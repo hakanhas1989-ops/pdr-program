@@ -93,7 +93,7 @@ window.storage = {
 </script>
 
 <script type="text/babel" data-type="module">
-const { useState, useEffect, useRef } = React;
+const { useState, useEffect, useRef, useMemo, useCallback } = React;
 const XLSX = window.XLSX;
 
 const ACCENT = "#2D6A4F";
@@ -119,6 +119,8 @@ const DIMENSIONS = [
   { key: "akran", label: "Akran İlişkileri", color: "#F4A261" },
 ];
 
+const PROF_HAKAN = "Sen Prof. Dr. Hakan'sin. Klinik psikoloji, cocuk-ergen psikiyatrisi, egitim psikolojisi, PDR, psikoterapi, norobiyoloji ve aile sistemleri alanlarinda 30 yillik akademik ve klinik deneyime sahip ust duzey bir supervizor ve akademisyensin. BDT, psikanalitik, humanistik, varoluşcu, sistem teorisi ve norobiyolojik perspektifleri entegre kullanırsın. Diger AI degerlendirmelerini de okuyarak butunsel klinik supervizyon sunarsın. ONEMLI: Degerlendirmeni yaptiktan sonra mutlaka vakayı daha iyi anlamak icin 2-3 adet derinlestirilmis soru sor. Bu sorular: danismanin dogrudan gozlemlemedigi bilgileri ortaya cikarmalı, ogrenci hakkinda kritik eksik bilgileri tamamlamalı, veya fark edilmemis bir boyutu aydınlatmalıdır. Sorularını 'DAHA İYİ ANLAYABİLMEK İÇİN SORULARIM:' basligi altında yaz. Turkce yaz, akademik ama anlasilir ol, Markdown kullanma. Ogrencinin en yuksek yararını on planda tut.";
+
 const LGS_KOCLUK = "Sen Dr. Ayse Kara'sin. 20 yillik klinik deneyime sahip PDR uzmani, psikolog ve ogrenci kocusun. BDT, baglanma teorisi ve gelisim psikolojisi perspektifinden analiz yaparsın. LGS PUAN REHBERI (2024 yaklasik): 85 ustu net = yuzde 1-5 = en iyi Anadolu Liseleri. 75-85 net = yuzde 5-15 = iyi Anadolu Liseleri. 60-75 net = yuzde 15-35 = orta-iyi Anadolu Liseleri. 45-60 net = yuzde 35-60 = Anadolu Liseleri. 30-45 net = yuzde 60-80 = Imam Hatip Anadolu. 30 alti = yuzde 80 ustu = Mahalle Lisesi veya Meslek Lisesi. CALISMA KOÇLUGU: Hata analizi yap o konulara yogunlas. Aralikli tekrar (1-3-7-30 gun). Aktif ogrenme: sorular coz ozetle. Kolay sorudan zora. BDT ile kaygı yonetimi. Deneme ortalamasina gore somut hedef okul turu belirt. Turkce yaz, sade ve anlasilir ol, markdown kullanma.";
 
 const EMPTY_SCORES = { akademik: 3, sosyal: 3, duygusal: 3, aile: 3, ozguven: 3, uyum: 3, kariyer: 3, akran: 3 };
@@ -142,6 +144,7 @@ ${profilBolum}
 
 Bu öğrencinin risk durumunu değerlendir:
 
+RİSK TÜRÜ: (Şu türlerden EN UYGUN birini seç — sadece türün adını yaz: Davranış / Akademik / Aile / Akran-Zorbalık / Duygusal / Devamsızlık / Öz Zarar / Sağlık / Madde Kullanımı / Ekonomik Güçlük / Yas-Kayıp / Travma / Özel Öğrenme Güçlüğü / Diğer)
 RİSK DÜZEYİ: (HAFİF / ORTA / YÜKSEK — net belirt)
 RİSK DEĞERLENDİRMESİ: (Bu risk neden önemli, nasıl yorumlanmalı — 2-3 cümle)
 KORUYUCU FAKTÖRLER: (Öğrencinin güçlü yönleri ve koruyucu faktörler)
@@ -406,7 +409,7 @@ async function storageKapasite() {
 
 // Büyük array'leri chunk'lara böl (görüşme notları için)
 async function saveChunked(baseKey, items) {
-  const CHUNK = 80;
+  const CHUNK = 150; // 150 kayıt/chunk — daha az storage yazma
   if (items.length <= CHUNK) {
     await window.storage.set(baseKey, JSON.stringify(items));
     await window.storage.delete(baseKey + "-meta");
@@ -449,10 +452,21 @@ async function saveRecords(records) {
   try { await saveChunked("pdr-records", records); } catch(e) { console.warn(e); }
 }
 async function loadProfiles() {
-  try { const r = await window.storage.get("pdr-profiles"); return r ? JSON.parse(r.value) : []; } catch { return []; }
+  try {
+    const meta = await window.storage.get("pdr-profiles-meta");
+    if (meta) return await loadChunked("pdr-profiles");
+    const r = await window.storage.get("pdr-profiles");
+    return r ? JSON.parse(r.value) : [];
+  } catch { return []; }
 }
 async function saveProfiles(profiles) {
-  try { await window.storage.set("pdr-profiles", JSON.stringify(profiles)); } catch(e) { console.warn(e); }
+  try {
+    if (profiles.length > 100) {
+      await saveChunked("pdr-profiles", profiles);
+    } else {
+      await window.storage.set("pdr-profiles", JSON.stringify(profiles));
+    }
+  } catch(e) { console.warn(e); }
 }
 async function loadDenemeler() {
   try { const r = await window.storage.get("pdr-denemeler"); return r ? JSON.parse(r.value) : {}; } catch { return {}; }
@@ -477,6 +491,54 @@ async function loadProfiles2() {
 }
 async function saveProfiles2(p) {
   try { await window.storage.set("pdr-profiles2", JSON.stringify(p)); } catch(e) { console.warn(e); }
+}
+
+async function loadYillar() {
+  try { const r = await window.storage.get("pdr-yillar"); return r ? JSON.parse(r.value) : ["2026-2027"]; } catch { return ["2026-2027"]; }
+}
+async function saveYillar(items) {
+  try { await window.storage.set("pdr-yillar", JSON.stringify(items)); } catch(e) { console.warn(e); }
+}
+async function loadAktifYil() {
+  try { const r = await window.storage.get("pdr-aktif-yil"); return r ? r.value : "2026-2027"; } catch { return "2026-2027"; }
+}
+async function saveAktifYil(yil) {
+  try { await window.storage.set("pdr-aktif-yil", yil); } catch(e) { console.warn(e); }
+}
+
+async function loadMudahalePlan() {
+  try { const r = await window.storage.get("pdr-mudahale"); return r ? JSON.parse(r.value) : {}; } catch { return {}; }
+}
+async function saveMudahalePlan(data) {
+  try { await window.storage.set("pdr-mudahale", JSON.stringify(data)); } catch(e) { console.warn(e); }
+}
+
+async function loadSevkler() {
+  try { const r = await window.storage.get("pdr-sevkler"); return r ? JSON.parse(r.value) : []; } catch { return []; }
+}
+async function saveSevkler(items) {
+  try { await window.storage.set("pdr-sevkler", JSON.stringify(items)); } catch(e) { console.warn(e); }
+}
+
+async function loadHazirlikNotlari() {
+  try { const r = await window.storage.get("pdr-hazirlik"); return r ? JSON.parse(r.value) : {}; } catch { return {}; }
+}
+async function saveHazirlikNotlari(data) {
+  try { await window.storage.set("pdr-hazirlik", JSON.stringify(data)); } catch(e) { console.warn(e); }
+}
+
+async function loadIlerlemeNotlari() {
+  try { const r = await window.storage.get("pdr-ilerleme"); return r ? JSON.parse(r.value) : {}; } catch { return {}; }
+}
+async function saveIlerlemeNotlari(data) {
+  try { await window.storage.set("pdr-ilerleme", JSON.stringify(data)); } catch(e) { console.warn(e); }
+}
+
+async function loadProfNotlari() {
+  try { const r = await window.storage.get("pdr-prof-notlar"); return r ? JSON.parse(r.value) : {}; } catch { return {}; }
+}
+async function saveProfNotlari(data) {
+  try { await window.storage.set("pdr-prof-notlar", JSON.stringify(data)); } catch(e) { console.warn(e); }
 }
 
 
@@ -1007,14 +1069,14 @@ async function raporIndir(elementId, dosyaAdi) {
 
 
 // ── PDF Rapor Verisi ─────────────────────────────────────────────────────────
-function raporVerisiOlustur({ ogrenci, profil1, profil2, gorusmeler, denemeler }) {
-  return { ogrenci, profil1, profil2, gorusmeler, denemeler: denemeler || {}, tarih: new Date().toLocaleDateString("tr-TR") };
+function raporVerisiOlustur({ ogrenci, profil1, profil2, gorusmeler, denemeler, mudahalePlan, riskListesi }) {
+  return { ogrenci, profil1, profil2, gorusmeler, denemeler: denemeler || {}, mudahalePlan: mudahalePlan || {}, riskListesi: riskListesi || [], tarih: new Date().toLocaleDateString("tr-TR") };
 }
 
 // ── PDF Rapor Bileşeni ────────────────────────────────────────────────────────
 function RaporModal({ rapor, onKapat }) {
   if (!rapor) return null;
-  const { ogrenci, profil1, profil2, gorusmeler, denemeler: raporDenemeler, tarih } = rapor;
+  const { ogrenci, profil1, profil2, gorusmeler, denemeler: raporDenemeler, mudahalePlan: raporMudahale, riskListesi: raporRisk, tarih } = rapor;
 
   // Radar SVG
   const RadarMini = ({ scores }) => {
@@ -1366,6 +1428,97 @@ function RaporModal({ rapor, onKapat }) {
                 </div>
               );
             })()}
+
+            {/* Bir Sonraki Seans Planı */}
+            {(() => {
+              const aktifPlanlar = (raporMudahale[ogrenci] || []).filter(p => p.durum === "Devam Ediyor");
+              const sonGorusme = gorusmeler?.length > 0 ? [...gorusmeler].sort((a,b) => {
+                const parse = d => { const [g,ay,y]=(d||"").split("."); return new Date(`${y}-${ay}-${g}`); };
+                return parse(b.date) - parse(a.date);
+              })[0] : null;
+              const aktifRisk = (raporRisk || []).filter(r => r.studentName?.toLowerCase().trim() === ogrenci?.toLowerCase().trim() && !r.kapandi);
+              return (
+                <div style={{ marginTop:16, pageBreakInside:"avoid" }}>
+                  <div style={{ ...S.bolumBaslik2 }}>Bir Sonraki Seans Planı</div>
+                  <div style={{ ...S.bolumIcerik2 }}>
+
+                    {/* Son görüşme özeti */}
+                    {sonGorusme && (
+                      <div style={{ marginBottom:10 }}>
+                        <div style={{ fontSize:9, fontWeight:700, color:"#555", textTransform:"uppercase", marginBottom:4 }}>Son Görüşme Özeti ({sonGorusme.date})</div>
+                        <div style={{ fontSize:10, color:"#333", background:"#f9f9f9", padding:"6px 8px", borderRadius:4, lineHeight:1.6 }}>{sonGorusme.summary}</div>
+                      </div>
+                    )}
+
+                    {/* Aktif müdahale planları */}
+                    {aktifPlanlar.length > 0 && (
+                      <div style={{ marginBottom:10 }}>
+                        <div style={{ fontSize:9, fontWeight:700, color:"#3B4FD8", textTransform:"uppercase", marginBottom:4 }}>Devam Eden Müdahale Hedefleri</div>
+                        {aktifPlanlar.map((p,i) => (
+                          <div key={p.id} style={{ display:"flex", gap:6, marginBottom:4, alignItems:"flex-start" }}>
+                            <span style={{ fontSize:10, fontWeight:700, color:"#3B4FD8", flexShrink:0 }}>{i+1}.</span>
+                            <div>
+                              <div style={{ fontSize:10, fontWeight:700, color:"#333" }}>{p.hedef}</div>
+                              {p.adimlar && <div style={{ fontSize:9, color:"#666", marginTop:2, lineHeight:1.5 }}>{p.adimlar}</div>}
+                              {p.sure && <div style={{ fontSize:9, color:"#888", marginTop:2 }}>Süre: {p.sure}</div>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Aktif riskler */}
+                    {aktifRisk.length > 0 && (
+                      <div style={{ marginBottom:10 }}>
+                        <div style={{ fontSize:9, fontWeight:700, color:"#C0392B", textTransform:"uppercase", marginBottom:4 }}>Takip Edilmesi Gereken Riskler</div>
+                        {aktifRisk.map(r => (
+                          <div key={r.id} style={{ display:"flex", gap:6, marginBottom:3, alignItems:"center" }}>
+                            <span style={{ background:"#FDECEA", color:"#C0392B", borderRadius:4, padding:"1px 6px", fontSize:9, fontWeight:700, flexShrink:0 }}>{r.oncelik}</span>
+                            <span style={{ fontSize:10, color:"#333" }}>{r.riskTuru} — {r.aciklama}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Seans planı alanı */}
+                    <div style={{ border:"1px solid #ddd", borderRadius:6, padding:10 }}>
+                      <div style={{ fontSize:9, fontWeight:700, color:"#555", textTransform:"uppercase", marginBottom:8 }}>Seans Hedefleri ve Notlar</div>
+                      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                        <div>
+                          <div style={{ fontSize:9, fontWeight:700, color:"#333", marginBottom:4 }}>Bu seansta odaklanılacaklar:</div>
+                          <div style={{ height:50, border:"1px solid #eee", borderRadius:4 }}></div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize:9, fontWeight:700, color:"#333", marginBottom:4 }}>Sorulacak sorular:</div>
+                          <div style={{ height:50, border:"1px solid #eee", borderRadius:4 }}></div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize:9, fontWeight:700, color:"#333", marginBottom:4 }}>Seans sonrası notlar:</div>
+                          <div style={{ height:50, border:"1px solid #eee", borderRadius:4 }}></div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize:9, fontWeight:700, color:"#333", marginBottom:4 }}>Bir sonraki seans için:</div>
+                          <div style={{ height:50, border:"1px solid #eee", borderRadius:4 }}></div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* İmza alanı */}
+                    <div style={{ display:"flex", justifyContent:"space-between", marginTop:16, paddingTop:10, borderTop:"1px solid #eee" }}>
+                      <div style={{ textAlign:"center" }}>
+                        <div style={{ height:30, width:120, borderBottom:"1px solid #333" }}></div>
+                        <div style={{ fontSize:9, color:"#555", marginTop:4 }}>PDR Danışmanı İmzası</div>
+                      </div>
+                      <div style={{ textAlign:"center" }}>
+                        <div style={{ fontSize:9, color:"#555" }}>Rapor Tarihi</div>
+                        <div style={{ fontSize:11, fontWeight:700, color:"#333", marginTop:4 }}>{tarih}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
           </div>
         </div>
       </div>
@@ -1706,6 +1859,1414 @@ function Profile2Card({ p, onDelete }) {
 
 
 // ── Öğrenci Yönetim Bileşeni ─────────────────────────────────────────────────
+
+// ── Müdahale Planı Bileşeni ───────────────────────────────────────────────────
+function MudahalePlanEkrani({ kayitliListesi, aktifOgrenci, mudahalePlan, setMudahalePlan, records }) {
+  const [seciliAd, setSeciliAd] = useState(aktifOgrenci?.name || "");
+  const [aramaMetni, setAramaMetni] = useState("");
+  const [form, setForm] = useState({ hedef:"", adimlar:"", sorumlu:"pdr", sure:"", oncelik:"Orta", durum:"Devam Ediyor" });
+  const [aiLoading, setAiLoading] = useState(false);
+  const [kaydedildi, setKaydedildi] = useState(false);
+
+  useEffect(() => { if (aktifOgrenci?.name) setSeciliAd(aktifOgrenci.name); }, [aktifOgrenci?.name]);
+
+  const ogrPlanlar = (mudahalePlan[seciliAd] || []).sort((a,b) => new Date(b.tarih) - new Date(a.tarih));
+  const ogrRec = records.filter(r => r.studentName?.toLowerCase().trim() === seciliAd?.toLowerCase().trim());
+
+  async function handleAiPlan() {
+    if (!seciliAd) return;
+    setAiLoading(true);
+    const notlar = ogrRec.map((r,i) => `Görüşme ${i+1} (${r.date}): ${r.summary}`).join("\n\n");
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        model:"claude-sonnet-4-6", max_tokens:1500,
+        system:"Sen Dr. Ayse Kara'sin — 20 yillik klinik PDR uzmanisin. BDT ve varoluşçu perspektiften somut müdahale plani olusturursun.",
+        messages:[{role:"user", content:`Öğrenci: ${seciliAd}
+
+Görüşme Notları:
+${notlar||"Henüz görüşme notu yok."}
+
+Bu öğrenci için somut bir PDR müdahale planı oluştur:
+
+HEDEF: (tek cümle, ölçülebilir)
+MÜDAHALE ADIMLARI:
+1.
+2.
+3.
+SÜRE: (kaç hafta/ay)
+KONTROL KRİTERİ: (nasıl değerlendireceğiz)
+
+Sade yaz, Markdown kullanma.`}]
+      })
+    });
+    const data = await res.json();
+    const analiz = data.content?.[0]?.text || "";
+    const hedefMatch = analiz.match(/HEDEF:\s*(.+)/);
+    const adimlarMatch = analiz.match(/MÜDAHALE ADIMLARI:\s*([\s\S]+?)SÜRE:/);
+    const sureMatch = analiz.match(/SÜRE:\s*(.+)/);
+    setForm(f => ({
+      ...f,
+      hedef: hedefMatch ? hedefMatch[1].trim() : f.hedef,
+      adimlar: adimlarMatch ? adimlarMatch[1].trim() : analiz,
+      sure: sureMatch ? sureMatch[1].trim() : f.sure
+    }));
+    setAiLoading(false);
+  }
+
+  async function handleKaydet() {
+    if (!seciliAd || !form.hedef.trim()) return;
+    const yeni = { id: uid(), tarih: today(), ogrenci: seciliAd, ...form };
+    const updated = { ...mudahalePlan, [seciliAd]: [yeni, ...(mudahalePlan[seciliAd]||[])] };
+    setMudahalePlan(updated);
+    await saveMudahalePlan(updated);
+    setForm({ hedef:"", adimlar:"", sorumlu:"pdr", sure:"", oncelik:"Orta", durum:"Devam Ediyor" });
+    setKaydedildi(true); setTimeout(() => setKaydedildi(false), 2000);
+  }
+
+  async function handleDurumGuncelle(ogrenci, id, durum) {
+    const updated = { ...mudahalePlan, [ogrenci]: (mudahalePlan[ogrenci]||[]).map(p => p.id===id ? {...p, durum} : p) };
+    setMudahalePlan(updated);
+    await saveMudahalePlan(updated);
+  }
+
+  const inp = { width:"100%", padding:"9px 11px", border:`1px solid ${BORDER}`, borderRadius:9, fontSize:13, background:CARD, color:TEXT, outline:"none", boxSizing:"border-box", fontFamily:"inherit" };
+  const lbl = { fontSize:11, fontWeight:600, color:MUTED, display:"block", marginBottom:4, textTransform:"uppercase" };
+  const durumRenk = { "Devam Ediyor":["#1A8C5B","#E6F5EE"], "Tamamlandı":["#457B9D","#EEF2FF"], "Askıda":["#B07D1A","#FDF6E3"] };
+
+  return (
+    <div>
+      <div style={{background:"#EEF2FF",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:13,color:"#3B4FD8",fontWeight:600}}>
+        🎯 Müdahale Planı — Hedef, adımlar ve süre takibi
+      </div>
+
+      {/* Öğrenci seç */}
+      <input placeholder="Öğrenci ara..." value={aramaMetni} onChange={e=>setAramaMetni(e.target.value)} style={{...inp, marginBottom:8}} />
+      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:14}}>
+        {kayitliListesi.filter(o=>o.name.toLowerCase().includes(aramaMetni.toLowerCase())).slice(0,15).map(o=>{
+          const s=seciliAd===o.name;
+          return <button key={o.name} onClick={()=>setSeciliAd(o.name)} style={{padding:"4px 10px",borderRadius:16,border:`2px solid ${s?ACCENT:BORDER}`,background:s?ACCENT_LIGHT:CARD,color:s?ACCENT:MUTED,fontSize:11,fontWeight:s?700:500,cursor:"pointer"}}>{o.name}</button>;
+        })}
+      </div>
+
+      {seciliAd && (
+        <>
+          {/* Yeni plan formu */}
+          <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:12,padding:14,marginBottom:14}}>
+            <div style={{fontSize:12,fontWeight:700,color:TEXT,marginBottom:10}}>Yeni Müdahale Planı — {seciliAd}</div>
+
+            <button onClick={handleAiPlan} disabled={aiLoading} style={{width:"100%",padding:"10px",background:aiLoading?BORDER:PURPLE,color:aiLoading?"#666":"#fff",border:"none",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer",marginBottom:12}}>
+              {aiLoading?"⏳ AI plan oluşturuyor...":"✦ AI Müdahale Planı Oluştur"}
+            </button>
+
+            <label style={lbl}>HEDEF (ölçülebilir)</label>
+            <input placeholder="örn. 3 haftada sınav kaygısını yönetebilir hale gelme" value={form.hedef} onChange={e=>setForm(f=>({...f,hedef:e.target.value}))} style={{...inp,marginBottom:10}} />
+
+            <label style={lbl}>MÜDAHALE ADIMLARI</label>
+            <textarea placeholder="1. Nefes egzersizi öğret&#10;2. Düşünce kaydı tut&#10;3. Veli görüşmesi yap" value={form.adimlar} onChange={e=>setForm(f=>({...f,adimlar:e.target.value}))} rows={4} style={{...inp,resize:"vertical",marginBottom:10}} />
+
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+              <div>
+                <label style={lbl}>SÜRE</label>
+                <input placeholder="örn. 4 hafta" value={form.sure} onChange={e=>setForm(f=>({...f,sure:e.target.value}))} style={inp} />
+              </div>
+              <div>
+                <label style={lbl}>ÖNCELİK</label>
+                <select value={form.oncelik} onChange={e=>setForm(f=>({...f,oncelik:e.target.value}))} style={{...inp,height:38}}>
+                  {["Yüksek","Orta","Düşük"].map(o=><option key={o}>{o}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <label style={lbl}>SORUMLU</label>
+            <div style={{display:"flex",gap:6,marginBottom:10}}>
+              {[["pdr","PDR Danışmanı"],["aile","Aile"],["ogretmen","Öğretmen"],["ogrenci","Öğrenci"]].map(([k,l])=>(
+                <button key={k} onClick={()=>setForm(f=>({...f,sorumlu:k}))} style={{flex:1,padding:"6px 4px",fontSize:11,fontWeight:form.sorumlu===k?700:500,borderRadius:8,border:`2px solid ${form.sorumlu===k?ACCENT:BORDER}`,background:form.sorumlu===k?ACCENT_LIGHT:CARD,color:form.sorumlu===k?ACCENT:MUTED,cursor:"pointer"}}>{l}</button>
+              ))}
+            </div>
+
+            <button onClick={handleKaydet} disabled={!form.hedef.trim()} style={{width:"100%",padding:"11px",background:form.hedef?ACCENT:BORDER,color:form.hedef?"#fff":MUTED,border:"none",borderRadius:10,fontSize:14,fontWeight:800,cursor:"pointer"}}>
+              {kaydedildi?"✓ Kaydedildi!":"💾 Planı Kaydet"}
+            </button>
+          </div>
+
+          {/* Mevcut planlar */}
+          {ogrPlanlar.length > 0 && (
+            <div>
+              <div style={{fontSize:12,fontWeight:700,color:TEXT,marginBottom:10}}>Mevcut Planlar ({ogrPlanlar.length})</div>
+              {ogrPlanlar.map(p => {
+                const [rc,rbg] = durumRenk[p.durum]||["#888","#eee"];
+                return (
+                  <div key={p.id} style={{background:CARD,border:`1px solid ${BORDER}`,borderLeft:`4px solid ${rc}`,borderRadius:10,padding:12,marginBottom:10}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                      <div style={{fontSize:13,fontWeight:700,color:TEXT,flex:1}}>{p.hedef}</div>
+                      <span style={{background:rbg,color:rc,borderRadius:20,padding:"2px 10px",fontSize:10,fontWeight:700,flexShrink:0,marginLeft:8}}>{p.durum}</span>
+                    </div>
+                    <div style={{fontSize:11,color:MUTED,marginBottom:6}}>{p.tarih} · {p.sure} · {p.oncelik} öncelik</div>
+                    {p.adimlar && <div style={{fontSize:12,color:TEXT,lineHeight:1.7,whiteSpace:"pre-wrap",background:"#f9f9f9",borderRadius:6,padding:"6px 8px",marginBottom:8}}>{p.adimlar}</div>}
+                    <div style={{display:"flex",gap:6}}>
+                      {["Devam Ediyor","Tamamlandı","Askıda"].map(d=>(
+                        <button key={d} onClick={()=>handleDurumGuncelle(p.ogrenci,p.id,d)} style={{flex:1,padding:"5px",fontSize:10,fontWeight:p.durum===d?700:500,borderRadius:7,border:`1px solid ${p.durum===d?rc:BORDER}`,background:p.durum===d?rbg:CARD,color:p.durum===d?rc:MUTED,cursor:"pointer"}}>{d}</button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Sevk Takip Bileşeni ───────────────────────────────────────────────────────
+function SevkTakipEkrani({ kayitliListesi, aktifOgrenci, sevkler, setSevkler }) {
+  const [aramaMetni, setAramaMetni] = useState("");
+  const [form, setForm] = useState({ studentName:"", className:"", sevkYeri:"RAM", sevkNedeni:"", tarih:today(), sonucBekleniyor:true, geri_bildirim:"" });
+  const [gosterFiltre, setGosterFiltre] = useState("Tümü");
+
+  useEffect(() => { if (aktifOgrenci?.name) setForm(f=>({...f, studentName:aktifOgrenci.name, className:aktifOgrenci.className||""})); }, [aktifOgrenci?.name]);
+
+  const inp = { width:"100%", padding:"9px 11px", border:`1px solid ${BORDER}`, borderRadius:9, fontSize:13, background:CARD, color:TEXT, outline:"none", boxSizing:"border-box", fontFamily:"inherit" };
+  const lbl = { fontSize:11, fontWeight:600, color:MUTED, display:"block", marginBottom:4, textTransform:"uppercase" };
+
+  async function handleKaydet() {
+    if (!form.studentName.trim() || !form.sevkNedeni.trim()) return;
+    const yeni = { id: uid(), ...form };
+    const updated = [yeni, ...sevkler];
+    setSevkler(updated); await saveSevkler(updated);
+    setForm({ studentName:"", className:"", sevkYeri:"RAM", sevkNedeni:"", tarih:today(), sonucBekleniyor:true, geri_bildirim:"" });
+  }
+
+  async function handleGuncelle(id, fields) {
+    const updated = sevkler.map(s => s.id===id ? {...s, ...fields} : s);
+    setSevkler(updated); await saveSevkler(updated);
+  }
+
+  const filtreli = sevkler.filter(s => {
+    if (gosterFiltre === "Bekliyor") return s.sonucBekleniyor;
+    if (gosterFiltre === "Tamamlandı") return !s.sonucBekleniyor;
+    return true;
+  }).filter(s => !aramaMetni || s.studentName?.toLowerCase().includes(aramaMetni.toLowerCase()));
+
+  const sevkYerleri = ["RAM","Psikolog","Psikiyatrist","Özel Eğitim","Sosyal Hizmetler","Rehberlik Araştırma","Diğer"];
+
+  return (
+    <div>
+      <div style={{background:"#FDF6E3",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:13,color:"#B07D1A",fontWeight:600}}>
+        📤 Sevk Takibi — RAM, psikolog, psikiyatri ve diğer yönlendirmeler
+      </div>
+
+      {/* Yeni sevk formu */}
+      <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:12,padding:14,marginBottom:14}}>
+        <div style={{fontSize:12,fontWeight:700,color:TEXT,marginBottom:10}}>Yeni Sevk Kaydı</div>
+
+        {/* Öğrenci seç */}
+        <label style={lbl}>ÖĞRENCİ</label>
+        <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
+          {kayitliListesi.filter(o=>o.name.toLowerCase().includes(aramaMetni.toLowerCase())).slice(0,12).map(o=>{
+            const s=form.studentName===o.name;
+            return <button key={o.name} onClick={()=>setForm(f=>({...f,studentName:o.name,className:o.className||""}))} style={{padding:"4px 10px",borderRadius:16,border:`2px solid ${s?ACCENT:BORDER}`,background:s?ACCENT_LIGHT:CARD,color:s?ACCENT:MUTED,fontSize:11,fontWeight:s?700:500,cursor:"pointer"}}>{o.name}</button>;
+          })}
+        </div>
+        <input placeholder="veya ad yaz..." value={form.studentName} onChange={e=>setForm(f=>({...f,studentName:e.target.value}))} style={{...inp,marginBottom:10}} />
+
+        <label style={lbl}>SEVK YERİ</label>
+        <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:10}}>
+          {sevkYerleri.map(y=>(
+            <button key={y} onClick={()=>setForm(f=>({...f,sevkYeri:y}))} style={{padding:"5px 10px",borderRadius:16,border:`2px solid ${form.sevkYeri===y?"#B07D1A":BORDER}`,background:form.sevkYeri===y?"#FDF6E3":CARD,color:form.sevkYeri===y?"#B07D1A":MUTED,fontSize:11,fontWeight:form.sevkYeri===y?700:500,cursor:"pointer"}}>{y}</button>
+          ))}
+        </div>
+
+        <label style={lbl}>SEVK NEDENİ</label>
+        <textarea placeholder="Sevk gerekçesi, klinik gözlemler..." value={form.sevkNedeni} onChange={e=>setForm(f=>({...f,sevkNedeni:e.target.value}))} rows={3} style={{...inp,resize:"vertical",marginBottom:10}} />
+
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+          <div>
+            <label style={lbl}>SEVK TARİHİ</label>
+            <input value={form.tarih} onChange={e=>setForm(f=>({...f,tarih:e.target.value}))} style={inp} />
+          </div>
+          <div>
+            <label style={lbl}>DURUM</label>
+            <select value={form.sonucBekleniyor?"Bekliyor":"Tamamlandı"} onChange={e=>setForm(f=>({...f,sonucBekleniyor:e.target.value==="Bekliyor"}))} style={{...inp,height:38}}>
+              <option>Bekliyor</option><option>Tamamlandı</option>
+            </select>
+          </div>
+        </div>
+
+        <button onClick={handleKaydet} disabled={!form.studentName.trim()||!form.sevkNedeni.trim()} style={{width:"100%",padding:"11px",background:form.studentName&&form.sevkNedeni?ACCENT:BORDER,color:form.studentName&&form.sevkNedeni?"#fff":MUTED,border:"none",borderRadius:10,fontSize:14,fontWeight:800,cursor:"pointer"}}>
+          📤 Sevk Kaydet
+        </button>
+      </div>
+
+      {/* Filtre */}
+      <div style={{display:"flex",gap:6,marginBottom:12}}>
+        <input placeholder="Öğrenci ara..." value={aramaMetni} onChange={e=>setAramaMetni(e.target.value)} style={{...inp,flex:1}} />
+        {["Tümü","Bekliyor","Tamamlandı"].map(f=>(
+          <button key={f} onClick={()=>setGosterFiltre(f)} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${gosterFiltre===f?ACCENT:BORDER}`,background:gosterFiltre===f?ACCENT_LIGHT:CARD,color:gosterFiltre===f?ACCENT:MUTED,fontSize:11,fontWeight:gosterFiltre===f?700:500,cursor:"pointer"}}>{f}</button>
+        ))}
+      </div>
+
+      {/* Sevk listesi */}
+      {filtreli.length === 0 && <div style={{textAlign:"center",color:MUTED,marginTop:30,fontSize:13}}>Sevk kaydı yok</div>}
+      {filtreli.map(s => (
+        <div key={s.id} style={{background:CARD,border:`1px solid ${BORDER}`,borderLeft:`4px solid ${s.sonucBekleniyor?"#B07D1A":"#1A8C5B"}`,borderRadius:10,padding:12,marginBottom:10}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+            <div>
+              <div style={{fontSize:14,fontWeight:800,color:TEXT}}>{s.studentName}</div>
+              <div style={{fontSize:11,color:MUTED}}>{s.tarih} · {s.sevkYeri}</div>
+            </div>
+            <span style={{background:s.sonucBekleniyor?"#FDF6E3":"#E6F5EE",color:s.sonucBekleniyor?"#B07D1A":"#1A8C5B",borderRadius:20,padding:"2px 10px",fontSize:10,fontWeight:700}}>
+              {s.sonucBekleniyor?"Bekliyor":"Tamamlandı"}
+            </span>
+          </div>
+          <div style={{fontSize:12,color:TEXT,lineHeight:1.6,marginBottom:8}}>{s.sevkNedeni}</div>
+          {/* Geri bildirim */}
+          <div>
+            <label style={{fontSize:10,fontWeight:600,color:MUTED,display:"block",marginBottom:3}}>GERİ BİLDİRİM / SONUÇ</label>
+            <div style={{display:"flex",gap:6}}>
+              <input placeholder="Kurum geri bildirimi..." value={s.geri_bildirim||""} onChange={e=>handleGuncelle(s.id,{geri_bildirim:e.target.value})} style={{...inp,flex:1,fontSize:11}} />
+              <button onClick={()=>handleGuncelle(s.id,{sonucBekleniyor:!s.sonucBekleniyor})} style={{padding:"6px 10px",background:s.sonucBekleniyor?ACCENT:"#f0f0f0",color:s.sonucBekleniyor?"#fff":"#666",border:"none",borderRadius:8,fontSize:11,fontWeight:700,cursor:"pointer",flexShrink:0}}>
+                {s.sonucBekleniyor?"✓ Tamamla":"↩ Aç"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── MEB Rapor Bileşeni ────────────────────────────────────────────────────────
+function MEBRaporEkrani({ records, profiles, riskListesi, sevkler, kayitliListesi }) {
+  const [donem, setDonem] = useState("1. Dönem");
+  const [yil, setYil] = useState(new Date().getFullYear().toString());
+  const [aiRapor, setAiRapor] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+
+  // İstatistikler
+  const toplamGorusme = records.length;
+  const ogrenciGorusme = records.filter(r => (r.meetingType||"Öğrenci")==="Öğrenci").length;
+  const veliGorusme = records.filter(r => r.meetingType==="Veli").length;
+  const benzersizOgrenci = new Set(records.map(r => r.studentName?.toLowerCase().trim())).size;
+  const aktifRisk = riskListesi.filter(r => !r.kapandi).length;
+  const tamamlananSevk = sevkler.filter(s => !s.sonucBekleniyor).length;
+  const bekleyenSevk = sevkler.filter(s => s.sonucBekleniyor).length;
+
+  // Konu dağılımı
+  const konular = {};
+  records.forEach(r => { const k = r.topic||"Genel"; konular[k] = (konular[k]||0)+1; });
+  const topKonular = Object.entries(konular).sort((a,b)=>b[1]-a[1]).slice(0,5);
+
+  // Risk türleri
+  const riskTurleri = {};
+  riskListesi.forEach(r => { riskTurleri[r.riskTuru||"Diğer"] = (riskTurleri[r.riskTuru||"Diğer"]||0)+1; });
+
+  async function handleAiRapor() {
+    setAiLoading(true);
+    const istatistik = `
+Dönem: ${donem} ${yil}
+Toplam Görüşme: ${toplamGorusme} (Öğrenci: ${ogrenciGorusme}, Veli: ${veliGorusme})
+Görüşülen Öğrenci Sayısı: ${benzersizOgrenci}
+Aktif Risk: ${aktifRisk}, Sevk: ${sevkler.length} (Tamamlanan: ${tamamlananSevk}, Bekleyen: ${bekleyenSevk})
+Başlıca Görüşme Konuları: ${topKonular.map(([k,v])=>k+": "+v).join(", ")}
+Risk Türleri: ${Object.entries(riskTurleri).map(([k,v])=>k+": "+v).join(", ")}
+    `.trim();
+
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        model:"claude-sonnet-4-6", max_tokens:2000,
+        system:"Sen okul PDR danismanisın. MEB formatinda, resmi ve özlü dönem sonu raporu yazarsın.",
+        messages:[{role:"user", content:`${istatistik}
+
+Bu istatistiklere dayalı MEB formatında dönem sonu PDR faaliyet raporu yaz. Şu bölümleri içersin:
+1. GENEL DEĞERLENDİRME
+2. BİREYSEL GÖRÜŞMELER
+3. RİSK DEĞERLENDİRMESİ
+4. SEVK VE YÖNLENDİRME
+5. ÖNERİLER
+
+Resmi dil kullan, Markdown kullanma.`}]
+      })
+    });
+    const data = await res.json();
+    setAiRapor(data.content?.[0]?.text || "");
+    setAiLoading(false);
+  }
+
+  return (
+    <div>
+      <div style={{background:"#F0F4FF",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:13,color:"#3B4FD8",fontWeight:600}}>
+        📑 MEB Dönem Sonu PDR Faaliyet Raporu
+      </div>
+
+      {/* Dönem seç */}
+      <div style={{display:"flex",gap:8,marginBottom:14}}>
+        <select value={donem} onChange={e=>setDonem(e.target.value)} style={{flex:1,padding:"9px 11px",border:`1px solid ${BORDER}`,borderRadius:9,fontSize:13}}>
+          <option>1. Dönem</option><option>2. Dönem</option><option>Yıllık</option>
+        </select>
+        <input value={yil} onChange={e=>setYil(e.target.value)} style={{width:80,padding:"9px",border:`1px solid ${BORDER}`,borderRadius:9,fontSize:13,textAlign:"center"}} />
+      </div>
+
+      {/* İstatistik kartları */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14}}>
+        {[
+          ["Toplam Görüşme",toplamGorusme,ACCENT],
+          ["Öğrenci",ogrenciGorusme,BLUE],
+          ["Veli",veliGorusme,ORANGE],
+          ["Görüşülen Öğrenci",benzersizOgrenci,PURPLE],
+          ["Aktif Risk",aktifRisk,"#C0392B"],
+          ["Sevk",sevkler.length,"#B07D1A"],
+        ].map(([l,v,c])=>(
+          <div key={l} style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:10,padding:"10px 6px",textAlign:"center"}}>
+            <div style={{fontSize:22,fontWeight:900,color:c}}>{v}</div>
+            <div style={{fontSize:10,color:MUTED}}>{l}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Konu dağılımı */}
+      {topKonular.length > 0 && (
+        <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:10,padding:12,marginBottom:14}}>
+          <div style={{fontSize:11,fontWeight:700,color:TEXT,textTransform:"uppercase",marginBottom:8}}>Başlıca Görüşme Konuları</div>
+          {topKonular.map(([k,v])=>(
+            <div key={k} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+              <span style={{fontSize:12,color:TEXT}}>{k}</span>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <div style={{width:60,height:4,background:BORDER,borderRadius:2}}>
+                  <div style={{width:`${(v/toplamGorusme)*100}%`,height:"100%",background:ACCENT,borderRadius:2}}/>
+                </div>
+                <span style={{fontSize:12,fontWeight:700,color:ACCENT,width:20,textAlign:"right"}}>{v}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* AI Rapor */}
+      <button onClick={handleAiRapor} disabled={aiLoading} style={{width:"100%",padding:"12px",background:aiLoading?BORDER:ACCENT,color:aiLoading?"#666":"#fff",border:"none",borderRadius:12,fontSize:14,fontWeight:800,cursor:"pointer",marginBottom:12}}>
+        {aiLoading?"⏳ MEB raporu hazırlanıyor...":"📑 AI ile MEB Raporu Oluştur"}
+      </button>
+
+      {aiRapor && (
+        <div>
+          <div id="meb-rapor-icerik" style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:12,padding:16,marginBottom:10}}>
+            <div style={{fontSize:14,fontWeight:800,color:TEXT,marginBottom:4}}>PDR Faaliyet Raporu</div>
+            <div style={{fontSize:11,color:MUTED,marginBottom:12}}>{donem} {yil} · {new Date().toLocaleDateString("tr-TR")}</div>
+            <div style={{fontSize:13,color:TEXT,lineHeight:1.8,whiteSpace:"pre-wrap"}}>{aiRapor}</div>
+          </div>
+          <button onClick={()=>raporIndir("meb-rapor-icerik","MEB_PDR_Raporu_"+donem.replace(" ","_")+"_"+yil)} style={{width:"100%",padding:"10px",background:BLUE,color:"#fff",border:"none",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"}}>
+            📄 Raporu İndir
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Veli Mektubu Bileşeni ─────────────────────────────────────────────────────
+function VeliMektubu({ kayitliListesi, aktifOgrenci, records }) {
+  const [seciliAd, setSeciliAd] = useState(aktifOgrenci?.name || "");
+  const [mektupTipi, setMektupTipi] = useState("bilgilendirme");
+  const [mektup, setMektup] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aramaMetni, setAramaMetni] = useState("");
+
+  useEffect(() => { if (aktifOgrenci?.name) setSeciliAd(aktifOgrenci.name); }, [aktifOgrenci?.name]);
+
+  const ogrRec = records.filter(r => r.studentName?.toLowerCase().trim() === seciliAd?.toLowerCase().trim());
+
+  async function handleOlustur() {
+    if (!seciliAd) return;
+    setAiLoading(true);
+    const ozet = ogrRec.slice(0,3).map((r,i)=>`Görüşme ${i+1} (${r.date}): ${r.summary}`).join("\n\n");
+    const tipler = {
+      bilgilendirme:"Veliye öğrencinin PDR görüşmeleri hakkında genel bilgilendirme mektubu",
+      davet:"Velinin okula davet edilmesi için resmi davet mektubu",
+      bildirim:"Öğrenci hakkında acil durum/risk bildirimi mektubu",
+      tesekkur:"Veli iş birliği için teşekkür mektubu"
+    };
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        model:"claude-sonnet-4-6", max_tokens:1500,
+        system:"Sen okul PDR danismanisın. MEB resmi yazı formatında, sade ve profesyonel veli mektupları yazarsın.",
+        messages:[{role:"user", content:`Öğrenci: ${seciliAd}
+Mektup Tipi: ${tipler[mektupTipi]}
+Görüşme Özeti:
+${ozet||"Henüz görüşme yok."}
+
+MEB resmi yazı formatında veli mektubu yaz. T.C. başlığı, tarih, konu, sayın velimiz hitabı, içerik ve imza bölümü olsun. Markdown kullanma.`}]
+      })
+    });
+    const data = await res.json();
+    setMektup(data.content?.[0]?.text || "");
+    setAiLoading(false);
+  }
+
+  return (
+    <div>
+      <div style={{background:"#F0FAF4",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:13,color:ACCENT,fontWeight:600}}>
+        ✉ Veli Bilgilendirme Mektubu — AI destekli resmi yazı
+      </div>
+
+      <input placeholder="Öğrenci ara..." value={aramaMetni} onChange={e=>setAramaMetni(e.target.value)} style={{width:"100%",padding:"9px 11px",border:`1px solid ${BORDER}`,borderRadius:9,fontSize:13,boxSizing:"border-box",marginBottom:8}} />
+      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:12}}>
+        {kayitliListesi.filter(o=>o.name.toLowerCase().includes(aramaMetni.toLowerCase())).slice(0,12).map(o=>{
+          const s=seciliAd===o.name;
+          return <button key={o.name} onClick={()=>setSeciliAd(o.name)} style={{padding:"4px 10px",borderRadius:16,border:`2px solid ${s?ACCENT:BORDER}`,background:s?ACCENT_LIGHT:CARD,color:s?ACCENT:MUTED,fontSize:11,fontWeight:s?700:500,cursor:"pointer"}}>{o.name}</button>;
+        })}
+      </div>
+
+      <div style={{fontSize:11,fontWeight:600,color:MUTED,marginBottom:6,textTransform:"uppercase"}}>MEKTUP TİPİ</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:12}}>
+        {[["bilgilendirme","📋 Genel Bilgilendirme"],["davet","📅 Veli Daveti"],["bildirim","⚠ Durum Bildirimi"],["tesekkur","🙏 Teşekkür"]].map(([k,l])=>(
+          <button key={k} onClick={()=>setMektupTipi(k)} style={{padding:"8px",borderRadius:8,border:`2px solid ${mektupTipi===k?ACCENT:BORDER}`,background:mektupTipi===k?ACCENT_LIGHT:CARD,color:mektupTipi===k?ACCENT:MUTED,fontSize:12,fontWeight:mektupTipi===k?700:500,cursor:"pointer"}}>{l}</button>
+        ))}
+      </div>
+
+      <button onClick={handleOlustur} disabled={!seciliAd||aiLoading} style={{width:"100%",padding:"11px",background:seciliAd&&!aiLoading?ACCENT:BORDER,color:seciliAd&&!aiLoading?"#fff":MUTED,border:"none",borderRadius:10,fontSize:14,fontWeight:800,cursor:"pointer",marginBottom:12}}>
+        {aiLoading?"⏳ Mektup hazırlanıyor...":"✦ AI ile Mektup Oluştur"}
+      </button>
+
+      {mektup && (
+        <div>
+          <div id="veli-mektup-icerik">
+            <textarea value={mektup} onChange={e=>setMektup(e.target.value)} rows={20} style={{width:"100%",padding:"12px",border:`1px solid ${BORDER}`,borderRadius:10,fontSize:13,lineHeight:1.8,fontFamily:"Arial,sans-serif",boxSizing:"border-box",resize:"vertical",marginBottom:8}} />
+          </div>
+          <button onClick={()=>raporIndir("veli-mektup-icerik","Veli_Mektubu_"+seciliAd.replace(/\s+/g,"_"))} style={{width:"100%",padding:"10px",background:ACCENT,color:"#fff",border:"none",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"}}>
+            📄 Mektubu İndir
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+
+// ── Yıl Seçim Ekranı ─────────────────────────────────────────────────────────
+function YilSecimEkrani({ yillar, setYillar, aktifYil, setAktifYil, ogrenciler, onYilSec, onYilSil }) {
+  const [yeniYil, setYeniYil] = useState("");
+  const [silOnayYil, setSilOnayYil] = useState(null);
+
+  async function handleYilEkle() {
+    const yil = yeniYil.trim();
+    if (!yil || yillar.includes(yil)) return;
+    const updated = [...yillar, yil].sort((a,b) => b.localeCompare(a));
+    setYillar(updated);
+    await saveYillar(updated);
+    setYeniYil("");
+  }
+
+  async function handleYilSil(yil) {
+    const updated = yillar.filter(y => y !== yil);
+    if (updated.length === 0) { alert("En az bir yıl olmalı!"); return; }
+    setYillar(updated);
+    await saveYillar(updated);
+    if (aktifYil === yil) {
+      setAktifYil(updated[0]);
+      await saveAktifYil(updated[0]);
+    }
+    onYilSil(yil);
+    setSilOnayYil(null);
+  }
+
+  return (
+    <div style={{padding:"0 0 80px"}}>
+      {/* Başlık */}
+      <div style={{background:ACCENT,borderRadius:12,padding:"16px 16px",marginBottom:20,color:"#fff"}}>
+        <div style={{fontSize:11,fontWeight:600,opacity:0.8,marginBottom:4,textTransform:"uppercase"}}>Akademik Yıllar</div>
+        <div style={{fontSize:22,fontWeight:900}}>Yıl Seç veya Ekle</div>
+        <div style={{fontSize:12,opacity:0.8,marginTop:4}}>Her yıl ayrı öğrenci listesi tutulur</div>
+      </div>
+
+      {/* Yıl kartları */}
+      <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:20}}>
+        {yillar.map(yil => {
+          const ogrSayisi = ogrenciler.filter(o => !o.yil || o.yil === yil || (yil === yillar[0] && !o.yil)).length;
+          const aktif = yil === aktifYil;
+          return (
+            <div key={yil} style={{
+              background:aktif?ACCENT_LIGHT:CARD,
+              border:`2px solid ${aktif?ACCENT:BORDER}`,
+              borderRadius:14, padding:"14px 16px",
+              display:"flex", alignItems:"center", gap:12
+            }}>
+              {/* Tıklama alanı */}
+              <div onClick={() => onYilSec(yil)} style={{flex:1,cursor:"pointer"}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                  <span style={{fontSize:28}}>📅</span>
+                  <div>
+                    <div style={{fontSize:18,fontWeight:900,color:aktif?ACCENT:TEXT}}>{yil}</div>
+                    <div style={{fontSize:12,color:MUTED}}>{ogrSayisi} öğrenci</div>
+                  </div>
+                </div>
+                {aktif && (
+                  <span style={{background:ACCENT,color:"#fff",borderRadius:20,padding:"2px 10px",fontSize:10,fontWeight:700}}>
+                    ✓ Aktif Yıl
+                  </span>
+                )}
+              </div>
+
+              {/* Sil */}
+              {yillar.length > 1 && (
+                silOnayYil === yil ? (
+                  <div style={{display:"flex",gap:6,flexShrink:0}}>
+                    <div style={{fontSize:11,color:"#C0392B",maxWidth:100,marginRight:4}}>
+                      {ogrSayisi} öğrenci silinecek!
+                    </div>
+                    <button onClick={()=>handleYilSil(yil)} style={{background:"#C0392B",color:"#fff",border:"none",borderRadius:8,padding:"6px 10px",fontSize:11,fontWeight:800,cursor:"pointer"}}>Sil</button>
+                    <button onClick={()=>setSilOnayYil(null)} style={{background:BG,color:MUTED,border:`1px solid ${BORDER}`,borderRadius:8,padding:"6px 8px",fontSize:11,cursor:"pointer"}}>✕</button>
+                  </div>
+                ) : (
+                  <button onClick={()=>setSilOnayYil(yil)} style={{background:"none",border:"1px solid #F28B82",color:"#C5221F",borderRadius:8,padding:"6px 10px",fontSize:12,cursor:"pointer",flexShrink:0}}>🗑</button>
+                )
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Yeni yıl ekle */}
+      <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:12,padding:14}}>
+        <div style={{fontSize:12,fontWeight:700,color:TEXT,marginBottom:10}}>Yeni Akademik Yıl Ekle</div>
+        <div style={{display:"flex",gap:8}}>
+          <input
+            placeholder="örn. 2026-2027"
+            value={yeniYil}
+            onChange={e=>setYeniYil(e.target.value)}
+            onKeyDown={e=>e.key==="Enter"&&handleYilEkle()}
+            style={{flex:1,padding:"10px 12px",border:`1px solid ${BORDER}`,borderRadius:10,fontSize:14,outline:"none"}}
+          />
+          <button onClick={handleYilEkle} disabled={!yeniYil.trim()} style={{
+            padding:"10px 16px",background:yeniYil.trim()?ACCENT:BORDER,
+            color:yeniYil.trim()?"#fff":MUTED,border:"none",borderRadius:10,
+            fontSize:14,fontWeight:800,cursor:"pointer"
+          }}>+ Ekle</button>
+        </div>
+        <div style={{fontSize:11,color:MUTED,marginTop:8}}>
+          Yılı silince o yılın tüm öğrenci kayıtları silinir.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Özet Kartı Bileşeni (Seans Öncesi Hazırlık) ─────────────────────────────
+function OzetKarti({ ogrenci, ogrRec, ogrP1, ogrP2, ogrRisk, denemeGirilen, denemeAvg, mudahalePlan, hazirlikNotlari, setHazirlikNotlari, ilerlemeNotlari, setIlerlemeNotlari, setTab }) {
+  const [hazirlikAiLoading, setHazirlikAiLoading] = useState(false);
+  const [aktifPanel, setAktifPanel] = useState("ozet"); // ozet | hazirlik | ilerleme
+
+  // Storage'dan yükle
+  const hazirlikNotu = hazirlikNotlari[ogrenci] || "";
+  async function setHazirlikNotu(metin) {
+    const updated = { ...hazirlikNotlari, [ogrenci]: metin };
+    setHazirlikNotlari(updated);
+    await saveHazirlikNotlari(updated);
+  }
+
+  const ogrMudahale = (mudahalePlan[ogrenci] || []).filter(p => p.durum === "Devam Ediyor");
+  const sonGorusme = ogrRec[0];
+  const ilkGorusme = ogrRec[ogrRec.length - 1];
+
+  // İlerleme: profil puanı değişimi (birden fazla analiz kaydı varsa)
+  const profilPuanlar = ogrP1?.scores || {};
+  const dusukBoyutlar = DIMENSIONS.filter(d => (profilPuanlar[d.key]||0) <= 2);
+  const yuksekBoyutlar = DIMENSIONS.filter(d => (profilPuanlar[d.key]||0) >= 4);
+
+  // Deneme trendi
+  const denemeArtan = denemeGirilen.length > 1 &&
+    denemeGirilen[denemeGirilen.length-1].toplam > denemeGirilen[0].toplam;
+
+  async function handleHazirlikNotu() {
+    setHazirlikAiLoading(true);
+    const gorusmeler = ogrRec.slice(0,5).map((r,i) =>
+      `Görüşme ${i+1} (${r.date}): ${r.summary}`
+    ).join("\n\n");
+    const mudahaleBolum = ogrMudahale.length > 0
+      ? "Aktif Müdahale Planı: " + ogrMudahale.map(p => p.hedef).join(", ")
+      : "";
+    const risk = ogrRisk.length > 0
+      ? "Risk: " + ogrRisk.map(r => r.riskTuru).join(", ")
+      : "";
+    const deneme = denemeAvg ? `Deneme Ortalaması: ${denemeAvg}/90` : "";
+
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        model:"claude-sonnet-4-6", max_tokens:1000,
+        system:"Sen Dr. Ayse Kara'sin — 20 yillik klinik PDR uzmanisin. Danismana bir sonraki seans icin pratik hazirlik notu yazarsın.",
+        messages:[{role:"user", content:`Öğrenci: ${ogrenci}
+${gorusmeler}
+${mudahaleBolum}
+${risk}
+${deneme}
+
+Bu öğrenciyle bir sonraki görüşme için seans hazırlık notu yaz:
+
+ÖNCEKİ SEANSLARDAN ÖZET: (en önemli 2-3 nokta)
+TAKİP EDİLMESİ GEREKENLER: (son görüşmede kalan konular)
+BU SEANSTA ODAKLANILACAKLAR: (somut 2-3 madde)
+SORULACAK SORULAR: (açıcı, terapötik sorular)
+DİKKAT EDİLECEKLER: (öğrenciye özel hassas noktalar)
+
+Kısa ve pratik yaz, Markdown kullanma.`}]
+      })
+    });
+    const data = await res.json();
+    setHazirlikNotu(data.content?.[0]?.text || "");
+    setHazirlikAiLoading(false);
+  }
+
+  return (
+    <div>
+      {/* Panel seçici */}
+      <div style={{display:"flex", borderBottom:`1px solid ${BORDER}`, marginBottom:14}}>
+        {[["ozet","📊 Özet"],["hazirlik","🎯 Seans Hazırlık"],["ilerleme","📈 İlerleme"]].map(([k,l])=>(
+          <button key={k} onClick={()=>setAktifPanel(k)} style={{
+            flex:1, padding:"8px 4px", border:"none", background:"none",
+            color:aktifPanel===k?ACCENT:MUTED, fontWeight:aktifPanel===k?700:500,
+            fontSize:12, cursor:"pointer",
+            borderBottom:aktifPanel===k?`3px solid ${ACCENT}`:"3px solid transparent"
+          }}>{l}</button>
+        ))}
+      </div>
+
+      {/* ── ÖZET PANELİ ─────────────────────────────────────── */}
+      {aktifPanel === "ozet" && (
+        <div>
+          {/* İstatistik kartları */}
+          <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:12}}>
+            {[
+              {label:"Görüşme",val:ogrRec.length,color:ACCENT},
+              {label:"Den.Ort.",val:denemeAvg||"—",color:BLUE},
+              {label:"Aktif Risk",val:ogrRisk.length>0?"⚠ Var":"✓",color:ogrRisk.length>0?"#C0392B":"#1A8C5B"},
+              {label:"Müdahale",val:ogrMudahale.length>0?ogrMudahale.length+" aktif":"—",color:ogrMudahale.length>0?PURPLE:MUTED},
+            ].map(c=>(
+              <div key={c.label} style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:10,padding:"10px",textAlign:"center"}}>
+                <div style={{fontSize:18,fontWeight:900,color:c.color}}>{c.val}</div>
+                <div style={{fontSize:10,color:MUTED}}>{c.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Son görüşme */}
+          {sonGorusme && (
+            <div style={{background:CARD,border:`1px solid ${BORDER}`,borderLeft:`4px solid ${ACCENT}`,borderRadius:10,padding:12,marginBottom:10}}>
+              <div style={{fontSize:10,fontWeight:700,color:MUTED,textTransform:"uppercase",marginBottom:4}}>Son Görüşme · {sonGorusme.date}</div>
+              <div style={{fontSize:13,color:TEXT,lineHeight:1.7}}>{sonGorusme.summary}</div>
+            </div>
+          )}
+
+          {/* Aktif müdahale planı */}
+          {ogrMudahale.length > 0 && (
+            <div style={{background:"#F0F4FF",border:`1px solid #c7ccf5`,borderRadius:10,padding:12,marginBottom:10}}>
+              <div style={{fontSize:10,fontWeight:700,color:"#3B4FD8",textTransform:"uppercase",marginBottom:6}}>Aktif Müdahale Planı</div>
+              {ogrMudahale.map(p=>(
+                <div key={p.id} style={{fontSize:12,color:TEXT,marginBottom:4}}>
+                  🎯 <b>{p.hedef}</b>
+                  {p.sure && <span style={{color:MUTED,fontSize:11}}> · {p.sure}</span>}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Profil özeti */}
+          {ogrP1 && (
+            <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:10,padding:12,marginBottom:10}}>
+              <div style={{fontSize:10,fontWeight:700,color:MUTED,textTransform:"uppercase",marginBottom:8}}>Profil 1</div>
+              {dusukBoyutlar.length > 0 && (
+                <div style={{marginBottom:6}}>
+                  <span style={{fontSize:10,color:"#C0392B",fontWeight:700}}>⚠ Düşük: </span>
+                  <span style={{fontSize:11,color:TEXT}}>{dusukBoyutlar.map(d=>d.label).join(", ")}</span>
+                </div>
+              )}
+              {yuksekBoyutlar.length > 0 && (
+                <div style={{marginBottom:8}}>
+                  <span style={{fontSize:10,color:"#1A8C5B",fontWeight:700}}>✓ Güçlü: </span>
+                  <span style={{fontSize:11,color:TEXT}}>{yuksekBoyutlar.map(d=>d.label).join(", ")}</span>
+                </div>
+              )}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
+                {DIMENSIONS.map(d=>{
+                  const val=profilPuanlar[d.key]||0;
+                  return (
+                    <div key={d.key} style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <span style={{fontSize:10,color:TEXT}}>{d.label}</span>
+                      <div style={{display:"flex",alignItems:"center",gap:3}}>
+                        <div style={{width:35,height:3,background:BORDER,borderRadius:2}}>
+                          <div style={{width:`${(val/5)*100}%`,height:"100%",background:d.color,borderRadius:2}}/>
+                        </div>
+                        <span style={{fontSize:11,fontWeight:800,color:d.color}}>{val}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Deneme netleri */}
+          {denemeGirilen.length > 0 && (
+            <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:10,padding:12}}>
+              <div style={{fontSize:10,fontWeight:700,color:MUTED,textTransform:"uppercase",marginBottom:8}}>
+                Deneme Netleri {denemeGirilen.length > 1 && <span style={{color:denemeArtan?"#1A8C5B":"#C0392B",fontWeight:700}}>{denemeArtan?"↑ Artış":"↓ Düşüş"}</span>}
+              </div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                {denemeGirilen.map(d=>{
+                  const c=d.toplam>=70?"#1A8C5B":d.toplam>=50?"#B07D1A":"#C0392B";
+                  const bg=d.toplam>=70?"#E6F5EE":d.toplam>=50?"#FDF6E3":"#FDECEA";
+                  return <div key={d.no} style={{background:bg,borderRadius:8,padding:"4px 10px",textAlign:"center"}}><div style={{fontSize:9,color:"#888"}}>D{d.no}</div><div style={{fontSize:13,fontWeight:900,color:c}}>{d.toplam.toFixed(1)}</div></div>;
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── SEANS HAZIRLIK PANELİ ────────────────────────────── */}
+      {aktifPanel === "hazirlik" && (
+        <div>
+          <div style={{background:"#FDF6E3",borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:12,color:"#B07D1A"}}>
+            🎯 Bir sonraki görüşme öncesi Dr. Ayşe Kara sana hazırlık notu hazırlasın
+          </div>
+
+          <button onClick={handleHazirlikNotu} disabled={hazirlikAiLoading||ogrRec.length===0} style={{
+            width:"100%", padding:"12px", marginBottom:12,
+            background:hazirlikAiLoading||ogrRec.length===0?BORDER:PURPLE,
+            color:hazirlikAiLoading||ogrRec.length===0?"#666":"#fff",
+            border:"none", borderRadius:10, fontSize:14, fontWeight:800, cursor:"pointer"
+          }}>
+            {hazirlikAiLoading?"⏳ Hazırlık notu oluşturuluyor...":ogrRec.length===0?"Önce görüşme notu ekleyin":"✦ Seans Hazırlık Notu Oluştur"}
+          </button>
+
+          {hazirlikNotu ? (
+            <div style={{background:CARD,border:`2px solid ${PURPLE}22`,borderRadius:12,padding:14}}>
+              <div style={{fontSize:11,fontWeight:700,color:PURPLE,textTransform:"uppercase",marginBottom:10}}>Seans Hazırlık Notu</div>
+              <div style={{fontSize:13,color:TEXT,lineHeight:1.8,whiteSpace:"pre-wrap"}}>{hazirlikNotu}</div>
+            </div>
+          ) : ogrRec.length > 0 ? (
+            <div style={{textAlign:"center",color:MUTED,marginTop:30,fontSize:13}}>
+              <div style={{fontSize:32,marginBottom:8}}>🎯</div>
+              Butona bas, AI önceki görüşmelere bakarak<br/>bir sonraki seans için hazırlık notu hazırlasın
+            </div>
+          ) : null}
+        </div>
+      )}
+
+      {/* ── İLERLEME TAKİBİ PANELİ ─────────────────────────── */}
+      {aktifPanel === "ilerleme" && (
+        <div>
+          <div style={{background:"#E6F5EE",borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:12,color:ACCENT}}>
+            📈 Öğrencinin görüşme sürecindeki gelişimi
+          </div>
+
+          {/* Görüşme sıklığı */}
+          {ogrRec.length > 0 && (
+            <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:10,padding:12,marginBottom:10}}>
+              <div style={{fontSize:11,fontWeight:700,color:MUTED,textTransform:"uppercase",marginBottom:8}}>Görüşme Süreci</div>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+                <div style={{textAlign:"center"}}>
+                  <div style={{fontSize:20,fontWeight:900,color:ACCENT}}>{ogrRec.length}</div>
+                  <div style={{fontSize:10,color:MUTED}}>Toplam Görüşme</div>
+                </div>
+                <div style={{textAlign:"center"}}>
+                  <div style={{fontSize:14,fontWeight:700,color:TEXT}}>{ilkGorusme?.date}</div>
+                  <div style={{fontSize:10,color:MUTED}}>İlk Görüşme</div>
+                </div>
+                <div style={{textAlign:"center"}}>
+                  <div style={{fontSize:14,fontWeight:700,color:TEXT}}>{sonGorusme?.date}</div>
+                  <div style={{fontSize:10,color:MUTED}}>Son Görüşme</div>
+                </div>
+              </div>
+              {/* Görüşme zaman çizelgesi bar */}
+              <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
+                {[...ogrRec].reverse().map((r,i)=>(
+                  <div key={r.id} title={r.date} style={{
+                    width:20, height:20, borderRadius:4,
+                    background:r.meetingType==="Veli"?ORANGE:ACCENT,
+                    opacity:0.4+(i/ogrRec.length)*0.6,
+                    display:"flex",alignItems:"center",justifyContent:"center",
+                    fontSize:9,color:"#fff",fontWeight:700
+                  }}>{i+1}</div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Profil güçlü/zayıf */}
+          {ogrP1 && (
+            <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:10,padding:12,marginBottom:10}}>
+              <div style={{fontSize:11,fontWeight:700,color:MUTED,textTransform:"uppercase",marginBottom:10}}>Profil Analizi</div>
+              {DIMENSIONS.map(d=>{
+                const val=profilPuanlar[d.key]||0;
+                const renk=val>=4?"#1A8C5B":val>=3?BLUE:val>=2?"#B07D1A":"#C0392B";
+                const bg=val>=4?"#E6F5EE":val>=3?"#EEF2FF":val>=2?"#FDF6E3":"#FDECEA";
+                return (
+                  <div key={d.key} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                    <span style={{fontSize:11,color:TEXT,width:110,flexShrink:0}}>{d.label}</span>
+                    <div style={{flex:1,height:8,background:BORDER,borderRadius:4}}>
+                      <div style={{width:`${(val/5)*100}%`,height:"100%",background:renk,borderRadius:4}}/>
+                    </div>
+                    <span style={{fontSize:12,fontWeight:900,color:renk,width:20,textAlign:"right"}}>{val}</span>
+                    <span style={{fontSize:10,background:bg,color:renk,borderRadius:10,padding:"1px 6px",width:60,textAlign:"center",flexShrink:0}}>
+                      {val>=4?"Güçlü":val>=3?"İyi":val>=2?"Gelişiyor":"Destek"}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Deneme trendi */}
+          {denemeGirilen.length > 1 && (
+            <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:10,padding:12}}>
+              <div style={{fontSize:11,fontWeight:700,color:MUTED,textTransform:"uppercase",marginBottom:8}}>Deneme Trendi</div>
+              <div style={{display:"flex",alignItems:"flex-end",gap:4,height:60,marginBottom:6}}>
+                {denemeGirilen.map((d,i)=>{
+                  const maxT=Math.max(...denemeGirilen.map(x=>x.toplam));
+                  const h=Math.max(8,(d.toplam/maxT)*55);
+                  const c=d.toplam>=70?"#1A8C5B":d.toplam>=50?"#B07D1A":"#C0392B";
+                  return (
+                    <div key={d.no} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                      <div style={{fontSize:8,color:c,fontWeight:700}}>{d.toplam.toFixed(0)}</div>
+                      <div style={{width:"100%",height:h,background:c,borderRadius:"3px 3px 0 0",opacity:0.8}}/>
+                      <div style={{fontSize:8,color:MUTED}}>D{d.no}</div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:11}}>
+                <span style={{color:MUTED}}>İlk: <b style={{color:TEXT}}>{denemeGirilen[0].toplam.toFixed(1)}</b></span>
+                <span style={{color:denemeArtan?"#1A8C5B":"#C0392B",fontWeight:700}}>
+                  {denemeArtan?"↑ ":"↓ "}{Math.abs(denemeGirilen[denemeGirilen.length-1].toplam-denemeGirilen[0].toplam).toFixed(1)} net
+                </span>
+                <span style={{color:MUTED}}>Son: <b style={{color:TEXT}}>{denemeGirilen[denemeGirilen.length-1].toplam.toFixed(1)}</b></span>
+              </div>
+            </div>
+          )}
+
+          {/* Seans Arası İlerleme Değerlendirmesi */}
+          {ogrRec.length >= 2 && (
+            <IlerlemeYazisi ogrenci={ogrenci} ogrRec={ogrRec} ogrP1={ogrP1} denemeGirilen={denemeGirilen} ilerlemeNotlari={ilerlemeNotlari} setIlerlemeNotlari={setIlerlemeNotlari} />
+          )}
+
+          {ogrRec.length === 0 && !ogrP1 && (
+            <div style={{textAlign:"center",color:MUTED,marginTop:40,fontSize:13}}>
+              <div style={{fontSize:36,marginBottom:8}}>📈</div>
+              Henüz veri yok. Görüşme ve profil ekledikçe ilerleme burada görünür.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ── İlerleme Yazısı Bileşeni ─────────────────────────────────────────────────
+function IlerlemeYazisi({ ogrenci, ogrRec, ogrP1, denemeGirilen, ilerlemeNotlari, setIlerlemeNotlari }) {
+  const [loading, setLoading] = useState(false);
+
+  // Storage'dan yükle
+  const yazı = ilerlemeNotlari[ogrenci] || "";
+  async function setYazi(metin) {
+    const updated = { ...ilerlemeNotlari, [ogrenci]: metin };
+    setIlerlemeNotlari(updated);
+    await saveIlerlemeNotlari(updated);
+  }
+
+  async function handleOlustur() {
+    setLoading(true);
+
+    // Seans kronolojisi
+    const seanslar = [...ogrRec]
+      .sort((a,b) => {
+        const parse = d => { const [g,ay,y]=(d||"").split("."); return new Date(`${y}-${ay}-${g}`); };
+        return parse(a.date) - parse(b.date);
+      })
+      .map((r,i) => `SEANS ${i+1} (${r.date}): ${r.summary}`)
+      .join("\n\n");
+
+    const profilBolum = ogrP1?.scores
+      ? "PROFİL PUANLARI: " + DIMENSIONS.map(d => `${d.label}: ${ogrP1.scores[d.key]||0}/5`).join(", ")
+      : "";
+
+    const denemeBolum = denemeGirilen.length > 0
+      ? "DENEME NETLERI: " + denemeGirilen.map(d => `D${d.no}: ${d.toplam.toFixed(1)}`).join(", ")
+      : "";
+
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        model:"claude-sonnet-4-6", max_tokens:2000,
+        system:"Sen Dr. Ayse Kara'sin — 20 yillik klinik PDR uzmanisin. BDT, baglanma teorisi ve varoluşçu perspektiften seans süreci değerlendirmesi yazarsın. Gelişmeleri somut ve destekleyici dille aktarırsın.",
+        messages:[{role:"user", content:`Öğrenci: ${ogrenci}
+
+SEANS GEÇMİŞİ (kronolojik):
+${seanslar}
+
+${profilBolum}
+${denemeBolum}
+
+Bu öğrencinin seans süreci boyunca gösterdiği ilerlemeyi kapsamlı değerlendir:
+
+GENEL İLERLEME DEĞERLENDİRMESİ:
+(Süreç boyunca gözlemlenen genel değişim ve gelişme)
+
+OLUMLU GELİŞMELER:
+(Seanslar arasında öne çıkan somut iyileşmeler, güçlenen alanlar, kazanılan beceriler)
+
+SEANS ARASI FARK:
+(İlk seanstan bu yana ne değişti, hangi konularda dönüşüm yaşandı)
+
+DEVAM EDEN ÇALIŞMA ALANLARI:
+(Hâlâ gelişim gerektiren, üzerinde çalışılmaya devam edilecek konular)
+
+GÜÇLÜ YÖNLERİ:
+(Öğrencinin terapötik süreçteki güç kaynakları, koruyucu faktörler)
+
+GENEL GÖRÜŞ:
+(Süreç hakkında kısa ve destekleyici genel değerlendirme)
+
+Sade, klinik ama sıcak bir dil kullan. Markdown kullanma.`}]
+      })
+    });
+    const data = await res.json();
+    setYazi(data.content?.[0]?.text || "");
+    setLoading(false);
+  }
+
+  return (
+    <div style={{marginTop:14}}>
+      <div style={{background:"#F0F4FF",border:`1px solid #c7ccf5`,borderRadius:10,padding:"10px 14px",marginBottom:10,fontSize:12,color:"#3B4FD8"}}>
+        📝 Seanslar arası ilerlemeyi ve olumlu gelişmeleri AI yazıyla değerlendirsin
+      </div>
+
+      <button onClick={handleOlustur} disabled={loading} style={{
+        width:"100%", padding:"12px", marginBottom:12,
+        background:loading?BORDER:PURPLE,
+        color:loading?"#666":"#fff",
+        border:"none", borderRadius:10, fontSize:14, fontWeight:800, cursor:"pointer"
+      }}>
+        {loading?"⏳ İlerleme değerlendirmesi yazılıyor...":"✦ Seans Arası İlerleme Değerlendirmesi Yaz"}
+      </button>
+
+      {yazı && (
+        <div style={{background:CARD,border:`2px solid ${PURPLE}33`,borderRadius:12,padding:16}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+            <div style={{fontSize:12,fontWeight:700,color:PURPLE,textTransform:"uppercase"}}>
+              İlerleme Değerlendirmesi — {ogrenci}
+            </div>
+            <button onClick={()=>{
+              const el = document.getElementById("ilerleme-yazisi-"+ogrenci.replace(/\s+/g,"_"));
+              if (el) raporIndir("ilerleme-yazisi-"+ogrenci.replace(/\s+/g,"_"), "Ilerleme_"+ogrenci.replace(/\s+/g,"_"));
+            }} style={{background:PURPLE,color:"#fff",border:"none",borderRadius:8,padding:"5px 12px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+              📄 İndir
+            </button>
+          </div>
+          <div id={"ilerleme-yazisi-"+ogrenci.replace(/\s+/g,"_")} style={{fontSize:13,color:TEXT,lineHeight:1.9,whiteSpace:"pre-wrap"}}>
+            {yazı}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ── Prof. Dr. Hakan Süpervizyon Bileşeni ─────────────────────────────────────
+function ProfDanismaEkrani({
+  kayitliListesi, aktifOgrenci, records, profiles, profiles2,
+  denemeler, riskListesi, mudahalePlan, sevkler,
+  hazirlikNotlari, ilerlemeNotlari, profNotlari, setProfNotlari
+}) {
+  const [seciliAd, setSeciliAd] = useState(aktifOgrenci?.name || "");
+  const [aramaMetni, setAramaMetni] = useState("");
+  const [soru, setSoru] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [mod, setMod] = useState("genel"); // genel | soru
+
+  useEffect(() => { if (aktifOgrenci?.name) setSeciliAd(aktifOgrenci.name); }, [aktifOgrenci?.name]);
+
+  const ogrKonusma = profNotlari[seciliAd] || [];
+
+  function tumVeriHazirla(ad) {
+    const adLower = ad.toLowerCase().trim();
+    const ogrRec = records.filter(r => r.studentName?.toLowerCase().trim() === adLower);
+    const ogrP1 = profiles.find(p => p.studentName?.toLowerCase().trim() === adLower);
+    const ogrP2 = profiles2.find(p => p.studentName?.toLowerCase().trim() === adLower);
+    const ogrDen = denemeler[ad] || {};
+    const ogrRisk = riskListesi.filter(r => r.studentName?.toLowerCase().trim() === adLower && !r.kapandi);
+    const ogrMud = (mudahalePlan[ad] || []).filter(p => p.durum === "Devam Ediyor");
+    const ogrSevk = sevkler.filter(s => s.studentName?.toLowerCase().trim() === adLower);
+    const ogrHazirlik = hazirlikNotlari[ad] || "";
+    const ogrIlerleme = ilerlemeNotlari[ad] || "";
+
+    const denemeGirilen = Object.entries(ogrDen).sort((a,b)=>a[0]-b[0]).map(([no,nets])=>({
+      no:parseInt(no), nets,
+      toplam: LGS_DERSLER.reduce((s,d)=>s+(parseFloat(nets[d.key])||0),0)
+    }));
+    const denemeAvg = denemeGirilen.length > 0
+      ? (denemeGirilen.reduce((s,d)=>s+d.toplam,0)/denemeGirilen.length).toFixed(1) : null;
+
+    return `
+ÖĞRENCİ: ${ad}
+
+GÖRÜŞME GEÇMİŞİ (${ogrRec.length} görüşme):
+${ogrRec.map((r,i)=>`Seans ${i+1} (${r.date}, ${r.meetingType||"Öğrenci"}): ${r.summary}`).join("\n") || "Yok"}
+
+
+PROFİL 1 — PSİKOSOSYAL BOYUTLAR:
+${ogrP1?.scores ? DIMENSIONS.map(d=>`${d.label}: ${ogrP1.scores[d.key]||0}/5`).join(", ") : "Girilmemiş"}
+${ogrP1?.analiz ? `PDR Analizi: ${ogrP1.analiz}` : ""}
+
+PROFİL 2 — AKADEMİK:
+${ogrP2?.sinavlar ? DERSLER.map(d=>`${d.label}: 1.Yazılı ${ogrP2.sinavlar[d.key+"1"]||"-"}, 2.Yazılı ${ogrP2.sinavlar[d.key+"2"]||"-"}`).join(", ") : "Girilmemiş"}
+${ogrP2?.d2 ? `D2 Dikkat: TN=${ogrP2.d2.TN||"-"}, E%=${ogrP2.d2.E_yuzde||"-"}, PR=${ogrP2.d2.PR||"-"}` : ""}
+${ogrP2?.kariyer_hedef ? `Kariyer Hedefi: ${ogrP2.kariyer_hedef}` : ""}
+
+DENEME SONUÇLARI:
+${denemeGirilen.length > 0 ? `Ortalama: ${denemeAvg}/90
+${denemeGirilen.map(d=>`D${d.no}: ${d.toplam.toFixed(1)}/90`).join(", ")}` : "Girilmemiş"}
+
+AKTİF RİSKLER (${ogrRisk.length}):
+${ogrRisk.map(r=>`${r.oncelik} - ${r.riskTuru}: ${r.aciklama} ${r.aiAnaliz||""}`).join("\n") || "Yok"}
+
+
+
+AKTİF MÜDAHALE PLANLARI:
+${ogrMud.map(p=>`Hedef: ${p.hedef} | Süre: ${p.sure||"-"}`).join("\n") || "Yok"}
+
+
+SEVK KAYITLARI:
+${ogrSevk.map(s=>`${s.tarih} - ${s.sevkYeri}: ${s.sevkNedeni} [${s.sonucBekleniyor?"Bekliyor":"Tamamlandi"}]`).join("\n") || "Yok"}
+
+
+DR. AYŞE KARA'NIN DEĞERLENDİRMELERİ:
+Seans Hazırlık Notu: ${ogrHazirlik || "Henüz oluşturulmamış"}
+İlerleme Değerlendirmesi: ${ogrIlerleme || "Henüz oluşturulmamış"}
+    `.trim();
+  }
+
+  async function handleGenel() {
+    if (!seciliAd) return;
+    setLoading(true);
+    const veri = tumVeriHazirla(seciliAd);
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        model:"claude-sonnet-4-6", max_tokens:3000,
+        system: PROF_HAKAN,
+        messages:[{role:"user", content:`${veri}
+
+Bu öğrencinin tüm verilerini ve Dr. Ayşe Kara'nın değerlendirmelerini inceleyerek kapsamlı bir klinik süpervizyon raporu yaz:
+
+KLİNİK İZLENİM:
+(Öğrencinin genel psikolojik profili, güçlü ve zayıf yanları)
+
+DR. AYŞE KARA DEĞERLENDİRMELERİNİN SÜPERVİZYONU:
+(Yapılan değerlendirmeleri üst düzey perspektiften yorumla, eksik veya dikkat edilmesi gereken noktaları belirt)
+
+ENTEGRATİF ANALİZ:
+(Tüm veriler bir arada ne anlatıyor — akademik, duygusal, sosyal, ailesel boyutlar arası etkileşim)
+
+KRİTİK GÖZLEMLER:
+(Gözden kaçmış olabilecek önemli noktalar, uyarılar)
+
+ÖNERİLEN YAKLAŞIM:
+(Bundan sonraki süreçte PDR danışmanına öneriler — teorik temel ve pratik adımlar)
+
+UZUN VADELİ PROGNOZ:
+(Mevcut gidişatla ne beklenebilir, nasıl önlenebilir veya desteklenebilir)
+
+Akademik ama sıcak, yapıcı bir dil kullan. Markdown kullanma.`}]
+      })
+    });
+    const data = await res.json();
+    const cevap = data.content?.[0]?.text || "";
+    const yeniKayit = { id: uid(), tarih: today(), tip: "genel", soru: "Genel Süpervizyon", cevap };
+    const updated = { ...profNotlari, [seciliAd]: [yeniKayit, ...(profNotlari[seciliAd]||[])] };
+    setProfNotlari(updated);
+    await saveProfNotlari(updated);
+    setLoading(false);
+  }
+
+  async function handleSoru() {
+    if (!seciliAd || !soru.trim()) return;
+    setLoading(true);
+    const veri = tumVeriHazirla(seciliAd);
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        model:"claude-sonnet-4-6", max_tokens:2000,
+        system: PROF_HAKAN,
+        messages:[{role:"user", content:`${veri}
+
+DANIŞMANIN SORUSU: ${soru}
+
+Bu soruyu tüm verileri ve Dr. Ayşe Kara'nın değerlendirmelerini göz önünde bulundurarak yanıtla. Akademik derinlikte ama pratik ve uygulanabilir bir yanıt ver. Yanıtının sonunda gerekli görürsen 1-2 adet takip sorusu sor — 'TAKIP SORULARIM:' başlığı altında. Markdown kullanma.`}]
+      })
+    });
+    const data = await res.json();
+    const cevap = data.content?.[0]?.text || "";
+    const yeniKayit = { id: uid(), tarih: today(), tip: "soru", soru, cevap };
+    const updated = { ...profNotlari, [seciliAd]: [yeniKayit, ...(profNotlari[seciliAd]||[])] };
+    setProfNotlari(updated);
+    await saveProfNotlari(updated);
+    setSoru("");
+    setLoading(false);
+  }
+
+  const inp = { width:"100%", padding:"9px 11px", border:`1px solid ${BORDER}`, borderRadius:9, fontSize:13, background:CARD, color:TEXT, outline:"none", boxSizing:"border-box", fontFamily:"inherit" };
+
+  return (
+    <div>
+      {/* Başlık */}
+      <div style={{background:"linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)", borderRadius:12, padding:"14px 16px", marginBottom:14, color:"#fff"}}>
+        <div style={{fontSize:10, opacity:0.7, textTransform:"uppercase", letterSpacing:1, marginBottom:4}}>Klinik Süpervizyon</div>
+        <div style={{fontSize:18, fontWeight:900}}>Prof. Dr. Hakan</div>
+        <div style={{fontSize:11, opacity:0.8, marginTop:2}}>Klinik Psikoloji · Çocuk-Ergen Psikiyatrisi · Eğitim Psikolojisi · PDR</div>
+      </div>
+
+      {/* Öğrenci seç */}
+      <input placeholder="Öğrenci ara..." value={aramaMetni} onChange={e=>setAramaMetni(e.target.value)} style={{...inp, marginBottom:8}} />
+      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:14}}>
+        {kayitliListesi.filter(o=>o.name.toLowerCase().includes(aramaMetni.toLowerCase())).slice(0,15).map(o=>{
+          const s=seciliAd===o.name;
+          return <button key={o.name} onClick={()=>setSeciliAd(o.name)} style={{padding:"4px 10px",borderRadius:16,border:`2px solid ${s?"#1a1a2e":BORDER}`,background:s?"#1a1a2e":CARD,color:s?"#fff":MUTED,fontSize:11,fontWeight:s?700:500,cursor:"pointer"}}>{o.name}</button>;
+        })}
+      </div>
+
+      {seciliAd && (
+        <>
+          {/* Mod seç */}
+          <div style={{display:"flex",gap:8,marginBottom:14}}>
+            <button onClick={()=>setMod("genel")} style={{flex:1,padding:"10px",borderRadius:10,border:`2px solid ${mod==="genel"?"#1a1a2e":BORDER}`,background:mod==="genel"?"#1a1a2e":CARD,color:mod==="genel"?"#fff":MUTED,fontSize:13,fontWeight:700,cursor:"pointer"}}>
+              📊 Genel Süpervizyon
+            </button>
+            <button onClick={()=>setMod("soru")} style={{flex:1,padding:"10px",borderRadius:10,border:`2px solid ${mod==="soru"?"#1a1a2e":BORDER}`,background:mod==="soru"?"#1a1a2e":CARD,color:mod==="soru"?"#fff":MUTED,fontSize:13,fontWeight:700,cursor:"pointer"}}>
+              💬 Soru Sor
+            </button>
+          </div>
+
+          {/* Genel süpervizyon */}
+          {mod === "genel" && (
+            <button onClick={handleGenel} disabled={loading} style={{
+              width:"100%", padding:"13px", marginBottom:14,
+              background:loading?"#666":"#1a1a2e",
+              color:"#fff", border:"none", borderRadius:12, fontSize:14, fontWeight:800, cursor:"pointer"
+            }}>
+              {loading ? "⏳ Prof. Dr. Hakan değerlendiriyor..." : "🎓 Tüm Verileri Değerlendir"}
+            </button>
+          )}
+
+          {/* Soru sor */}
+          {mod === "soru" && (
+            <div style={{marginBottom:14}}>
+              <textarea
+                placeholder="Prof. Dr. Hakan'a sorunuzu yazın...&#10;Örn: Bu öğrencide kaygıyı nasıl ele almalıyım?&#10;Örn: Aile görüşmesinde ne söylemeliyim?&#10;Örn: Risk değerlendirmesi doğru mu?"
+                value={soru}
+                onChange={e=>setSoru(e.target.value)}
+                rows={4}
+                style={{...inp, resize:"vertical", marginBottom:8}}
+              />
+              <button onClick={handleSoru} disabled={!soru.trim()||loading} style={{
+                width:"100%", padding:"12px",
+                background:soru.trim()&&!loading?"#1a1a2e":BORDER,
+                color:soru.trim()&&!loading?"#fff":MUTED,
+                border:"none", borderRadius:10, fontSize:14, fontWeight:800, cursor:"pointer"
+              }}>
+                {loading ? "⏳ Yanıtlanıyor..." : "💬 Soruyu Gönder"}
+              </button>
+            </div>
+          )}
+
+          {/* Konuşma geçmişi */}
+          {ogrKonusma.length > 0 && (
+            <div>
+              <div style={{fontSize:11,fontWeight:700,color:MUTED,textTransform:"uppercase",marginBottom:10}}>
+                Süpervizyon Geçmişi ({ogrKonusma.length})
+              </div>
+              {ogrKonusma.map((k,i) => (
+                <div key={k.id} style={{
+                  background:CARD, border:`1px solid ${BORDER}`,
+                  borderLeft:"4px solid #1a1a2e",
+                  borderRadius:10, padding:14, marginBottom:12
+                }}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                    <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                      <span style={{background:"#1a1a2e",color:"#fff",borderRadius:20,padding:"2px 10px",fontSize:10,fontWeight:700}}>
+                        {k.tip === "genel" ? "📊 Genel Süpervizyon" : "💬 Soru-Cevap"}
+                      </span>
+                      <span style={{fontSize:10,color:MUTED}}>{k.tarih}</span>
+                    </div>
+                    <button onClick={async()=>{
+                      const updated={...profNotlari,[seciliAd]:(profNotlari[seciliAd]||[]).filter(x=>x.id!==k.id)};
+                      setProfNotlari(updated);await saveProfNotlari(updated);
+                    }} style={{background:"none",border:"none",color:MUTED,cursor:"pointer",fontSize:12}}>✕</button>
+                  </div>
+                  {k.tip === "soru" && (
+                    <div style={{fontSize:12,fontWeight:700,color:"#1a1a2e",marginBottom:8,background:"#f0f0f8",borderRadius:6,padding:"6px 10px"}}>
+                      ❓ {k.soru}
+                    </div>
+                  )}
+                  <div style={{fontSize:13,color:TEXT,lineHeight:1.8,whiteSpace:"pre-wrap"}}>{k.cevap}</div>
+                  {/* Prof'un sorularına cevap ver */}
+                  {(k.cevap.includes("DAHA İYİ ANLAYABİLMEK İÇİN") || k.cevap.includes("TAKİP SORULARIM")) && (
+                    <ProfCevapAlani
+                      konusmaId={k.id}
+                      seciliAd={seciliAd}
+                      oncekiVeri={k.cevap}
+                      profNotlari={profNotlari}
+                      setProfNotlari={setProfNotlari}
+                    />
+                  )}
+
+                  <button onClick={()=>{
+                    // Geçici div oluştur, raporIndir çağır
+                    const tmpId = "prof-rapor-tmp-"+k.id;
+                    let tmp = document.getElementById(tmpId);
+                    if (!tmp) {
+                      tmp = document.createElement("div");
+                      tmp.id = tmpId;
+                      tmp.style.position = "absolute";
+                      tmp.style.left = "-9999px";
+                      tmp.style.top = "0";
+                      tmp.style.width = "800px";
+                      tmp.style.fontFamily = "Arial, sans-serif";
+                      tmp.style.fontSize = "13px";
+                      tmp.style.color = "#1a1a1a";
+                      tmp.style.padding = "20px";
+                      tmp.innerHTML = `
+                        <div style="border-bottom:3px solid #1a1a2e;padding-bottom:12px;margin-bottom:16px">
+                          <div style="font-size:10px;color:#666;text-transform:uppercase;letter-spacing:1px">Klinik Süpervizyon Raporu</div>
+                          <div style="font-size:22px;font-weight:900;color:#1a1a2e">Prof. Dr. Hakan</div>
+                          <div style="font-size:11px;color:#555;margin-top:2px">Klinik Psikoloji · Çocuk-Ergen Psikiyatrisi · Eğitim Psikolojisi · PDR</div>
+                        </div>
+                        <table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:12px">
+                          <tr><td style="padding:4px 8px;background:#f5f5f5;font-weight:700;width:140px">Öğrenci</td><td style="padding:4px 8px">${seciliAd}</td></tr>
+                          <tr><td style="padding:4px 8px;background:#f5f5f5;font-weight:700">Tarih</td><td style="padding:4px 8px">${k.tarih}</td></tr>
+                          <tr><td style="padding:4px 8px;background:#f5f5f5;font-weight:700">Tür</td><td style="padding:4px 8px">${k.tip === "genel" ? "Genel Süpervizyon" : "Soru-Cevap"}</td></tr>
+                          ${k.tip === "soru" ? `<tr><td style="padding:4px 8px;background:#f5f5f5;font-weight:700">Soru</td><td style="padding:4px 8px">${k.soru}</td></tr>` : ""}
+                        </table>
+                        <div style="font-size:11px;font-weight:700;color:#1a1a2e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;padding-bottom:4px;border-bottom:1px solid #ddd">Süpervizyon Değerlendirmesi</div>
+                        <div style="font-size:13px;line-height:1.9;white-space:pre-wrap;color:#1a1a1a">${k.cevap}</div>
+                        <div style="margin-top:30px;padding-top:12px;border-top:1px solid #eee;display:flex;justify-content:space-between;font-size:11px;color:#666">
+                          <div>PDR Danışmanı: ___________________</div>
+                          <div>Tarih: ${k.tarih}</div>
+                        </div>
+                      `;
+                      document.body.appendChild(tmp);
+                    }
+                    raporIndir(tmpId, "ProfDrHakan_Supervizyon_" + seciliAd.replace(/\s+/g,"_") + "_" + k.tarih.replace(/\./g,"-"));
+                    setTimeout(()=>{ const el=document.getElementById(tmpId); if(el) el.remove(); }, 8000);
+                  }} style={{
+                    marginTop:10, padding:"7px 16px", background:"#1a1a2e", color:"#fff",
+                    border:"none", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer"
+                  }}>📄 PDF Olarak İndir</button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {ogrKonusma.length === 0 && (
+            <div style={{textAlign:"center",color:MUTED,marginTop:40,fontSize:13}}>
+              <div style={{fontSize:48,marginBottom:12}}>🎓</div>
+              <div style={{fontWeight:700,color:TEXT,marginBottom:6}}>Prof. Dr. Hakan</div>
+              <div>Öğrencinin tüm verilerini değerlendirmek veya<br/>soru sormak için yukarıdaki butonları kullanın</div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+
+// ── Prof. Cevap Alanı Bileşeni ───────────────────────────────────────────────
+function ProfCevapAlani({ konusmaId, seciliAd, oncekiVeri, profNotlari, setProfNotlari }) {
+  const [cevap, setCevap] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [goster, setGoster] = useState(false);
+
+  async function handleCevapGonder() {
+    if (!cevap.trim()) return;
+    setLoading(true);
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        model:"claude-sonnet-4-6", max_tokens:2000,
+        system: PROF_HAKAN,
+        messages:[{role:"user", content:`Öğrenci: ${seciliAd}
+
+Önceki değerlendirmem ve sorularım:
+${oncekiVeri}
+
+Danışmanın cevabı:
+${cevap}
+
+Bu bilgiyi de göz önünde bulundurarak değerlendirmeni güncelle ve derinleştir. Gerekirse ek sorular sorabilirsin. Markdown kullanma.`}]
+      })
+    });
+    const data = await res.json();
+    const yeniCevap = data.content?.[0]?.text || "";
+    const yeniKayit = {
+      id: uid(), tarih: today(), tip: "takip",
+      soru: "Takip cevabı: " + cevap.substring(0,50) + "...",
+      cevap: yeniCevap
+    };
+    const updated = { ...profNotlari, [seciliAd]: [yeniKayit, ...(profNotlari[seciliAd]||[])] };
+    setProfNotlari(updated);
+    await saveProfNotlari(updated);
+    setCevap("");
+    setGoster(false);
+    setLoading(false);
+  }
+
+  if (!goster) return (
+    <button onClick={()=>setGoster(true)} style={{
+      marginTop:8, padding:"6px 14px",
+      background:"#EEF2FF", color:"#3B4FD8",
+      border:"1px solid #c7ccf5", borderRadius:8,
+      fontSize:11, fontWeight:700, cursor:"pointer"
+    }}>
+      💬 Prof'un Sorularını Yanıtla
+    </button>
+  );
+
+  return (
+    <div style={{marginTop:10, background:"#EEF2FF", borderRadius:10, padding:12}}>
+      <div style={{fontSize:11, fontWeight:700, color:"#3B4FD8", marginBottom:8}}>
+        Prof. Dr. Hakan'ın sorularını yanıtlayın
+      </div>
+      <textarea
+        placeholder="Prof'un sorularına cevabınızı yazın..."
+        value={cevap}
+        onChange={e=>setCevap(e.target.value)}
+        rows={4}
+        style={{width:"100%", padding:"8px 10px", border:"1px solid #c7ccf5", borderRadius:8, fontSize:12, resize:"vertical", boxSizing:"border-box", fontFamily:"inherit", marginBottom:8}}
+      />
+      <div style={{display:"flex", gap:8}}>
+        <button onClick={()=>setGoster(false)} style={{flex:1, padding:"8px", background:"#fff", color:MUTED, border:`1px solid ${BORDER}`, borderRadius:8, fontSize:12, cursor:"pointer"}}>
+          İptal
+        </button>
+        <button onClick={handleCevapGonder} disabled={!cevap.trim()||loading} style={{
+          flex:2, padding:"8px",
+          background:cevap.trim()&&!loading?"#1a1a2e":BORDER,
+          color:cevap.trim()&&!loading?"#fff":MUTED,
+          border:"none", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer"
+        }}>
+          {loading ? "⏳ Prof. değerlendiriyor..." : "🎓 Gönder ve Derinleştir"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Sil Butonu Bileşeni ───────────────────────────────────────────────────────
 function SilButonu({ onSil }) {
   const [onay, setOnay] = useState(false);
@@ -1727,11 +3288,21 @@ function OgrenciYonetim({
   profiles2, setProfiles2,
   denemeler, setDenemeler,
   riskListesi, setRiskListesi,
-  kayitliListesi, onRaporAc, setAktifOgrenci, setTab
+  kayitliListesi, mudahalePlan, aktifYil, onYilEkrani,
+  hazirlikNotlari, setHazirlikNotlari,
+  ilerlemeNotlari, setIlerlemeNotlari,
+  onRaporAc, setAktifOgrenci, setTab
 }) {
 
   const [aramaMetni, setAramaMetni] = useState("");
+  const [aramaDebounce, setAramaDebounce] = useState("");
   const [seciliOgrenci, setSeciliOgrenci] = useState(null);
+
+  // Arama debounce — 300ms bekle
+  useEffect(() => {
+    const t = setTimeout(() => setAramaDebounce(aramaMetni), 300);
+    return () => clearTimeout(t);
+  }, [aramaMetni]);
   const [yeniForm, setYeniForm] = useState({ studentName:"", className:"", numara:"" });
   const [formAcik, setFormAcik] = useState(false);
   const [aktifSekme, setAktifSekme] = useState("ozet"); // ozet | gorusme | deneme | profil
@@ -1756,47 +3327,47 @@ function OgrenciYonetim({
     setSeciliOgrenci(null);
   }
 
-  // Tüm kaynaklardan öğrenci listesi — ogrenciler + kayıtlılardan
-  const tumOgrenciler = (() => {
-    const map = new Map();
-    ogrenciler.forEach(o => map.set(o.studentName.toLowerCase().trim(), o));
-    kayitliListesi.forEach(o => {
-      const key = o.name.toLowerCase().trim();
-      if (!map.has(key)) map.set(key, { studentName: o.name, className: o.className, numara: "" });
-    });
-    return [...map.values()].sort((a,b) => a.studentName.localeCompare(b.studentName, "tr"));
-  })();
+  // Öğrenci listesi — aktif yıla göre filtrele (useMemo ile cache)
+  const tumOgrenciler = useMemo(() =>
+    ogrenciler
+      .filter(o => !o.yil || o.yil === aktifYil)
+      .slice()
+      .sort((a,b) => (a.studentName||"").localeCompare(b.studentName||"", "tr")),
+  [ogrenciler, aktifYil]);
 
-  const filtreliListe = tumOgrenciler.filter(o =>
-    o.studentName.toLowerCase().includes(aramaMetni.toLowerCase()) ||
-    o.className?.toLowerCase().includes(aramaMetni.toLowerCase()) ||
-    o.numara?.includes(aramaMetni)
-  );
+  const filtreliListe = useMemo(() => tumOgrenciler.filter(o =>
+    !aramaDebounce ||
+    o.studentName?.toLowerCase().includes(aramaDebounce.toLowerCase()) ||
+    o.className?.toLowerCase().includes(aramaDebounce.toLowerCase()) ||
+    o.numara?.includes(aramaDebounce)
+  ), [tumOgrenciler, aramaDebounce]);
 
   async function handleOgrenciSil(studentName) {
-    // Direkt sil (confirm artifact'ta çalışmaz)
     const ad = studentName.toLowerCase().trim();
-    // Öğrenci listesinden sil
+    // Hepsini paralel sil
     const updOgr = ogrenciler.filter(o => o.studentName?.toLowerCase().trim() !== ad);
-    setOgrenciler(updOgr); await saveOgrenciler(updOgr);
-    // Görüşme notları
     const updRec = records.filter(r => r.studentName?.toLowerCase().trim() !== ad);
-    setRecords(updRec); await saveRecords(updRec);
-    // Profil 1
     const updP1 = profiles.filter(p => p.studentName?.toLowerCase().trim() !== ad);
-    setProfiles(updP1); await saveProfiles(updP1);
-    // Profil 2
     const updP2 = profiles2.filter(p => p.studentName?.toLowerCase().trim() !== ad);
-    setProfiles2(updP2); await saveProfiles2(updP2);
-    // Denemeler
     const updDen = { ...denemeler };
-    const denKey = Object.keys(updDen).find(k => k.toLowerCase().trim() === ad);
-    if (denKey) delete updDen[denKey];
-    setDenemeler(updDen); await saveDenemeler(updDen);
-    // Risk listesi
+    Object.keys(updDen).forEach(k => { if (k.toLowerCase().trim() === ad) delete updDen[k]; });
     const updRisk = riskListesi.filter(r => r.studentName?.toLowerCase().trim() !== ad);
-    setRiskListesi(updRisk); await saveRiskListesi(updRisk);
-    // Aktif öğrenciyi temizle
+    // State'leri güncelle
+    setOgrenciler(updOgr);
+    setRecords(updRec);
+    setProfiles(updP1);
+    setProfiles2(updP2);
+    setDenemeler(updDen);
+    setRiskListesi(updRisk);
+    // Storage'a kaydet
+    await Promise.all([
+      saveOgrenciler(updOgr),
+      saveRecords(updRec),
+      saveProfiles(updP1),
+      saveProfiles2(updP2),
+      saveDenemeler(updDen),
+      saveRiskListesi(updRisk),
+    ]);
     if (aktifOgrenci?.name?.toLowerCase().trim() === ad) setAktifOgrenci({ name: "", className: "" });
     setSeciliOgrenci(null);
   }
@@ -1804,7 +3375,7 @@ function OgrenciYonetim({
 
   async function handleOgrenciEkle() {
     if (!yeniForm.studentName.trim()) return;
-    const yeni = { id: uid(), ...yeniForm, tarih: today() };
+    const yeni = { id: uid(), ...yeniForm, yil: aktifYil, tarih: today() };
     const updated = [yeni, ...ogrenciler];
     setOgrenciler(updated);
     await saveOgrenciler(updated);
@@ -1986,73 +3557,24 @@ function OgrenciYonetim({
             ))}
           </div>
 
-          {/* ÖZET */}
+          {/* ÖZET — Canlı Öğrenci Kartı */}
           {aktifSekme === "ozet" && (
-            <div>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:14 }}>
-                {[
-                  { label:"Görüşme", val:ogrRec.length, color:ACCENT },
-                  { label:"Deneme", val:Object.keys(ogrDeneme).length, color:BLUE },
-                  { label:"Den. Ort.", val:denemeAvg || "—", color:BLUE },
-                  { label:"Risk", val:ogrRisk.length > 0 ? "⚠ Var" : "—", color:ogrRisk.length>0?"#C0392B":MUTED },
-                ].map(c => (
-                  <div key={c.label} style={{ background:CARD, border:`1px solid ${BORDER}`, borderRadius:10, padding:"10px 12px", textAlign:"center" }}>
-                    <div style={{ fontSize:20, fontWeight:900, color:c.color }}>{c.val}</div>
-                    <div style={{ fontSize:11, color:MUTED }}>{c.label}</div>
-                  </div>
-                ))}
-              </div>
-              {/* Son görüşme */}
-              {ogrRec.length > 0 && (
-                <div style={{ background:CARD, border:`1px solid ${BORDER}`, borderRadius:10, padding:12, marginBottom:10 }}>
-                  <div style={{ fontSize:11, fontWeight:700, color:MUTED, marginBottom:6, textTransform:"uppercase" }}>Son Görüşme</div>
-                  <div style={{ fontSize:11, color:MUTED, marginBottom:4 }}>{ogrRec[0].date} · {ogrRec[0].topic || "Genel"}</div>
-                  <div style={{ fontSize:13, color:TEXT, lineHeight:1.6 }}>{ogrRec[0].summary}</div>
-                </div>
-              )}
-              {/* Profil radar mini */}
-              {ogrP1 && (
-                <div style={{ background:CARD, border:`1px solid ${BORDER}`, borderRadius:10, padding:12, marginBottom:10 }}>
-                  <div style={{ fontSize:11, fontWeight:700, color:MUTED, marginBottom:8, textTransform:"uppercase" }}>Profil 1 Özeti</div>
-                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:5 }}>
-                    {DIMENSIONS.map(d => {
-                      const val = ogrP1.scores?.[d.key] || 0;
-                      return (
-                        <div key={d.key} style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                          <span style={{ fontSize:11, color:TEXT }}>{d.label}</span>
-                          <div style={{ display:"flex", alignItems:"center", gap:4 }}>
-                            <div style={{ width:40, height:4, background:BORDER, borderRadius:2 }}>
-                              <div style={{ width:`${(val/5)*100}%`, height:"100%", background:d.color, borderRadius:2 }} />
-                            </div>
-                            <span style={{ fontSize:11, fontWeight:800, color:d.color }}>{val}</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-              {/* Deneme özeti */}
-              {denemeGirilen.length > 0 && (
-                <div style={{ background:CARD, border:`1px solid ${BORDER}`, borderRadius:10, padding:12 }}>
-                  <div style={{ fontSize:11, fontWeight:700, color:MUTED, marginBottom:8, textTransform:"uppercase" }}>Deneme Netleri</div>
-                  <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
-                    {denemeGirilen.map(d => {
-                      const c = d.toplam>=70?"#1A8C5B":d.toplam>=50?"#B07D1A":"#C0392B";
-                      const bg = d.toplam>=70?"#E6F5EE":d.toplam>=50?"#FDF6E3":"#FDECEA";
-                      return (
-                        <div key={d.no} style={{ background:bg, borderRadius:8, padding:"5px 10px", textAlign:"center" }}>
-                          <div style={{ fontSize:9, color:"#888" }}>D{d.no}</div>
-                          <div style={{ fontSize:14, fontWeight:900, color:c }}>{d.toplam.toFixed(1)}</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
+            <OzetKarti
+              ogrenci={seciliOgrenci}
+              ogrRec={ogrRec}
+              ogrP1={ogrP1}
+              ogrP2={ogrP2}
+              ogrRisk={ogrRisk}
+              denemeGirilen={denemeGirilen}
+              denemeAvg={denemeAvg}
+              mudahalePlan={mudahalePlan || {}}
+              hazirlikNotlari={hazirlikNotlari}
+              setHazirlikNotlari={setHazirlikNotlari}
+              ilerlemeNotlari={ilerlemeNotlari}
+              setIlerlemeNotlari={setIlerlemeNotlari}
+              setTab={setTab}
+            />
           )}
-
           {/* GÖRÜŞME */}
           {aktifSekme === "gorusme" && (
             <div>
@@ -3200,100 +4722,192 @@ function ProfilMerkez({
 }
 
 // ── Sınıf Profili Bileşeni ────────────────────────────────────────────────────
-function SinifProfili({ profiles }) {
-  const siniflar = [...new Set(profiles.map(p => p.className).filter(Boolean))].sort();
-  const [seciliSinif, setSeciliSinif] = useState(siniflar[0] || "");
-  const sinifOgrencileri = profiles.filter(p => p.className === seciliSinif);
-  const boyutOrtalamalari = DIMENSIONS.map(d => {
-    const vals = sinifOgrencileri.map(p => p.scores?.[d.key] || 0);
-    const ort = vals.length ? (vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(1) : 0;
-    return { ...d, ort: parseFloat(ort) };
-  });
+function SinifProfili({ ogrenciler, records, riskListesi, aktifYil }) {
+  const [seciliSinif, setSeciliSinif] = useState(null);
 
+  const SUBELER = ["8-A","8-B","8-C","8-D","8-E","8-F","8-G","8-H","8-I","8-J","8-K","8-L","8-M","8-N"];
+  const RISK_TURLERI = ["Davranış","Akademik","Aile","Akran / Zorbalık","Duygusal","Devamsızlık","Öz Zarar","Sağlık","Madde Kullanımı","Ekonomik Güçlük","Yas / Kayıp","Travma","Özel Öğrenme Güçlüğü","Diğer"];
+
+  // Yıl filtreli öğrenciler
+  const yilOgrencileri = ogrenciler.filter(o => !o.yil || o.yil === aktifYil);
+
+  // Her şube için istatistik
+  function subeIstatistik(sube) {
+    const ogr = yilOgrencileri.filter(o => (o.className||"").toUpperCase().replace(" ","") === sube.replace("-","").toUpperCase() ||
+      (o.className||"").toUpperCase() === sube.toUpperCase());
+    const ogrAdlar = ogr.map(o => o.studentName.toLowerCase().trim());
+    const gorusmeler = records.filter(r => ogrAdlar.includes(r.studentName?.toLowerCase().trim()));
+    const riskler = riskListesi.filter(r => ogrAdlar.includes(r.studentName?.toLowerCase().trim()) && !r.kapandi);
+    const riskDagilim = {};
+    RISK_TURLERI.forEach(t => {
+      riskDagilim[t] = riskler.filter(r => r.riskTuru === t).length;
+    });
+    return { ogr, gorusmeler, riskler, riskDagilim };
+  }
+
+  // Aktif şubeler — öğrencisi olan ya da herhangi biri
+  const aktifSubeler = SUBELER.filter(s => {
+    const st = subeIstatistik(s);
+    return st.ogr.length > 0;
+  });
+  const gosterilecekSubeler = aktifSubeler.length > 0 ? aktifSubeler : SUBELER;
+
+  if (seciliSinif) {
+    const st = subeIstatistik(seciliSinif);
+    const enCokGorusulen = [...st.ogr].sort((a,b) => {
+      const aG = records.filter(r => r.studentName?.toLowerCase().trim() === a.studentName.toLowerCase().trim()).length;
+      const bG = records.filter(r => r.studentName?.toLowerCase().trim() === b.studentName.toLowerCase().trim()).length;
+      return bG - aG;
+    });
+
+    return (
+      <div>
+        {/* Geri butonu */}
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+          <button onClick={()=>setSeciliSinif(null)} style={{background:BG,border:`1px solid ${BORDER}`,borderRadius:8,padding:"6px 12px",fontSize:12,fontWeight:700,color:MUTED,cursor:"pointer"}}>← Geri</button>
+          <div style={{fontSize:18,fontWeight:900,color:TEXT}}>{seciliSinif} Sınıfı</div>
+          <span style={{fontSize:12,color:MUTED}}>· {aktifYil}</span>
+        </div>
+
+        {/* Özet kartlar */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14}}>
+          {[
+            {label:"Öğrenci",val:st.ogr.length,color:ACCENT},
+            {label:"Görüşme",val:st.gorusmeler.length,color:BLUE},
+            {label:"Aktif Risk",val:st.riskler.length,color:st.riskler.length>0?"#C0392B":MUTED},
+          ].map(c=>(
+            <div key={c.label} style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:10,padding:"10px 6px",textAlign:"center"}}>
+              <div style={{fontSize:22,fontWeight:900,color:c.color}}>{c.val}</div>
+              <div style={{fontSize:10,color:MUTED}}>{c.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Risk Haritası */}
+        <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:12,padding:14,marginBottom:14}}>
+          <div style={{fontSize:12,fontWeight:700,color:"#C0392B",textTransform:"uppercase",marginBottom:10}}>⚠ Risk Haritası</div>
+          {RISK_TURLERI.map(t => {
+            const sayi = st.riskDagilim[t]||0;
+            const ogrRisk = st.riskler.filter(r=>r.riskTuru===t);
+            return (
+              <div key={t} style={{marginBottom:8}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
+                  <span style={{fontSize:12,color:TEXT,fontWeight:sayi>0?700:400}}>{t}</span>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    {sayi > 0 && (
+                      <div style={{display:"flex",gap:3}}>
+                        {ogrRisk.map(r=>(
+                          <span key={r.id} style={{background:"#FDECEA",color:"#C0392B",borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:700}}>{r.studentName}</span>
+                        ))}
+                      </div>
+                    )}
+                    <span style={{fontSize:12,fontWeight:900,color:sayi>0?"#C0392B":MUTED,width:20,textAlign:"right"}}>{sayi||"—"}</span>
+                  </div>
+                </div>
+                <div style={{height:4,background:BORDER,borderRadius:2}}>
+                  <div style={{width:`${st.ogr.length>0?Math.min(100,(sayi/st.ogr.length)*100*3):0}%`,height:"100%",background:sayi>0?"#C0392B":BORDER,borderRadius:2}}/>
+                </div>
+              </div>
+            );
+          })}
+          {st.riskler.length === 0 && (
+            <div style={{textAlign:"center",color:"#1A8C5B",fontSize:12,padding:"8px 0"}}>✓ Aktif risk kaydı yok</div>
+          )}
+        </div>
+
+        {/* Öğrenci Listesi */}
+        <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:12,padding:14}}>
+          <div style={{fontSize:12,fontWeight:700,color:TEXT,textTransform:"uppercase",marginBottom:10}}>Öğrenci Listesi</div>
+          {enCokGorusulen.length === 0 && (
+            <div style={{textAlign:"center",color:MUTED,fontSize:12}}>Bu sınıfta kayıtlı öğrenci yok</div>
+          )}
+          {enCokGorusulen.map(o => {
+            const gSayisi = records.filter(r => r.studentName?.toLowerCase().trim() === o.studentName.toLowerCase().trim()).length;
+            const oRisk = riskListesi.filter(r => r.studentName?.toLowerCase().trim() === o.studentName.toLowerCase().trim() && !r.kapandi);
+            return (
+              <div key={o.studentName} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 0",borderBottom:`1px solid ${BORDER}`}}>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <div style={{width:30,height:30,borderRadius:"50%",background:ACCENT_LIGHT,color:ACCENT,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800}}>
+                    {o.studentName.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:600,color:TEXT}}>{o.studentName}</div>
+                    {o.numara && <div style={{fontSize:10,color:MUTED}}>No: {o.numara}</div>}
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:5,alignItems:"center"}}>
+                  {oRisk.length > 0 && <span style={{background:"#FDECEA",color:"#C0392B",borderRadius:10,padding:"2px 7px",fontSize:10,fontWeight:700}}>⚠ Risk</span>}
+                  <span style={{background:ACCENT_LIGHT,color:ACCENT,borderRadius:10,padding:"2px 8px",fontSize:10,fontWeight:700}}>{gSayisi} görüşme</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // Ana ekran — şube kartları
   return (
     <div>
-      <div style={{ background: "#EEF2FF", borderRadius: 10, padding: "10px 14px", marginBottom: 14, fontSize: 13, color: BLUE, fontWeight: 600 }}>
-        🏫 Bir sınıftaki tüm öğrencilerin Profil 1 puanlarını karşılaştır
+      <div style={{background:"#EEF2FF",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:13,color:BLUE,fontWeight:600}}>
+        🏫 {aktifYil} — Sınıf & Şube Haritası
       </div>
-      {siniflar.length === 0 ? (
-        <div style={{ textAlign: "center", color: MUTED, marginTop: 40, fontSize: 14 }}>
-          <div style={{ fontSize: 36, marginBottom: 8 }}>🏫</div>
-          Henüz sınıf bilgisi olan Profil 1 kaydı yok.
-        </div>
-      ) : (
-        <>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
-            {siniflar.map(s => (
-              <button key={s} onClick={() => setSeciliSinif(s)} style={{
-                padding: "6px 14px", borderRadius: 20,
-                border: `2px solid ${seciliSinif === s ? BLUE : BORDER}`,
-                background: seciliSinif === s ? "#EEF2FF" : CARD,
-                color: seciliSinif === s ? BLUE : MUTED,
-                fontSize: 13, fontWeight: 700, cursor: "pointer"
-              }}>{s}</button>
-            ))}
-          </div>
-          {seciliSinif && sinifOgrencileri.length > 0 && (
-            <>
-              <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 14, marginBottom: 14 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: BLUE, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>
-                  {seciliSinif} — Sınıf Ortalaması ({sinifOgrencileri.length} öğrenci)
-                </div>
-                {boyutOrtalamalari.map(d => (
-                  <div key={d.key} style={{ marginBottom: 8 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: TEXT }}>{d.label}</span>
-                      <span style={{ fontSize: 13, fontWeight: 800, color: d.color }}>{d.ort}</span>
-                    </div>
-                    <div style={{ height: 8, background: BG, borderRadius: 4 }}>
-                      <div style={{ width: `${(d.ort/5)*100}%`, height: "100%", background: d.color, borderRadius: 4 }} />
-                    </div>
-                  </div>
-                ))}
+
+      {/* Şube kartları grid */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        {SUBELER.map(sube => {
+          const st = subeIstatistik(sube);
+          const riskVar = st.riskler.length > 0;
+          const gorusmeli = st.gorusmeler.length > 0;
+          return (
+            <div key={sube} onClick={()=>setSeciliSinif(sube)} style={{
+              background:CARD, border:`2px solid ${riskVar?"#F28B82":gorusmeli?ACCENT_LIGHT:BORDER}`,
+              borderRadius:14, padding:"14px 12px", cursor:"pointer",
+              transition:"all 0.15s"
+            }}>
+              {/* Şube adı */}
+              <div style={{fontSize:22,fontWeight:900,color:riskVar?"#C0392B":gorusmeli?ACCENT:MUTED,marginBottom:6}}>{sube}</div>
+
+              {/* İstatistikler */}
+              <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:6}}>
+                <span style={{background:ACCENT_LIGHT,color:ACCENT,borderRadius:10,padding:"2px 8px",fontSize:11,fontWeight:700}}>
+                  👤 {st.ogr.length} öğrenci
+                </span>
+                {gorusmeli && (
+                  <span style={{background:"#EEF2FF",color:BLUE,borderRadius:10,padding:"2px 8px",fontSize:11,fontWeight:700}}>
+                    💬 {st.gorusmeler.length} görüşme
+                  </span>
+                )}
+                {riskVar && (
+                  <span style={{background:"#FDECEA",color:"#C0392B",borderRadius:10,padding:"2px 8px",fontSize:11,fontWeight:700}}>
+                    ⚠ {st.riskler.length} risk
+                  </span>
+                )}
               </div>
-              <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, overflow: "hidden" }}>
-                <div style={{ padding: "10px 14px", borderBottom: `1px solid ${BORDER}`, background: BG, display: "grid", gridTemplateColumns: "1fr repeat(8, auto)", gap: 4, alignItems: "center" }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: TEXT }}>Öğrenci</span>
-                  {DIMENSIONS.map(d => (
-                    <span key={d.key} title={d.label} style={{ color: d.color, fontSize: 9, textAlign: "center", fontWeight: 700 }}>
-                      {d.label.split(" ")[0].substring(0,4)}
+
+              {/* Risk türleri mini */}
+              {riskVar && (
+                <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
+                  {RISK_TURLERI.filter(t=>st.riskDagilim[t]>0).map(t=>(
+                    <span key={t} style={{background:"#FDECEA",color:"#C0392B",borderRadius:8,padding:"1px 6px",fontSize:9,fontWeight:700}}>
+                      {t}: {st.riskDagilim[t]}
                     </span>
                   ))}
                 </div>
-                {[...sinifOgrencileri].sort((a,b) => {
-                  const aOrt = DIMENSIONS.reduce((s,d)=>s+(a.scores?.[d.key]||0),0)/DIMENSIONS.length;
-                  const bOrt = DIMENSIONS.reduce((s,d)=>s+(b.scores?.[d.key]||0),0)/DIMENSIONS.length;
-                  return bOrt - aOrt;
-                }).map((p, idx) => {
-                  const dusukBoyutlar = DIMENSIONS.filter(d => (p.scores?.[d.key]||0) <= 2).map(d => d.label);
-                  return (
-                    <div key={p.id} style={{ padding: "8px 14px", borderBottom: `1px solid ${BG}`, background: idx%2===0 ? CARD : BG, display: "grid", gridTemplateColumns: "1fr repeat(8, auto)", gap: 4, alignItems: "center" }}>
-                      <div>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: TEXT }}>{p.studentName}</div>
-                        {dusukBoyutlar.length > 0 && <div style={{ fontSize: 9, color: ORANGE }}>⚠ {dusukBoyutlar.join(", ")}</div>}
-                      </div>
-                      {DIMENSIONS.map(d => {
-                        const val = p.scores?.[d.key] || 0;
-                        const bg = val >= 4 ? "#E6F5EE" : val >= 3 ? BG : val >= 2 ? "#FDF6E3" : "#FDECEA";
-                        return (
-                          <div key={d.key} style={{ background: bg, borderRadius: 5, width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, color: d.color }}>
-                            {val}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })}
-              </div>
-              <div style={{ marginTop: 8, fontSize: 11, color: MUTED }}>⚠ = 2 veya altı puan · Yüksek ortalamadan düşüğe sıralı</div>
-            </>
-          )}
-        </>
-      )}
+              )}
 
+              {!gorusmeli && st.ogr.length === 0 && (
+                <div style={{fontSize:10,color:MUTED}}>Kayıt yok</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
+
 
 // ── Kütüphane Ekle Bileşeni ───────────────────────────────────────────────────
 function KutuphaneEkle({ kutuphane, setKutuphane }) {
@@ -3643,6 +5257,14 @@ export default function App() {
   const [riskAiLoading, setRiskAiLoading] = useState(false);
   const [denemeAiLoading, setDenemeAiLoading] = useState(false);
   const [denemeAnaliz, setDenemeAnaliz] = useState({});
+  const [yillar, setYillar] = useState(["2026-2027"]);
+  const [aktifYil, setAktifYil] = useState("2026-2027");
+  const [yilEkranı, setYilEkrani] = useState(false); // true = yıl seçim ekranı
+  const [mudahalePlan, setMudahalePlan] = useState({});
+  const [hazirlikNotlari, setHazirlikNotlari] = useState({});
+  const [profNotlari, setProfNotlari] = useState({});
+  const [ilerlemeNotlari, setIlerlemeNotlari] = useState({});
+  const [sevkler, setSevkler] = useState([]);
   const [kutuphane, setKutuphane] = useState([]);
   const [pdfYukleniyor, setPdfYukleniyor] = useState(false);
   const [search, setSearch] = useState("");
@@ -3656,7 +5278,23 @@ export default function App() {
     loadRiskListesi().then(setRiskListesi);
     loadDenemeler().then(setDenemeler);
     loadOgrenciler().then(setOgrenciler);
+    loadYillar().then(setYillar);
+    loadAktifYil().then(setAktifYil);
+    loadMudahalePlan().then(setMudahalePlan);
+    loadHazirlikNotlari().then(setHazirlikNotlari);
+    loadProfNotlari().then(setProfNotlari);
+    loadIlerlemeNotlari().then(setIlerlemeNotlari);
+    loadSevkler().then(setSevkler);
   }, []);
+
+  // aktifOgrenci değişince formu güncelle
+  useEffect(() => {
+    if (aktifOgrenci?.name) {
+      setForm(f => ({ ...f, studentName: aktifOgrenci.name, className: aktifOgrenci.className || "" }));
+    } else {
+      setForm({ studentName: "", className: "", meetingType: "Öğrenci", topic: "", raw: "", summary: "" });
+    }
+  }, [aktifOgrenci?.name]);
 
   function startListening() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -3683,7 +5321,7 @@ export default function App() {
     const updated = [rec, ...records];
     setRecords(updated); await saveRecords(updated);
     setForm({ studentName: "", className: "", meetingType: "Öğrenci", topic: "", raw: "", summary: "" });
-    setSaved(true); setTimeout(() => setSaved(false), 2000); setTab("ogrenci");
+    setSaved(true); setTimeout(() => setSaved(false), 2000); setTab("ogrenciler");
   }
 
   async function handleDelete(id) { const u = records.filter(r => r.id !== id); setRecords(u); await saveRecords(u); }
@@ -3746,11 +5384,24 @@ export default function App() {
     const ogrP1 = profiles.find(p => p.studentName?.toLowerCase().trim() === ad);
     const aiAnaliz = await getRiskAnalizi(riskForm, ogrGorusmeler, ogrP1);
     // Risk düzeyini AI cevabından çek
+    // Risk düzeyi
     let aiOncelik = riskForm.oncelik;
     if (aiAnaliz.includes("YÜKSEK") || aiAnaliz.includes("YUKSEK")) aiOncelik = "Yüksek";
     else if (aiAnaliz.includes("ORTA")) aiOncelik = "Orta";
     else if (aiAnaliz.includes("HAFİF") || aiAnaliz.includes("HAFIF")) aiOncelik = "Düşük";
-    const item = { id: uid(), tarih: today(), ...riskForm, oncelik: aiOncelik, aiAnaliz, kapandi: false };
+
+    // Risk türü — AI'dan otomatik çek
+    const riskTurleriListesi = ["Davranış","Akademik","Aile","Akran / Zorbalık","Akran-Zorbalık","Duygusal","Devamsızlık","Öz Zarar","Sağlık","Madde Kullanımı","Ekonomik Güçlük","Yas / Kayıp","Yas-Kayıp","Travma","Özel Öğrenme Güçlüğü","Diğer"];
+    let aiRiskTuru = riskForm.riskTuru;
+    const turMatch = aiAnaliz.match(/RİSK TÜRÜ:\s*(.+)/);
+    if (turMatch) {
+      const bulunan = turMatch[1].trim().replace(/-/g, " / ");
+      const eslesen = riskTurleriListesi.find(t => t.toLowerCase().replace(/-/g," / ") === bulunan.toLowerCase() || bulunan.toLowerCase().includes(t.toLowerCase().split("/")[0].trim().toLowerCase()));
+      if (eslesen) aiRiskTuru = eslesen;
+      else aiRiskTuru = bulunan.split("\n")[0].trim();
+    }
+
+    const item = { id: uid(), tarih: today(), ...riskForm, riskTuru: aiRiskTuru, oncelik: aiOncelik, aiAnaliz, kapandi: false };
     const updated = [item, ...riskListesi];
     setRiskListesi(updated); await saveRiskListesi(updated);
     setRiskForm({ studentName: "", className: "", riskTuru: "", aciklama: "", oncelik: "Orta" });
@@ -3793,7 +5444,7 @@ export default function App() {
         const parse = d => { const [g, ay, y] = (d||"").split("."); return new Date(`${y}-${ay}-${g}`); };
         return parse(a.date) - parse(b.date);
       });
-    setRaporVerisi(raporVerisiOlustur({ ogrenci: ogrenciAdi, profil1, profil2, gorusmeler, denemeler: denemeler[ogrenciAdi] || {} }));
+    setRaporVerisi(raporVerisiOlustur({ ogrenci: ogrenciAdi, profil1, profil2, gorusmeler, denemeler: denemeler[ogrenciAdi] || {}, mudahalePlan, riskListesi }));
   }
 
   async function handleProf2Analiz() {
@@ -3861,14 +5512,16 @@ export default function App() {
   const maxMonth = Math.max(...Object.values(monthCount), 1);
 
   // Tüm kaynaklardan benzersiz öğrenci listesi
-  const kayitliListesi = Array.from(
+  const kayitliListesi = useMemo(() => Array.from(
     new Map([
+      ...ogrenciler.map(o => ({ studentName: o.studentName, className: o.className || "" })),
       ...records.filter(r => (r.meetingType || "Öğrenci") === "Öğrenci"),
       ...profiles,
       ...profiles2,
     ].map(r => [r.studentName.toLowerCase().trim(), { name: r.studentName, className: r.className || "" }]))
     .values()
-  ).sort((a, b) => a.name.localeCompare(b.name, "tr"));
+  ).sort((a, b) => a.name.localeCompare(b.name, "tr")),
+  [ogrenciler, records, profiles, profiles2]);
 
   const TABS = [
     { key: "ogrenciler", label: "👥 Öğrenciler" },
@@ -3876,9 +5529,14 @@ export default function App() {
     { key: "sinif_profili", label: "🏫 Sınıf" },
     { key: "risk", label: "⚠ Risk" },
     { key: "deneme", label: "📊 Deneme" },
+    { key: "mudahale", label: "🎯 Müdahale" },
+    { key: "sevk", label: "📤 Sevk" },
+    { key: "meb_rapor", label: "📑 MEB Rapor" },
+    { key: "veli_mektubu", label: "✉ Veli" },
     { key: "degerlendirme", label: "🧭 Değerlendir" },
     { key: "kutuphane", label: "📚 Kütüphane" },
     { key: "istatistik", label: "İstatistik" },
+    { key: "prof_danisma", label: "🎓 Prof. Hakan" },
     { key: "yeni", label: "+ Not" },
   ];
 
@@ -3888,8 +5546,14 @@ export default function App() {
       <RaporModal rapor={raporVerisi} onKapat={() => setRaporVerisi(null)} />
       {/* Header */}
       <div style={{ background: ACCENT, color: "#fff", padding: "16px 20px 12px", position: "sticky", top: 0, zIndex: 10 }}>
-        <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1, opacity: 0.7, textTransform: "uppercase" }}>PDR Servisi</div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 2 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1, opacity: 0.7, textTransform: "uppercase" }}>PDR Servisi</div>
+          <button onClick={() => { setTab("ogrenciler"); setYilEkrani(true); }} style={{
+            background:"rgba(255,255,255,0.25)", color:"#fff", border:"1px solid rgba(255,255,255,0.5)",
+            borderRadius:20, padding:"3px 12px", fontSize:12, fontWeight:800, cursor:"pointer"
+          }}>📅 {aktifYil}</button>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
           <div style={{ fontSize: 20, fontWeight: 800 }}>Görüşme & Profil</div>
           <button onClick={() => exportToExcel(records)} style={{
             background: "rgba(255,255,255,0.2)", color: "#fff", border: "1px solid rgba(255,255,255,0.4)",
@@ -3917,6 +5581,111 @@ export default function App() {
       <div style={{ padding: "16px 16px 80px" }}>
 
 
+        {/* ── YENİ GÖRÜŞME NOTU ───────────────────────────────────── */}
+        {tab === "yeni" && (
+          <div>
+            {aktifOgrenci?.name && (
+              <div style={{ background:ACCENT_LIGHT, borderRadius:10, padding:"10px 14px", marginBottom:12, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <span style={{ fontSize:13, color:ACCENT, fontWeight:700 }}>👤 {aktifOgrenci.name}</span>
+                <button onClick={() => setForm(f => ({ ...f, studentName: aktifOgrenci.name, className: aktifOgrenci.className }))} style={{ background:ACCENT, color:"#fff", border:"none", borderRadius:8, padding:"5px 12px", fontSize:12, fontWeight:700, cursor:"pointer" }}>Seç</button>
+              </div>
+            )}
+            <div>
+              {/* Öğrenci seç */}
+              <div style={{ marginBottom:12 }}>
+                <label style={{ fontSize:11, fontWeight:600, color:MUTED, display:"block", marginBottom:4 }}>ÖĞRENCİ</label>
+                <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:8 }}>
+                  {kayitliListesi.map(o => {
+                    const s = form.studentName === o.name;
+                    return <button key={o.name} onClick={() => setForm(f=>({...f, studentName:o.name, className:o.className||""}))} style={{ padding:"5px 10px", borderRadius:16, border:`2px solid ${s?ACCENT:BORDER}`, background:s?ACCENT_LIGHT:CARD, color:s?ACCENT:MUTED, fontSize:12, fontWeight:s?700:500, cursor:"pointer" }}>{o.name}</button>;
+                  })}
+                </div>
+                <input placeholder="veya ad yaz..." value={form.studentName} onChange={e=>setForm(f=>({...f,studentName:e.target.value}))} style={{ width:"100%", padding:"9px 11px", border:`1px solid ${BORDER}`, borderRadius:9, fontSize:13, boxSizing:"border-box" }} />
+              </div>
+              {/* Görüşme türü */}
+              <div style={{ display:"flex", gap:8, marginBottom:12 }}>
+                {["Öğrenci","Veli","Öğretmen"].map(t=>(
+                  <button key={t} onClick={()=>setForm(f=>({...f,meetingType:t}))} style={{ flex:1, padding:"8px", borderRadius:8, border:`2px solid ${form.meetingType===t?ACCENT:BORDER}`, background:form.meetingType===t?ACCENT_LIGHT:CARD, color:form.meetingType===t?ACCENT:MUTED, fontSize:12, fontWeight:700, cursor:"pointer" }}>{t}</button>
+                ))}
+              </div>
+              {/* Ham not */}
+              <label style={{ fontSize:11, fontWeight:600, color:MUTED, display:"block", marginBottom:4 }}>GÖRÜŞME NOTU</label>
+              <textarea placeholder="Görüşme notlarını buraya yazın..." value={form.raw} onChange={e=>setForm(f=>({...f,raw:e.target.value}))} rows={5} style={{ width:"100%", padding:"9px 11px", border:`1px solid ${BORDER}`, borderRadius:9, fontSize:13, resize:"vertical", boxSizing:"border-box", marginBottom:10 }} />
+              {/* Sesli giriş */}
+              <div style={{ display:"flex", gap:8, marginBottom:10 }}>
+                <button onClick={listening?stopListening:startListening} style={{ flex:1, padding:"10px", background:listening?"#C0392B":ACCENT_LIGHT, color:listening?"#fff":ACCENT, border:"none", borderRadius:10, fontSize:13, fontWeight:700, cursor:"pointer" }}>
+                  {listening?"⏹ Durdur":"🎤 Sesli Giriş"}
+                </button>
+                <button onClick={handleSummarize} disabled={!form.raw.trim()||aiLoading} style={{ flex:1, padding:"10px", background:form.raw.trim()&&!aiLoading?PURPLE:BORDER, color:form.raw.trim()&&!aiLoading?"#fff":MUTED, border:"none", borderRadius:10, fontSize:13, fontWeight:700, cursor:"pointer" }}>
+                  {aiLoading?"⏳ Özetleniyor...":"✦ AI Özetle"}
+                </button>
+              </div>
+              {/* Özet */}
+              {form.summary ? (
+                <div style={{ marginBottom:10 }}>
+                  <label style={{ fontSize:11, fontWeight:600, color:MUTED, display:"block", marginBottom:4 }}>ÖZET</label>
+                  <textarea value={form.summary} onChange={e=>setForm(f=>({...f,summary:e.target.value}))} rows={4} style={{ width:"100%", padding:"9px 11px", border:`1px solid ${ACCENT_LIGHT}`, borderRadius:9, fontSize:13, resize:"vertical", boxSizing:"border-box", background:"#F0FAF4" }} />
+                </div>
+              ) : null}
+              {/* Kaydet */}
+              <button onClick={handleSave} disabled={!form.studentName.trim()||!form.summary.trim()} style={{ width:"100%", padding:"13px", background:form.studentName&&form.summary?ACCENT:BORDER, color:form.studentName&&form.summary?"#fff":MUTED, border:"none", borderRadius:12, fontSize:15, fontWeight:800, cursor:"pointer" }}>
+                {saved?"✓ Kaydedildi!":"💾 Görüşmeyi Kaydet"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── MÜDAHALE PLANI ───────────────────────────────────────── */}
+        {tab === "mudahale" && (
+          <MudahalePlanEkrani
+            kayitliListesi={kayitliListesi}
+            aktifOgrenci={aktifOgrenci}
+            mudahalePlan={mudahalePlan}
+            setMudahalePlan={setMudahalePlan}
+            records={records}
+          />
+        )}
+
+        {/* ── SEVK TAKİP ───────────────────────────────────────────── */}
+        {tab === "sevk" && (
+          <SevkTakipEkrani
+            kayitliListesi={kayitliListesi}
+            aktifOgrenci={aktifOgrenci}
+            sevkler={sevkler}
+            setSevkler={setSevkler}
+          />
+        )}
+
+        {/* ── MEB RAPOR ────────────────────────────────────────────── */}
+        {tab === "meb_rapor" && (
+          <MEBRaporEkrani
+            records={records}
+            profiles={profiles}
+            riskListesi={riskListesi}
+            sevkler={sevkler}
+            kayitliListesi={kayitliListesi}
+          />
+        )}
+
+        {/* ── PROF. DR. HAKAN ──────────────────────────────────────── */}
+        {tab === "prof_danisma" && (
+          <ProfDanismaEkrani
+            kayitliListesi={kayitliListesi}
+            aktifOgrenci={aktifOgrenci}
+            records={records}
+            profiles={profiles}
+            profiles2={profiles2}
+            denemeler={denemeler}
+            riskListesi={riskListesi}
+            mudahalePlan={mudahalePlan}
+            sevkler={sevkler}
+            hazirlikNotlari={hazirlikNotlari}
+            ilerlemeNotlari={ilerlemeNotlari}
+            profNotlari={profNotlari}
+            setProfNotlari={setProfNotlari}
+          />
+        )}
+
         {/* ── DEĞERLENDİRME ────────────────────────────────────────── */}
         {tab === "degerlendirme" && (
           <DegerlendirmeEkrani
@@ -3943,14 +5712,35 @@ export default function App() {
             denemeler={denemeler}
             records={records}
             kutuphane={kutuphane}
-            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur(data))}
+            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi }))}
           />
         )}
 
 
 
         {/* ── ÖĞRENCİLER ──────────────────────────────────────────── */}
-        {tab === "ogrenciler" && (
+        {tab === "ogrenciler" && yilEkranı && (
+          <YilSecimEkrani
+            yillar={yillar}
+            setYillar={setYillar}
+            aktifYil={aktifYil}
+            setAktifYil={async (yil) => { setAktifYil(yil); await saveAktifYil(yil); }}
+            ogrenciler={ogrenciler}
+            onYilSec={async (yil) => {
+              setAktifYil(yil);
+              await saveAktifYil(yil);
+              setYilEkrani(false);
+            }}
+            onYilSil={async (yil) => {
+              // O yıla ait öğrencileri sil
+              const kalacaklar = ogrenciler.filter(o => o.yil && o.yil !== yil);
+              setOgrenciler(kalacaklar);
+              await saveOgrenciler(kalacaklar);
+            }}
+          />
+        )}
+
+        {tab === "ogrenciler" && !yilEkranı && (
           <OgrenciYonetim
             ogrenciler={ogrenciler}
             setOgrenciler={setOgrenciler}
@@ -3965,7 +5755,14 @@ export default function App() {
             riskListesi={riskListesi}
             setRiskListesi={setRiskListesi}
             kayitliListesi={kayitliListesi}
-            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur(data))}
+            mudahalePlan={mudahalePlan}
+            aktifYil={aktifYil}
+            onYilEkrani={() => setYilEkrani(true)}
+            hazirlikNotlari={hazirlikNotlari}
+            setHazirlikNotlari={setHazirlikNotlari}
+            ilerlemeNotlari={ilerlemeNotlari}
+            setIlerlemeNotlari={setIlerlemeNotlari}
+            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi }))}
             setAktifOgrenci={setAktifOgrenci}
             setTab={setTab}
           />
@@ -3986,7 +5783,12 @@ export default function App() {
 
         {/* ── SINIF PROFİLİ ────────────────────────────────────────── */}
         {tab === "sinif_profili" && (
-          <SinifProfili profiles={profiles} />
+          <SinifProfili
+            ogrenciler={ogrenciler}
+            records={records}
+            riskListesi={riskListesi}
+            aktifYil={aktifYil}
+          />
         )}
 
         {/* ── RİSK LİSTESİ ─────────────────────────────────────────── */}
@@ -4027,7 +5829,7 @@ export default function App() {
               <div style={{ marginBottom: 8 }}>
                 <label style={labelStyle}>RİSK TÜRÜ</label>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {["Davranış", "Akademik", "Aile", "Akran / Zorbalık", "Duygusal", "Devamsızlık", "Öz Zarar", "Diğer"].map(t => (
+                  {["Davranış", "Akademik", "Aile", "Akran / Zorbalık", "Duygusal", "Devamsızlık", "Öz Zarar", "Sağlık", "Madde Kullanımı", "Ekonomik Güçlük", "Yas / Kayıp", "Travma", "Özel Öğrenme Güçlüğü", "Diğer"].map(t => (
                     <button key={t} onClick={() => setRiskForm(f=>({...f, riskTuru:t}))} style={{
                       padding: "5px 10px", borderRadius: 16,
                       border: `2px solid ${riskForm.riskTuru===t ? "#C0392B" : BORDER}`,
@@ -4175,6 +5977,14 @@ export default function App() {
         )}
 
         {/* ── İSTATİSTİK ───────────────────────────────────────────── */}
+        {tab === "veli_mektubu" && (
+          <VeliMektubu
+            kayitliListesi={kayitliListesi}
+            aktifOgrenci={aktifOgrenci}
+            records={records}
+          />
+        )}
+
         {tab === "istatistik" && (
           <div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>

@@ -156,7 +156,7 @@ ACİL MÜDAHALE GEREKTİRİR Mİ: (Evet/Hayır — gerekçesiyle)
 
 Sade, PDR diline uygun yaz. Markdown kullanma.`;
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -220,7 +220,7 @@ HEDEF: (Son denemeler icin gercekci hedef net ve hedef okul)
 
 Sade, somut, PDR ve ogr. koçlugu diline uygun yaz. Markdown kullanma.`;
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       model: "claude-sonnet-4-6", max_tokens: 4000,
@@ -236,7 +236,7 @@ Sade, somut, PDR ve ogr. koçlugu diline uygun yaz. Markdown kullanma.`;
 async function getScoresFromNotes(studentName, notlar) {
   const boyutlar = DIMENSIONS.map(d => d.key + " (" + d.label + ")").join(", ");
   const prompt = "Ogrenci: " + studentName + "\n\nAsagidaki notlara dayanarak ogrenciyi 8 boyutta 1-5 arasinda puanla:\n" + boyutlar + "\n\n1=Cok Dusuk, 2=Dusuk, 3=Orta, 4=Iyi, 5=Cok Iyi. Notlarda bilgi yoksa 3 ver.\n\nNotlar:\n" + notlar + "\n\nSADECE su formatta JSON dondur:\n{\"akademik\":X,\"sosyal\":X,\"duygusal\":X,\"aile\":X,\"ozguven\":X,\"uyum\":X,\"kariyer\":X,\"akran\":X}";
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -305,7 +305,7 @@ ONERILER:
 
 Sade, PDR diline uygun, somut yaz. Markdown kullanma.`;
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       model: "claude-sonnet-4-6", max_tokens: 4000,
@@ -320,7 +320,7 @@ Sade, PDR diline uygun, somut yaz. Markdown kullanma.`;
 
 
 async function getAISummary(rawText) {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -352,7 +352,7 @@ GELİŞİM ALANLARI: (düşük puan alan boyutlar hakkında 1-2 cümle)
 RİSK NOTU: (varsa dikkat edilmesi gereken bir şey, yoksa "Belirgin risk faktörü gözlemlenmedi" yaz)
 
 Sade, profesyonel ve PDR diline uygun yaz. Markdown veya JSON kullanma.`;
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -654,7 +654,7 @@ async function pdfMetinCikar(file) {
     reader.onload = async (e) => {
       const base64 = e.target.result.split(",")[1];
       try {
-        const res = await fetch("https://api.anthropic.com/v1/messages", {
+        const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -698,7 +698,7 @@ async function getDegerlendirmeAnalysis(studentName, className, cevaplar, notlar
     return `${DIMENSIONS.find(d => d.key === b.key)?.label}: ${p ?? "?"}/5`;
   }).join(", ");
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -1877,7 +1877,7 @@ function MudahalePlanEkrani({ kayitliListesi, aktifOgrenci, mudahalePlan, setMud
     if (!seciliAd) return;
     setAiLoading(true);
     const notlar = ogrRec.map((r,i) => `Görüşme ${i+1} (${r.date}): ${r.summary}`).join("\n\n");
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({
         model:"claude-sonnet-4-6", max_tokens:1500,
@@ -2174,7 +2174,7 @@ Başlıca Görüşme Konuları: ${topKonular.map(([k,v])=>k+": "+v).join(", ")}
 Risk Türleri: ${Object.entries(riskTurleri).map(([k,v])=>k+": "+v).join(", ")}
     `.trim();
 
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({
         model:"claude-sonnet-4-6", max_tokens:2000,
@@ -2288,7 +2288,7 @@ function VeliMektubu({ kayitliListesi, aktifOgrenci, records }) {
       bildirim:"Öğrenci hakkında acil durum/risk bildirimi mektubu",
       tesekkur:"Veli iş birliği için teşekkür mektubu"
     };
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({
         model:"claude-sonnet-4-6", max_tokens:1500,
@@ -2494,7 +2494,7 @@ function OzetKarti({ ogrenci, ogrRec, ogrP1, ogrP2, ogrRisk, denemeGirilen, dene
       : "";
     const deneme = denemeAvg ? `Deneme Ortalaması: ${denemeAvg}/90` : "";
 
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({
         model:"claude-sonnet-4-6", max_tokens:1000,
@@ -2799,7 +2799,7 @@ function IlerlemeYazisi({ ogrenci, ogrRec, ogrP1, denemeGirilen, ilerlemeNotlari
       ? "DENEME NETLERI: " + denemeGirilen.map(d => `D${d.no}: ${d.toplam.toFixed(1)}`).join(", ")
       : "";
 
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({
         model:"claude-sonnet-4-6", max_tokens:2000,
@@ -2956,10 +2956,10 @@ Seans Hazırlık Notu: ${ogrHazirlik || "Henüz oluşturulmamış"}
     if (!seciliAd) return;
     setLoading(true);
     const veri = tumVeriHazirla(seciliAd);
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({
-        model:"claude-sonnet-4-6", max_tokens:3000,
+        model:"claude-sonnet-4-6", max_tokens:4000,
         system: PROF_HAKAN,
         messages:[{role:"user", content:`${veri}
 
@@ -2999,10 +2999,10 @@ Akademik ama sıcak, yapıcı bir dil kullan. Markdown kullanma.`}]
     if (!seciliAd || !soru.trim()) return;
     setLoading(true);
     const veri = tumVeriHazirla(seciliAd);
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({
-        model:"claude-sonnet-4-6", max_tokens:2000,
+        model:"claude-sonnet-4-6", max_tokens:3000,
         system: PROF_HAKAN,
         messages:[{role:"user", content:`${veri}
 
@@ -3196,10 +3196,10 @@ function ProfCevapAlani({ konusmaId, seciliAd, oncekiVeri, profNotlari, setProfN
   async function handleCevapGonder() {
     if (!cevap.trim()) return;
     setLoading(true);
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({
-        model:"claude-sonnet-4-6", max_tokens:2000,
+        model:"claude-sonnet-4-6", max_tokens:3000,
         system: PROF_HAKAN,
         messages:[{role:"user", content:`Öğrenci: ${seciliAd}
 
@@ -4921,7 +4921,7 @@ function KutuphaneEkle({ kutuphane, setKutuphane }) {
   const lbl = { fontSize:11, fontWeight:600, color:MUTED, display:"block", marginBottom:4, textTransform:"uppercase" };
 
   async function aiOzetle(metin, baslik) {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({
         model:"claude-sonnet-4-6", max_tokens:800,
@@ -4953,7 +4953,7 @@ function KutuphaneEkle({ kutuphane, setKutuphane }) {
           r.onerror = rej;
           r.readAsDataURL(file);
         });
-        const resp = await fetch("https://api.anthropic.com/v1/messages", {
+        const resp = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
           method:"POST", headers:{"Content-Type":"application/json"},
           body: JSON.stringify({
             model:"claude-sonnet-4-6", max_tokens:800,
@@ -5006,7 +5006,7 @@ function KutuphaneEkle({ kutuphane, setKutuphane }) {
       };
       if (!sayfaIcerigi) bodyObj.tools = [{ type: "web_search_20250305", name: "web_search" }];
 
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
+      const resp = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(bodyObj)
       });

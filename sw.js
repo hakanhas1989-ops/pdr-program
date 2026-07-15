@@ -1,4 +1,4 @@
-const CACHE_NAME = "pdr-v2";
+const CACHE_NAME = "pdr-v3";
 
 const CACHE_URLS = [
   "./index.html",
@@ -10,7 +10,6 @@ const CACHE_URLS = [
   "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"
 ];
 
-// Kurulum — dosyaları cache'le
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
@@ -20,7 +19,6 @@ self.addEventListener("install", (event) => {
   self.skipWaiting();
 });
 
-// Aktivasyon — eski cache'leri sil
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then(keys =>
@@ -32,10 +30,10 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// Fetch — önce cache, sonra network
 self.addEventListener("fetch", (event) => {
-  // Anthropic API isteklerini cache'leme
-  if (event.request.url.includes("anthropic.com")) {
+  // API isteklerini cache'leme
+  if (event.request.url.includes("anthropic.com") || 
+      event.request.url.includes("workers.dev")) {
     return;
   }
   event.respondWith(

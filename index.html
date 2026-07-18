@@ -3267,6 +3267,175 @@ Bu bilgiyi de göz önünde bulundurarak değerlendirmeni güncelle ve derinleş
   );
 }
 
+
+// ── Excel Toplu Yükleme (7. Sınıf) ─────────────────────────────────────────
+function ExcelTopluYukle({ ogrenciler, setOgrenciler, denemeler, setDenemeler, aktifYil, onKapat }) {
+  const [yukleniyor, setYukleniyor] = useState(false);
+  const [sonuc, setSonuc] = useState(null);
+
+  async function handleDosya(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setYukleniyor(true);
+    setSonuc(null);
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const wb = XLSX.read(evt.target.result, { type: "binary" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+
+        const yeniOgrenciler = [];
+        const yeniDenemeler = { ...denemeler };
+        let eklenen = 0;
+
+        // Başlık satırlarını atla — ilk boş olmayan veri satırından başla
+        let baslangic = 0;
+        for (let i = 0; i < rows.length; i++) {
+          const row = rows[i];
+          const adSoyad = String(row[1] || "").trim();
+          if (adSoyad && !adSoyad.includes("AD") && !adSoyad.includes("SOYAD") && !adSoyad.startsWith("*")) {
+            baslangic = i;
+            break;
+          }
+        }
+
+        for (let i = baslangic; i < rows.length; i++) {
+          const row = rows[i];
+          const no = String(row[0] || "").trim();
+          const adSoyad = String(row[1] || "").trim();
+          const sube = String(row[2] || "").trim();
+
+          if (!adSoyad || adSoyad.startsWith("*") || adSoyad.includes("OKUL") || adSoyad.includes("SINIF")) continue;
+
+          // 7.sınıf 9 deneme netleri (D-L sütunları, index 3-11)
+          const deneme7 = {};
+          let toplamGirilen = 0;
+          let toplamNet = 0;
+          for (let d = 0; d < 9; d++) {
+            const net = parseFloat(String(row[3 + d]).replace(",", "."));
+            if (!isNaN(net) && net > 0) {
+              deneme7[d + 1] = { "7sinif": true, toplam_net: net };
+              toplamNet += net;
+              toplamGirilen++;
+            }
+          }
+
+          const ort = toplamGirilen > 0 ? toplamNet / toplamGirilen : 0;
+
+          // Risk seviyesi
+          const risk7 = ort >= 55 ? "dusuk" : ort >= 30 ? "orta" : "yuksek";
+
+          // Mevcut öğrenci var mı?
+          const mevcut = ogrenciler.find(o =>
+            o.studentName.toLowerCase().trim() === adSoyad.toLowerCase().trim()
+          );
+
+          if (!mevcut) {
+            yeniOgrenciler.push({
+              id: uid(),
+              studentName: adSoyad,
+              className: sube,
+              numara: no,
+              yil: aktifYil,
+              tarih: today(),
+              risk7sinif: risk7,
+              ort7sinif: ort.toFixed(1)
+            });
+            eklenen++;
+          } else {
+            // Mevcut öğrenciye 7.sınıf bilgisi ekle
+            mevcut.risk7sinif = risk7;
+            mevcut.ort7sinif = ort.toFixed(1);
+          }
+
+          // 7.sınıf denemelerini "7s_" prefix ile kaydet
+          if (Object.keys(deneme7).length > 0) {
+            const ogrDen = yeniDenemeler[adSoyad] || {};
+            ogrDen["7sinif"] = { denemeler: deneme7, ortalama: ort.toFixed(1), risk: risk7 };
+            yeniDenemeler[adSoyad] = ogrDen;
+          }
+        }
+
+        const tumOgrenciler = [...ogrenciler, ...yeniOgrenciler];
+        setOgrenciler(tumOgrenciler);
+        await saveOgrenciler(tumOgrenciler);
+        setDenemeler(yeniDenemeler);
+        await saveDenemeler(yeniDenemeler);
+
+        // Risk özeti
+        const yuksek = [...ogrenciler, ...yeniOgrenciler].filter(o => o.risk7sinif === "yuksek").length;
+        const orta = [...ogrenciler, ...yeniOgrenciler].filter(o => o.risk7sinif === "orta").length;
+        const dusuk = [...ogrenciler, ...yeniOgrenciler].filter(o => o.risk7sinif === "dusuk").length;
+
+        setSonuc({ eklenen, toplam: tumOgrenciler.length, yuksek, orta, dusuk });
+      } catch (err) {
+        setSonuc({ hata: err.message });
+      }
+      setYukleniyor(false);
+    };
+    reader.readAsBinaryString(file);
+  }
+
+  return (
+    <div style={{background:CARD, border:`2px solid #1A8C5B`, borderRadius:14, padding:16, marginBottom:16}}>
+      <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12}}>
+        <div style={{fontSize:14, fontWeight:800, color:TEXT}}>📊 7. Sınıf Excel Yükle</div>
+        <button onClick={onKapat} style={{background:"none", border:"none", color:MUTED, fontSize:18, cursor:"pointer"}}>✕</button>
+      </div>
+
+      <div style={{background:"#E6F5EE", borderRadius:8, padding:"8px 12px", marginBottom:12, fontSize:11, color:"#1A8C5B"}}>
+        Format: <b>A=No | B=Ad Soyad | C=Şube | D-L=9 Deneme Toplam Net</b>
+        <br/>Risk: 🔴 0-30 Yüksek · 🟡 30-55 Orta · 🟢 55+ Düşük
+      </div>
+
+      <input type="file" accept=".xlsx,.xls" onChange={handleDosya} style={{display:"none"}} id="excel7-input" />
+      <label htmlFor="excel7-input" style={{
+        display:"block", width:"100%", padding:"12px",
+        background:yukleniyor?"#ccc":"#1A8C5B", color:"#fff",
+        border:"none", borderRadius:10, fontSize:14, fontWeight:800,
+        cursor:"pointer", textAlign:"center", boxSizing:"border-box"
+      }}>
+        {yukleniyor ? "⏳ Yükleniyor..." : "📂 Excel Dosyası Seç (.xlsx)"}
+      </label>
+
+      {sonuc && !sonuc.hata && (
+        <div style={{marginTop:12}}>
+          <div style={{background:"#E6F5EE", borderRadius:8, padding:10, marginBottom:8}}>
+            <div style={{fontSize:13, fontWeight:700, color:"#1A8C5B", marginBottom:6}}>✓ Yükleme Tamamlandı!</div>
+            <div style={{fontSize:12, color:TEXT}}>{sonuc.eklenen} yeni öğrenci eklendi · Toplam: {sonuc.toplam}</div>
+          </div>
+          <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8}}>
+            <div style={{background:"#FDECEA", borderRadius:8, padding:"8px", textAlign:"center"}}>
+              <div style={{fontSize:20, fontWeight:900, color:"#C0392B"}}>{sonuc.yuksek}</div>
+              <div style={{fontSize:10, color:"#C0392B", fontWeight:700}}>🔴 Yüksek Risk</div>
+              <div style={{fontSize:9, color:"#C0392B"}}>0-30 net</div>
+            </div>
+            <div style={{background:"#FDF6E3", borderRadius:8, padding:"8px", textAlign:"center"}}>
+              <div style={{fontSize:20, fontWeight:900, color:"#B07D1A"}}>{sonuc.orta}</div>
+              <div style={{fontSize:10, color:"#B07D1A", fontWeight:700}}>🟡 Orta Risk</div>
+              <div style={{fontSize:9, color:"#B07D1A"}}>30-55 net</div>
+            </div>
+            <div style={{background:"#E6F5EE", borderRadius:8, padding:"8px", textAlign:"center"}}>
+              <div style={{fontSize:20, fontWeight:900, color:"#1A8C5B"}}>{sonuc.dusuk}</div>
+              <div style={{fontSize:10, color:"#1A8C5B", fontWeight:700}}>🟢 Düşük Risk</div>
+              <div style={{fontSize:9, color:"#1A8C5B"}}>55+ net</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {sonuc?.hata && (
+        <div style={{marginTop:10, padding:10, background:"#FDECEA", borderRadius:8, fontSize:12, color:"#C0392B"}}>
+          Hata: {sonuc.hata}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 // ── Sil Butonu Bileşeni ───────────────────────────────────────────────────────
 function SilButonu({ onSil }) {
   const [onay, setOnay] = useState(false);
@@ -3297,6 +3466,7 @@ function OgrenciYonetim({
   const [aramaMetni, setAramaMetni] = useState("");
   const [aramaDebounce, setAramaDebounce] = useState("");
   const [seciliOgrenci, setSeciliOgrenci] = useState(null);
+  const [excelPanelAcik, setExcelPanelAcik] = useState(false);
 
   // Arama debounce — 300ms bekle
   useEffect(() => {
@@ -3771,6 +3941,7 @@ function DenemeTabip({ denemeler, setDenemeler, kayitliListesi, aktifOgrenci, ha
   );
 
   const ogrenciDenemeler = denemeler[seciliOgrenci] || {};
+  const sinif7Data = ogrenciDenemeler["7sinif"] || null;
 
   // Toplam net hesapla
   function toplamNet(nets) {
@@ -3978,7 +4149,46 @@ function DenemeTabip({ denemeler, setDenemeler, kayitliListesi, aktifOgrenci, ha
           {seciliOgrenci && (
             <>
               {/* Grafik */}
-              <LineChart />
+              {/* 7. Sınıf Özet */}
+        {sinif7Data && (
+          <div style={{background:CARD, border:`1px solid ${BORDER}`, borderRadius:12, padding:12, marginBottom:12}}>
+            <div style={{fontSize:11, fontWeight:700, color:MUTED, textTransform:"uppercase", marginBottom:8}}>📊 7. Sınıf Deneme Geçmişi</div>
+            <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8}}>
+              <div style={{textAlign:"center"}}>
+                <div style={{fontSize:22, fontWeight:900, color:
+                  sinif7Data.risk==="yuksek"?"#C0392B":sinif7Data.risk==="orta"?"#B07D1A":"#1A8C5B"
+                }}>{sinif7Data.ortalama}</div>
+                <div style={{fontSize:10, color:MUTED}}>Ortalama Net</div>
+              </div>
+              <div style={{
+                background: sinif7Data.risk==="yuksek"?"#FDECEA":sinif7Data.risk==="orta"?"#FDF6E3":"#E6F5EE",
+                color: sinif7Data.risk==="yuksek"?"#C0392B":sinif7Data.risk==="orta"?"#B07D1A":"#1A8C5B",
+                borderRadius:20, padding:"6px 14px", fontSize:13, fontWeight:900
+              }}>
+                {sinif7Data.risk==="yuksek"?"🔴 Yüksek Risk":sinif7Data.risk==="orta"?"🟡 Orta Risk":"🟢 Düşük Risk"}
+              </div>
+            </div>
+            <div style={{display:"flex", flexWrap:"wrap", gap:4}}>
+              {Object.entries(sinif7Data.denemeler).map(([no, d]) => {
+                const net = d.toplam_net;
+                const c = net>=55?"#1A8C5B":net>=30?"#B07D1A":"#C0392B";
+                const bg = net>=55?"#E6F5EE":net>=30?"#FDF6E3":"#FDECEA";
+                return <div key={no} style={{background:bg,borderRadius:8,padding:"4px 10px",textAlign:"center"}}>
+                  <div style={{fontSize:9,color:"#888"}}>D{no}</div>
+                  <div style={{fontSize:13,fontWeight:900,color:c}}>{net.toFixed(1)}</div>
+                </div>;
+              })}
+            </div>
+          </div>
+        )}
+
+        {sinif7Data && girilenDenemeler.length > 0 && (
+          <div style={{background:"#E6F5EE", borderRadius:8, padding:"8px 12px", marginBottom:10, fontSize:11, color:"#1A8C5B", fontWeight:600}}>
+            📈 8. Sınıf Denemeleri (Manuel Giriş)
+          </div>
+        )}
+
+        <LineChart />
 
               {/* Aktif form */}
               {aktifDeneme && (

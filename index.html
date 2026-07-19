@@ -17,6 +17,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; overflow-x: hidden; }
@@ -39,6 +42,28 @@ body {
   color: white; font-size: 18px; font-weight: 700; gap: 16px; z-index: 9999;
 }
 #splash.hide { display: none; }
+/* Giriş ekranı */
+#pdr-login-overlay {
+  position: fixed; inset: 0; background: #2D6A4F; z-index: 9998;
+  display: none; flex-direction: column; align-items: center; justify-content: center;
+  color: white; padding: 24px;
+}
+#pdr-login-overlay .pdr-login-box {
+  background: #fff; border-radius: 16px; padding: 28px 24px;
+  width: 100%; max-width: 340px; box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+}
+#pdr-login-overlay h2 { color: #1A4D3B; font-size: 20px; margin-bottom: 4px; }
+#pdr-login-overlay p.pdr-sub { color: #6b7d75; font-size: 13px; margin-bottom: 18px; }
+#pdr-login-overlay input {
+  width: 100%; padding: 11px 12px; border: 1px solid #d7e3dd; border-radius: 10px;
+  font-size: 14px; margin-bottom: 10px; outline: none; box-sizing: border-box;
+}
+#pdr-login-overlay button {
+  width: 100%; padding: 12px; background: #2D6A4F; color: #fff; border: none;
+  border-radius: 10px; font-size: 14px; font-weight: 800; cursor: pointer; margin-top: 4px;
+}
+#pdr-login-overlay button:disabled { opacity: 0.6; cursor: default; }
+#pdr-login-error { color: #C0392B; font-size: 12px; margin-top: 8px; min-height: 16px; }
 </style>
 </head>
 <body>
@@ -49,9 +74,86 @@ body {
   <div style="font-size:13px;opacity:0.7;font-weight:400">Yükleniyor...</div>
 </div>
 
+<div id="pdr-login-overlay">
+  <div class="pdr-login-box">
+    <h2>🔒 Giriş Yap</h2>
+    <p class="pdr-sub">Verileriniz güvenle bulutta saklanır.</p>
+    <form id="pdr-login-form">
+      <input type="email" id="pdr-login-email" placeholder="E-posta" required autocomplete="username" />
+      <input type="password" id="pdr-login-pass" placeholder="Şifre" required autocomplete="current-password" />
+      <button type="submit" id="pdr-login-btn">Giriş Yap</button>
+      <div id="pdr-login-error"></div>
+    </form>
+  </div>
+</div>
+
 <div id="root"></div>
 
 <script>
+// Firebase kurulumu
+const firebaseConfig = {
+  apiKey: "AIzaSyATC969KGtY_xhL-UG1fVI0sRVSY2_2o54",
+  authDomain: "pdr-program.firebaseapp.com",
+  projectId: "pdr-program",
+  storageBucket: "pdr-program.firebasestorage.app",
+  messagingSenderId: "199087746443",
+  appId: "1:199087746443:web:f6163f46d719adce05138e"
+};
+firebase.initializeApp(firebaseConfig);
+const pdrAuth = firebase.auth();
+const pdrDb = firebase.firestore();
+
+let pdrResolveReady;
+window.__pdrAuthReady = new Promise((res) => { pdrResolveReady = res; });
+
+async function pdrSyncDown(uid) {
+  try {
+    const snap = await pdrDb.collection("users").doc(uid).collection("data").get();
+    snap.forEach((doc) => {
+      const d = doc.data();
+      if (d && typeof d.value === "string") {
+        localStorage.setItem("pdr__" + doc.id, d.value);
+      }
+    });
+  } catch (e) { console.log("Firestore indirme hatası:", e); }
+}
+
+const pdrLoginOverlay = document.getElementById("pdr-login-overlay");
+const pdrLoginForm = document.getElementById("pdr-login-form");
+const pdrLoginError = document.getElementById("pdr-login-error");
+const pdrLoginBtn = document.getElementById("pdr-login-btn");
+
+let pdrFirstReady = true;
+pdrAuth.onAuthStateChanged(async (user) => {
+  const splashEl = document.getElementById("splash");
+  if (user) {
+    if (pdrLoginOverlay) pdrLoginOverlay.style.display = "none";
+    await pdrSyncDown(user.uid);
+    if (pdrFirstReady) { pdrFirstReady = false; pdrResolveReady(user); }
+  } else {
+    if (splashEl) splashEl.className = "hide";
+    if (pdrLoginOverlay) pdrLoginOverlay.style.display = "flex";
+  }
+});
+
+if (pdrLoginForm) {
+  pdrLoginForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const email = document.getElementById("pdr-login-email").value.trim();
+    const pass = document.getElementById("pdr-login-pass").value;
+    pdrLoginBtn.disabled = true;
+    pdrLoginBtn.textContent = "Giriş yapılıyor...";
+    if (pdrLoginError) pdrLoginError.textContent = "";
+    try {
+      await pdrAuth.signInWithEmailAndPassword(email, pass);
+    } catch (err) {
+      if (pdrLoginError) pdrLoginError.textContent = "Giriş başarısız: e-posta veya şifre hatalı.";
+    }
+    pdrLoginBtn.disabled = false;
+    pdrLoginBtn.textContent = "Giriş Yap";
+  });
+}
+
 // Service Worker kaydı
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
@@ -61,7 +163,7 @@ if ("serviceWorker" in navigator) {
   });
 }
 
-// Storage API — localStorage tabanlı
+// Storage API — localStorage tabanlı + Firestore bulut senkronizasyonu
 window.storage = {
   get: async (key) => {
     try {
@@ -72,11 +174,22 @@ window.storage = {
   set: async (key, value) => {
     try {
       localStorage.setItem("pdr__" + key, value);
+      const user = pdrAuth.currentUser;
+      if (user) {
+        pdrDb.collection("users").doc(user.uid).collection("data").doc(key)
+          .set({ value, updatedAt: Date.now() })
+          .catch(err => console.log("Firestore yazma hatası:", err));
+      }
       return { key, value };
     } catch { return null; }
   },
   delete: async (key) => {
     localStorage.removeItem("pdr__" + key);
+    const user = pdrAuth.currentUser;
+    if (user) {
+      pdrDb.collection("users").doc(user.uid).collection("data").doc(key)
+        .delete().catch(() => {});
+    }
     return { key, deleted: true };
   },
   list: async (prefix) => {
@@ -6269,8 +6382,10 @@ const labelStyle = { fontSize: 11, fontWeight: 600, color: MUTED, display: "bloc
 
 const container=document.getElementById("root");
 const root=ReactDOM.createRoot(container);
-root.render(React.createElement(App));
-setTimeout(()=>{const s=document.getElementById("splash");if(s)s.className="hide";},800);
+window.__pdrAuthReady.then(() => {
+  root.render(React.createElement(App));
+  setTimeout(()=>{const s=document.getElementById("splash");if(s)s.className="hide";},800);
+});
 </script>
 
 </body>

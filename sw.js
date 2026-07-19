@@ -1,4 +1,4 @@
-const CACHE_NAME = "pdr-v4";
+const CACHE_NAME = "pdr-v5";
 
 const CACHE_URLS = [
   "./index.html",

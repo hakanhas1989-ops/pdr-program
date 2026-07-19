@@ -3927,7 +3927,8 @@ const LGS_DERSLER = [
 ];
 const DENEME_SAYISI = 10;
 
-function DenemeTabip({ denemeler, setDenemeler, kayitliListesi, aktifOgrenci, handleDenemeAnaliz, denemeAiLoading, denemeAnaliz }) {
+function DenemeTabip({ denemeler, setDenemeler, kayitliListesi, aktifOgrenci, handleDenemeAnaliz, denemeAiLoading, denemeAnaliz, ogrenciler, setOgrenciler, aktifYil }) {
+  const [excelPanelAcik, setExcelPanelAcik] = useState(false);
   const [seciliOgrenci, setSeciliOgrenci] = useState(aktifOgrenci?.name || kayitliListesi[0]?.name || "");
   // aktifOgrenci değişince güncelle
   useEffect(() => { if (aktifOgrenci?.name) setSeciliOgrenci(aktifOgrenci.name); }, [aktifOgrenci?.name]);
@@ -4109,6 +4110,27 @@ function DenemeTabip({ denemeler, setDenemeler, kayitliListesi, aktifOgrenci, ha
       <div style={{ background: "#EEF2FF", borderRadius: 10, padding: "10px 14px", marginBottom: 14, fontSize: 13, color: BLUE, fontWeight: 600 }}>
         📊 LGS Deneme Takibi — 10 deneme, 90 soru, toplam net
       </div>
+
+      {!excelPanelAcik && (
+        <button onClick={() => setExcelPanelAcik(true)} style={{
+          width: "100%", padding: "10px", marginBottom: 14,
+          background: "#1A8C5B", color: "#fff", border: "none", borderRadius: 10,
+          fontSize: 13, fontWeight: 800, cursor: "pointer"
+        }}>
+          📂 7. Sınıf Excel Toplu Yükle
+        </button>
+      )}
+
+      {excelPanelAcik && (
+        <ExcelTopluYukle
+          ogrenciler={ogrenciler}
+          setOgrenciler={setOgrenciler}
+          denemeler={denemeler}
+          setDenemeler={setDenemeler}
+          aktifYil={aktifYil}
+          onKapat={() => setExcelPanelAcik(false)}
+        />
+      )}
 
       {/* Öğrenci arama */}
       <div style={{ marginBottom: 14 }}>
@@ -5988,6 +6010,9 @@ export default function App() {
             handleDenemeAnaliz={handleDenemeAnaliz}
             denemeAiLoading={denemeAiLoading}
             denemeAnaliz={denemeAnaliz}
+            ogrenciler={ogrenciler}
+            setOgrenciler={setOgrenciler}
+            aktifYil={aktifYil}
           />
         )}
 

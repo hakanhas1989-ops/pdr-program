@@ -23,7 +23,13 @@
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; overflow-x: hidden; }
-body { font-family: "Segoe UI", system-ui, -apple-system, sans-serif; overscroll-behavior: none; background: #F8FAF9; }
+body { font-family: "Segoe UI", system-ui, -apple-system, sans-serif; overscroll-behavior: none; background: linear-gradient(160deg, #F4F9F6 0%, #E9F3EE 45%, #F8FAF9 100%); background-attachment: fixed; }
+div[style*="border-radius: 12px"][style*="1px solid"] {
+  box-shadow: 0 2px 10px rgba(15,61,46,0.07), 0 1px 2px rgba(15,61,46,0.04) !important;
+}
+div[style*="border-radius: 12px"][style*="1px solid"]:active {
+  box-shadow: 0 1px 4px rgba(15,61,46,0.08) !important;
+}
 input, textarea, button, select { font-family: inherit; }
 input[type=range] { cursor: pointer; }
 /* iOS safe area */
@@ -87,6 +93,8 @@ body {
   </div>
 </div>
 
+<button id="pdr-logout-btn" style="display:none;position:fixed;bottom:14px;right:14px;z-index:9999;background:#f5f5f5;border:1px solid #ccc;border-radius:20px;padding:8px 16px;font-size:12px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.15);">Çıkış Yap</button>
+
 <div id="root"></div>
 
 <script>
@@ -106,7 +114,23 @@ const pdrDb = firebase.firestore();
 let pdrResolveReady;
 window.__pdrAuthReady = new Promise((res) => { pdrResolveReady = res; });
 
+// Farklı bir kullanıcı giriş yaptığında önceki kullanıcının önbellek
+// verilerinin görünmemesi için, önce yerel "pdr__" anahtarlarını temizleriz.
+function pdrClearLocalCache() {
+  const toRemove = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith("pdr__")) toRemove.push(k);
+  }
+  toRemove.forEach((k) => localStorage.removeItem(k));
+}
+
 async function pdrSyncDown(uid) {
+  const lastUid = localStorage.getItem("pdr_last_uid");
+  if (!lastUid || lastUid !== uid) {
+    pdrClearLocalCache();
+  }
+  localStorage.setItem("pdr_last_uid", uid);
   try {
     const snap = await pdrDb.collection("users").doc(uid).collection("data").get();
     snap.forEach((doc) => {
@@ -122,17 +146,29 @@ const pdrLoginOverlay = document.getElementById("pdr-login-overlay");
 const pdrLoginForm = document.getElementById("pdr-login-form");
 const pdrLoginError = document.getElementById("pdr-login-error");
 const pdrLoginBtn = document.getElementById("pdr-login-btn");
+const pdrLogoutBtn = document.getElementById("pdr-logout-btn");
+
+if (pdrLogoutBtn) {
+  pdrLogoutBtn.addEventListener("click", async () => {
+    await pdrAuth.signOut();
+    pdrClearLocalCache();
+    localStorage.removeItem("pdr_last_uid");
+    location.reload();
+  });
+}
 
 let pdrFirstReady = true;
 pdrAuth.onAuthStateChanged(async (user) => {
   const splashEl = document.getElementById("splash");
   if (user) {
     if (pdrLoginOverlay) pdrLoginOverlay.style.display = "none";
+    if (pdrLogoutBtn) pdrLogoutBtn.style.display = "block";
     await pdrSyncDown(user.uid);
     if (pdrFirstReady) { pdrFirstReady = false; pdrResolveReady(user); }
   } else {
     if (splashEl) splashEl.className = "hide";
     if (pdrLoginOverlay) pdrLoginOverlay.style.display = "flex";
+    if (pdrLogoutBtn) pdrLogoutBtn.style.display = "none";
   }
 });
 
@@ -1032,6 +1068,17 @@ function DegerlendirmeEkrani({ onTransfer, onClose, records, profiles, profiles2
   // Sonuç
   return (
     <div style={{ padding: "16px 16px 80px" }}>
+      <div id="deg-sonuc-icerik">
+      <div style={{
+        background: `linear-gradient(135deg, ${ACCENT}E6 0%, #164A35E6 100%)`,
+        backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
+        border: "1px solid rgba(255,255,255,0.25)", borderRadius: 16, padding: 18, marginBottom: 14,
+        display: "flex", flexDirection: "column", alignItems: "center", boxShadow: "0 8px 24px rgba(15,61,46,0.3)"
+      }}>
+        <div style={{ color: "#fff", fontSize: 12, fontWeight: 700, letterSpacing: 0.5, opacity: 0.85, marginBottom: 6, alignSelf: "flex-start" }}>◈ Gelişim Radarı</div>
+        <RadarChart scores={DIMENSIONS.reduce((acc, d) => { acc[d.key] = degBoyutPuan(cevaplar, d.key) || 3; return acc; }, {})} size={280} glass />
+      </div>
+
       <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 14, marginBottom: 14 }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>Boyut Puanları</div>
         {DIMENSIONS.map(d => {
@@ -1054,6 +1101,7 @@ function DegerlendirmeEkrani({ onTransfer, onClose, records, profiles, profiles2
       <div style={{ background: "#EEF0FD", border: "1px solid #c7ccf5", borderRadius: 12, padding: 14, marginBottom: 14 }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: "#3B4FD8", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>✦ AI PDR Analizi</div>
         <div style={{ fontSize: 13, lineHeight: 1.8, whiteSpace: "pre-wrap" }}>{analiz}</div>
+      </div>
       </div>
 
 
@@ -1115,15 +1163,16 @@ async function raporIndir(elementId, dosyaAdi) {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${dosyaAdi}</title>
 <style>
-  @page { size: A4; margin: 12mm; }
+  @page { size: A4; margin: 8mm; }
   * { box-sizing: border-box; }
   body { font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #1a1a1a; background: #fff; padding: 0; margin: 0; }
   @media print {
     .noprint { display: none !important; }
-    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; margin-top: 0 !important; }
+    #pdr-print-spacer { margin-top: 0 !important; }
   }
   @media screen {
-    body { padding: 20px; max-width: 800px; margin: 0 auto; }
+    body { padding: 16px; max-width: 1100px; margin: 0 auto; }
   }
   table { width: 100%; border-collapse: collapse; }
   svg { max-width: 100%; }
@@ -1137,22 +1186,34 @@ async function raporIndir(elementId, dosyaAdi) {
     <button onclick="window.close()" style="background:rgba(255,255,255,0.2);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:14px;cursor:pointer;">✕</button>
   </div>
 </div>
-<div style="margin-top:60px;">${icerik}</div>
+<div id="pdr-print-spacer" style="margin-top:60px;">${icerik}</div>
 </body>
 </html>`;
 
-  // Yöntem 1: Yeni sekme (masaüstü)
-  try {
-    const w = window.open("", "_blank");
-    if (w && !w.closed) {
-      w.document.open();
-      w.document.write(htmlStr);
-      w.document.close();
-      return;
-    }
-  } catch(e) {}
+  const isMobil = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 
-  // Yöntem 2: Blob + link (mobil)
+  if (isMobil) {
+    // Mobilde: dosya indirmek yerine doğrudan aynı sekmede aç (dosya yöneticisine gitmeye gerek kalmaz)
+    try {
+      const blob = new Blob([htmlStr], { type: "text/html;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      window.location.href = url;
+      return;
+    } catch(e) {}
+  } else {
+    // Masaüstü: Yeni sekme
+    try {
+      const w = window.open("", "_blank");
+      if (w && !w.closed) {
+        w.document.open();
+        w.document.write(htmlStr);
+        w.document.close();
+        return;
+      }
+    } catch(e) {}
+  }
+
+  // Yöntem 2: Blob + link (yedek)
   try {
     const blob = new Blob([htmlStr], { type: "text/html;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -1190,36 +1251,6 @@ function raporVerisiOlustur({ ogrenci, profil1, profil2, gorusmeler, denemeler, 
 function RaporModal({ rapor, onKapat }) {
   if (!rapor) return null;
   const { ogrenci, profil1, profil2, gorusmeler, denemeler: raporDenemeler, mudahalePlan: raporMudahale, riskListesi: raporRisk, tarih } = rapor;
-
-  // Radar SVG
-  const RadarMini = ({ scores }) => {
-    if (!scores) return null;
-    const cx = 120, cy = 120, r = 90, n = DIMENSIONS.length;
-    const step = (2 * Math.PI) / n;
-    const pt = (i, val) => {
-      const a = i * step - Math.PI / 2;
-      const d = (Math.min(val || 0, 5) / 5) * r;
-      return { x: cx + d * Math.cos(a), y: cy + d * Math.sin(a) };
-    };
-    const dataPts = DIMENSIONS.map((b, i) => pt(i, scores[b.key] || 0));
-    const pathD = dataPts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ") + " Z";
-    return (
-      <svg width={240} height={240} viewBox="0 0 240 240">
-        {[1,2,3,4,5].map(lv => (
-          <polygon key={lv} points={DIMENSIONS.map((_, i) => { const p = pt(i, lv); return `${p.x.toFixed(1)},${p.y.toFixed(1)}`; }).join(" ")} fill="none" stroke="#e0e0e0" strokeWidth={0.8} />
-        ))}
-        {DIMENSIONS.map((_, i) => { const p = pt(i, 5); return <line key={i} x1={cx} y1={cy} x2={p.x.toFixed(1)} y2={p.y.toFixed(1)} stroke="#e0e0e0" strokeWidth={0.8} />; })}
-        <polygon points={dataPts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ")} fill="#2D6A4F22" stroke="#2D6A4F" strokeWidth={2} />
-        {dataPts.map((p, i) => <circle key={i} cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r={4} fill={DIMENSIONS[i].color} stroke="white" strokeWidth={1.5} />)}
-        {DIMENSIONS.map((b, i) => {
-          const a = i * step - Math.PI / 2;
-          const lx = (cx + (r + 22) * Math.cos(a)).toFixed(1);
-          const ly = (cy + (r + 22) * Math.sin(a)).toFixed(1);
-          return <text key={i} x={lx} y={ly} textAnchor="middle" dominantBaseline="middle" fontSize={8} fontWeight={600} fill={b.color}>{b.label}</text>;
-        })}
-      </svg>
-    );
-  };
 
   const dersOrtalama = () => {
     if (!profil2?.sinavlar) return null;
@@ -1286,7 +1317,7 @@ function RaporModal({ rapor, onKapat }) {
                 <div style={S.bolumBaslik}>Profil 1 — PDR Değerlendirmesi</div>
                 <div style={S.bolumIcerik}>
                   <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}>
-                    <RadarMini scores={profil1.scores} />
+                    <RadarChart scores={profil1.scores} size={150} />
                   </div>
                   {DIMENSIONS.map(d => {
                     const val = profil1.scores?.[d.key] || 0;
@@ -1332,7 +1363,7 @@ function RaporModal({ rapor, onKapat }) {
                           <div style={{ fontSize:10, color:"#555", lineHeight:1.6, background:"#fafafa", borderRadius:4, padding:"4px 7px", fontStyle:"italic" }}>{r.raw}</div>
                         </div>
                       )}
-                      <div style={{ fontSize:9, fontWeight:700, color:"#2D6A4F", textTransform:"uppercase", marginBottom:3 }}>Görüşme Özeti</div>
+                      <div style={{ fontSize:9, fontWeight:700, color:"#2D6A4F", textTransform:"uppercase", marginBottom:3 }}>Bir Sonraki Seans Planlaması</div>
                       <div style={{ fontSize:11, color:"#333", lineHeight:1.7 }}>{r.summary}</div>
                     </div>
                   ))}
@@ -1555,14 +1586,6 @@ function RaporModal({ rapor, onKapat }) {
                   <div style={{ ...S.bolumBaslik2 }}>Bir Sonraki Seans Planı</div>
                   <div style={{ ...S.bolumIcerik2 }}>
 
-                    {/* Son görüşme özeti */}
-                    {sonGorusme && (
-                      <div style={{ marginBottom:10 }}>
-                        <div style={{ fontSize:9, fontWeight:700, color:"#555", textTransform:"uppercase", marginBottom:4 }}>Son Görüşme Özeti ({sonGorusme.date})</div>
-                        <div style={{ fontSize:10, color:"#333", background:"#f9f9f9", padding:"6px 8px", borderRadius:4, lineHeight:1.6 }}>{sonGorusme.summary}</div>
-                      </div>
-                    )}
-
                     {/* Aktif müdahale planları */}
                     {aktifPlanlar.length > 0 && (
                       <div style={{ marginBottom:10 }}>
@@ -1673,8 +1696,10 @@ function exportToExcel(records) {
 }
 
 // ── Radar SVG ─────────────────────────────────────────────────────────────────
-function RadarChart({ scores }) {
-  const cx = 120, cy = 120, r = 90, n = DIMENSIONS.length;
+function RadarChart({ scores, size = 240, glass = false }) {
+  const pad = size * 0.30; // Etiketler için ekstra kenar boşluğu
+  const total = size + pad * 2;
+  const cx = total / 2, cy = total / 2, r = size * 0.34, n = DIMENSIONS.length;
   const angleStep = (2 * Math.PI) / n;
   const getPoint = (i, val, maxVal = 5) => {
     const angle = i * angleStep - Math.PI / 2;
@@ -1682,38 +1707,56 @@ function RadarChart({ scores }) {
     return { x: cx + dist * Math.cos(angle), y: cy + dist * Math.sin(angle) };
   };
   const dataPoints = DIMENSIONS.map((d, i) => getPoint(i, scores[d.key] || 0));
-  const dataPath = dataPoints.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ") + " Z";
   const gridLevels = [1, 2, 3, 4, 5];
+  const gid = "radarFillGrad" + size + (glass ? "g" : "");
+  const gridColor = glass ? "rgba(255,255,255,0.35)" : "#EEF3F0";
+  const gridColorOuter = glass ? "rgba(255,255,255,0.55)" : BORDER;
+  const axisColor = glass ? "rgba(255,255,255,0.3)" : BORDER;
+  const fillColor = glass ? "#ffffff" : ACCENT;
+  const labelColor = glass ? "#ffffff" : TEXT;
 
   return (
-    <svg width={240} height={240} viewBox="0 0 240 240">
+    <svg width="100%" height="auto" style={{ maxWidth: total, display: "block" }} viewBox={`0 0 ${total} ${total}`}>
+      <defs>
+        <radialGradient id={gid} cx="50%" cy="45%" r="60%">
+          <stop offset="0%" stopColor={fillColor} stopOpacity={glass ? 0.5 : 0.6} />
+          <stop offset="100%" stopColor={fillColor} stopOpacity={glass ? 0.12 : 0.15} />
+        </radialGradient>
+        <filter id={"radarGlow" + size + (glass ? "g" : "")} x="-40%" y="-40%" width="180%" height="180%">
+          <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor={glass ? "#000000" : ACCENT} floodOpacity={glass ? 0.25 : 0.4} />
+        </filter>
+      </defs>
       {/* Grid */}
       {gridLevels.map(level => {
         const pts = DIMENSIONS.map((_, i) => getPoint(i, level));
         return <polygon key={level} points={pts.map(p => `${p.x},${p.y}`).join(" ")}
-          fill="none" stroke={BORDER} strokeWidth={1} />;
+          fill="none" stroke={level === 5 ? gridColorOuter : gridColor} strokeWidth={level === 5 ? 1.4 : 1} />;
       })}
       {/* Axes */}
       {DIMENSIONS.map((_, i) => {
         const outer = getPoint(i, 5);
-        return <line key={i} x1={cx} y1={cy} x2={outer.x} y2={outer.y} stroke={BORDER} strokeWidth={1} />;
+        return <line key={i} x1={cx} y1={cy} x2={outer.x} y2={outer.y} stroke={axisColor} strokeWidth={1} />;
       })}
-      {/* Data */}
+      {/* Data: gradyanlı dolgu + parlaklık gölgesi */}
       <polygon points={dataPoints.map(p => `${p.x},${p.y}`).join(" ")}
-        fill={`${ACCENT}33`} stroke={ACCENT} strokeWidth={2} />
+        fill={`url(#${gid})`} filter={`url(#radarGlow${size}${glass ? "g" : ""})`} stroke={fillColor} strokeWidth={2.5} strokeLinejoin="round" />
       {dataPoints.map((p, i) => (
-        <circle key={i} cx={p.x} cy={p.y} r={4} fill={DIMENSIONS[i].color} stroke="#fff" strokeWidth={1.5} />
+        <circle key={i} cx={p.x} cy={p.y} r={5} fill={glass ? "#fff" : DIMENSIONS[i].color} stroke={glass ? ACCENT : "#fff"} strokeWidth={2} />
       ))}
-      {/* Labels */}
+      {/* Labels: her boyut kendi canlı rengiyle, hepsi ortalı */}
       {DIMENSIONS.map((d, i) => {
         const angle = i * angleStep - Math.PI / 2;
-        const lx = cx + (r + 18) * Math.cos(angle);
-        const ly = cy + (r + 18) * Math.sin(angle);
+        const cosA = Math.cos(angle), sinA = Math.sin(angle);
+        const lx = cx + (r + size * 0.16) * cosA;
+        const ly = cy + (r + size * 0.16) * sinA;
+        const GLASS_RENK = { akademik: "#5DC8FF", sosyal: "#7CFFB2", duygusal: "#FF9466", aile: "#C79CFF", ozguven: "#FFD966", uyum: "#5EEAD4", kariyer: "#FF6B6B", akran: "#FFB877" };
+        const etiketRengi = glass ? (GLASS_RENK[d.key] || d.color) : d.color;
         return (
           <text key={i} x={lx} y={ly} textAnchor="middle" dominantBaseline="middle"
-            fontSize={9} fill={TEXT} fontWeight={600}>
+            fontSize={size * 0.055} fill={etiketRengi} fontWeight={900}
+            stroke={glass ? "rgba(6,26,19,0.55)" : "none"} strokeWidth={glass ? 0.7 : 0} paintOrder="stroke">
             {d.label.split(" ").map((w, wi) => (
-              <tspan key={wi} x={lx} dy={wi === 0 ? 0 : 11}>{w}</tspan>
+              <tspan key={wi} x={lx} dy={wi === 0 ? 0 : size * 0.062}>{w}</tspan>
             ))}
           </text>
         );
@@ -4090,12 +4133,17 @@ function DenemeTabip({ denemeler, setDenemeler, kayitliListesi, aktifOgrenci, ha
       : 0;
 
     return (
-      <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 14, marginBottom: 14 }}>
+      <div style={{
+        background: `linear-gradient(135deg, ${ACCENT}E6 0%, #164A35E6 100%)`,
+        backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
+        border: "1px solid rgba(255,255,255,0.25)", borderRadius: 16, padding: 16, marginBottom: 14,
+        boxShadow: "0 8px 24px rgba(15,61,46,0.3)"
+      }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: TEXT }}>Toplam Net Gelişimi</span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: "#fff" }}>◈ Toplam Net Gelişimi</span>
           <div style={{ display: "flex", gap: 10 }}>
-            <span style={{ fontSize: 11, color: MUTED }}>Ort: <b style={{ color: ACCENT }}>{avgNet.toFixed(1)}</b></span>
-            <span style={{ fontSize: 11, color: trend >= 0 ? "#1A8C5B" : "#C0392B" }}>
+            <span style={{ fontSize: 11, color: "rgba(255,255,255,0.75)" }}>Ort: <b style={{ color: "#fff" }}>{avgNet.toFixed(1)}</b></span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: trend >= 0 ? "#8FE3B0" : "#FF9E90" }}>
               {trend >= 0 ? "↑" : "↓"} {Math.abs(trend).toFixed(1)}
             </span>
           </div>
@@ -4106,36 +4154,36 @@ function DenemeTabip({ denemeler, setDenemeler, kayitliListesi, aktifOgrenci, ha
             const y = padT + innerH - (v / maxNet) * innerH;
             return (
               <g key={v}>
-                <line x1={padL} y1={y} x2={chartW - padR} y2={y} stroke={BORDER} strokeWidth={0.7} strokeDasharray="3,3" />
-                <text x={padL - 4} y={y} textAnchor="end" dominantBaseline="middle" fontSize={8} fill={MUTED}>{v}</text>
+                <line x1={padL} y1={y} x2={chartW - padR} y2={y} stroke="rgba(255,255,255,0.2)" strokeWidth={0.7} strokeDasharray="3,3" />
+                <text x={padL - 4} y={y} textAnchor="end" dominantBaseline="middle" fontSize={8} fill="rgba(255,255,255,0.6)">{v}</text>
               </g>
             );
           })}
           {/* Ortalama çizgisi */}
           {(() => {
             const avgY = padT + innerH - (avgNet / maxNet) * innerH;
-            return <line x1={padL} y1={avgY} x2={chartW - padR} y2={avgY} stroke={ACCENT} strokeWidth={1} strokeDasharray="4,4" opacity={0.5} />;
+            return <line x1={padL} y1={avgY} x2={chartW - padR} y2={avgY} stroke="#fff" strokeWidth={1} strokeDasharray="4,4" opacity={0.5} />;
           })()}
           {/* Veri çizgisi */}
-          <path d={pathD} fill="none" stroke={ACCENT} strokeWidth={2.5} strokeLinejoin="round" />
+          <path d={pathD} fill="none" stroke="#fff" strokeWidth={2.5} strokeLinejoin="round" />
           {/* Alan doldurma */}
           <path d={pathD + ` L${points[points.length-1].x},${padT+innerH} L${points[0].x},${padT+innerH} Z`}
-            fill={ACCENT} opacity={0.08} />
+            fill="#ffffff" opacity={0.12} />
           {/* Noktalar */}
           {points.map((p, i) => (
             <g key={i}>
-              <circle cx={p.x} cy={p.y} r={5} fill={ACCENT} stroke="#fff" strokeWidth={2} />
-              <text x={p.x} y={p.y - 10} textAnchor="middle" fontSize={9} fontWeight={700} fill={ACCENT}>
+              <circle cx={p.x} cy={p.y} r={5} fill="#fff" stroke={ACCENT} strokeWidth={2} />
+              <text x={p.x} y={p.y - 10} textAnchor="middle" fontSize={9} fontWeight={700} fill="#fff">
                 {p.d.toplam.toFixed(1)}
               </text>
-              <text x={p.x} y={padT + innerH + 14} textAnchor="middle" fontSize={8} fill={MUTED}>D{p.d.no}</text>
+              <text x={p.x} y={padT + innerH + 14} textAnchor="middle" fontSize={8} fill="rgba(255,255,255,0.7)">D{p.d.no}</text>
             </g>
           ))}
         </svg>
         {/* Ders bazlı bar */}
         {girilenDenemeler.length > 0 && (
           <div style={{ marginTop: 10 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: MUTED, marginBottom: 6 }}>Son Deneme Ders Dağılımı</div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.75)", marginBottom: 6 }}>Son Deneme Ders Dağılımı</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 4 }}>
               {LGS_DERSLER.map(d => {
                 const sonDeneme = girilenDenemeler[girilenDenemeler.length - 1];
@@ -4606,26 +4654,6 @@ function ProfilMerkez({
   }
 
   // Radar mini
-  const RadarMiniComp = ({ scores }) => {
-    if (!scores) return null;
-    const cx=110,cy=110,r=80,n=DIMENSIONS.length, step=(2*Math.PI)/n;
-    const pt=(i,val)=>{ const a=i*step-Math.PI/2,d=(Math.min(val||0,5)/5)*r; return {x:cx+d*Math.cos(a),y:cy+d*Math.sin(a)}; };
-    const dataPts=DIMENSIONS.map((b,i)=>pt(i,scores[b.key]||0));
-    const pathD=dataPts.map((p,i)=>`${i===0?"M":"L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ")+" Z";
-    return (
-      <svg width={220} height={220} viewBox="0 0 220 220">
-        {[1,2,3,4,5].map(lv=><polygon key={lv} points={DIMENSIONS.map((_,i)=>{const p=pt(i,lv);return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;}).join(" ")} fill="none" stroke={BORDER} strokeWidth={0.8}/>)}
-        {DIMENSIONS.map((_,i)=>{const p=pt(i,5);return <line key={i} x1={cx} y1={cy} x2={p.x.toFixed(1)} y2={p.y.toFixed(1)} stroke={BORDER} strokeWidth={0.8}/>;} )}
-        <polygon points={dataPts.map(p=>`${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ")} fill={`${ACCENT}22`} stroke={ACCENT} strokeWidth={2}/>
-        {dataPts.map((p,i)=><circle key={i} cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r={4} fill={DIMENSIONS[i].color} stroke="#fff" strokeWidth={1.5}/>)}
-        {DIMENSIONS.map((b,i)=>{
-          const a=i*step-Math.PI/2,lx=(cx+(r+20)*Math.cos(a)).toFixed(1),ly=(cy+(r+20)*Math.sin(a)).toFixed(1);
-          return <text key={i} x={lx} y={ly} textAnchor="middle" dominantBaseline="middle" fontSize={8} fontWeight={600} fill={b.color}>{b.label}</text>;
-        })}
-      </svg>
-    );
-  };
-
   const inp = { width:"100%", padding:"9px 11px", border:`1px solid ${BORDER}`, borderRadius:9, fontSize:13, background:CARD, color:TEXT, outline:"none", boxSizing:"border-box", fontFamily:"inherit" };
   const lbl = { fontSize:11, fontWeight:600, color:MUTED, display:"block", marginBottom:4, textTransform:"uppercase" };
 
@@ -4724,8 +4752,13 @@ function ProfilMerkez({
                   </div>
 
                   {/* Radar + sliderlar */}
-                  <div style={{display:"flex",justifyContent:"center",marginBottom:12}}>
-                    <RadarMiniComp scores={profForm.scores} />
+                  <div style={{
+                    background: `linear-gradient(135deg, ${ACCENT}E6 0%, #164A35E6 100%)`,
+                    backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
+                    border: "1px solid rgba(255,255,255,0.25)", borderRadius: 16, padding: 16, marginBottom: 12,
+                    display: "flex", justifyContent: "center", boxShadow: "0 8px 24px rgba(15,61,46,0.3)"
+                  }}>
+                    <RadarChart scores={profForm.scores} size={240} glass />
                   </div>
                   <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:12,padding:14,marginBottom:12}}>
                     {DIMENSIONS.map(dim=>(
@@ -4882,10 +4915,15 @@ function ProfilMerkez({
             <div>
               {/* Radar */}
               {mevcutP1 && (
-                <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:12,padding:14,marginBottom:12}}>
-                  <div style={{fontSize:12,fontWeight:700,color:ACCENT,textTransform:"uppercase",letterSpacing:0.5,marginBottom:10}}>PDR Profil Radar</div>
+                <div style={{
+                  background: `linear-gradient(135deg, ${ACCENT}E6 0%, #164A35E6 100%)`,
+                  backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
+                  border: "1px solid rgba(255,255,255,0.25)", borderRadius: 16, padding: 16, marginBottom: 12,
+                  boxShadow: "0 8px 24px rgba(15,61,46,0.3)"
+                }}>
+                  <div style={{fontSize:12,fontWeight:700,color:"#fff",opacity:0.85,textTransform:"uppercase",letterSpacing:0.5,marginBottom:10}}>◈ PDR Profil Radar</div>
                   <div style={{display:"flex",justifyContent:"center"}}>
-                    <RadarMiniComp scores={mevcutP1.scores} />
+                    <RadarChart scores={mevcutP1.scores} size={240} glass />
                   </div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5,marginTop:8}}>
                     {DIMENSIONS.map(d=>{
@@ -5890,7 +5928,7 @@ export default function App() {
 
       <RaporModal rapor={raporVerisi} onKapat={() => setRaporVerisi(null)} />
       {/* Header */}
-      <div style={{ background: ACCENT, color: "#fff", padding: "16px 20px 12px", position: "sticky", top: 0, zIndex: 10 }}>
+      <div style={{ background: `linear-gradient(135deg, ${ACCENT} 0%, #164A35 100%)`, color: "#fff", padding: "16px 20px 12px", position: "sticky", top: 0, zIndex: 10, boxShadow: "0 4px 16px rgba(15,61,46,0.35)" }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
           <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1, opacity: 0.7, textTransform: "uppercase" }}>PDR Servisi</div>
           <button onClick={() => { setTab("ogrenciler"); setYilEkrani(true); }} style={{
@@ -5911,7 +5949,7 @@ export default function App() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: "flex", background: CARD, borderBottom: `1px solid ${BORDER}`, overflowX: "auto" }}>
+      <div style={{ display: "flex", background: CARD, borderBottom: `1px solid ${BORDER}`, overflowX: "auto", boxShadow: "0 3px 8px rgba(0,0,0,0.06)", position: "sticky", top: 0, zIndex: 9 }}>
         {TABS.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)} style={{
             flexShrink: 0, padding: "11px 10px", border: "none", background: "none",
@@ -6142,8 +6180,24 @@ export default function App() {
         {/* ── RİSK LİSTESİ ─────────────────────────────────────────── */}
         {tab === "risk" && (
           <div>
-            <div style={{ background: "#FDECEA", borderRadius: 10, padding: "10px 14px", marginBottom: 14, fontSize: 13, color: "#C0392B", fontWeight: 600 }}>
-              ⚠ Takip gerektiren öğrenciler — Risk durumu, açıklama ve öncelik seviyesi
+            <div style={{
+              background: `linear-gradient(135deg, #C0392BE6 0%, #7B241CE6 100%)`,
+              backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
+              border: "1px solid rgba(255,255,255,0.25)", borderRadius: 16, padding: 16, marginBottom: 16,
+              boxShadow: "0 8px 24px rgba(123,36,28,0.3)"
+            }}>
+              <div style={{ color: "#fff", fontSize: 12, fontWeight: 700, letterSpacing: 0.5, opacity: 0.9, marginBottom: 10 }}>⚠ Risk Takip Özeti</div>
+              <div style={{ display: "flex", gap: 10 }}>
+                {[["Yüksek", "#FF5A4E"], ["Orta", "#FFA53E"], ["Düşük", "#FFD84A"]].map(([lvl, c]) => {
+                  const sayi = riskListesi.filter(r => !r.kapandi && r.oncelik === lvl).length;
+                  return (
+                    <div key={lvl} style={{ flex: 1, background: "rgba(255,255,255,0.12)", borderRadius: 12, padding: "10px 8px", textAlign: "center" }}>
+                      <div style={{ fontSize: 22, fontWeight: 900, color: c }}>{sayi}</div>
+                      <div style={{ fontSize: 10, color: "#fff", opacity: 0.85, fontWeight: 700, marginTop: 2 }}>{lvl}</div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Yeni risk ekle */}
@@ -6157,11 +6211,12 @@ export default function App() {
                       const s = riskForm.studentName === o.name;
                       return (
                         <button key={o.name} onClick={() => setRiskForm(f => ({ ...f, studentName: o.name, className: o.className }))} style={{
-                          padding: "5px 10px", borderRadius: 20,
-                          border: `2px solid ${s ? "#C0392B" : BORDER}`,
-                          background: s ? "#FDECEA" : CARD,
-                          color: s ? "#C0392B" : MUTED,
-                          fontSize: 11, fontWeight: s ? 700 : 500, cursor: "pointer"
+                          padding: "6px 12px", borderRadius: 18,
+                          border: s ? "1.5px solid #FF5A4E" : `1.5px solid ${BORDER}`,
+                          background: s ? "linear-gradient(135deg, #FF6B5B 0%, #C0392B 100%)" : CARD,
+                          color: s ? "#fff" : MUTED,
+                          boxShadow: s ? "0 0 12px rgba(255,90,78,0.5)" : "none",
+                          fontSize: 11, fontWeight: s ? 800 : 500, cursor: "pointer", transition: "all 0.15s"
                         }}>{o.name}</button>
                       );
                     })}
@@ -6176,28 +6231,41 @@ export default function App() {
               </div>
               <div style={{ marginBottom: 8 }}>
                 <label style={labelStyle}>RİSK TÜRÜ</label>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {["Davranış", "Akademik", "Aile", "Akran / Zorbalık", "Duygusal", "Devamsızlık", "Öz Zarar", "Sağlık", "Madde Kullanımı", "Ekonomik Güçlük", "Yas / Kayıp", "Travma", "Özel Öğrenme Güçlüğü", "Diğer"].map(t => (
-                    <button key={t} onClick={() => setRiskForm(f=>({...f, riskTuru:t}))} style={{
-                      padding: "5px 10px", borderRadius: 16,
-                      border: `2px solid ${riskForm.riskTuru===t ? "#C0392B" : BORDER}`,
-                      background: riskForm.riskTuru===t ? "#FDECEA" : CARD,
-                      color: riskForm.riskTuru===t ? "#C0392B" : MUTED,
-                      fontSize: 12, fontWeight: riskForm.riskTuru===t ? 700 : 500, cursor: "pointer"
-                    }}>{t}</button>
-                  ))}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                  {(() => {
+                    const TUR_PALET = ["#E63946","#457B9D","#2A9D8F","#E76F51","#7B5EA7","#E9C46A","#C0392B","#1A8C5B","#8E5B3C","#3B4FD8","#D45D9C","#B07D1A","#00A8A8","#6C757D"];
+                    const turler = ["Davranış", "Akademik", "Aile", "Akran / Zorbalık", "Duygusal", "Devamsızlık", "Öz Zarar", "Sağlık", "Madde Kullanımı", "Ekonomik Güçlük", "Yas / Kayıp", "Travma", "Özel Öğrenme Güçlüğü", "Diğer"];
+                    return turler.map((t, ti) => {
+                      const s = riskForm.riskTuru === t;
+                      const rc = TUR_PALET[ti % TUR_PALET.length];
+                      return (
+                        <button key={t} onClick={() => setRiskForm(f=>({...f, riskTuru:t}))} style={{
+                          padding: "7px 13px", borderRadius: 18,
+                          border: `2px solid ${rc}`,
+                          background: s ? `linear-gradient(135deg, ${rc} 0%, ${rc}CC 100%)` : `${rc}1A`,
+                          color: s ? "#fff" : rc,
+                          boxShadow: s ? `0 0 14px ${rc}88` : "none",
+                          fontSize: 12, fontWeight: s ? 800 : 700, cursor: "pointer", transition: "all 0.15s"
+                        }}>{t}</button>
+                      );
+                    });
+                  })()}
                 </div>
               </div>
               <div style={{ marginBottom: 8 }}>
                 <label style={labelStyle}>ÖNCELİK</label>
-                <div style={{ display: "flex", gap: 6 }}>
-                  {[["Yüksek","#C0392B","#FDECEA"],["Orta","#B07D1A","#FDF6E3"],["Düşük","#2D6A4F","#E6F5EE"]].map(([p,c,bg]) => (
-                    <button key={p} onClick={() => setRiskForm(f=>({...f, oncelik:p}))} style={{
-                      flex:1, padding:"7px", border:`2px solid ${riskForm.oncelik===p ? c : BORDER}`,
-                      borderRadius:8, background: riskForm.oncelik===p ? bg : CARD,
-                      color: riskForm.oncelik===p ? c : MUTED, fontSize:12, fontWeight:700, cursor:"pointer"
-                    }}>{p}</button>
-                  ))}
+                <div style={{ display: "flex", gap: 8 }}>
+                  {[["Yüksek","#FF5A4E","linear-gradient(135deg, #FF6B5B 0%, #C0392B 100%)","rgba(255,90,78,0.5)"],["Orta","#FFA53E","linear-gradient(135deg, #FFB65C 0%, #C97A18 100%)","rgba(255,165,62,0.5)"],["Düşük","#FFD84A","linear-gradient(135deg, #FFE375 0%, #C9A017 100%)","rgba(255,216,74,0.5)"]].map(([p,c,grad,glow]) => {
+                    const s = riskForm.oncelik === p;
+                    return (
+                      <button key={p} onClick={() => setRiskForm(f=>({...f, oncelik:p}))} style={{
+                        flex:1, padding:"10px", border: s ? `1.5px solid ${c}` : `1.5px solid ${BORDER}`,
+                        borderRadius:12, background: s ? grad : CARD,
+                        boxShadow: s ? `0 0 16px ${glow}` : "none",
+                        color: s ? "#fff" : MUTED, fontSize:13, fontWeight:800, cursor:"pointer", transition:"all 0.15s"
+                      }}>{p}</button>
+                    );
+                  })}
                 </div>
               </div>
               <div style={{ marginBottom: 10 }}>
@@ -6207,10 +6275,11 @@ export default function App() {
                   rows={2} style={{...inputStyle, resize:"vertical"}} />
               </div>
               <button onClick={handleRiskEkle} disabled={!riskForm.studentName.trim() || riskAiLoading} style={{
-                width:"100%", padding:"11px",
-                background: riskAiLoading ? BORDER : riskForm.studentName ? "#C0392B" : BORDER,
+                width:"100%", padding:"13px",
+                background: riskAiLoading ? BORDER : riskForm.studentName ? "linear-gradient(135deg, #FF6B5B 0%, #C0392B 100%)" : BORDER,
                 color: riskAiLoading || !riskForm.studentName ? MUTED : "#fff",
-                border:"none", borderRadius:10, fontSize:14, fontWeight:800, cursor:"pointer"
+                boxShadow: (!riskAiLoading && riskForm.studentName) ? "0 0 18px rgba(255,90,78,0.45)" : "none",
+                border:"none", borderRadius:12, fontSize:14, fontWeight:800, cursor:"pointer", transition:"all 0.15s"
               }}>{riskAiLoading ? "⏳ AI risk analizi yapıyor…" : "✦ AI Analiz Et ve Kaydet"}</button>
             </div>
 
@@ -6218,45 +6287,52 @@ export default function App() {
             {(() => {
               const aktif = riskListesi.filter(r => !r.kapandi);
               const kapali = riskListesi.filter(r => r.kapandi);
-              const oncelikRenk = { "Yüksek": ["#C0392B","#FDECEA"], "Orta": ["#B07D1A","#FDF6E3"], "Düşük": ["#2D6A4F","#E6F5EE"] };
+              const oncelikRenk = {
+                "Yüksek": ["#FF5A4E", "linear-gradient(135deg, #E8443A 0%, #7B1610 100%)", "rgba(255,90,78,0.55)"],
+                "Orta":   ["#FFA53E", "linear-gradient(135deg, #E88A2E 0%, #7A4508 100%)", "rgba(255,165,62,0.5)"],
+                "Düşük":  ["#FFD84A", "linear-gradient(135deg, #D9B93A 0%, #6E5A08 100%)", "rgba(255,216,74,0.45)"],
+              };
               return (
                 <>
                   {aktif.length === 0 && <div style={{ textAlign:"center", color:MUTED, marginTop:20, fontSize:14 }}>Aktif risk kaydı yok ✓</div>}
                   {aktif.map(r => {
-                    const [rc, rbg] = oncelikRenk[r.oncelik] || ["#888","#eee"];
+                    const [rc, rbgGrad, rglow] = oncelikRenk[r.oncelik] || ["#888", "rgba(120,120,120,0.3)", "rgba(120,120,120,0.3)"];
                     return (
-                      <div key={r.id} style={{ background: CARD, border:`2px solid ${rc}22`, borderLeft:`4px solid ${rc}`, borderRadius:12, padding:14, marginBottom:10 }}>
+                      <div key={r.id} style={{
+                        background: rbgGrad, backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
+                        border: `1.5px solid ${rc}`, borderRadius: 16, padding: 16, marginBottom: 12,
+                        boxShadow: `0 0 20px ${rglow}, 0 6px 18px rgba(0,0,0,0.25)`
+                      }}>
                         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6 }}>
                           <div>
-                            <div style={{ fontWeight:800, fontSize:14, color:TEXT }}>{r.studentName}</div>
-                            <div style={{ fontSize:11, color:MUTED }}>{r.tarih} · {r.className}</div>
+                            <div style={{ fontWeight:900, fontSize:15, color:"#fff" }}>{r.studentName}</div>
+                            <div style={{ fontSize:11, color:"rgba(255,255,255,0.75)" }}>{r.tarih} · {r.className}</div>
                           </div>
                           <div style={{ display:"flex", gap:6, flexShrink:0 }}>
-                            <span style={{ background:rbg, color:rc, borderRadius:20, padding:"2px 10px", fontSize:11, fontWeight:700 }}>{r.oncelik}</span>
-                            {r.riskTuru && <span style={{ background:"#FDECEA", color:"#C0392B", borderRadius:20, padding:"2px 10px", fontSize:11, fontWeight:700 }}>{r.riskTuru}</span>}
+                            <span style={{ background:"rgba(255,255,255,0.22)", color:"#fff", borderRadius:20, padding:"3px 12px", fontSize:11, fontWeight:800, border:`1px solid ${rc}` }}>{r.oncelik}</span>
+                            {r.riskTuru && <span style={{ background:"rgba(255,255,255,0.15)", color:"#fff", borderRadius:20, padding:"3px 12px", fontSize:11, fontWeight:700 }}>{r.riskTuru}</span>}
                           </div>
                         </div>
-                        {r.aciklama && <div style={{ fontSize:12, color:TEXT, lineHeight:1.6, marginBottom:10 }}>{r.aciklama}</div>}
+                        <div style={{ height:1, background:"rgba(255,255,255,0.25)", margin:"8px 0" }} />
+                        {r.aciklama && <div style={{ fontSize:12, color:"rgba(255,255,255,0.92)", lineHeight:1.6, marginBottom:10 }}>{r.aciklama}</div>}
                         <div style={{ display:"flex", gap:8 }}>
                           {r.aiAnaliz && (() => {
                             const duz = r.aiAnaliz.includes("YÜKSEK") ? "YÜKSEK" : r.aiAnaliz.includes("ORTA") ? "ORTA" : "HAFİF";
-                            const dc = duz==="YÜKSEK" ? "#C0392B" : duz==="ORTA" ? "#B07D1A" : "#1A8C5B";
-                            const dbg = duz==="YÜKSEK" ? "#FDECEA" : duz==="ORTA" ? "#FDF6E3" : "#E6F5EE";
                             return (
                               <div style={{ marginBottom:8 }}>
                                 <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
-                                  <span style={{ background:dbg, color:dc, borderRadius:20, padding:"3px 12px", fontSize:12, fontWeight:800 }}>
-                                    {duz==="YÜKSEK"?"🔴":"duz"==="ORTA"?"🟡":"🟢"} Risk Düzeyi: {duz}
+                                  <span style={{ background:"rgba(255,255,255,0.2)", color:"#fff", borderRadius:20, padding:"3px 12px", fontSize:12, fontWeight:800 }}>
+                                    {duz==="YÜKSEK"?"🔴":duz==="ORTA"?"🟡":"🟢"} Risk Düzeyi: {duz}
                                   </span>
                                 </div>
-                                <div style={{ fontSize:12, color:TEXT, lineHeight:1.7, whiteSpace:"pre-wrap", background:"#FAFDF7", borderRadius:8, padding:10 }}>
+                                <div style={{ fontSize:12, color:"#fff", lineHeight:1.7, whiteSpace:"pre-wrap", background:"rgba(0,0,0,0.2)", borderRadius:10, padding:10 }}>
                                   {r.aiAnaliz}
                                 </div>
                               </div>
                             );
                           })()}
-                        <button onClick={() => handleRiskKapat(r.id)} style={{ flex:1, padding:"7px", background:ACCENT_LIGHT, color:ACCENT, border:"none", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer" }}>✓ Kapat</button>
-                          <button onClick={() => handleRiskSil(r.id)} style={{ padding:"7px 12px", background:"none", border:`1px solid #F28B82`, color:"#C5221F", borderRadius:8, fontSize:12, cursor:"pointer" }}>Sil</button>
+                        <button onClick={() => handleRiskKapat(r.id)} style={{ flex:1, padding:"9px", background:"rgba(255,255,255,0.9)", color:"#1a1a1a", border:"none", borderRadius:10, fontSize:12, fontWeight:800, cursor:"pointer" }}>✓ Kapat</button>
+                          <button onClick={() => handleRiskSil(r.id)} style={{ padding:"9px 14px", background:"rgba(0,0,0,0.2)", border:`1px solid rgba(255,255,255,0.4)`, color:"#fff", borderRadius:10, fontSize:12, cursor:"pointer" }}>Sil</button>
                         </div>
                       </div>
                     );

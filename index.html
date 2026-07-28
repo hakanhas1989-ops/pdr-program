@@ -13,48 +13,6 @@
 <link rel="apple-touch-icon" sizes="192x192" href="icon.png">
 <link rel="icon" href="icon.png">
 <title>PDR Program</title>
-<script>
-  // Kullanıcının kendi Anthropic API anahtarını yönetir. Her müşteri kendi
-  // anahtarını Ayarlar bölümünden girer; AI faturası doğrudan ona kesilir.
-  // "rpusula__" ön ekiyle saklanan her anahtar otomatik olarak Firestore'a da
-  // senkronize edilir (pdrSyncDown ile), böylece anahtar tarayıcıya değil hesaba bağlı olur.
-  function pdrGetApiKey() {
-    return localStorage.getItem("rpusula__apiKey") || "";
-  }
-  function pdrSetApiKey(key) {
-    const trimmed = key.trim();
-    localStorage.setItem("rpusula__apiKey", trimmed);
-    const user = window.pdrAuth && window.pdrAuth.currentUser;
-    if (user && window.pdrDb) {
-      window.pdrDb.collection("users").doc(user.uid).collection("data").doc("apiKey")
-        .set({ value: trimmed, updatedAt: Date.now() })
-        .catch(err => console.log("API anahtarı buluta kaydedilemedi:", err));
-    }
-  }
-  // Tüm AI çağrılarının geçtiği tek nokta. Eski Cloudflare Worker çağrılarının
-  // yerini alır — { model, max_tokens, system, messages } aynı formatı kabul eder.
-  async function pdrCallClaude(payload) {
-    const apiKey = pdrGetApiKey();
-    if (!apiKey) {
-      throw new Error("API_KEY_MISSING");
-    }
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "anthropic-dangerous-direct-browser-access": "true"
-      },
-      body: JSON.stringify(payload)
-    });
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error("API_ERROR: " + errText);
-    }
-    return res;
-  }
-</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
@@ -66,19 +24,14 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; overflow-x: hidden; }
 body { font-family: "Segoe UI", system-ui, -apple-system, sans-serif; overscroll-behavior: none; background: linear-gradient(160deg, #F4F9F6 0%, #E9F3EE 45%, #F8FAF9 100%); background-attachment: fixed; }
-input, textarea, button, select { font-family: inherit; }
-input[type=range] { cursor: pointer; }
-/* Kartlara genel derinlik/gölge: satır içi stilleri hedefleyen öznitelik seçicisi */
 div[style*="border-radius: 12px"][style*="1px solid"] {
   box-shadow: 0 2px 10px rgba(15,61,46,0.07), 0 1px 2px rgba(15,61,46,0.04) !important;
 }
 div[style*="border-radius: 12px"][style*="1px solid"]:active {
   box-shadow: 0 1px 4px rgba(15,61,46,0.08) !important;
 }
-/* Küçük başlıklarda daha keskin/net görünüm */
-div[style*="text-transform: uppercase"][style*="letter-spacing"] {
-  text-shadow: 0 0.5px 0 rgba(0,0,0,0.02);
-}
+input, textarea, button, select { font-family: inherit; }
+input[type=range] { cursor: pointer; }
 /* iOS safe area */
 body {
   padding-top: env(safe-area-inset-top);
@@ -354,7 +307,7 @@ body {
       <div id="pdr-splash-flash"></div>
     </div>
   </div>
-  <div style="margin-top:8px;position:relative;z-index:3;">🧭 Rehber Pusula</div>
+  <div style="margin-top:8px;position:relative;z-index:3;">PDR Program</div>
   <div style="font-size:13px;opacity:0.7;font-weight:400;position:relative;z-index:3;">Yükleniyor...</div>
 </div>
 <script>
@@ -424,24 +377,14 @@ body {
     </svg>
   </div>
   <div class="pdr-login-box">
-    <h2 id="pdr-login-title">🔒 Giriş Yap</h2>
+    <h2>🔒 Giriş Yap</h2>
     <p class="pdr-sub">Verileriniz güvenle bulutta saklanır.</p>
     <form id="pdr-login-form">
       <input type="email" id="pdr-login-email" placeholder="E-posta" required autocomplete="username" />
       <input type="password" id="pdr-login-pass" placeholder="Şifre" required autocomplete="current-password" />
-      <input type="password" id="pdr-login-pass2" placeholder="Şifre (tekrar)" autocomplete="new-password" style="display:none" />
-      <div id="pdr-tos-row" style="display:none;align-items:flex-start;gap:8px;margin:10px 0;text-align:left">
-        <input type="checkbox" id="pdr-tos-checkbox" style="width:16px;min-width:16px;height:16px;margin:3px 0 0 0;flex-shrink:0" />
-        <label for="pdr-tos-checkbox" style="font-size:12px;color:#555;line-height:1.5;flex:1;min-width:0">
-          <a href="#" id="pdr-tos-link" style="color:#1A4D3B;font-weight:600;text-decoration:underline">Kullanım Şartları</a>'nı okudum ve kabul ediyorum.
-        </label>
-      </div>
       <button type="submit" id="pdr-login-btn">Giriş Yap</button>
       <div id="pdr-login-error"></div>
       <div id="pdr-login-info" style="color:#1A4D3B;font-size:12px;margin-top:8px;min-height:16px"></div>
-      <p class="pdr-sub" style="margin-top:14px">
-        <a href="#" id="pdr-toggle-mode" style="color:#1A4D3B;font-weight:600;text-decoration:underline">Hesabınız yok mu? Kayıt olun</a>
-      </p>
       <p class="pdr-sub" style="margin-top:6px">
         <a href="#" id="pdr-forgot-pass" style="color:#666;font-size:12px;text-decoration:underline">Şifremi unuttum</a>
       </p>
@@ -474,115 +417,34 @@ body {
 })();
 
 const firebaseConfig = {
-  apiKey: "AIzaSyAhS-sfwpZa2zb8GKSqcvihLdrBMtPOCTQ",
-  authDomain: "rehber-pusula.firebaseapp.com",
-  projectId: "rehber-pusula",
-  storageBucket: "rehber-pusula.firebasestorage.app",
-  messagingSenderId: "880787609777",
-  appId: "1:880787609777:web:2987584e47fc78a2fc2a90"
+  apiKey: "AIzaSyATC969KGtY_xhL-UG1fVI0sRVSY2_2o54",
+  authDomain: "pdr-program.firebaseapp.com",
+  projectId: "pdr-program",
+  storageBucket: "pdr-program.firebasestorage.app",
+  messagingSenderId: "199087746443",
+  appId: "1:199087746443:web:f6163f46d719adce05138e"
 };
 firebase.initializeApp(firebaseConfig);
 const pdrAuth = firebase.auth();
 const pdrDb = firebase.firestore();
-window.pdrAuth = pdrAuth;
-window.pdrDb = pdrDb;
-
-// Sadece bu e-posta adresi admin sayılır ve onay sistemine takılmaz.
-const PDR_ADMIN_EMAIL = "hakanhas1989@gmail.com";
-window.PDR_ADMIN_EMAIL = PDR_ADMIN_EMAIL;
-
-// Kullanıcının başvuru/onay durumunu getirir. Kayıt yoksa (özellik eklenmeden
-// önce açılmış eski hesap gibi) otomatik "onaylı" sayılır — geriye dönük uyumluluk için.
-async function pdrOnayDurumuGetir(user) {
-  const ref = pdrDb.collection("basvurular").doc(user.uid);
-  const snap = await ref.get();
-  if (!snap.exists) {
-    const kayit = { email: user.email || "", tarih: Date.now(), durum: "onayli", ucretsiz: false, odemeAlindi: false };
-    await ref.set(kayit);
-    return kayit;
-  }
-  return snap.data();
-}
-
-function pdrOnayEkraniGoster(durum) {
-  let el = document.getElementById("pdr-onay-overlay");
-  if (!el) {
-    el = document.createElement("div");
-    el.id = "pdr-onay-overlay";
-    el.style.cssText = "position:fixed;inset:0;z-index:9997;background:radial-gradient(circle at 50% 42%, #1f4d3a 0%, #163b2c 55%, #0a1f18 100%);display:flex;align-items:center;justify-content:center;padding:24px;";
-    document.body.appendChild(el);
-  }
-  const reddedildi = durum === "reddedildi";
-  const mesaj = reddedildi
-    ? "Üzgünüz, hesap başvurunuz onaylanmadı. Detaylı bilgi için bizimle iletişime geçebilirsiniz."
-    : "Hesabınız incelemeye alındı. Onaylandığında bu ekran otomatik olarak kapanıp uygulamaya yönlendirileceksiniz.";
-  const ikon = reddedildi ? "🚫" : "⏳";
-  el.innerHTML = `
-    <div style="max-width:340px;width:100%;background:rgba(255,255,255,0.97);color:#1A4D3B;border-radius:18px;padding:32px 26px;box-shadow:0 20px 50px rgba(0,0,0,0.35);text-align:center;">
-      <div style="font-size:40px;margin-bottom:12px;">${ikon}</div>
-      <div style="font-size:19px;font-weight:800;margin-bottom:8px;">🧭 Rehber Pusula</div>
-      <div style="font-size:13px;color:#4a5c53;line-height:1.7;margin-bottom:18px;">${mesaj}</div>
-      <button id="pdr-onay-cikis" style="width:100%;padding:12px;background:#2D6A4F;color:#fff;border:none;border-radius:10px;font-weight:800;font-size:14px;cursor:pointer;">Çıkış Yap</button>
-    </div>`;
-  el.style.display = "flex";
-  document.getElementById("pdr-onay-cikis").onclick = async () => {
-    await pdrAuth.signOut();
-    pdrClearLocalCache();
-    localStorage.removeItem("pdr_last_uid");
-    location.reload();
-  };
-}
-function pdrOnayEkraniGizle() {
-  const el = document.getElementById("pdr-onay-overlay");
-  if (el) el.style.display = "none";
-}
-
-function pdrOdemeEkraniGoster() {
-  let el = document.getElementById("pdr-odeme-overlay");
-  if (!el) {
-    el = document.createElement("div");
-    el.id = "pdr-odeme-overlay";
-    el.style.cssText = "position:fixed;inset:0;z-index:9996;background:radial-gradient(circle at 50% 42%, #1f4d3a 0%, #163b2c 55%, #0a1f18 100%);display:flex;align-items:center;justify-content:center;padding:24px;";
-    document.body.appendChild(el);
-  }
-  el.innerHTML = `
-    <div style="max-width:340px;width:100%;background:rgba(255,255,255,0.97);color:#1A4D3B;border-radius:18px;padding:32px 26px;box-shadow:0 20px 50px rgba(0,0,0,0.35);text-align:center;">
-      <div style="font-size:40px;margin-bottom:12px;">💳</div>
-      <div style="font-size:19px;font-weight:800;margin-bottom:8px;">🧭 Rehber Pusula</div>
-      <div style="font-size:13px;color:#4a5c53;line-height:1.7;margin-bottom:18px;">Hesabınız onaylandı, ancak erişimin açılması için ödemenizin tamamlanması gerekiyor. Ödeme yaptıktan sonra hesabınız kısa süre içinde aktif edilecektir.</div>
-      <button id="pdr-odeme-cikis" style="width:100%;padding:12px;background:#2D6A4F;color:#fff;border:none;border-radius:10px;font-weight:800;font-size:14px;cursor:pointer;">Çıkış Yap</button>
-    </div>`;
-  el.style.display = "flex";
-  document.getElementById("pdr-odeme-cikis").onclick = async () => {
-    await pdrAuth.signOut();
-    pdrClearLocalCache();
-    localStorage.removeItem("pdr_last_uid");
-    location.reload();
-  };
-}
-function pdrOdemeEkraniGizle() {
-  const el = document.getElementById("pdr-odeme-overlay");
-  if (el) el.style.display = "none";
-}
 
 let pdrResolveReady;
 window.__pdrAuthReady = new Promise((res) => { pdrResolveReady = res; });
 
 // Farklı bir kullanıcı giriş yaptığında önceki kullanıcının önbellek
-// verilerinin görünmemesi için, önce yerel "rpusula__" anahtarlarını temizleriz.
+// verilerinin görünmemesi için, önce yerel "pdr__" anahtarlarını temizleriz.
 function pdrClearLocalCache() {
   const toRemove = [];
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
-    if (k && k.startsWith("rpusula__")) toRemove.push(k);
+    if (k && k.startsWith("pdr__")) toRemove.push(k);
   }
   toRemove.forEach((k) => localStorage.removeItem(k));
 }
 
 async function pdrSyncDown(uid) {
   const lastUid = localStorage.getItem("pdr_last_uid");
-  if (lastUid && lastUid !== uid) {
-    // Cihazda önceden başka bir hesap açılmış — eski veriler karışmasın diye temizle.
+  if (!lastUid || lastUid !== uid) {
     pdrClearLocalCache();
   }
   localStorage.setItem("pdr_last_uid", uid);
@@ -597,7 +459,7 @@ async function pdrSyncDown(uid) {
         deger = d.value;
       }
       if (deger !== null) {
-        try { localStorage.setItem("rpusula__" + doc.id, deger); }
+        try { localStorage.setItem("pdr__" + doc.id, deger); }
         catch (e) { console.warn("Yerel depolama dolu, atlanıyor:", doc.id, e); }
       }
     }
@@ -660,43 +522,8 @@ const pdrLoginForm = document.getElementById("pdr-login-form");
 const pdrLoginError = document.getElementById("pdr-login-error");
 const pdrLoginInfo = document.getElementById("pdr-login-info");
 const pdrLoginBtn = document.getElementById("pdr-login-btn");
-const pdrLoginTitle = document.getElementById("pdr-login-title");
-const pdrToggleMode = document.getElementById("pdr-toggle-mode");
-const pdrPass2 = document.getElementById("pdr-login-pass2");
-const pdrTosRow = document.getElementById("pdr-tos-row");
-const pdrTosCheckbox = document.getElementById("pdr-tos-checkbox");
-const pdrTosLink = document.getElementById("pdr-tos-link");
 const pdrLogoutBtn = document.getElementById("pdr-logout-btn");
 const pdrForgotPass = document.getElementById("pdr-forgot-pass");
-let pdrIsRegisterMode = false;
-
-if (pdrTosLink) {
-  pdrTosLink.addEventListener("click", (e) => {
-    e.preventDefault();
-    let el = document.getElementById("pdr-tos-overlay");
-    if (!el) {
-      el = document.createElement("div");
-      el.id = "pdr-tos-overlay";
-      el.style.cssText = "position:fixed;inset:0;z-index:9999;background:rgba(10,30,20,0.6);display:flex;align-items:center;justify-content:center;padding:20px;";
-      document.body.appendChild(el);
-    }
-    el.innerHTML = `
-      <div style="max-width:480px;width:100%;max-height:80vh;overflow-y:auto;background:#fff;color:#1A1A1A;border-radius:16px;padding:24px 22px;box-shadow:0 20px 50px rgba(0,0,0,0.4);">
-        <div style="font-weight:800;font-size:17px;margin-bottom:14px;color:#1A4D3B;">🧭 Rehber Pusula — Kullanım Şartları</div>
-        <div style="font-size:12.5px;line-height:1.8;color:#333;">
-          <p><b>1. Hizmetin Kapsamı</b><br/>Rehber Pusula, rehber öğretmenler/PDR uzmanları için öğrenci görüşme, profil ve takip kayıtlarının yönetimini kolaylaştıran bir yazılım hizmetidir.</p>
-          <p><b>2. Hesap ve Erişim</b><br/>Hesabınız kişiseldir. Kullanıcı adı ve şifrenizi başkalarıyla paylaşamaz, hesabınızı başka bir kişi veya kuruma devredemez ya da kiralayamazsınız.</p>
-          <p><b>3. Kopyalama ve Yeniden Satış Yasağı</b><br/>Yazılımın kaynak kodunu, tasarımını veya işlevselliğini kopyalayamaz, çoğaltamaz, tersine mühendislik yapamaz, başka bir ürün olarak yeniden paketleyip satamaz veya üçüncü kişilere devredemezsiniz. Bu maddenin ihlali hesabın askıya alınmasına ve hukuki yollara başvurulmasına sebep olabilir.</p>
-          <p><b>4. Öğrenci Verilerinin Sorumluluğu</b><br/>Sisteme girdiğiniz öğrenci/veli verilerinin doğruluğundan ve ilgili mevzuata (KVKK dahil) uygun şekilde işlenmesinden siz sorumlusunuz.</p>
-          <p><b>5. Ücretlendirme</b><br/>Hesabınızın aktif kalabilmesi için belirlenen ücretin ödenmesi veya tarafımızca ücretsiz kullanıcı olarak tanımlanmış olmanız gerekir. Ödeme yapılmayan hesaplar erişime kapatılabilir.</p>
-          <p><b>6. Hizmetin Sona Ermesi</b><br/>Bu şartların ihlali durumunda hesabınız önceden bildirim yapılmaksızın askıya alınabilir veya kapatılabilir.</p>
-        </div>
-        <button id="pdr-tos-close" style="width:100%;margin-top:16px;padding:11px;background:#2D6A4F;color:#fff;border:none;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;">Kapat</button>
-      </div>`;
-    el.style.display = "flex";
-    document.getElementById("pdr-tos-close").onclick = () => { el.style.display = "none"; };
-  });
-}
 
 if (pdrForgotPass) {
   pdrForgotPass.addEventListener("click", async (e) => {
@@ -720,30 +547,6 @@ if (pdrForgotPass) {
   });
 }
 
-if (pdrToggleMode) {
-  pdrToggleMode.addEventListener("click", (e) => {
-    e.preventDefault();
-    pdrIsRegisterMode = !pdrIsRegisterMode;
-    if (pdrIsRegisterMode) {
-      pdrLoginTitle.textContent = "📝 Kayıt Ol";
-      pdrLoginBtn.textContent = "Kayıt Ol";
-      pdrPass2.style.display = "block";
-      pdrPass2.required = true;
-      if (pdrTosRow) pdrTosRow.style.display = "flex";
-      pdrToggleMode.textContent = "Zaten hesabınız var mı? Giriş yapın";
-    } else {
-      pdrLoginTitle.textContent = "🔒 Giriş Yap";
-      pdrLoginBtn.textContent = "Giriş Yap";
-      pdrPass2.style.display = "none";
-      pdrPass2.required = false;
-      if (pdrTosRow) pdrTosRow.style.display = "none";
-      if (pdrTosCheckbox) pdrTosCheckbox.checked = false;
-      pdrToggleMode.textContent = "Hesabınız yok mu? Kayıt olun";
-    }
-    if (pdrLoginError) pdrLoginError.textContent = "";
-  });
-}
-
 if (pdrLogoutBtn) {
   pdrLogoutBtn.addEventListener("click", async () => {
     await pdrAuth.signOut();
@@ -759,33 +562,12 @@ pdrAuth.onAuthStateChanged(async (user) => {
   if (user) {
     if (pdrLoginOverlay) pdrLoginOverlay.style.display = "none";
     if (pdrLogoutBtn) pdrLogoutBtn.style.display = "block";
-
-    // Admin hariç herkes için onay durumu kontrolü
-    if (user.email !== PDR_ADMIN_EMAIL) {
-      const basvuru = await pdrOnayDurumuGetir(user);
-      if (basvuru.durum !== "onayli") {
-        if (splashEl) splashEl.className = "hide";
-        pdrOnayEkraniGoster(basvuru.durum);
-        return;
-      }
-      // Onaylı ama ne ücretsiz ne de ödemesi alınmış — erişimi ödeme bekleme ekranında durdur
-      if (!basvuru.ucretsiz && !basvuru.odemeAlindi) {
-        if (splashEl) splashEl.className = "hide";
-        pdrOdemeEkraniGoster();
-        return;
-      }
-    }
-    pdrOnayEkraniGizle();
-    pdrOdemeEkraniGizle();
-
     await pdrSyncDown(user.uid);
     if (pdrFirstReady) { pdrFirstReady = false; pdrResolveReady(user); }
   } else {
     if (splashEl) splashEl.className = "hide";
     if (pdrLoginOverlay) pdrLoginOverlay.style.display = "flex";
     if (pdrLogoutBtn) pdrLogoutBtn.style.display = "none";
-    pdrOnayEkraniGizle();
-    pdrOdemeEkraniGizle();
   }
 });
 
@@ -794,46 +576,16 @@ if (pdrLoginForm) {
     e.preventDefault();
     const email = document.getElementById("pdr-login-email").value.trim();
     const pass = document.getElementById("pdr-login-pass").value;
-    const pass2 = pdrPass2.value;
-    if (pdrLoginError) pdrLoginError.textContent = "";
-
-    if (pdrIsRegisterMode) {
-      if (pass.length < 6) {
-        pdrLoginError.textContent = "Şifre en az 6 karakter olmalı.";
-        return;
-      }
-      if (pass !== pass2) {
-        pdrLoginError.textContent = "Şifreler eşleşmiyor.";
-        return;
-      }
-      if (pdrTosCheckbox && !pdrTosCheckbox.checked) {
-        pdrLoginError.textContent = "Devam etmek için Kullanım Şartları'nı kabul etmeniz gerekiyor.";
-        return;
-      }
-    }
-
     pdrLoginBtn.disabled = true;
-    pdrLoginBtn.textContent = pdrIsRegisterMode ? "Kayıt olunuyor..." : "Giriş yapılıyor...";
+    pdrLoginBtn.textContent = "Giriş yapılıyor...";
+    if (pdrLoginError) pdrLoginError.textContent = "";
     try {
-      if (pdrIsRegisterMode) {
-        const cred = await pdrAuth.createUserWithEmailAndPassword(email, pass);
-        if (cred && cred.user) {
-          await pdrDb.collection("basvurular").doc(cred.user.uid).set({
-            email: email, tarih: Date.now(), durum: "bekliyor", ucretsiz: false, odemeAlindi: false
-          });
-        }
-      } else {
-        await pdrAuth.signInWithEmailAndPassword(email, pass);
-      }
+      await pdrAuth.signInWithEmailAndPassword(email, pass);
     } catch (err) {
-      let msg = pdrIsRegisterMode ? "Kayıt başarısız." : "Giriş başarısız: e-posta veya şifre hatalı.";
-      if (err && err.code === "auth/email-already-in-use") msg = "Bu e-posta zaten kayıtlı. Giriş yapmayı deneyin.";
-      if (err && err.code === "auth/weak-password") msg = "Şifre çok zayıf, en az 6 karakter kullanın.";
-      if (err && err.code === "auth/invalid-email") msg = "Geçersiz e-posta adresi.";
-      if (pdrLoginError) pdrLoginError.textContent = msg;
+      if (pdrLoginError) pdrLoginError.textContent = "Giriş başarısız: e-posta veya şifre hatalı.";
     }
     pdrLoginBtn.disabled = false;
-    pdrLoginBtn.textContent = pdrIsRegisterMode ? "Kayıt Ol" : "Giriş Yap";
+    pdrLoginBtn.textContent = "Giriş Yap";
   });
 }
 
@@ -850,7 +602,7 @@ if ("serviceWorker" in navigator) {
 window.storage = {
   get: async (key) => {
     try {
-      const v = localStorage.getItem("rpusula__" + key);
+      const v = localStorage.getItem("pdr__" + key);
       if (v !== null) return { key, value: v };
     } catch (e) { console.warn("Yerel okuma hatası:", key, e); }
     // Yerelde yoksa (örn. yeni cihaz, henüz senkronize olmadı) doğrudan buluttan dene
@@ -859,7 +611,7 @@ window.storage = {
     try {
       const bulutDeger = await pdrFirestoreOku(user.uid, key);
       if (bulutDeger !== null) {
-        try { localStorage.setItem("rpusula__" + key, bulutDeger); } catch {}
+        try { localStorage.setItem("pdr__" + key, bulutDeger); } catch {}
         return { key, value: bulutDeger };
       }
     } catch (e) { console.warn("Bulut okuma hatası:", key, e); }
@@ -868,7 +620,7 @@ window.storage = {
   set: async (key, value) => {
     let yerelBasarili = true;
     try {
-      localStorage.setItem("rpusula__" + key, value);
+      localStorage.setItem("pdr__" + key, value);
     } catch (e) {
       yerelBasarili = false;
       console.warn("Yerel depolama dolu — bu cihazda kapasite doldu, sadece buluta yazılacak:", key, e);
@@ -880,7 +632,7 @@ window.storage = {
     return yerelBasarili ? { key, value } : (user ? { key, value } : null);
   },
   delete: async (key) => {
-    localStorage.removeItem("rpusula__" + key);
+    localStorage.removeItem("pdr__" + key);
     const user = pdrAuth.currentUser;
     if (user) {
       pdrDb.collection("users").doc(user.uid).collection("data").doc(key).delete().catch(() => {});
@@ -892,8 +644,8 @@ window.storage = {
     const keys = [];
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
-      if (k && k.startsWith("rpusula__" + (prefix || ""))) {
-        keys.push(k.replace("rpusula__", ""));
+      if (k && k.startsWith("pdr__" + (prefix || ""))) {
+        keys.push(k.replace("pdr__", ""));
       }
     }
     return { keys };
@@ -928,83 +680,7 @@ const DIMENSIONS = [
   { key: "akran", label: "Akran İlişkileri", color: "#F4A261" },
 ];
 
-// ── ÖÖG (Özel Öğrenme Güçlüğü) Ön-Tarama Soru Bankası ──────────────────────────
-// Bu bir TARAMA aracıdır, TANI KOYMAZ. Kesin tanı için RAM/uzman değerlendirmesi gerekir.
-const OOG_KATEGORILER = [
-  { key: "okuma", label: "📖 Okuma", sorular: [
-    "Okurken harf/hece atlar veya ekler",
-    "Okuduğu satırı kaybeder, yanlış satıra geçer",
-    "Aynı kelimeyi/cümleyi tekrar tekrar okur",
-    "Yaşıtlarına göre belirgin yavaş ve duraksayarak okur",
-  ]},
-  { key: "yazma", label: "✍️ Yazma", sorular: [
-    "Harfleri ters yazar (b-d, p-q, s-z gibi)",
-    "Yazarken harf/hece atlar veya ekler",
-    "Satır takibi bozuk, yazı satırdan taşar",
-    "El yazısı düzensiz, harf boyutları tutarsız",
-  ]},
-  { key: "yon", label: "🧭 Yön / Mekansal Algı", sorular: [
-    "Sağını solunu karıştırır",
-    "Daire/şekil çizerken yön ya da başlangıç noktası tutarsız",
-    "Yön tarifini anlamakta/vermekte zorlanır",
-    "Saat okumakta zorlanır",
-  ]},
-  { key: "konusma", label: "🗣️ Konuşma / Dil", sorular: [
-    "Konuşurken kekeler veya sık duraksar",
-    "Kelime bulmakta zorlanır (\"şey\" gibi dolgu kelimeler kullanır)",
-    "Cümle kurarken sözcük sırasını karıştırır",
-    "Sözel yönergeyi anlamakta/hatırlamakta zorlanır",
-  ]},
-  { key: "matematik", label: "🔢 Matematik", sorular: [
-    "Rakamları ters yazar (6-9, 2-5 gibi)",
-    "İşlem sırasını (toplama/çıkarma sırası) karıştırır",
-    "Çarpım tablosunu ezberlemekte belirgin zorluk yaşar",
-    "Zaman kavramını (dün/bugün/yarın, saat) kavramakta zorlanır",
-  ]},
-  { key: "motor", label: "✋ Motor Beceri", sorular: [
-    "Makas kullanma, düğme ilikleme gibi ince motor işlerde zorlanır",
-    "Kalem tutuşu düzensiz/güçsüz",
-    "Kaba motor becerilerde (denge, koordinasyon) yaşıtlarına göre geridedir",
-  ]},
-  { key: "dikkat", label: "🧠 Dikkat / Bellek", sorular: [
-    "Verilen yönergeyi kısa sürede unutur",
-    "Sırayı/dizilimi karıştırır (günler, aylar, alfabe gibi)",
-    "Kısa süreli bellek zorluğu belirgin (az önce söyleneni hatırlamakta güçlük)",
-    "Dikkatini uzun süre bir işe veremiyor",
-  ]},
-  { key: "aile_oyku", label: "👪 Aile Öyküsü / Gelişimsel", sorular: [
-    "Ailede benzer okuma-yazma güçlüğü öyküsü var",
-    "Konuşmaya yaşıtlarına göre geç başladı",
-    "Okuma-yazmayı öğrenmede yaşıtlarına göre belirgin gecikme yaşadı",
-  ]},
-];
-const OOG_SECENEKLER = [
-  { val: 0, label: "Hiç" },
-  { val: 1, label: "Nadiren" },
-  { val: 2, label: "Sıklıkla" },
-  { val: 3, label: "Çok Sık" },
-];
-function oogSonucHesapla(cevaplar) {
-  let toplam = 0, maks = 0;
-  const kategoriPuan = {};
-  OOG_KATEGORILER.forEach(k => {
-    let kToplam = 0, kMaks = k.sorular.length * 3;
-    k.sorular.forEach((_, i) => {
-      const v = cevaplar[k.key + "_" + i];
-      kToplam += (typeof v === "number") ? v : 0;
-    });
-    kategoriPuan[k.key] = kMaks > 0 ? Math.round((kToplam / kMaks) * 100) : 0;
-    toplam += kToplam; maks += kMaks;
-  });
-  const yuzde = maks > 0 ? Math.round((toplam / maks) * 100) : 0;
-  const seviye = yuzde >= 66 ? { label: "Yüksek Şüphe", color: "#C0392B", bg: "#FDECEA" }
-    : yuzde >= 41 ? { label: "Orta Şüphe", color: "#B07D1A", bg: "#FDF6E3" }
-    : yuzde >= 21 ? { label: "Düşük-Orta Şüphe", color: "#457B9D", bg: "#EEF2FF" }
-    : { label: "Düşük Şüphe", color: "#1A8C5B", bg: "#E6F5EE" };
-  return { yuzde, seviye, kategoriPuan, tamamlananSoru: Object.keys(cevaplar).length, toplamSoru: OOG_KATEGORILER.reduce((s,k)=>s+k.sorular.length,0) };
-}
-
-
+const PROF_HAKAN = "Sen Prof. Dr. Hakan'sin. Klinik psikoloji, cocuk-ergen psikiyatrisi, egitim psikolojisi, PDR, psikoterapi, norobiyoloji ve aile sistemleri alanlarinda 30 yillik akademik ve klinik deneyime sahip ust duzey bir supervizor ve akademisyensin. BDT, psikanalitik, humanistik, varoluşcu, sistem teorisi ve norobiyolojik perspektifleri entegre kullanırsın. Diger AI degerlendirmelerini de okuyarak butunsel klinik supervizyon sunarsın. ONEMLI: Degerlendirmeni yaptiktan sonra mutlaka vakayı daha iyi anlamak icin 2-3 adet derinlestirilmis soru sor. Bu sorular: danismanin dogrudan gozlemlemedigi bilgileri ortaya cikarmalı, ogrenci hakkinda kritik eksik bilgileri tamamlamalı, veya fark edilmemis bir boyutu aydınlatmalıdır. Sorularını 'DAHA İYİ ANLAYABİLMEK İÇİN SORULARIM:' basligi altında yaz. Turkce yaz, akademik ama anlasilir ol, Markdown kullanma. Ogrencinin en yuksek yararını on planda tut.";
 
 const LGS_KOCLUK = "Sen Dr. Ayse Kara'sin. 20 yillik klinik deneyime sahip PDR uzmani, psikolog ve ogrenci kocusun. BDT, baglanma teorisi ve gelisim psikolojisi perspektifinden analiz yaparsın. LGS PUAN REHBERI (2024 yaklasik): 85 ustu net = yuzde 1-5 = en iyi Anadolu Liseleri. 75-85 net = yuzde 5-15 = iyi Anadolu Liseleri. 60-75 net = yuzde 15-35 = orta-iyi Anadolu Liseleri. 45-60 net = yuzde 35-60 = Anadolu Liseleri. 30-45 net = yuzde 60-80 = Imam Hatip Anadolu. 30 alti = yuzde 80 ustu = Mahalle Lisesi veya Meslek Lisesi. CALISMA KOÇLUGU: Hata analizi yap o konulara yogunlas. Aralikli tekrar (1-3-7-30 gun). Aktif ogrenme: sorular coz ozetle. Kolay sorudan zora. BDT ile kaygı yonetimi. Deneme ortalamasina gore somut hedef okul turu belirt. Turkce yaz, sade ve anlasilir ol, markdown kullanma.";
 
@@ -1041,11 +717,15 @@ ACİL MÜDAHALE GEREKTİRİR Mİ: (Evet/Hayır — gerekçesiyle)
 
 Sade, PDR diline uygun yaz. Markdown kullanma.`;
 
-  const res = await pdrCallClaude({
+  const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
       model: "claude-sonnet-4-6", max_tokens: 2000,
       system: "Sen Dr. Ayse Kara'sin — 20 yillik klinik deneyime sahip PDR uzmani ve psikologsun. BDT, baglanma teorisi, gelisim psikolojisi ve aile sistemleri perspektifinden risk degerlendirmesi yaparsın. Risk duzeyini net belirt: HAFIF (gunluk isleyisi minimal etkiliyor), ORTA (mudahale gerekiyor, takip sart), YUKSEK (acil mudahale, uzman yonlendirme gerekebilir).",
       messages: [{ role: "user", content: prompt }]
-    });
+    })
+  });
   const data = await res.json();
   return data.content?.[0]?.text || "";
 }
@@ -1101,11 +781,14 @@ HEDEF: (Son denemeler icin gercekci hedef net ve hedef okul)
 
 Sade, somut, PDR ve ogr. koçlugu diline uygun yaz. Markdown kullanma.`;
 
-  const res = await pdrCallClaude({
+  const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
       model: "claude-sonnet-4-6", max_tokens: 4000,
       system: LGS_KOCLUK,
       messages: [{ role: "user", content: prompt }]
-    });
+    })
+  });
   const data = await res.json();
   return data.content?.[0]?.text || "";
 }
@@ -1114,11 +797,15 @@ Sade, somut, PDR ve ogr. koçlugu diline uygun yaz. Markdown kullanma.`;
 async function getScoresFromNotes(studentName, notlar) {
   const boyutlar = DIMENSIONS.map(d => d.key + " (" + d.label + ")").join(", ");
   const prompt = "Ogrenci: " + studentName + "\n\nAsagidaki notlara dayanarak ogrenciyi 8 boyutta 1-5 arasinda puanla:\n" + boyutlar + "\n\n1=Cok Dusuk, 2=Dusuk, 3=Orta, 4=Iyi, 5=Cok Iyi. Notlarda bilgi yoksa 3 ver.\n\nNotlar:\n" + notlar + "\n\nSADECE su formatta JSON dondur:\n{\"akademik\":X,\"sosyal\":X,\"duygusal\":X,\"aile\":X,\"ozguven\":X,\"uyum\":X,\"kariyer\":X,\"akran\":X}";
-  const res = await pdrCallClaude({
+  const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
       model: "claude-sonnet-4-6", max_tokens: 200,
       system: "Sen 20 yillik klinik deneyime sahip PDR uzmani Dr. Ayse Kara'sin. Gorusme notlarini analiz edip SADECE JSON formatinda puan dondur. Baska hicbir sey yazma.",
       messages: [{ role: "user", content: prompt }],
-    });
+    }),
+  });
   const data = await res.json();
   const text = data.content?.[0]?.text || "{}";
   try {
@@ -1179,11 +866,14 @@ ONERILER:
 
 Sade, PDR diline uygun, somut yaz. Markdown kullanma.`;
 
-  const res = await pdrCallClaude({
+  const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
       model: "claude-sonnet-4-6", max_tokens: 4000,
       system: LGS_KOCLUK,
       messages: [{ role: "user", content: prompt }]
-    });
+    })
+  });
   const data = await res.json();
   return data.content?.[0]?.text || "";
 }
@@ -1191,13 +881,17 @@ Sade, PDR diline uygun, somut yaz. Markdown kullanma.`;
 
 
 async function getAISummary(rawText) {
-  const res = await pdrCallClaude({
+  const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
       model: "claude-sonnet-4-6", max_tokens: 1000,
       system: `Sen Dr. Ayse Kara'sin - 20 yillik klinik deneyime sahip, okul psikolojik danismanligi alaninda uzmanlasmis bir psikolog ve PDR uzmanisin. Bilissel Davranisci Terapi (BDT) temel yonelimindir: otomatik dusunceler, bilissel carpitmalar, sema teorisi, davranissal aktivasyon ve maruz birakma tekniklerini klinik pratikte ustaca kullanirsin. Baglanma teorisi (Bowlby, Ainsworth), aile sistemleri terapisi (Minuchin, Bowen) ve gelisim psikolojisi (Piaget, Vygotsky, Erikson) perspektifinden bireyi cevresiyle birlikte degerlendirirsin. Sosyolojide Bourdieu'nun habitus ve kulturel sermaye kavramlari, Giddens'in yapilasmasi ve sosyal tabakalasmanin psikolojik etkilerini Turkiye baglaminda okursun: aile baskisi, toplumsal cinsiyet rolleri, sinav odakli egitimin cocuk uzerindeki yukunu sosyolojik zemine oturtursun. Felsefi temetin: Frankl anlam terapisi, Sartre sorumluluk etigi, Stoa kontrol alani, fenomenolojinin oznel deneyim odagi. Uslubun: yargilamayan, merak eden, guclu yonlere odaklanan, somut ve uygulanabilir oneriler sunan, Turkce yazan, PDR diline hakim bir klinisyen.
 
 GOREV - GORUSME NOTU OZETI: Danismanin anlattigi gorusme notunu kisa ve net ozete donustur. Basliklar (sadece ilgililer): Ogrenci durumu (BDT: bilissel-duygusal-davranissal oruntu), Gorusmede one cikan (baglanma, otomatik dusunceler, stres-basa cikma, sosyal dinamikler, varolussel temalar), Yapilan/planlanan, Takip notu. Max 5-6 cumle. Sade PDR dili. JSON veya markdown kullanma.`,
       messages: [{ role: "user", content: rawText }],
-    });
+    }),
+  });
   const data = await res.json();
   return data.content?.[0]?.text || "";
 }
@@ -1219,7 +913,10 @@ GELİŞİM ALANLARI: (düşük puan alan boyutlar hakkında 1-2 cümle)
 RİSK NOTU: (varsa dikkat edilmesi gereken bir şey, yoksa "Belirgin risk faktörü gözlemlenmedi" yaz)
 
 Sade, profesyonel ve PDR diline uygun yaz. Markdown veya JSON kullanma.`;
-  const res = await pdrCallClaude({
+  const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
       model: "claude-sonnet-4-6", max_tokens: 2000,
       system: `Sen Dr. Ayse Kara'sin - 20 yillik klinik deneyime sahip PDR uzmani ve psikologsun. BDT (otomatik dusunceler, sema teorisi, maruz birakma), baglanma teorisi (Bowlby), aile sistemleri (Minuchin), gelisim psikolojisi (Erikson, Vygotsky), Bourdieu sosyolojisi, Frankl anlam terapisi ve Stoa felsefesi perspektifinden degerlendirir; somut, uygulanabilir PDR onerileri sunarsın. Yargilamayan, guclu yonlere odaklanan, Turkce yazan bir klinisyensin.
 
@@ -1249,7 +946,8 @@ Analiz yaparken:
 4. Öneri yaparken teorik temeli belirt (örn. "Bandura'nın öz-yeterlilik yaklaşımına göre...")
 5. Pratik ve uygulanabilir öneriler ver`,
       messages: [{ role: "user", content: prompt }],
-    });
+    }),
+  });
   const data = await res.json();
   return data.content?.[0]?.text || "";
 }
@@ -1263,7 +961,7 @@ async function storageKapasite() {
     let total = 0;
     for (let i=0; i<localStorage.length; i++) {
       const k = localStorage.key(i);
-      if (k && k.startsWith("rpusula__")) total += (localStorage.getItem(k)||"").length * 2;
+      if (k && k.startsWith("pdr__")) total += (localStorage.getItem(k)||"").length * 2;
     }
     const mb = (total/1024/1024).toFixed(2);
     return { used: parseFloat(mb), limit: 5, yuzde: Math.round((parseFloat(mb)/5)*100) };
@@ -1354,12 +1052,6 @@ async function loadProfiles2() {
 }
 async function saveProfiles2(p) {
   try { await window.storage.set("pdr-profiles2", JSON.stringify(p)); } catch(e) { console.warn(e); }
-}
-async function loadOogDegerlendirmeler() {
-  try { const r = await window.storage.get("pdr-oog"); return r ? JSON.parse(r.value) : []; } catch { return []; }
-}
-async function saveOogDegerlendirmeler(items) {
-  try { await window.storage.set("pdr-oog", JSON.stringify(items)); } catch(e) { console.warn(e); }
 }
 
 async function loadYillar() {
@@ -1523,7 +1215,10 @@ async function pdfMetinCikar(file) {
     reader.onload = async (e) => {
       const base64 = e.target.result.split(",")[1];
       try {
-        const res = await pdrCallClaude({
+        const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
             model: "claude-sonnet-4-6",
             max_tokens: 1000,
             system: `Sen Dr. Ayse Kara'sin - 20 yillik klinik deneyime sahip PDR uzmani ve psikologsun. BDT (otomatik dusunceler, sema teorisi, maruz birakma), baglanma teorisi (Bowlby), aile sistemleri (Minuchin), gelisim psikolojisi (Erikson, Vygotsky), Bourdieu sosyolojisi, Frankl anlam terapisi ve Stoa felsefesi perspektifinden degerlendirir; somut, uygulanabilir PDR onerileri sunarsın. Yargilamayan, guclu yonlere odaklanan, Turkce yazan bir klinisyensin.
@@ -1542,7 +1237,8 @@ Maksimum 400 kelime. Sade ve yapılandırılmış yaz. JSON veya markdown kullan
                 { type: "text", text: "Bu belgeyi PDR perspektifinden analiz et ve özetle." }
               ]
             }]
-          });
+          })
+        });
         const data = await res.json();
         resolve(data.content?.[0]?.text || "Metin çıkarılamadı.");
       } catch(err) { reject(err); }
@@ -1563,7 +1259,10 @@ async function getDegerlendirmeAnalysis(studentName, className, cevaplar, notlar
     return `${DIMENSIONS.find(d => d.key === b.key)?.label}: ${p ?? "?"}/5`;
   }).join(", ");
 
-  const res = await pdrCallClaude({
+  const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
       model: "claude-sonnet-4-6", max_tokens: 2000,
       system: `Sen Dr. Ayse Kara'sin - 20 yillik klinik deneyime sahip PDR uzmani ve psikologsun. BDT (otomatik dusunceler, sema teorisi, maruz birakma), baglanma teorisi (Bowlby), aile sistemleri (Minuchin), gelisim psikolojisi (Erikson, Vygotsky), Bourdieu sosyolojisi, Frankl anlam terapisi ve Stoa felsefesi perspektifinden degerlendirir; somut, uygulanabilir PDR onerileri sunarsın. Yargilamayan, guclu yonlere odaklanan, Turkce yazan bir klinisyensin.
 
@@ -1583,7 +1282,8 @@ MEB OKUL REHBERLİK ÇERÇEVESİ: Bireysel farkındalık, sosyal-duygusal öğre
 
 Analiz yaparken: Her boyutu ilgili teorik çerçeveden yorumla, hangi teoriden baktığını belirt, MEB kazanımlarına atıfta bulun, pratik ve uygulanabilir öneriler ver. Markdown veya JSON kullanma.`,
       messages: [{ role: "user", content: `Öğrenci: ${studentName}${className ? `, Sınıf: ${className}` : ""}\nPuan Özeti: ${puanOzet}\n\n${boyutMetni}\n\nBu öğrencinin PDR analizini şu yapıda yaz:\nGENEL DEĞERLENDİRME: (öğrencinin genel profilini teorik perspektiften 2-3 cümle)\nGÜÇLÜ YÖNLER: (hangi teoriye göre güçlü olduğunu belirt)\nGELİŞİM ALANLARI: (hangi teorik çerçeveden müdahale önerilebileceğini belirt)\nÖNERİLER: (teorik temelli 3 somut öneri, kaynağını belirt)\nRİSK NOTU: (varsa teorik dayanaklı risk değerlendirmesi)` }],
-    });
+    }),
+  });
   const data = await res.json();
   return data.content?.[0]?.text || "";
 }
@@ -2800,7 +2500,9 @@ function MudahalePlanEkrani({ kayitliListesi, aktifOgrenci, mudahalePlan, setMud
     if (!seciliAd) return;
     setAiLoading(true);
     const notlar = ogrRec.map((r,i) => `Görüşme ${i+1} (${r.date}): ${r.summary}`).join("\n\n");
-    const res = await pdrCallClaude({
+    const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
         model:"claude-sonnet-4-6", max_tokens:1500,
         system:"Sen Dr. Ayse Kara'sin — 20 yillik klinik PDR uzmanisin. BDT ve varoluşçu perspektiften somut müdahale plani olusturursun.",
         messages:[{role:"user", content:`Öğrenci: ${seciliAd}
@@ -2819,7 +2521,8 @@ SÜRE: (kaç hafta/ay)
 KONTROL KRİTERİ: (nasıl değerlendireceğiz)
 
 Sade yaz, Markdown kullanma.`}]
-      });
+      })
+    });
     const data = await res.json();
     const analiz = data.content?.[0]?.text || "";
     const hedefMatch = analiz.match(/HEDEF:\s*(.+)/);
@@ -3096,7 +2799,9 @@ Başlıca Görüşme Konuları: ${topKonular.map(([k,v])=>k+": "+v).join(", ")}
 Risk Türleri: ${Object.entries(riskTurleri).map(([k,v])=>k+": "+v).join(", ")}
     `.trim();
 
-    const res = await pdrCallClaude({
+    const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
         model:"claude-sonnet-4-6", max_tokens:2000,
         system:"Sen okul PDR danismanisın. MEB formatinda, resmi ve özlü dönem sonu raporu yazarsın.",
         messages:[{role:"user", content:`${istatistik}
@@ -3109,7 +2814,8 @@ Bu istatistiklere dayalı MEB formatında dönem sonu PDR faaliyet raporu yaz. �
 5. ÖNERİLER
 
 Resmi dil kullan, Markdown kullanma.`}]
-      });
+      })
+    });
     const data = await res.json();
     setAiRapor(data.content?.[0]?.text || "");
     setAiLoading(false);
@@ -3208,7 +2914,9 @@ function VeliMektubu({ kayitliListesi, aktifOgrenci, records }) {
       bildirim:"Öğrenci hakkında acil durum/risk bildirimi mektubu",
       tesekkur:"Veli iş birliği için teşekkür mektubu"
     };
-    const res = await pdrCallClaude({
+    const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
         model:"claude-sonnet-4-6", max_tokens:1500,
         system:"Sen okul PDR danismanisın. MEB resmi yazı formatında, sade ve profesyonel veli mektupları yazarsın.",
         messages:[{role:"user", content:`Öğrenci: ${seciliAd}
@@ -3217,7 +2925,8 @@ Görüşme Özeti:
 ${ozet||"Henüz görüşme yok."}
 
 MEB resmi yazı formatında veli mektubu yaz. T.C. başlığı, tarih, konu, sayın velimiz hitabı, içerik ve imza bölümü olsun. Markdown kullanma.`}]
-      });
+      })
+    });
     const data = await res.json();
     setMektup(data.content?.[0]?.text || "");
     setAiLoading(false);
@@ -3373,9 +3082,11 @@ function YilSecimEkrani({ yillar, setYillar, aktifYil, setAktifYil, ogrenciler, 
 }
 
 // ── Özet Kartı Bileşeni (Seans Öncesi Hazırlık) ─────────────────────────────
-function OzetKarti({ ogrenci, ogrenciSinif, ogrRec, ogrP1, ogrP2, ogrRisk, denemeGirilen, denemeAvg, mudahalePlan, hazirlikNotlari, setHazirlikNotlari, ilerlemeNotlari, setIlerlemeNotlari, setTab }) {
+function OzetKarti({ ogrenci, ogrenciSinif, ogrRec, ogrP1, ogrP2, ogrRisk, denemeGirilen, denemeAvg, mudahalePlan, hazirlikNotlari, setHazirlikNotlari, ilerlemeNotlari, setIlerlemeNotlari, setTab, devamsizlik, onDevamsizlikGuncelle }) {
   const [hazirlikAiLoading, setHazirlikAiLoading] = useState(false);
   const [aktifPanel, setAktifPanel] = useState("ozet"); // ozet | hazirlik | ilerleme
+  const [devGuncelleAcik, setDevGuncelleAcik] = useState(false);
+  const [devInput, setDevInput] = useState(devamsizlik || 0);
 
   // Storage'dan yükle
   const hazirlikNotu = pdrSozlukOku(hazirlikNotlari, ogrenci, ogrenciSinif) || "";
@@ -3411,7 +3122,9 @@ function OzetKarti({ ogrenci, ogrenciSinif, ogrRec, ogrP1, ogrP2, ogrRisk, denem
       : "";
     const deneme = denemeAvg ? `Deneme Ortalaması: ${denemeAvg}/90` : "";
 
-    const res = await pdrCallClaude({
+    const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
         model:"claude-sonnet-4-6", max_tokens:1000,
         system:"Sen Dr. Ayse Kara'sin — 20 yillik klinik PDR uzmanisin. Danismana bir sonraki seans icin pratik hazirlik notu yazarsın.",
         messages:[{role:"user", content:`Öğrenci: ${ogrenci}
@@ -3429,7 +3142,8 @@ SORULACAK SORULAR: (açıcı, terapötik sorular)
 DİKKAT EDİLECEKLER: (öğrenciye özel hassas noktalar)
 
 Kısa ve pratik yaz, Markdown kullanma.`}]
-      });
+      })
+    });
     const data = await res.json();
     setHazirlikNotu(data.content?.[0]?.text || "");
     setHazirlikAiLoading(false);
@@ -3460,13 +3174,44 @@ Kısa ve pratik yaz, Markdown kullanma.`}]
               {label:"Aktif Risk",val:ogrRisk.length>0?"⚠ Var":"✓",color:ogrRisk.length>0?"#C0392B":"#1A8C5B"},
               {label:"Müdahale",val:ogrMudahale.length>0?ogrMudahale.length+" aktif":"—",color:ogrMudahale.length>0?PURPLE:MUTED},
             ].map(c=>(
-              <div key={c.label} style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:14,padding:"16px 10px",textAlign:"center"}}>
-                <div style={{fontSize:26,fontWeight:900,color:c.color,letterSpacing:-0.5}}>{c.val}</div>
-                <div style={{fontSize:11,color:MUTED,fontWeight:600,marginTop:2}}>{c.label}</div>
+              <div key={c.label} style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:10,padding:"10px",textAlign:"center"}}>
+                <div style={{fontSize:18,fontWeight:900,color:c.color}}>{c.val}</div>
+                <div style={{fontSize:10,color:MUTED}}>{c.label}</div>
               </div>
             ))}
           </div>
 
+          {/* Devamsızlık */}
+          {(() => {
+            const gun = parseInt(devamsizlik) || 0;
+            const durum = gun >= 10
+              ? { label: "🚨 Kritik (Resmi Sınır)", color: "#C0392B", bg: "#FDECEA", border: "#F28B82" }
+              : gun >= 7
+              ? { label: "⚠️ Anlamlı — Yakın Takip", color: "#B7791F", bg: "#FEF3E2", border: "#F5C77E" }
+              : gun >= 4
+              ? { label: "👀 Takip Edilmeli", color: "#B07D1A", bg: "#FDF6E3", border: "#E9D18B" }
+              : { label: "✅ Anlamsız", color: "#1A8C5B", bg: "#E6F5EE", border: "#A8D9C3" };
+            return (
+              <div style={{marginBottom:12}}>
+                <div onClick={() => { setDevInput(gun); setDevGuncelleAcik(a => !a); }}
+                  style={{background:durum.bg, border:`1px solid ${durum.border}`, borderRadius:14, padding:"12px 14px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer"}}>
+                  <div>
+                    <div style={{fontSize:10,color:MUTED,fontWeight:700,letterSpacing:0.3}}>DEVAMSIZLIK</div>
+                    <div style={{fontSize:20,fontWeight:900,color:durum.color}}>{gun} gün</div>
+                  </div>
+                  <span style={{background:durum.color,color:"#fff",borderRadius:12,padding:"5px 11px",fontSize:11,fontWeight:700}}>{durum.label}</span>
+                </div>
+                {devGuncelleAcik && (
+                  <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:10,padding:10,marginTop:6,display:"flex",gap:8}}>
+                    <input type="number" min="0" value={devInput} onChange={e=>setDevInput(e.target.value)}
+                      style={{flex:1,padding:"8px 10px",border:`1px solid ${BORDER}`,borderRadius:8,fontSize:14,boxSizing:"border-box"}} />
+                    <button onClick={() => { onDevamsizlikGuncelle(parseInt(devInput)||0); setDevGuncelleAcik(false); }}
+                      style={{padding:"8px 16px",background:ACCENT,color:"#fff",border:"none",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"}}>Kaydet</button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
           {/* Son görüşme */}
           {sonGorusme && (
             <div style={{background:CARD,border:`1px solid ${BORDER}`,borderLeft:`4px solid ${ACCENT}`,borderRadius:10,padding:12,marginBottom:10}}>
@@ -3713,7 +3458,9 @@ function IlerlemeYazisi({ ogrenci, ogrenciSinif, ogrRec, ogrP1, denemeGirilen, i
       ? "DENEME NETLERI: " + denemeGirilen.map(d => `D${d.no}: ${d.toplam.toFixed(1)}`).join(", ")
       : "";
 
-    const res = await pdrCallClaude({
+    const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
         model:"claude-sonnet-4-6", max_tokens:2000,
         system:"Sen Dr. Ayse Kara'sin — 20 yillik klinik PDR uzmanisin. BDT, baglanma teorisi ve varoluşçu perspektiften seans süreci değerlendirmesi yazarsın. Gelişmeleri somut ve destekleyici dille aktarırsın.",
         messages:[{role:"user", content:`Öğrenci: ${ogrenci}
@@ -3745,7 +3492,8 @@ GENEL GÖRÜŞ:
 (Süreç hakkında kısa ve destekleyici genel değerlendirme)
 
 Sade, klinik ama sıcak bir dil kullan. Markdown kullanma.`}]
-      });
+      })
+    });
     const data = await res.json();
     setYazi(data.content?.[0]?.text || "");
     setLoading(false);
@@ -3789,158 +3537,395 @@ Sade, klinik ama sıcak bir dil kullan. Markdown kullanma.`}]
 }
 
 
-// ── Ayarlar Ekranı (kendi Anthropic API anahtarı) ─────────────────
-function PdrToggle({ checked, onChange, color, label }) {
-  return (
-    <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-      <span
-        onClick={() => onChange(!checked)}
-        style={{
-          position: "relative", width: 38, height: 22, borderRadius: 999, flexShrink: 0,
-          background: checked ? color : "#d7dbd9", transition: "background 0.2s ease",
-        }}
-      >
-        <span style={{
-          position: "absolute", top: 2, left: checked ? 18 : 2, width: 18, height: 18,
-          borderRadius: "50%", background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
-          transition: "left 0.2s ease",
-        }} />
-      </span>
-      <span style={{ fontSize: 11, fontWeight: 700, color: checked ? color : MUTED }}>{label}</span>
-    </label>
-  );
-}
+// ── Prof. Dr. Hakan Süpervizyon Bileşeni ─────────────────────────────────────
+function ProfDanismaEkrani({
+  kayitliListesi, aktifOgrenci, records, profiles, profiles2,
+  denemeler, riskListesi, mudahalePlan, sevkler,
+  hazirlikNotlari, ilerlemeNotlari, profNotlari, setProfNotlari
+}) {
+  const [seciliAd, setSeciliAd] = useState(aktifOgrenci?.name || "");
+  const [aramaMetni, setAramaMetni] = useState("");
+  const [soru, setSoru] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [mod, setMod] = useState("genel"); // genel | soru
 
-function KullaniciOnaylari() {
-  const [basvurular, setBasvurular] = useState([]);
-  const [yukleniyor, setYukleniyor] = useState(true);
+  useEffect(() => { if (aktifOgrenci?.name) setSeciliAd(aktifOgrenci.name); }, [aktifOgrenci?.name]);
 
-  async function yenile() {
-    setYukleniyor(true);
-    try {
-      const snap = await window.pdrDb.collection("basvurular").get();
-      const liste = [];
-      snap.forEach(doc => liste.push({ uid: doc.id, ...doc.data() }));
-      liste.sort((a, b) => (b.tarih || 0) - (a.tarih || 0));
-      setBasvurular(liste);
-    } catch (e) { console.log("Onay listesi yüklenemedi:", e); }
-    setYukleniyor(false);
+  const seciliSinif = kayitliListesi.find(o => o.name === seciliAd)?.className || aktifOgrenci?.className || "";
+  const ogrKonusma = pdrSozlukOku(profNotlari, seciliAd, seciliSinif) || [];
+
+  function tumVeriHazirla(ad, sinif) {
+    const adLower = ad.toLowerCase().trim();
+    const ogrRec = records.filter(r => pdrAyniOgrenci(r.studentName, r.className, ad, sinif));
+    const ogrP1 = profiles.find(p => pdrAyniOgrenci(p.studentName, p.className, ad, sinif));
+    const ogrP2 = profiles2.find(p => pdrAyniOgrenci(p.studentName, p.className, ad, sinif));
+    const ogrDen = pdrSozlukOku(denemeler, ad, sinif) || {};
+    const ogrRisk = riskListesi.filter(r => pdrAyniOgrenci(r.studentName, r.className, ad, sinif) && !r.kapandi);
+    const ogrMud = (pdrSozlukOku(mudahalePlan, ad, sinif) || []).filter(p => p.durum === "Devam Ediyor");
+    const ogrSevk = sevkler.filter(s => pdrAyniOgrenci(s.studentName, s.className, ad, sinif));
+    const ogrHazirlik = pdrSozlukOku(hazirlikNotlari, ad, sinif) || "";
+    const ogrIlerleme = pdrSozlukOku(ilerlemeNotlari, ad, sinif) || "";
+
+    const denemeGirilen = Object.entries(ogrDen).sort((a,b)=>a[0]-b[0]).map(([no,nets])=>({
+      no:parseInt(no), nets,
+      toplam: LGS_DERSLER.reduce((s,d)=>s+(parseFloat(nets[d.key])||0),0)
+    }));
+    const denemeAvg = denemeGirilen.length > 0
+      ? (denemeGirilen.reduce((s,d)=>s+d.toplam,0)/denemeGirilen.length).toFixed(1) : null;
+
+    return `
+ÖĞRENCİ: ${ad}
+
+GÖRÜŞME GEÇMİŞİ (${ogrRec.length} görüşme):
+${ogrRec.map((r,i)=>`Seans ${i+1} (${r.date}, ${r.meetingType||"Öğrenci"}): ${r.summary}`).join("\n") || "Yok"}
+
+
+PROFİL 1 — PSİKOSOSYAL BOYUTLAR:
+${ogrP1?.scores ? DIMENSIONS.map(d=>`${d.label}: ${ogrP1.scores[d.key]||0}/5`).join(", ") : "Girilmemiş"}
+${ogrP1?.analiz ? `PDR Analizi: ${ogrP1.analiz}` : ""}
+
+PROFİL 2 — AKADEMİK:
+${ogrP2?.sinavlar ? DERSLER.map(d=>`${d.label}: 1.Yazılı ${ogrP2.sinavlar[d.key+"1"]||"-"}, 2.Yazılı ${ogrP2.sinavlar[d.key+"2"]||"-"}`).join(", ") : "Girilmemiş"}
+${ogrP2?.d2 ? `D2 Dikkat: TN=${ogrP2.d2.TN||"-"}, E%=${ogrP2.d2.E_yuzde||"-"}, PR=${ogrP2.d2.PR||"-"}` : ""}
+${ogrP2?.kariyer_hedef ? `Kariyer Hedefi: ${ogrP2.kariyer_hedef}` : ""}
+
+DENEME SONUÇLARI:
+${denemeGirilen.length > 0 ? `Ortalama: ${denemeAvg}/90
+${denemeGirilen.map(d=>`D${d.no}: ${d.toplam.toFixed(1)}/90`).join(", ")}` : "Girilmemiş"}
+
+AKTİF RİSKLER (${ogrRisk.length}):
+${ogrRisk.map(r=>`${r.oncelik} - ${r.riskTuru}: ${r.aciklama} ${r.aiAnaliz||""}`).join("\n") || "Yok"}
+
+
+
+AKTİF MÜDAHALE PLANLARI:
+${ogrMud.map(p=>`Hedef: ${p.hedef} | Süre: ${p.sure||"-"}`).join("\n") || "Yok"}
+
+
+SEVK KAYITLARI:
+${ogrSevk.map(s=>`${s.tarih} - ${s.sevkYeri}: ${s.sevkNedeni} [${s.sonucBekleniyor?"Bekliyor":"Tamamlandi"}]`).join("\n") || "Yok"}
+
+
+DR. AYŞE KARA'NIN DEĞERLENDİRMELERİ:
+Seans Hazırlık Notu: ${ogrHazirlik || "Henüz oluşturulmamış"}
+İlerleme Değerlendirmesi: ${ogrIlerleme || "Henüz oluşturulmamış"}
+    `.trim();
   }
 
-  useEffect(() => { yenile(); }, []);
+  async function handleGenel() {
+    if (!seciliAd) return;
+    setLoading(true);
+    const veri = tumVeriHazirla(seciliAd, seciliSinif);
+    const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        model:"claude-sonnet-4-6", max_tokens:4000,
+        system: PROF_HAKAN,
+        messages:[{role:"user", content:`${veri}
 
-  async function guncelle(uid, fields) {
-    await window.pdrDb.collection("basvurular").doc(uid).update(fields);
-    setBasvurular(list => list.map(b => b.uid === uid ? { ...b, ...fields } : b));
+Bu öğrencinin tüm verilerini ve Dr. Ayşe Kara'nın değerlendirmelerini inceleyerek kapsamlı bir klinik süpervizyon raporu yaz:
+
+KLİNİK İZLENİM:
+(Öğrencinin genel psikolojik profili, güçlü ve zayıf yanları)
+
+DR. AYŞE KARA DEĞERLENDİRMELERİNİN SÜPERVİZYONU:
+(Yapılan değerlendirmeleri üst düzey perspektiften yorumla, eksik veya dikkat edilmesi gereken noktaları belirt)
+
+ENTEGRATİF ANALİZ:
+(Tüm veriler bir arada ne anlatıyor — akademik, duygusal, sosyal, ailesel boyutlar arası etkileşim)
+
+KRİTİK GÖZLEMLER:
+(Gözden kaçmış olabilecek önemli noktalar, uyarılar)
+
+ÖNERİLEN YAKLAŞIM:
+(Bundan sonraki süreçte PDR danışmanına öneriler — teorik temel ve pratik adımlar)
+
+UZUN VADELİ PROGNOZ:
+(Mevcut gidişatla ne beklenebilir, nasıl önlenebilir veya desteklenebilir)
+
+Akademik ama sıcak, yapıcı bir dil kullan. Markdown kullanma.`}]
+      })
+    });
+    const data = await res.json();
+    const cevap = data.content?.[0]?.text || "";
+    const yeniKayit = { id: uid(), tarih: today(), tip: "genel", soru: "Genel Süpervizyon", cevap };
+    const updated = pdrSozlukYaz(profNotlari, seciliAd, seciliSinif, [yeniKayit, ...(pdrSozlukOku(profNotlari, seciliAd, seciliSinif)||[])]);
+    setProfNotlari(updated);
+    await saveProfNotlari(updated);
+    setLoading(false);
   }
 
-  const renkler = {
-    bekliyor: { bg: "#FDF6E3", color: "#B07D1A", label: "⏳ Bekliyor" },
-    onayli: { bg: "#E6F5EE", color: "#1A8C5B", label: "✓ Onaylı" },
-    reddedildi: { bg: "#FDECEA", color: "#C0392B", label: "🚫 Reddedildi" },
-  };
+  async function handleSoru() {
+    if (!seciliAd || !soru.trim()) return;
+    setLoading(true);
+    const veri = tumVeriHazirla(seciliAd, seciliSinif);
+    const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        model:"claude-sonnet-4-6", max_tokens:3000,
+        system: PROF_HAKAN,
+        messages:[{role:"user", content:`${veri}
+
+DANIŞMANIN SORUSU: ${soru}
+
+Bu soruyu tüm verileri ve Dr. Ayşe Kara'nın değerlendirmelerini göz önünde bulundurarak yanıtla. Akademik derinlikte ama pratik ve uygulanabilir bir yanıt ver. Yanıtının sonunda gerekli görürsen 1-2 adet takip sorusu sor — 'TAKIP SORULARIM:' başlığı altında. Markdown kullanma.`}]
+      })
+    });
+    const data = await res.json();
+    const cevap = data.content?.[0]?.text || "";
+    const yeniKayit = { id: uid(), tarih: today(), tip: "soru", soru, cevap };
+    const updated = pdrSozlukYaz(profNotlari, seciliAd, seciliSinif, [yeniKayit, ...(pdrSozlukOku(profNotlari, seciliAd, seciliSinif)||[])]);
+    setProfNotlari(updated);
+    await saveProfNotlari(updated);
+    setSoru("");
+    setLoading(false);
+  }
+
+  const inp = { width:"100%", padding:"9px 11px", border:`1px solid ${BORDER}`, borderRadius:9, fontSize:13, background:CARD, color:TEXT, outline:"none", boxSizing:"border-box", fontFamily:"inherit" };
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-        <div style={{ fontSize: 15, fontWeight: 800, color: TEXT }}>🛠 Kullanıcı Onayları</div>
-        <button onClick={yenile} style={{ background: "none", border: `1px solid ${BORDER}`, borderRadius: 8, padding: "5px 12px", fontSize: 12, fontWeight: 700, color: MUTED, cursor: "pointer" }}>↻ Yenile</button>
+      {/* Başlık */}
+      <div style={{background:"linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)", borderRadius:12, padding:"14px 16px", marginBottom:14, color:"#fff"}}>
+        <div style={{fontSize:10, opacity:0.7, textTransform:"uppercase", letterSpacing:1, marginBottom:4}}>Klinik Süpervizyon</div>
+        <div style={{fontSize:18, fontWeight:900}}>Prof. Dr. Hakan</div>
+        <div style={{fontSize:11, opacity:0.8, marginTop:2}}>Klinik Psikoloji · Çocuk-Ergen Psikiyatrisi · Eğitim Psikolojisi · PDR</div>
       </div>
 
-      {yukleniyor ? (
-        <div style={{ textAlign: "center", color: MUTED, marginTop: 30, fontSize: 13 }}>Yükleniyor...</div>
-      ) : basvurular.length === 0 ? (
-        <div style={{ textAlign: "center", color: MUTED, marginTop: 30, fontSize: 13 }}>Henüz başvuru yok.</div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {basvurular.map(b => {
-            const durumStil = renkler[b.durum] || renkler.bekliyor;
-            return (
-              <div key={b.uid} style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 10, padding: "12px 14px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: 13, color: TEXT }}>{b.email}</div>
-                    <div style={{ fontSize: 11, color: MUTED }}>{b.tarih ? new Date(b.tarih).toLocaleDateString("tr-TR") : ""}</div>
-                  </div>
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    <span style={{ background: durumStil.bg, color: durumStil.color, borderRadius: 12, padding: "3px 10px", fontSize: 11, fontWeight: 700 }}>{durumStil.label}</span>
-                    {b.durum === "onayli" && (
-                      (b.ucretsiz || b.odemeAlindi)
-                        ? <span style={{ background: "#E6F5EE", color: "#1A8C5B", borderRadius: 12, padding: "3px 10px", fontSize: 11, fontWeight: 700 }}>🔓 Erişim Açık</span>
-                        : <span style={{ background: "#FDECEA", color: "#C0392B", borderRadius: 12, padding: "3px 10px", fontSize: 11, fontWeight: 700 }}>🔒 Ödeme Bekliyor</span>
-                    )}
-                  </div>
-                </div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                  <button onClick={() => guncelle(b.uid, { durum: "onayli" })} disabled={b.durum === "onayli"} style={{ padding: "6px 12px", background: b.durum === "onayli" ? BORDER : ACCENT, color: b.durum === "onayli" ? MUTED : "#fff", border: "none", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: b.durum === "onayli" ? "default" : "pointer" }}>✓ Onayla</button>
-                  <button onClick={() => guncelle(b.uid, { durum: "reddedildi" })} disabled={b.durum === "reddedildi"} style={{ padding: "6px 12px", background: "none", border: "1px solid #F28B82", color: "#C5221F", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: b.durum === "reddedildi" ? "default" : "pointer" }}>🚫 Reddet</button>
-                  <button onClick={() => guncelle(b.uid, { durum: "bekliyor" })} disabled={b.durum === "bekliyor"} style={{ padding: "6px 12px", background: "none", border: `1px solid ${BORDER}`, color: MUTED, borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: b.durum === "bekliyor" ? "default" : "pointer" }}>↺ Beklemeye Al</button>
-                </div>
-                <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "center", marginTop: 8, paddingTop: 8, borderTop: `1px solid ${BORDER}` }}>
-                  <PdrToggle checked={!!b.odemeAlindi} onChange={v => guncelle(b.uid, { odemeAlindi: v })} color="#1A8C5B" label="💳 Ödeme Alındı" />
-                  <PdrToggle checked={!!b.ucretsiz} onChange={v => guncelle(b.uid, { ucretsiz: v })} color={ACCENT} label="🎁 Ücretsiz kullanıcı" />
-                </div>
+      {/* Öğrenci seç */}
+      <input placeholder="Öğrenci ara..." value={aramaMetni} onChange={e=>setAramaMetni(e.target.value)} style={{...inp, marginBottom:8}} />
+      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:14}}>
+        {kayitliListesi.filter(o=>o.name.toLowerCase().includes(aramaMetni.toLowerCase())).slice(0,15).map(o=>{
+          const s=seciliAd===o.name;
+          return <button key={o.name} onClick={()=>setSeciliAd(o.name)} style={{padding:"4px 10px",borderRadius:16,border:`2px solid ${s?"#1a1a2e":BORDER}`,background:s?"#1a1a2e":CARD,color:s?"#fff":MUTED,fontSize:11,fontWeight:s?700:500,cursor:"pointer"}}>{o.name}</button>;
+        })}
+      </div>
+
+      {seciliAd && (
+        <>
+          {/* Mod seç */}
+          <div style={{display:"flex",gap:8,marginBottom:14}}>
+            <button onClick={()=>setMod("genel")} style={{flex:1,padding:"10px",borderRadius:10,border:`2px solid ${mod==="genel"?"#1a1a2e":BORDER}`,background:mod==="genel"?"#1a1a2e":CARD,color:mod==="genel"?"#fff":MUTED,fontSize:13,fontWeight:700,cursor:"pointer"}}>
+              📊 Genel Süpervizyon
+            </button>
+            <button onClick={()=>setMod("soru")} style={{flex:1,padding:"10px",borderRadius:10,border:`2px solid ${mod==="soru"?"#1a1a2e":BORDER}`,background:mod==="soru"?"#1a1a2e":CARD,color:mod==="soru"?"#fff":MUTED,fontSize:13,fontWeight:700,cursor:"pointer"}}>
+              💬 Soru Sor
+            </button>
+          </div>
+
+          {/* Genel süpervizyon */}
+          {mod === "genel" && (
+            <button onClick={handleGenel} disabled={loading} style={{
+              width:"100%", padding:"13px", marginBottom:14,
+              background:loading?"#666":"#1a1a2e",
+              color:"#fff", border:"none", borderRadius:12, fontSize:14, fontWeight:800, cursor:"pointer"
+            }}>
+              {loading ? "⏳ Prof. Dr. Hakan değerlendiriyor..." : "🎓 Tüm Verileri Değerlendir"}
+            </button>
+          )}
+
+          {/* Soru sor */}
+          {mod === "soru" && (
+            <div style={{marginBottom:14}}>
+              <textarea
+                placeholder="Prof. Dr. Hakan'a sorunuzu yazın...&#10;Örn: Bu öğrencide kaygıyı nasıl ele almalıyım?&#10;Örn: Aile görüşmesinde ne söylemeliyim?&#10;Örn: Risk değerlendirmesi doğru mu?"
+                value={soru}
+                onChange={e=>setSoru(e.target.value)}
+                rows={4}
+                style={{...inp, resize:"vertical", marginBottom:8}}
+              />
+              <button onClick={handleSoru} disabled={!soru.trim()||loading} style={{
+                width:"100%", padding:"12px",
+                background:soru.trim()&&!loading?"#1a1a2e":BORDER,
+                color:soru.trim()&&!loading?"#fff":MUTED,
+                border:"none", borderRadius:10, fontSize:14, fontWeight:800, cursor:"pointer"
+              }}>
+                {loading ? "⏳ Yanıtlanıyor..." : "💬 Soruyu Gönder"}
+              </button>
+            </div>
+          )}
+
+          {/* Konuşma geçmişi */}
+          {ogrKonusma.length > 0 && (
+            <div>
+              <div style={{fontSize:11,fontWeight:700,color:MUTED,textTransform:"uppercase",marginBottom:10}}>
+                Süpervizyon Geçmişi ({ogrKonusma.length})
               </div>
-            );
-          })}
-        </div>
+              {ogrKonusma.map((k,i) => (
+                <div key={k.id} style={{
+                  background:CARD, border:`1px solid ${BORDER}`,
+                  borderLeft:"4px solid #1a1a2e",
+                  borderRadius:10, padding:14, marginBottom:12
+                }}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                    <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                      <span style={{background:"#1a1a2e",color:"#fff",borderRadius:20,padding:"2px 10px",fontSize:10,fontWeight:700}}>
+                        {k.tip === "genel" ? "📊 Genel Süpervizyon" : "💬 Soru-Cevap"}
+                      </span>
+                      <span style={{fontSize:10,color:MUTED}}>{k.tarih}</span>
+                    </div>
+                    <button onClick={async()=>{
+                      const updated = pdrSozlukYaz(profNotlari, seciliAd, seciliSinif, (pdrSozlukOku(profNotlari, seciliAd, seciliSinif)||[]).filter(x=>x.id!==k.id));
+                      setProfNotlari(updated);await saveProfNotlari(updated);
+                    }} style={{background:"none",border:"none",color:MUTED,cursor:"pointer",fontSize:12}}>✕</button>
+                  </div>
+                  {k.tip === "soru" && (
+                    <div style={{fontSize:12,fontWeight:700,color:"#1a1a2e",marginBottom:8,background:"#f0f0f8",borderRadius:6,padding:"6px 10px"}}>
+                      ❓ {k.soru}
+                    </div>
+                  )}
+                  <div style={{fontSize:13,color:TEXT,lineHeight:1.8,whiteSpace:"pre-wrap"}}>{k.cevap}</div>
+                  {/* Prof'un sorularına cevap ver */}
+                  {(k.cevap.includes("DAHA İYİ ANLAYABİLMEK İÇİN") || k.cevap.includes("TAKİP SORULARIM")) && (
+                    <ProfCevapAlani
+                      konusmaId={k.id}
+                      seciliAd={seciliAd}
+                      oncekiVeri={k.cevap}
+                      profNotlari={profNotlari}
+                      setProfNotlari={setProfNotlari}
+                    />
+                  )}
+
+                  <button onClick={()=>{
+                    // Geçici div oluştur, raporIndir çağır
+                    const tmpId = "prof-rapor-tmp-"+k.id;
+                    let tmp = document.getElementById(tmpId);
+                    if (!tmp) {
+                      tmp = document.createElement("div");
+                      tmp.id = tmpId;
+                      tmp.style.position = "absolute";
+                      tmp.style.left = "-9999px";
+                      tmp.style.top = "0";
+                      tmp.style.width = "800px";
+                      tmp.style.fontFamily = "Arial, sans-serif";
+                      tmp.style.fontSize = "13px";
+                      tmp.style.color = "#1a1a1a";
+                      tmp.style.padding = "20px";
+                      tmp.innerHTML = `
+                        <div style="border-bottom:3px solid #1a1a2e;padding-bottom:12px;margin-bottom:16px">
+                          <div style="font-size:10px;color:#666;text-transform:uppercase;letter-spacing:1px">Klinik Süpervizyon Raporu</div>
+                          <div style="font-size:22px;font-weight:900;color:#1a1a2e">Prof. Dr. Hakan</div>
+                          <div style="font-size:11px;color:#555;margin-top:2px">Klinik Psikoloji · Çocuk-Ergen Psikiyatrisi · Eğitim Psikolojisi · PDR</div>
+                        </div>
+                        <table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:12px">
+                          <tr><td style="padding:4px 8px;background:#f5f5f5;font-weight:700;width:140px">Öğrenci</td><td style="padding:4px 8px">${seciliAd}</td></tr>
+                          <tr><td style="padding:4px 8px;background:#f5f5f5;font-weight:700">Tarih</td><td style="padding:4px 8px">${k.tarih}</td></tr>
+                          <tr><td style="padding:4px 8px;background:#f5f5f5;font-weight:700">Tür</td><td style="padding:4px 8px">${k.tip === "genel" ? "Genel Süpervizyon" : "Soru-Cevap"}</td></tr>
+                          ${k.tip === "soru" ? `<tr><td style="padding:4px 8px;background:#f5f5f5;font-weight:700">Soru</td><td style="padding:4px 8px">${k.soru}</td></tr>` : ""}
+                        </table>
+                        <div style="font-size:11px;font-weight:700;color:#1a1a2e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;padding-bottom:4px;border-bottom:1px solid #ddd">Süpervizyon Değerlendirmesi</div>
+                        <div style="font-size:13px;line-height:1.9;white-space:pre-wrap;color:#1a1a1a">${k.cevap}</div>
+                        <div style="margin-top:30px;padding-top:12px;border-top:1px solid #eee;display:flex;justify-content:space-between;font-size:11px;color:#666">
+                          <div>PDR Danışmanı: ___________________</div>
+                          <div>Tarih: ${k.tarih}</div>
+                        </div>
+                      `;
+                      document.body.appendChild(tmp);
+                    }
+                    raporIndir(tmpId, "ProfDrHakan_Supervizyon_" + seciliAd.replace(/\s+/g,"_") + "_" + k.tarih.replace(/\./g,"-"));
+                    setTimeout(()=>{ const el=document.getElementById(tmpId); if(el) el.remove(); }, 8000);
+                  }} style={{
+                    marginTop:10, padding:"7px 16px", background:"#1a1a2e", color:"#fff",
+                    border:"none", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer"
+                  }}>📄 PDF Olarak İndir</button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {ogrKonusma.length === 0 && (
+            <div style={{textAlign:"center",color:MUTED,marginTop:40,fontSize:13}}>
+              <div style={{fontSize:48,marginBottom:12}}>🎓</div>
+              <div style={{fontWeight:700,color:TEXT,marginBottom:6}}>Prof. Dr. Hakan</div>
+              <div>Öğrencinin tüm verilerini değerlendirmek veya<br/>soru sormak için yukarıdaki butonları kullanın</div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
 }
 
-function AyarlarEkrani() {
-  const [key, setKey] = useState(() => pdrGetApiKey());
-  const [gosterKey, setGosterKey] = useState(false);
-  const [kaydedildi, setKaydedildi] = useState(false);
 
-  function handleKaydet() {
-    pdrSetApiKey(key);
-    setKaydedildi(true);
-    setTimeout(() => setKaydedildi(false), 2500);
+// ── Prof. Cevap Alanı Bileşeni ───────────────────────────────────────────────
+function ProfCevapAlani({ konusmaId, seciliAd, oncekiVeri, profNotlari, setProfNotlari }) {
+  const [cevap, setCevap] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [goster, setGoster] = useState(false);
+
+  async function handleCevapGonder() {
+    if (!cevap.trim()) return;
+    setLoading(true);
+    const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        model:"claude-sonnet-4-6", max_tokens:3000,
+        system: PROF_HAKAN,
+        messages:[{role:"user", content:`Öğrenci: ${seciliAd}
+
+Önceki değerlendirmem ve sorularım:
+${oncekiVeri}
+
+Danışmanın cevabı:
+${cevap}
+
+Bu bilgiyi de göz önünde bulundurarak değerlendirmeni güncelle ve derinleştir. Gerekirse ek sorular sorabilirsin. Markdown kullanma.`}]
+      })
+    });
+    const data = await res.json();
+    const yeniCevap = data.content?.[0]?.text || "";
+    const yeniKayit = {
+      id: uid(), tarih: today(), tip: "takip",
+      soru: "Takip cevabı: " + cevap.substring(0,50) + "...",
+      cevap: yeniCevap
+    };
+    const updated = pdrSozlukYaz(profNotlari, seciliAd, seciliSinif, [yeniKayit, ...(pdrSozlukOku(profNotlari, seciliAd, seciliSinif)||[])]);
+    setProfNotlari(updated);
+    await saveProfNotlari(updated);
+    setCevap("");
+    setGoster(false);
+    setLoading(false);
   }
 
+  if (!goster) return (
+    <button onClick={()=>setGoster(true)} style={{
+      marginTop:8, padding:"6px 14px",
+      background:"#EEF2FF", color:"#3B4FD8",
+      border:"1px solid #c7ccf5", borderRadius:8,
+      fontSize:11, fontWeight:700, cursor:"pointer"
+    }}>
+      💬 Prof'un Sorularını Yanıtla
+    </button>
+  );
+
   return (
-    <div style={{ maxWidth: 520 }}>
-      <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 6 }}>⚙️ Ayarlar</div>
-      <div style={{ fontSize: 14, color: MUTED, marginBottom: 16, lineHeight: 1.5 }}>
-        Yapay zeka özelliklerini (özet çıkarma, risk değerlendirmesi, müdahale planı vb.)
-        kullanabilmek için kendi Anthropic API anahtarınızı girmeniz gerekir. Anahtarınız
-        sadece bu tarayıcıda saklanır, hiçbir sunucuya gönderilmez.
+    <div style={{marginTop:10, background:"#EEF2FF", borderRadius:10, padding:12}}>
+      <div style={{fontSize:11, fontWeight:700, color:"#3B4FD8", marginBottom:8}}>
+        Prof. Dr. Hakan'ın sorularını yanıtlayın
       </div>
-
-      <div style={{ background: "#f5f5f5", borderRadius: 12, padding: 14, marginBottom: 16 }}>
-        <div style={{ fontWeight: 700, marginBottom: 8, fontSize: 14 }}>Anthropic API Anahtarı</div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <input
-            type={gosterKey ? "text" : "password"}
-            value={key}
-            onChange={(e) => setKey(e.target.value)}
-            placeholder="sk-ant-..."
-            style={{ flex: 1, padding: 10, borderRadius: 8, border: "1px solid #ccc", fontSize: 14 }}
-          />
-          <button onClick={() => setGosterKey(!gosterKey)} style={{
-            padding: "0 12px", borderRadius: 8, border: "1px solid #ccc", background: "#fff", cursor: "pointer"
-          }}>{gosterKey ? "Gizle" : "Göster"}</button>
-        </div>
-        <button onClick={handleKaydet} style={{
-          marginTop: 10, width: "100%", padding: 12, background: ACCENT, color: "#fff",
-          border: "none", borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: "pointer"
-        }}>{kaydedildi ? "✅ Kaydedildi" : "Kaydet"}</button>
-      </div>
-
-      <div style={{ fontSize: 13, color: MUTED, lineHeight: 1.6 }}>
-        <b>Nasıl API anahtarı alırım?</b>
-        <ol style={{ paddingLeft: 18, marginTop: 6 }}>
-          <li>console.anthropic.com adresine gidip ücretsiz bir hesap açın</li>
-          <li>"API Keys" bölümünden yeni bir anahtar oluşturun</li>
-          <li>Oluşan anahtarı (sk-ant- ile başlar) kopyalayıp yukarıya yapıştırın</li>
-        </ol>
+      <textarea
+        placeholder="Prof'un sorularına cevabınızı yazın..."
+        value={cevap}
+        onChange={e=>setCevap(e.target.value)}
+        rows={4}
+        style={{width:"100%", padding:"8px 10px", border:"1px solid #c7ccf5", borderRadius:8, fontSize:12, resize:"vertical", boxSizing:"border-box", fontFamily:"inherit", marginBottom:8}}
+      />
+      <div style={{display:"flex", gap:8}}>
+        <button onClick={()=>setGoster(false)} style={{flex:1, padding:"8px", background:"#fff", color:MUTED, border:`1px solid ${BORDER}`, borderRadius:8, fontSize:12, cursor:"pointer"}}>
+          İptal
+        </button>
+        <button onClick={handleCevapGonder} disabled={!cevap.trim()||loading} style={{
+          flex:2, padding:"8px",
+          background:cevap.trim()&&!loading?"#1a1a2e":BORDER,
+          color:cevap.trim()&&!loading?"#fff":MUTED,
+          border:"none", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer"
+        }}>
+          {loading ? "⏳ Prof. değerlendiriyor..." : "🎓 Gönder ve Derinleştir"}
+        </button>
       </div>
     </div>
   );
 }
-
 
 
 // ── Excel Toplu Yükleme (7. Sınıf) ─────────────────────────────────────────
@@ -4134,7 +4119,7 @@ function OgrenciYonetim({
   kayitliListesi, mudahalePlan, aktifYil, onYilEkrani,
   hazirlikNotlari, setHazirlikNotlari,
   ilerlemeNotlari, setIlerlemeNotlari,
-  onRaporAc, setAktifOgrenci, setTab, onSinifGuncelle, onOgrenciSil
+  onRaporAc, setAktifOgrenci, setTab, onSinifGuncelle
 }) {
 
   const [aramaMetni, setAramaMetni] = useState("");
@@ -4155,30 +4140,6 @@ function OgrenciYonetim({
   const [sinifFiltre, setSinifFiltre] = useState("Tümü");
   const [gorunumModu, setGorunumModu] = useState("liste"); // liste | aylik
   const [acikAylar, setAcikAylar] = useState({});
-  const [duzenlemeId, setDuzenlemeId] = useState(null);
-  const [duzenleForm, setDuzenleForm] = useState(null);
-  const [duzenleAiLoading, setDuzenleAiLoading] = useState(false);
-
-  async function handleDuzenleAiOzetle() {
-    if (!duzenleForm?.raw?.trim()) return;
-    setDuzenleAiLoading(true);
-    const summary = await getAISummary(duzenleForm.raw);
-    setDuzenleForm(f => ({ ...f, summary }));
-    setDuzenleAiLoading(false);
-  }
-
-  async function handleGorusmeGuncelle(id, fields) {
-    const updated = records.map(r => r.id === id ? { ...r, ...fields } : r);
-    setRecords(updated);
-    await saveRecords(updated);
-    setDuzenlemeId(null);
-    setDuzenleForm(null);
-  }
-  async function handleGorusmeSil(id) {
-    const updated = records.filter(r => r.id !== id);
-    setRecords(updated);
-    await saveRecords(updated);
-  }
 
   async function handleOgrenciSil(studentName) {
     const ad = studentName.toLowerCase().trim();
@@ -4215,7 +4176,32 @@ function OgrenciYonetim({
   ), [tumOgrenciler, aramaDebounce]);
 
   async function handleOgrenciSil(studentName, className, numara) {
-    await onOgrenciSil(studentName, className, numara);
+    const silinecekMi = (ad, sinif, no) => pdrAyniOgrenci(studentName, className, ad, sinif, numara, no);
+    // Hepsini paralel sil
+    const updOgr = ogrenciler.filter(o => !silinecekMi(o.studentName, o.className, o.numara));
+    const updRec = records.filter(r => !silinecekMi(r.studentName, r.className, r.numara));
+    const updP1 = profiles.filter(p => !silinecekMi(p.studentName, p.className, p.numara));
+    const updP2 = profiles2.filter(p => !silinecekMi(p.studentName, p.className, p.numara));
+    const updDen = { ...denemeler };
+    delete updDen[pdrOgrAnahtar(studentName, className)];
+    delete updDen[studentName];
+    const updRisk = riskListesi.filter(r => !silinecekMi(r.studentName, r.className, r.numara));
+    // State'leri güncelle
+    setOgrenciler(updOgr);
+    setRecords(updRec);
+    setProfiles(updP1);
+    setProfiles2(updP2);
+    setDenemeler(updDen);
+    setRiskListesi(updRisk);
+    // Storage'a kaydet
+    await Promise.all([
+      saveOgrenciler(updOgr),
+      saveRecords(updRec),
+      saveProfiles(updP1),
+      saveProfiles2(updP2),
+      saveDenemeler(updDen),
+      saveRiskListesi(updRisk),
+    ]);
     if (aktifOgrenci?.name === studentName) setAktifOgrenci({ name: "", className: "" });
     setSeciliOgrenci(null);
   }
@@ -4460,7 +4446,7 @@ function OgrenciYonetim({
             }}>🎓 Sınıf Güncelle</button>
             <div style={{ flex:1, minWidth:120 }}>
               <div style={{ fontWeight:800, fontSize:16, color:TEXT }}>{seciliOgrenci}</div>
-              {(() => { const o = tumOgrenciler.find(x=>x.studentName===seciliOgrenci); return o ? <div style={{ fontSize:11, color:MUTED }}>{o.className}{o.numara ? ` · No: ${o.numara}` : ""}</div> : null; })()}
+              <div style={{ fontSize:11, color:MUTED }}>{seciliOgrenciSinif}{seciliOgrenciNumara ? ` · No: ${seciliOgrenciNumara}` : ""}</div>
             </div>
             {ogrRisk.length > 0 && <span style={{ background:"#FDECEA", color:"#C0392B", borderRadius:8, padding:"4px 10px", fontSize:11, fontWeight:700 }}>⚠ Risk</span>}
             <button onClick={() => {
@@ -4528,6 +4514,12 @@ function OgrenciYonetim({
               ilerlemeNotlari={ilerlemeNotlari}
               setIlerlemeNotlari={setIlerlemeNotlari}
               setTab={setTab}
+              devamsizlik={tumOgrenciler.find(x => x.studentName === seciliOgrenci)?.devamsizlik || 0}
+              onDevamsizlikGuncelle={async (yeniDeger) => {
+                const updated = ogrenciler.map(o => pdrAyniOgrenci(o.studentName, o.className, seciliOgrenci, seciliOgrenciSinif, o.numara, seciliOgrenciNumara) ? { ...o, devamsizlik: yeniDeger } : o);
+                setOgrenciler(updated);
+                await saveOgrenciler(updated);
+              }}
             />
           )}
           {/* GÖRÜŞME */}
@@ -4593,36 +4585,8 @@ function OgrenciYonetim({
                               </div>
                               {gunFark!==null&&<span style={{fontSize:10,color:MUTED}}>{gunFark} gün önce</span>}
                             </div>
-                            {duzenlemeId===r.id ? (
-                              <div style={{marginTop:6}}>
-                                <div style={{display:"flex",gap:6,marginBottom:6}}>
-                                  {["Öğrenci","Veli","Öğretmen"].map(t=>(
-                                    <button key={t} onClick={()=>setDuzenleForm(f=>({...f,meetingType:t}))} style={{flex:1,padding:"6px",borderRadius:8,border:`2px solid ${duzenleForm?.meetingType===t?ACCENT:BORDER}`,background:duzenleForm?.meetingType===t?ACCENT_LIGHT:CARD,color:duzenleForm?.meetingType===t?ACCENT:MUTED,fontSize:11,fontWeight:700,cursor:"pointer"}}>{t}</button>
-                                  ))}
-                                </div>
-                                <input placeholder="Konu (örn: Sınav kaygısı)" value={duzenleForm?.topic||""} onChange={e=>setDuzenleForm(f=>({...f,topic:e.target.value}))} style={{width:"100%",padding:"7px 9px",border:`1px solid ${BORDER}`,borderRadius:8,fontSize:12,marginBottom:6,boxSizing:"border-box"}}/>
-                                <label style={{fontSize:10,fontWeight:600,color:MUTED,display:"block",marginBottom:2}}>HAM NOT</label>
-                                <textarea value={duzenleForm?.raw||""} onChange={e=>setDuzenleForm(f=>({...f,raw:e.target.value}))} rows={3} style={{width:"100%",padding:"7px 9px",border:`1px solid ${BORDER}`,borderRadius:8,fontSize:12,resize:"vertical",boxSizing:"border-box",marginBottom:6}}/>
-                                <button onClick={handleDuzenleAiOzetle} disabled={!duzenleForm?.raw?.trim()||duzenleAiLoading} style={{width:"100%",padding:"7px",background:duzenleForm?.raw?.trim()&&!duzenleAiLoading?PURPLE:BORDER,color:duzenleForm?.raw?.trim()&&!duzenleAiLoading?"#fff":MUTED,border:"none",borderRadius:8,fontSize:11,fontWeight:700,cursor:"pointer",marginBottom:6}}>
-                                  {duzenleAiLoading?"⏳ Özetleniyor...":"✦ AI ile Yeniden Özetle"}
-                                </button>
-                                <label style={{fontSize:10,fontWeight:600,color:MUTED,display:"block",marginBottom:2}}>ÖZET</label>
-                                <textarea value={duzenleForm?.summary||""} onChange={e=>setDuzenleForm(f=>({...f,summary:e.target.value}))} rows={4} style={{width:"100%",padding:"7px 9px",border:`1px solid ${ACCENT_LIGHT}`,borderRadius:8,fontSize:12,resize:"vertical",boxSizing:"border-box",background:"#F0FAF4",marginBottom:8}}/>
-                                <div style={{display:"flex",gap:8}}>
-                                  <button onClick={()=>{setDuzenlemeId(null);setDuzenleForm(null);}} style={{flex:1,padding:"8px",background:BG,border:`1px solid ${BORDER}`,borderRadius:8,fontSize:12,fontWeight:700,color:MUTED,cursor:"pointer"}}>İptal</button>
-                                  <button onClick={()=>handleGorusmeGuncelle(r.id,duzenleForm)} disabled={!duzenleForm?.summary?.trim()} style={{flex:1,padding:"8px",background:duzenleForm?.summary?.trim()?ACCENT:BORDER,color:duzenleForm?.summary?.trim()?"#fff":MUTED,border:"none",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"}}>💾 Kaydet</button>
-                                </div>
-                              </div>
-                            ) : (
-                              <>
-                                {r.raw&&<div style={{fontSize:11,color:MUTED,fontStyle:"italic",marginBottom:4,background:"#fafafa",borderRadius:5,padding:"3px 7px"}}>{r.raw}</div>}
-                                <div style={{fontSize:12,color:TEXT,lineHeight:1.7,marginBottom:6}}>{r.summary}</div>
-                                <div style={{display:"flex",gap:6}}>
-                                  <button onClick={()=>{setDuzenlemeId(r.id);setDuzenleForm({meetingType:r.meetingType||"Öğrenci",topic:r.topic||"",raw:r.raw||"",summary:r.summary||""});}} style={{padding:"5px 10px",background:ACCENT_LIGHT,color:ACCENT,border:"none",borderRadius:8,fontSize:11,fontWeight:700,cursor:"pointer"}}>✎ Düzenle</button>
-                                  <button onClick={()=>{ if(window.confirm("Bu görüşme notunu silmek istediğinize emin misiniz?")) handleGorusmeSil(r.id); }} style={{padding:"5px 10px",background:"none",border:"1px solid #F28B82",color:"#C5221F",borderRadius:8,fontSize:11,fontWeight:700,cursor:"pointer"}}>🗑 Sil</button>
-                                </div>
-                              </>
-                            )}
+                            {r.raw&&<div style={{fontSize:11,color:MUTED,fontStyle:"italic",marginBottom:4,background:"#fafafa",borderRadius:5,padding:"3px 7px"}}>{r.raw}</div>}
+                            <div style={{fontSize:12,color:TEXT,lineHeight:1.7}}>{r.summary}</div>
                           </div>
                         </div>
                       );
@@ -4753,9 +4717,8 @@ function DenemeTabip({ denemeler, setDenemeler, kayitliListesi, aktifOgrenci, ha
   const filtreliListe = kayitliListesi.filter(o =>
     o.name.toLowerCase().includes(aramaMetni.toLowerCase())
   );
-  const seciliOgrenciSinif = kayitliListesi.find(o => o.name === seciliOgrenci)?.className || aktifOgrenci?.className || "";
 
-  const ogrenciDenemeler = pdrSozlukOku(denemeler, seciliOgrenci, seciliOgrenciSinif) || {};
+  const ogrenciDenemeler = denemeler[seciliOgrenci] || {};
   const sinif7Data = ogrenciDenemeler["7sinif"] || null;
 
   // Toplam net hesapla
@@ -4905,8 +4868,10 @@ function DenemeTabip({ denemeler, setDenemeler, kayitliListesi, aktifOgrenci, ha
   }
 
   async function handleKaydet(no, nets) {
-    const guncelNets = { ...(pdrSozlukOku(denemeler, seciliOgrenci, seciliOgrenciSinif) || {}), [no]: nets };
-    const updated = pdrSozlukYaz(denemeler, seciliOgrenci, seciliOgrenciSinif, guncelNets);
+    const updated = {
+      ...denemeler,
+      [seciliOgrenci]: { ...(denemeler[seciliOgrenci] || {}), [no]: nets }
+    };
     setDenemeler(updated);
     await saveDenemeler(updated);
     setAktifDeneme(null);
@@ -4915,9 +4880,9 @@ function DenemeTabip({ denemeler, setDenemeler, kayitliListesi, aktifOgrenci, ha
   }
 
   async function handleSil(no) {
-    const ogr = { ...(pdrSozlukOku(denemeler, seciliOgrenci, seciliOgrenciSinif) || {}) };
+    const ogr = { ...(denemeler[seciliOgrenci] || {}) };
     delete ogr[no];
-    const updated = pdrSozlukYaz(denemeler, seciliOgrenci, seciliOgrenciSinif, ogr);
+    const updated = { ...denemeler, [seciliOgrenci]: ogr };
     setDenemeler(updated);
     await saveDenemeler(updated);
   }
@@ -4966,7 +4931,7 @@ function DenemeTabip({ denemeler, setDenemeler, kayitliListesi, aktifOgrenci, ha
           {/* Öğrenci listesi */}
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
             {filtreliListe.map(o => {
-              const ogrNets = pdrSozlukOku(denemeler, o.name, o.className) || {};
+              const ogrNets = denemeler[o.name] || {};
               const dCount = Object.keys(ogrNets).length;
               const s = seciliOgrenci === o.name;
               return (
@@ -5124,103 +5089,10 @@ function DenemeTabip({ denemeler, setDenemeler, kayitliListesi, aktifOgrenci, ha
 
 
 // ── ProfilMerkez Bileşeni ─────────────────────────────────────────────────────
-// ── ÖÖG (Özel Öğrenme Güçlüğü) Ön-Tarama Paneli ───────────────────────────────
-function OOGPaneli({ seciliAd, seciliSinif, seciliNumara, oogDegerlendirmeler, setOogDegerlendirmeler }) {
-  const mevcut = oogDegerlendirmeler.find(o => pdrAyniOgrenci(o.studentName, o.className, seciliAd, seciliSinif, o.numara, seciliNumara));
-  const [cevaplar, setCevaplar] = useState(mevcut?.cevaplar || {});
-  const [kaydedildi, setKaydedildi] = useState(false);
-
-  useEffect(() => {
-    const m = oogDegerlendirmeler.find(o => pdrAyniOgrenci(o.studentName, o.className, seciliAd, seciliSinif, o.numara, seciliNumara));
-    setCevaplar(m?.cevaplar || {});
-    setKaydedildi(false);
-  }, [seciliAd, seciliSinif, seciliNumara]);
-
-  function cevapVer(kategoriKey, soruIndex, val) {
-    setCevaplar(c => ({ ...c, [kategoriKey + "_" + soruIndex]: val }));
-  }
-
-  const sonuc = oogSonucHesapla(cevaplar);
-
-  async function handleKaydet() {
-    if (!seciliAd.trim()) return;
-    const kayit = {
-      id: mevcut?.id || uid(),
-      date: today(),
-      studentName: seciliAd, className: seciliSinif, numara: seciliNumara,
-      cevaplar, yuzde: sonuc.yuzde, kategoriPuan: sonuc.kategoriPuan,
-    };
-    const updated = mevcut
-      ? oogDegerlendirmeler.map(o => o.id === mevcut.id ? kayit : o)
-      : [kayit, ...oogDegerlendirmeler];
-    setOogDegerlendirmeler(updated);
-    await saveOogDegerlendirmeler(updated);
-    setKaydedildi(true);
-    setTimeout(() => setKaydedildi(false), 2500);
-  }
-
-  if (!seciliAd.trim()) {
-    return <div style={{textAlign:"center", color:MUTED, padding:20, fontSize:13}}>Önce bir öğrenci seçin</div>;
-  }
-
-  return (
-    <div>
-      <div style={{background:"#EEF2FF", border:`1px solid #c7ccf5`, borderRadius:10, padding:"10px 12px", marginBottom:14, fontSize:11, color:"#3B4FD8", lineHeight:1.6}}>
-        🧩 Bu bir <b>tarama aracıdır, tanı koymaz</b>. Öğrenciyi gözlemleyerek her maddeyi işaretle. Şüphe düzeyi yüksek çıkarsa RAM/uzman yönlendirmesi önerilir.
-      </div>
-
-      {sonuc.tamamlananSoru > 0 && (
-        <div style={{background:sonuc.seviye.bg, border:`1px solid ${sonuc.seviye.color}33`, borderRadius:12, padding:14, marginBottom:16, textAlign:"center"}}>
-          <div style={{fontSize:32, fontWeight:900, color:sonuc.seviye.color}}>%{sonuc.yuzde}</div>
-          <div style={{fontSize:13, fontWeight:700, color:sonuc.seviye.color, marginBottom:4}}>{sonuc.seviye.label}</div>
-          <div style={{fontSize:11, color:MUTED}}>{sonuc.tamamlananSoru}/{sonuc.toplamSoru} soru yanıtlandı</div>
-          <div style={{display:"flex", flexWrap:"wrap", gap:6, justifyContent:"center", marginTop:10}}>
-            {OOG_KATEGORILER.map(k => (
-              <span key={k.key} style={{fontSize:10, fontWeight:700, padding:"3px 8px", borderRadius:10, background:"#fff", border:`1px solid ${BORDER}`, color:TEXT}}>
-                {k.label.split(" ")[0]} %{sonuc.kategoriPuan[k.key]}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {OOG_KATEGORILER.map(kategori => (
-        <div key={kategori.key} style={{marginBottom:16}}>
-          <div style={{fontSize:12, fontWeight:800, color:ACCENT, marginBottom:8}}>{kategori.label}</div>
-          {kategori.sorular.map((soru, i) => {
-            const key = kategori.key + "_" + i;
-            return (
-              <div key={key} style={{marginBottom:10}}>
-                <div style={{fontSize:12, color:TEXT, marginBottom:5}}>{soru}</div>
-                <div style={{display:"flex", gap:5}}>
-                  {OOG_SECENEKLER.map(sec => (
-                    <button key={sec.val} onClick={() => cevapVer(kategori.key, i, sec.val)} style={{
-                      flex:1, padding:"7px 4px", borderRadius:8, fontSize:10, fontWeight:700, cursor:"pointer",
-                      border:`1.5px solid ${cevaplar[key]===sec.val?ACCENT:BORDER}`,
-                      background:cevaplar[key]===sec.val?ACCENT_LIGHT:CARD,
-                      color:cevaplar[key]===sec.val?ACCENT:MUTED,
-                    }}>{sec.label}</button>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ))}
-
-      <button onClick={handleKaydet} style={{
-        width:"100%", padding:13, background:ACCENT, color:"#fff", border:"none", borderRadius:12,
-        fontSize:15, fontWeight:800, cursor:"pointer", marginTop:4
-      }}>{kaydedildi ? "✓ Kaydedildi" : "💾 Kaydet"}</button>
-    </div>
-  );
-}
-
 function ProfilMerkez({
   aktifOgrenci, kayitliListesi,
   profiles, setProfiles,
   profiles2, setProfiles2,
-  oogDegerlendirmeler, setOogDegerlendirmeler,
   denemeler, records, kutuphane,
   onRaporAc,
 }) {
@@ -5468,7 +5340,7 @@ function ProfilMerkez({
                   aile_notu: prof2Form.aile_notu || "",
                   d2_analiz: prof2Analiz || ""
                 };
-                onRaporAc({ogrenci:seciliAd, ogrenciSinif:seciliSinif, profil1:p1Rapor, profil2:p2Rapor, gorusmeler:ogrRec, denemeler:ogrDeneme});
+                onRaporAc({ogrenci:seciliAd, profil1:p1Rapor, profil2:p2Rapor, gorusmeler:ogrRec, denemeler:ogrDeneme});
               }} style={{
                 background:ACCENT, color:"#fff", border:"none", borderRadius:8, padding:"6px 12px", fontSize:12, fontWeight:700, cursor:"pointer"
               }}>📄 PDF Rapor</button>
@@ -5480,7 +5352,7 @@ function ProfilMerkez({
             <>
               {/* Alt sekmeler */}
               <div style={{display:"flex",gap:0,marginBottom:14,borderBottom:`1px solid ${BORDER}`}}>
-                {[["p1","📊 Profil 1"],["p2","📚 Profil 2 + D2"],["oog","🧩 ÖÖG"]].map(([k,l])=>(
+                {[["p1","📊 Profil 1"],["p2","📚 Profil 2 + D2"]].map(([k,l])=>(
                   <button key={k} onClick={()=>setAltSekme(k)} style={{
                     padding:"9px 16px", border:"none", background:"none",
                     color:altSekme===k?ACCENT:MUTED, fontWeight:altSekme===k?700:500,
@@ -5655,21 +5527,11 @@ function ProfilMerkez({
                 </div>
               )}
 
-              {/* ÖÖG Tarama */}
-              {altSekme === "oog" && (
-                <OOGPaneli
-                  seciliAd={seciliAd} seciliSinif={seciliSinif} seciliNumara={seciliNumara}
-                  oogDegerlendirmeler={oogDegerlendirmeler} setOogDegerlendirmeler={setOogDegerlendirmeler}
-                />
-              )}
-
               {/* Kaydet butonu */}
-              {altSekme !== "oog" && (
               <button onClick={handleKaydet} disabled={!seciliAd} style={{
                 width:"100%",padding:"13px",background:seciliAd?ACCENT:BORDER,
                 color:seciliAd?"#fff":MUTED,border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer",marginTop:8
               }}>{kaydedildi?"✓ Kaydedildi — Önizleme Açıldı":"💾 Kaydet ve Önizle"}</button>
-              )}
             </>
           )}
 
@@ -5968,8 +5830,8 @@ function SinifProfili({ ogrenciler, records, riskListesi, aktifYil }) {
             <div style={{textAlign:"center",color:MUTED,fontSize:12}}>Bu sınıfta kayıtlı öğrenci yok</div>
           )}
           {enCokGorusulen.map(o => {
-            const gSayisi = records.filter(r => pdrAyniOgrenci(r.studentName, r.className, o.studentName, o.className, r.numara, o.numara)).length;
-            const oRisk = riskListesi.filter(r => pdrAyniOgrenci(r.studentName, r.className, o.studentName, o.className, r.numara, o.numara) && !r.kapandi);
+            const gSayisi = records.filter(r => pdrAyniOgrenci(r.studentName, r.className, o.studentName, o.className)).length;
+            const oRisk = riskListesi.filter(r => pdrAyniOgrenci(r.studentName, r.className, o.studentName, o.className) && !r.kapandi);
             return (
               <div key={o.studentName} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 0",borderBottom:`1px solid ${BORDER}`}}>
                 <div style={{display:"flex",alignItems:"center",gap:8}}>
@@ -6067,11 +5929,14 @@ function KutuphaneEkle({ kutuphane, setKutuphane }) {
   const lbl = { fontSize:11, fontWeight:600, color:MUTED, display:"block", marginBottom:4, textTransform:"uppercase" };
 
   async function aiOzetle(metin, baslik) {
-    const res = await pdrCallClaude({
+    const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
         model:"claude-sonnet-4-6", max_tokens:800,
         system:"Sen Dr. Ayse Kara'sin - 20 yillik klinik deneyime sahip PDR uzmani ve psikologsun. BDT (otomatik dusunceler, sema teorisi, maruz birakma), baglanma teorisi (Bowlby), aile sistemleri (Minuchin), gelisim psikolojisi (Erikson, Vygotsky), Bourdieu sosyolojisi, Frankl anlam terapisi ve Stoa felsefesi perspektifinden degerlendirir; somut, uygulanabilir PDR onerileri sunarsın. Yargilamayan, guclu yonlere odaklanan, Turkce yazan bir klinisyensin. Verilen metni su yapida ozet: 1. ANA TEMALAR 2. PDR/KLINIK ACISINDAN ONEMLI NOKTALAR (BDT, baglanma, sosyoloji, felsefe) 3. ANAHTAR KAVRAMLAR. Max 350 kelime. Sade yaz. Markdown kullanma.",
         messages:[{role:"user", content:`Başlık: ${baslik||"Belirtilmemiş"}\n\nMetin:\n${metin.substring(0,8000)}`}]
-      });
+      })
+    });
     const data = await res.json();
     return data.content?.[0]?.text || metin.substring(0,400);
   }
@@ -6096,14 +5961,17 @@ function KutuphaneEkle({ kutuphane, setKutuphane }) {
           r.onerror = rej;
           r.readAsDataURL(file);
         });
-        const resp = await pdrCallClaude({
+        const resp = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+          method:"POST", headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({
             model:"claude-sonnet-4-6", max_tokens:800,
             system:"Sen Dr. Ayse Kara'sin - 20 yillik klinik deneyime sahip, okul psikolojik danismanligi alaninda uzmanlasmis bir psikolog ve PDR uzmanisin. Bilissel Davranisci Terapi (BDT) temel yonelimindir: otomatik dusunceler, bilissel carpitmalar, sema teorisi, davranissal aktivasyon ve maruz birakma tekniklerini klinik pratikte ustaca kullanirsin. Baglanma teorisi (Bowlby, Ainsworth), aile sistemleri terapisi (Minuchin, Bowen) ve gelisim psikolojisi (Piaget, Vygotsky, Erikson) perspektifinden bireyi cevresiyle birlikte degerlendirirsin. Sosyolojide Bourdieu'nun habitus ve kulturel sermaye kavramlari, Giddens'in yapilasmasi ve sosyal tabakalasmanin psikolojik etkilerini Turkiye baglaminda okursun: aile baskisi, toplumsal cinsiyet rolleri, sinav odakli egitimin cocuk uzerindeki yukunu sosyolojik zemine oturtursun. Felsefi temetin: Frankl anlam terapisi, Sartre sorumluluk etigi, Stoa kontrol alani, fenomenolojinin oznel deneyim odagi. Uslubun: yargilamayan, merak eden, guclu yonlere odaklanan, somut ve uygulanabilir oneriler sunan, Turkce yazan, PDR diline hakim bir klinisyen. Verilen icerigi su yapida ozet: 1. ANA TEMALAR 2. PDR/KLINIK ACISINDAN ONEMLI NOKTALAR (BDT, baglanma, sosyoloji, felsefe perspektifinden) 3. ANAHTAR KAVRAMLAR. Max 350 kelime. Sade yaz. Markdown kullanma.",
             messages:[{role:"user", content:[
               {type:"document", source:{type:"base64", media_type:"application/pdf", data:b64}},
               {type:"text", text:`Bu belgeyi PDR perspektifinden özetle. Başlık: ${baslik}`}
             ]}]
-          });
+          })
+        });
         const data = await resp.json();
         const ozet = data.content?.[0]?.text || "Özet alınamadı.";
         await kaydet(ozet, baslik, file.name);
@@ -6146,7 +6014,10 @@ function KutuphaneEkle({ kutuphane, setKutuphane }) {
       };
       if (!sayfaIcerigi) bodyObj.tools = [{ type: "web_search_20250305", name: "web_search" }];
 
-      const resp = await pdrCallClaude(bodyObj);
+      const resp = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(bodyObj)
+      });
       const data = await resp.json();
       const ozet = data.content?.find(b => b.type === "text")?.text || "İçerik okunamadı.";
       await kaydet(ozet, baslik, yeniLink);
@@ -6369,10 +6240,9 @@ export default function App() {
   const [records, setRecords] = useState([]);
   const [profiles, setProfiles] = useState([]);
   const [profiles2, setProfiles2] = useState([]);
-  const [oogDegerlendirmeler, setOogDegerlendirmeler] = useState([]);
   const [tab, setTab] = useState("ogrenci");
   const [form, setForm] = useState({ studentName: "", className: "", numara: "", meetingType: "Öğrenci", topic: "", raw: "", summary: "" });
-  const [profForm, setProfForm] = useState({ studentName: "", className: "", numara: "", notes: "", scores: { ...EMPTY_SCORES }, analysis: "" });
+  const [profForm, setProfForm] = useState({ studentName: "", className: "", notes: "", scores: { ...EMPTY_SCORES }, analysis: "" });
   const [prof2Form, setProf2Form] = useState({ ...EMPTY_PROF2 });
   const [scoresSet, setScoresSet] = useState(false);
   const [scoresLoading, setScoresLoading] = useState(false);
@@ -6412,7 +6282,6 @@ export default function App() {
     loadRecords().then(setRecords);
     loadProfiles().then(setProfiles);
     loadProfiles2().then(setProfiles2);
-    loadOogDegerlendirmeler().then(setOogDegerlendirmeler);
     loadKutuphane().then(setKutuphane);
     loadRiskListesi().then(setRiskListesi);
     loadDenemeler().then(setDenemeler);
@@ -6475,7 +6344,7 @@ export default function App() {
   async function handleProfileAnalyze() {
     setProfAiLoading(true);
     // Öğrencinin deneme verilerini de bağlama ekle
-    const ogrenciDenemeler = pdrSozlukOku(denemeler, profForm.studentName, profForm.className) || {};
+    const ogrenciDenemeler = denemeler[profForm.studentName] || {};
     const denemeOzeti = Object.entries(ogrenciDenemeler).length > 0
       ? "DENEME SONUÇLARI: " + Object.entries(ogrenciDenemeler)
           .sort((a,b) => a[0]-b[0])
@@ -6495,7 +6364,7 @@ export default function App() {
     const p = { id: uid(), date: today(), ...profForm };
     const updated = [p, ...profiles];
     setProfiles(updated); await saveProfiles(updated);
-    setProfForm({ studentName: "", className: "", numara: "", notes: "", scores: { ...EMPTY_SCORES }, analysis: "" });
+    setProfForm({ studentName: "", className: "", notes: "", scores: { ...EMPTY_SCORES }, analysis: "" });
     setScoresSet(false);
     setProfSaved(true); setTimeout(() => setProfSaved(false), 2000); setTab("profil_merkez");
   }
@@ -6592,7 +6461,7 @@ export default function App() {
     const gorusmeBolum2 = ogrRec2.length > 0
       ? "GÖRÜŞME NOTLARI:\n" + ogrRec2.map((r,i)=>`Görüşme ${i+1} (${r.date}): ${r.summary}`).join("\n\n")
       : "";
-    const ogrDen2 = pdrSozlukOku(denemeler, seciliAd, seciliSinif) || {};
+    const ogrDen2 = denemeler[seciliAd] || {};
     const girilen2 = Object.entries(ogrDen2).sort((a,b)=>a[0]-b[0]).map(([no,nets])=>({
       no:parseInt(no), nets, toplam: LGS_DERSLER.reduce((s,d)=>s+(parseFloat(nets[d.key])||0),0)
     }));
@@ -6619,7 +6488,7 @@ export default function App() {
     const updated = [p, ...profiles];
     setProfiles(updated);
     await saveProfiles(updated);
-    setProfForm({ studentName: "", className: "", numara: "", notes: "", scores: { ...EMPTY_SCORES }, analysis: "" });
+    setProfForm({ studentName: "", className: "", notes: "", scores: { ...EMPTY_SCORES }, analysis: "" });
     setTab("profil_merkez");
   }
 
@@ -6677,7 +6546,6 @@ export default function App() {
       .sort((a, b) => a.name.localeCompare(b.name, "tr"));
   }, [ogrenciler, records, profiles, profiles2]);
 
-  const pdrIsAdmin = window.pdrAuth?.currentUser?.email === window.PDR_ADMIN_EMAIL;
   const TABS = [
     { key: "ogrenciler", label: "👥 Öğrenciler" },
     { key: "profil_merkez", label: "📋 Profil" },
@@ -6691,9 +6559,8 @@ export default function App() {
     { key: "degerlendirme", label: "🧭 Değerlendir" },
     { key: "kutuphane", label: "📚 Kütüphane" },
     { key: "istatistik", label: "İstatistik" },
-    { key: "ayarlar", label: "⚙️ Ayarlar" },
+    { key: "prof_danisma", label: "🎓 Prof. Hakan" },
     { key: "yeni", label: "+ Not" },
-    ...(pdrIsAdmin ? [{ key: "onaylar", label: "🛠 Onaylar" }] : []),
   ];
 
   return (
@@ -6721,7 +6588,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* Canlı bilgi şeridi (ticker) */}
+      {/* Canlı bilgi şeridi */}
       <div style={{ background: "#0F3D2E", overflow: "hidden", position: "sticky", top: 0, zIndex: 9, borderBottom: `1px solid ${BORDER}` }}>
         <div style={{ display: "inline-flex", whiteSpace: "nowrap", padding: "6px 0", animation: "pdrTickerScroll 26s linear infinite" }}>
           {[...tickerItems, ...tickerItems].map((item, i) => (
@@ -6739,11 +6606,7 @@ export default function App() {
             color: tab === t.key ? ACCENT : MUTED,
             fontSize: 11, cursor: "pointer",
             borderBottom: tab === t.key ? `3px solid ${ACCENT}` : "3px solid transparent",
-            display: "flex", alignItems: "center", gap: 4,
-          }}>
-            {t.label}
-            {t.key === "onaylar" && <span style={{ background: "#FB923C", color: "#fff", borderRadius: 8, padding: "1px 6px", fontSize: 8, fontWeight: 800, letterSpacing: 0.3 }}>YENİ</span>}
-          </button>
+          }}>{t.label}</button>
         ))}
       </div>
 
@@ -6836,6 +6699,25 @@ export default function App() {
           />
         )}
 
+        {/* ── PROF. DR. HAKAN ──────────────────────────────────────── */}
+        {tab === "prof_danisma" && (
+          <ProfDanismaEkrani
+            kayitliListesi={kayitliListesi}
+            aktifOgrenci={aktifOgrenci}
+            records={records}
+            profiles={profiles}
+            profiles2={profiles2}
+            denemeler={denemeler}
+            riskListesi={riskListesi}
+            mudahalePlan={mudahalePlan}
+            sevkler={sevkler}
+            hazirlikNotlari={hazirlikNotlari}
+            ilerlemeNotlari={ilerlemeNotlari}
+            profNotlari={profNotlari}
+            setProfNotlari={setProfNotlari}
+          />
+        )}
+
         {/* ── DEĞERLENDİRME ────────────────────────────────────────── */}
         {tab === "degerlendirme" && (
           <DegerlendirmeEkrani
@@ -6859,8 +6741,6 @@ export default function App() {
             setProfiles={setProfiles}
             profiles2={profiles2}
             setProfiles2={setProfiles2}
-            oogDegerlendirmeler={oogDegerlendirmeler}
-            setOogDegerlendirmeler={setOogDegerlendirmeler}
             denemeler={denemeler}
             records={records}
             kutuphane={kutuphane}
@@ -6909,11 +6789,9 @@ export default function App() {
               const kalanSevkler = sevkler.filter(s => !silinecekMi(s.studentName, s.className, s.numara));
               setSevkler(kalanSevkler); await saveSevkler(kalanSevkler);
 
-              const kalanOog = oogDegerlendirmeler.filter(o => !silinecekMi(o.studentName, o.className, o.numara));
-              setOogDegerlendirmeler(kalanOog); await saveOogDegerlendirmeler(kalanOog);
-
-              // İsimle anahtarlanan sözlükler (deneme, müdahale planı, hazırlık/ilerleme notları):
-              // silinen her öğrencinin hem yeni (isim+sınıf) hem eski (düz isim) anahtarını temizle
+              // İsimle anahtarlanan sözlükler (deneme, müdahale planı, hazırlık/ilerleme notları,
+              // Prof. Dr. Hakan süpervizyon notları): silinen her öğrencinin hem yeni (isim+sınıf)
+              // hem eski (düz isim) anahtarını temizle
               function pdrSozlukTemizle(sozluk) {
                 const yeni = { ...sozluk };
                 silinecekler.forEach(o => {
@@ -6933,6 +6811,9 @@ export default function App() {
 
               const kalanIlerleme = pdrSozlukTemizle(ilerlemeNotlari);
               setIlerlemeNotlari(kalanIlerleme); await saveIlerlemeNotlari(kalanIlerleme);
+
+              const kalanProfNotlari = pdrSozlukTemizle(profNotlari);
+              setProfNotlari(kalanProfNotlari); await saveProfNotlari(kalanProfNotlari);
             }}
           />
         )}
@@ -7004,53 +6885,8 @@ export default function App() {
               const yeniIlerleme = pdrSozlukSinifTasi(ilerlemeNotlari);
               setIlerlemeNotlari(yeniIlerleme); await saveIlerlemeNotlari(yeniIlerleme);
 
-              const yeniOog = oogDegerlendirmeler.map(o => ayniMi(o.studentName, o.className, o.numara) ? { ...o, className: yeniSinif } : o);
-              setOogDegerlendirmeler(yeniOog); await saveOogDegerlendirmeler(yeniOog);
-            }}
-            onOgrenciSil={async (studentName, className, numara) => {
-              const silinecekMi = (ad, sinif, no) => pdrAyniOgrenci(studentName, className, ad, sinif, numara, no);
-
-              const updOgr = ogrenciler.filter(o => !silinecekMi(o.studentName, o.className, o.numara));
-              setOgrenciler(updOgr); await saveOgrenciler(updOgr);
-
-              const updRec = records.filter(r => !silinecekMi(r.studentName, r.className, r.numara));
-              setRecords(updRec); await saveRecords(updRec);
-
-              const updRisk = riskListesi.filter(r => !silinecekMi(r.studentName, r.className, r.numara));
-              setRiskListesi(updRisk); await saveRiskListesi(updRisk);
-
-              const updP1 = profiles.filter(p => !silinecekMi(p.studentName, p.className, p.numara));
-              setProfiles(updP1); await saveProfiles(updP1);
-
-              const updP2 = profiles2.filter(p => !silinecekMi(p.studentName, p.className, p.numara));
-              setProfiles2(updP2); await saveProfiles2(updP2);
-
-              const updSevkler = sevkler.filter(s => !silinecekMi(s.studentName, s.className, s.numara));
-              setSevkler(updSevkler); await saveSevkler(updSevkler);
-
-              const updOog = oogDegerlendirmeler.filter(o => !silinecekMi(o.studentName, o.className, o.numara));
-              setOogDegerlendirmeler(updOog); await saveOogDegerlendirmeler(updOog);
-
-              // İsimle anahtarlanan sözlükler: silinen öğrencinin hem numaralı, hem
-              // isim+sınıf, hem eski düz-isim anahtarını temizle
-              function pdrSozlukOgrenciTemizle(sozluk) {
-                const yeni = { ...sozluk };
-                delete yeni[pdrOgrAnahtar(studentName, className, numara)];
-                delete yeni[pdrOgrAnahtar(studentName, className)];
-                delete yeni[studentName];
-                return yeni;
-              }
-              const updDen = pdrSozlukOgrenciTemizle(denemeler);
-              setDenemeler(updDen); await saveDenemeler(updDen);
-
-              const updMudahale = pdrSozlukOgrenciTemizle(mudahalePlan);
-              setMudahalePlan(updMudahale); await saveMudahalePlan(updMudahale);
-
-              const updHazirlik = pdrSozlukOgrenciTemizle(hazirlikNotlari);
-              setHazirlikNotlari(updHazirlik); await saveHazirlikNotlari(updHazirlik);
-
-              const updIlerleme = pdrSozlukOgrenciTemizle(ilerlemeNotlari);
-              setIlerlemeNotlari(updIlerleme); await saveIlerlemeNotlari(updIlerleme);
+              const yeniProfNotlari = pdrSozlukSinifTasi(profNotlari);
+              setProfNotlari(yeniProfNotlari); await saveProfNotlari(yeniProfNotlari);
             }}
             setAktifOgrenci={setAktifOgrenci}
             setTab={setTab}
@@ -7193,7 +7029,6 @@ export default function App() {
             {(() => {
               const aktif = riskListesi.filter(r => !r.kapandi);
               const kapali = riskListesi.filter(r => r.kapandi);
-              // [ana renk, camsı arka plan gradyanı, parlaklık gölgesi]
               const oncelikRenk = {
                 "Yüksek": ["#FF5A4E", "linear-gradient(135deg, #E8443A 0%, #7B1610 100%)", "rgba(255,90,78,0.55)"],
                 "Orta":   ["#FFA53E", "linear-gradient(135deg, #E88A2E 0%, #7A4508 100%)", "rgba(255,165,62,0.5)"],
@@ -7351,8 +7186,6 @@ export default function App() {
             }}>⬇ Excel'e Aktar</button>
           </div>
         )}
-        {tab === "ayarlar" && <AyarlarEkrani />}
-        {tab === "onaylar" && pdrIsAdmin && <KullaniciOnaylari />}
       </div>
     </div>
   );

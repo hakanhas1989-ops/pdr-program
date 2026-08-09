@@ -13,6 +13,27 @@
 <link rel="apple-touch-icon" sizes="192x192" href="icon.png">
 <link rel="icon" href="icon.png">
 <title>PDR Program</title>
+<script>
+  // Kullanıcının kendi Anthropic API anahtarını yönetir. Her müşteri kendi
+  // anahtarını Ayarlar bölümünden girer; AI faturası doğrudan ona kesilir.
+  // "rpusula__" ön ekiyle saklanan her anahtar otomatik olarak Firestore'a da
+  // senkronize edilir (pdrSyncDown ile), böylece anahtar tarayıcıya değil hesaba bağlı olur.
+  function pdrGetApiKey() {
+    return localStorage.getItem("rpusula__apiKey") || "";
+  }
+  function pdrSetApiKey(key) {
+    const trimmed = key.trim();
+    localStorage.setItem("rpusula__apiKey", trimmed);
+    const user = window.pdrAuth && window.pdrAuth.currentUser;
+    if (user && window.pdrDb) {
+      window.pdrDb.collection("users").doc(user.uid).collection("data").doc("apiKey")
+        .set({ value: trimmed, updatedAt: Date.now() })
+        .catch(err => console.log("API anahtarı buluta kaydedilemedi:", err));
+    }
+  }
+  // Tüm AI çağrıları artık doğrudan Cloudflare Worker'a (PDR_AI_WORKER_URL)
+  // gönderiliyor — bkz. her AI fonksiyonunun kendi içindeki fetch() çağrısı.
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
@@ -24,14 +45,19 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; overflow-x: hidden; }
 body { font-family: "Segoe UI", system-ui, -apple-system, sans-serif; overscroll-behavior: none; background: linear-gradient(160deg, #F4F9F6 0%, #E9F3EE 45%, #F8FAF9 100%); background-attachment: fixed; }
+input, textarea, button, select { font-family: inherit; }
+input[type=range] { cursor: pointer; }
+/* Kartlara genel derinlik/gölge: satır içi stilleri hedefleyen öznitelik seçicisi */
 div[style*="border-radius: 12px"][style*="1px solid"] {
   box-shadow: 0 2px 10px rgba(15,61,46,0.07), 0 1px 2px rgba(15,61,46,0.04) !important;
 }
 div[style*="border-radius: 12px"][style*="1px solid"]:active {
   box-shadow: 0 1px 4px rgba(15,61,46,0.08) !important;
 }
-input, textarea, button, select { font-family: inherit; }
-input[type=range] { cursor: pointer; }
+/* Küçük başlıklarda daha keskin/net görünüm */
+div[style*="text-transform: uppercase"][style*="letter-spacing"] {
+  text-shadow: 0 0.5px 0 rgba(0,0,0,0.02);
+}
 /* iOS safe area */
 body {
   padding-top: env(safe-area-inset-top);
@@ -307,7 +333,7 @@ body {
       <div id="pdr-splash-flash"></div>
     </div>
   </div>
-  <div style="margin-top:8px;position:relative;z-index:3;">PDR Program</div>
+  <div style="margin-top:8px;position:relative;z-index:3;">🧭 Rehber Pusula</div>
   <div style="font-size:13px;opacity:0.7;font-weight:400;position:relative;z-index:3;">Yükleniyor...</div>
 </div>
 <script>
@@ -377,14 +403,24 @@ body {
     </svg>
   </div>
   <div class="pdr-login-box">
-    <h2>🔒 Giriş Yap</h2>
+    <h2 id="pdr-login-title">🔒 Giriş Yap</h2>
     <p class="pdr-sub">Verileriniz güvenle bulutta saklanır.</p>
     <form id="pdr-login-form">
       <input type="email" id="pdr-login-email" placeholder="E-posta" required autocomplete="username" />
       <input type="password" id="pdr-login-pass" placeholder="Şifre" required autocomplete="current-password" />
+      <input type="password" id="pdr-login-pass2" placeholder="Şifre (tekrar)" autocomplete="new-password" style="display:none" />
+      <div id="pdr-tos-row" style="display:none;align-items:flex-start;gap:8px;margin:10px 0;text-align:left">
+        <input type="checkbox" id="pdr-tos-checkbox" style="width:16px;min-width:16px;height:16px;margin:3px 0 0 0;flex-shrink:0" />
+        <label for="pdr-tos-checkbox" style="font-size:12px;color:#555;line-height:1.5;flex:1;min-width:0">
+          <a href="#" id="pdr-tos-link" style="color:#1A4D3B;font-weight:600;text-decoration:underline">Kullanım Şartları</a>'nı okudum ve kabul ediyorum.
+        </label>
+      </div>
       <button type="submit" id="pdr-login-btn">Giriş Yap</button>
       <div id="pdr-login-error"></div>
       <div id="pdr-login-info" style="color:#1A4D3B;font-size:12px;margin-top:8px;min-height:16px"></div>
+      <p class="pdr-sub" style="margin-top:14px">
+        <a href="#" id="pdr-toggle-mode" style="color:#1A4D3B;font-weight:600;text-decoration:underline">Hesabınız yok mu? Kayıt olun</a>
+      </p>
       <p class="pdr-sub" style="margin-top:6px">
         <a href="#" id="pdr-forgot-pass" style="color:#666;font-size:12px;text-decoration:underline">Şifremi unuttum</a>
       </p>
@@ -421,34 +457,178 @@ body {
 })();
 
 const firebaseConfig = {
-  apiKey: "AIzaSyATC969KGtY_xhL-UG1fVI0sRVSY2_2o54",
-  authDomain: "pdr-program.firebaseapp.com",
-  projectId: "pdr-program",
-  storageBucket: "pdr-program.firebasestorage.app",
-  messagingSenderId: "199087746443",
-  appId: "1:199087746443:web:f6163f46d719adce05138e"
+  apiKey: "AIzaSyAhS-sfwpZa2zb8GKSqcvihLdrBMtPOCTQ",
+  authDomain: "rehber-pusula.firebaseapp.com",
+  projectId: "rehber-pusula",
+  storageBucket: "rehber-pusula.firebasestorage.app",
+  messagingSenderId: "880787609777",
+  appId: "1:880787609777:web:2987584e47fc78a2fc2a90"
 };
 firebase.initializeApp(firebaseConfig);
 const pdrAuth = firebase.auth();
 const pdrDb = firebase.firestore();
+window.pdrAuth = pdrAuth;
+window.pdrDb = pdrDb;
+
+// Sadece bu e-posta adresi admin sayılır ve onay sistemine takılmaz.
+const PDR_ADMIN_EMAIL = "hakanhas1989@gmail.com";
+window.PDR_ADMIN_EMAIL = PDR_ADMIN_EMAIL;
+
+// Kullanıcının başvuru/onay durumunu getirir. Kayıt yoksa (özellik eklenmeden
+// önce açılmış eski hesap gibi) otomatik "onaylı" sayılır — geriye dönük uyumluluk için.
+async function pdrOnayDurumuGetir(user) {
+  const ref = pdrDb.collection("basvurular").doc(user.uid);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    const kayit = { email: user.email || "", tarih: Date.now(), durum: "onayli", ucretsiz: false, odemeAlindi: false };
+    await ref.set(kayit);
+    return kayit;
+  }
+  return snap.data();
+}
+
+function pdrOnayEkraniGoster(durum) {
+  let el = document.getElementById("pdr-onay-overlay");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "pdr-onay-overlay";
+    el.style.cssText = "position:fixed;inset:0;z-index:9997;background:radial-gradient(circle at 50% 42%, #1f4d3a 0%, #163b2c 55%, #0a1f18 100%);display:flex;align-items:center;justify-content:center;padding:24px;";
+    document.body.appendChild(el);
+  }
+  const reddedildi = durum === "reddedildi";
+  const mesaj = reddedildi
+    ? "Üzgünüz, hesap başvurunuz onaylanmadı. Detaylı bilgi için bizimle iletişime geçebilirsiniz."
+    : "Hesabınız incelemeye alındı. Onaylandığında bu ekran otomatik olarak kapanıp uygulamaya yönlendirileceksiniz.";
+  const ikon = reddedildi ? "🚫" : "⏳";
+  el.innerHTML = `
+    <div style="max-width:340px;width:100%;background:rgba(255,255,255,0.97);color:#1A4D3B;border-radius:18px;padding:32px 26px;box-shadow:0 20px 50px rgba(0,0,0,0.35);text-align:center;">
+      <div style="font-size:40px;margin-bottom:12px;">${ikon}</div>
+      <div style="font-size:19px;font-weight:800;margin-bottom:8px;">🧭 Rehber Pusula</div>
+      <div style="font-size:13px;color:#4a5c53;line-height:1.7;margin-bottom:18px;">${mesaj}</div>
+      <button id="pdr-onay-cikis" style="width:100%;padding:12px;background:#1FA971;color:#fff;border:none;border-radius:10px;font-weight:800;font-size:14px;cursor:pointer;">Çıkış Yap</button>
+    </div>`;
+  el.style.display = "flex";
+  document.getElementById("pdr-onay-cikis").onclick = async () => {
+    await pdrAuth.signOut();
+    pdrClearLocalCache();
+    localStorage.removeItem("pdr_last_uid");
+    location.reload();
+  };
+}
+function pdrOnayEkraniGizle() {
+  const el = document.getElementById("pdr-onay-overlay");
+  if (el) el.style.display = "none";
+}
+
+function pdrOdemeEkraniGoster() {
+  let el = document.getElementById("pdr-odeme-overlay");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "pdr-odeme-overlay";
+    el.style.cssText = "position:fixed;inset:0;z-index:9996;background:radial-gradient(circle at 50% 42%, #1f4d3a 0%, #163b2c 55%, #0a1f18 100%);display:flex;align-items:center;justify-content:center;padding:24px;";
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `
+    <div style="max-width:340px;width:100%;background:rgba(255,255,255,0.97);color:#1A4D3B;border-radius:18px;padding:32px 26px;box-shadow:0 20px 50px rgba(0,0,0,0.35);text-align:center;">
+      <div style="font-size:40px;margin-bottom:12px;">💳</div>
+      <div style="font-size:19px;font-weight:800;margin-bottom:8px;">🧭 Rehber Pusula</div>
+      <div style="font-size:13px;color:#4a5c53;line-height:1.7;margin-bottom:18px;">Hesabınız onaylandı, ancak erişimin açılması için ödemenizin tamamlanması gerekiyor. Ödeme yaptıktan sonra hesabınız kısa süre içinde aktif edilecektir.</div>
+      <div style="background:#EEF2FF;border-radius:10px;padding:12px;margin-bottom:18px;text-align:left;font-size:11px;color:#3B4FD8;line-height:1.6;">
+        🔒 Verileriniz güvende, kimse erişemez. Gizlilik için öğrenci soyadlarını kısaltabilirsiniz (örn. "Ahmet Y."). Veri gizliliği (KVKK) sorumluluğu kullanıcıya aittir.
+      </div>
+      <button id="pdr-odeme-cikis" style="width:100%;padding:12px;background:#1FA971;color:#fff;border:none;border-radius:10px;font-weight:800;font-size:14px;cursor:pointer;">Çıkış Yap</button>
+    </div>`;
+  el.style.display = "flex";
+  document.getElementById("pdr-odeme-cikis").onclick = async () => {
+    await pdrAuth.signOut();
+    pdrClearLocalCache();
+    localStorage.removeItem("pdr_last_uid");
+    location.reload();
+  };
+}
+function pdrOdemeEkraniGizle() {
+  const el = document.getElementById("pdr-odeme-overlay");
+  if (el) el.style.display = "none";
+}
+
+// Bu kullanıcı hesabı, Kullanım Şartları onay kaydı eklenmeden ÖNCE oluşturulmuş
+// (eski kayıt) — girişte bir kereye mahsus onay istenir, onayladığında kayıt
+// altına alınır ve bu ekran bir daha çıkmaz.
+function pdrOnayEksikGoster(uid) {
+  let el = document.getElementById("pdr-onay-eksik-overlay");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "pdr-onay-eksik-overlay";
+    el.style.cssText = "position:fixed;inset:0;z-index:9995;background:rgba(10,30,20,0.75);display:flex;align-items:center;justify-content:center;padding:20px;";
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `
+    <div style="max-width:480px;width:100%;max-height:85vh;overflow-y:auto;background:#fff;color:#1A1A1A;border-radius:16px;padding:24px 22px;box-shadow:0 20px 50px rgba(0,0,0,0.4);">
+      <div style="font-weight:800;font-size:17px;margin-bottom:6px;color:#1A4D3B;">🧭 Rehber Pusula — Kullanım Şartları</div>
+      <div style="font-size:12px;color:#666;margin-bottom:14px;">Devam edebilmek için güncel Kullanım Şartları'nı onaylaman gerekiyor.</div>
+      <div style="font-size:12.5px;line-height:1.8;color:#333;max-height:220px;overflow-y:auto;border:1px solid #eee;border-radius:10px;padding:12px;margin-bottom:14px;">
+        <p><b>1. Hizmetin Kapsamı</b><br/>Rehber Pusula, rehber öğretmenler/PDR uzmanları için öğrenci görüşme, profil ve takip kayıtlarının yönetimini kolaylaştıran bir yazılım hizmetidir.</p>
+        <p><b>2. Hesap ve Erişim</b><br/>Hesabınız kişiseldir. Kullanıcı adı ve şifrenizi başkalarıyla paylaşamaz, hesabınızı başka bir kişi veya kuruma devredemez ya da kiralayamazsınız.</p>
+        <p><b>3. Kopyalama ve Yeniden Satış Yasağı</b><br/>Yazılımın kaynak kodunu, tasarımını veya işlevselliğini kopyalayamaz, çoğaltamaz, tersine mühendislik yapamaz, başka bir ürün olarak yeniden paketleyip satamaz veya üçüncü kişilere devredemezsiniz.</p>
+        <p><b>4. Öğrenci Verilerinin Sorumluluğu</b><br/>Sisteme girdiğiniz öğrenci/veli verilerinin doğruluğundan ve ilgili mevzuata (KVKK dahil) uygun şekilde işlenmesinden siz sorumlusunuz.</p>
+        <p><b>5. Ücretlendirme</b><br/>Hesabınızın aktif kalabilmesi için belirlenen ücretin ödenmesi veya tarafımızca ücretsiz kullanıcı olarak tanımlanmış olmanız gerekir. Ödeme yapılmayan hesaplar erişime kapatılabilir.</p>
+        <p><b>6. Hizmetin Sona Ermesi</b><br/>Bu şartların ihlali durumunda hesabınız önceden bildirim yapılmaksızın askıya alınabilir veya kapatılabilir.</p>
+      </div>
+      <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:14px;">
+        <input type="checkbox" id="pdr-onay-eksik-checkbox" style="width:16px;min-width:16px;height:16px;margin:3px 0 0 0;flex-shrink:0" />
+        <label for="pdr-onay-eksik-checkbox" style="font-size:12px;color:#555;line-height:1.5;">Yukarıdaki Kullanım Şartları'nı okudum ve kabul ediyorum.</label>
+      </div>
+      <div id="pdr-onay-eksik-hata" style="color:#C0392B;font-size:12px;margin-bottom:10px;min-height:14px;"></div>
+      <button id="pdr-onay-eksik-kabul" style="width:100%;padding:12px;background:#1FA971;color:#fff;border:none;border-radius:10px;font-weight:800;font-size:14px;cursor:pointer;margin-bottom:8px;">Kabul Ediyorum, Devam Et</button>
+      <button id="pdr-onay-eksik-cikis" style="width:100%;padding:10px;background:none;color:#666;border:1px solid #ddd;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;">Çıkış Yap</button>
+    </div>`;
+  el.style.display = "flex";
+  document.getElementById("pdr-onay-eksik-kabul").onclick = async () => {
+    const cb = document.getElementById("pdr-onay-eksik-checkbox");
+    const hata = document.getElementById("pdr-onay-eksik-hata");
+    if (!cb.checked) { hata.textContent = "Devam etmek için kutucuğu işaretlemeniz gerekiyor."; return; }
+    try {
+      await pdrDb.collection("basvurular").doc(uid).update({
+        kosulOnay: { onaylandi: true, tarih: Date.now(), versiyon: "v1" }
+      });
+      pdrOnayEksikGizle();
+    } catch (e) {
+      console.log("Onay kaydı yazılamadı:", e.code, e.message);
+      hata.textContent = e && e.code === "permission-denied"
+        ? "Yetki hatası — bu sorun teknik ekipte, hemen düzeltilecek."
+        : "Bir hata oluştu, tekrar deneyin.";
+    }
+  };
+  document.getElementById("pdr-onay-eksik-cikis").onclick = async () => {
+    await pdrAuth.signOut();
+    pdrClearLocalCache();
+    localStorage.removeItem("pdr_last_uid");
+    location.reload();
+  };
+}
+function pdrOnayEksikGizle() {
+  const el = document.getElementById("pdr-onay-eksik-overlay");
+  if (el) el.style.display = "none";
+}
 
 let pdrResolveReady;
 window.__pdrAuthReady = new Promise((res) => { pdrResolveReady = res; });
 
 // Farklı bir kullanıcı giriş yaptığında önceki kullanıcının önbellek
-// verilerinin görünmemesi için, önce yerel "pdr__" anahtarlarını temizleriz.
+// verilerinin görünmemesi için, önce yerel "rpusula__" anahtarlarını temizleriz.
 function pdrClearLocalCache() {
   const toRemove = [];
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
-    if (k && k.startsWith("pdr__")) toRemove.push(k);
+    if (k && k.startsWith("rpusula__")) toRemove.push(k);
   }
   toRemove.forEach((k) => localStorage.removeItem(k));
 }
 
 async function pdrSyncDown(uid) {
   const lastUid = localStorage.getItem("pdr_last_uid");
-  if (!lastUid || lastUid !== uid) {
+  if (lastUid && lastUid !== uid) {
+    // Cihazda önceden başka bir hesap açılmış — eski veriler karışmasın diye temizle.
     pdrClearLocalCache();
   }
   localStorage.setItem("pdr_last_uid", uid);
@@ -463,7 +643,7 @@ async function pdrSyncDown(uid) {
         deger = d.value;
       }
       if (deger !== null) {
-        try { localStorage.setItem("pdr__" + doc.id, deger); }
+        try { localStorage.setItem("rpusula__" + doc.id, deger); }
         catch (e) { console.warn("Yerel depolama dolu, atlanıyor:", doc.id, e); }
       }
     }
@@ -526,8 +706,43 @@ const pdrLoginForm = document.getElementById("pdr-login-form");
 const pdrLoginError = document.getElementById("pdr-login-error");
 const pdrLoginInfo = document.getElementById("pdr-login-info");
 const pdrLoginBtn = document.getElementById("pdr-login-btn");
+const pdrLoginTitle = document.getElementById("pdr-login-title");
+const pdrToggleMode = document.getElementById("pdr-toggle-mode");
+const pdrPass2 = document.getElementById("pdr-login-pass2");
+const pdrTosRow = document.getElementById("pdr-tos-row");
+const pdrTosCheckbox = document.getElementById("pdr-tos-checkbox");
+const pdrTosLink = document.getElementById("pdr-tos-link");
 const pdrLogoutBtn = document.getElementById("pdr-logout-btn");
 const pdrForgotPass = document.getElementById("pdr-forgot-pass");
+let pdrIsRegisterMode = false;
+
+if (pdrTosLink) {
+  pdrTosLink.addEventListener("click", (e) => {
+    e.preventDefault();
+    let el = document.getElementById("pdr-tos-overlay");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "pdr-tos-overlay";
+      el.style.cssText = "position:fixed;inset:0;z-index:9999;background:rgba(10,30,20,0.6);display:flex;align-items:center;justify-content:center;padding:20px;";
+      document.body.appendChild(el);
+    }
+    el.innerHTML = `
+      <div style="max-width:480px;width:100%;max-height:80vh;overflow-y:auto;background:#fff;color:#1A1A1A;border-radius:16px;padding:24px 22px;box-shadow:0 20px 50px rgba(0,0,0,0.4);">
+        <div style="font-weight:800;font-size:17px;margin-bottom:14px;color:#1A4D3B;">🧭 Rehber Pusula — Kullanım Şartları</div>
+        <div style="font-size:12.5px;line-height:1.8;color:#333;">
+          <p><b>1. Hizmetin Kapsamı</b><br/>Rehber Pusula, rehber öğretmenler/PDR uzmanları için öğrenci görüşme, profil ve takip kayıtlarının yönetimini kolaylaştıran bir yazılım hizmetidir.</p>
+          <p><b>2. Hesap ve Erişim</b><br/>Hesabınız kişiseldir. Kullanıcı adı ve şifrenizi başkalarıyla paylaşamaz, hesabınızı başka bir kişi veya kuruma devredemez ya da kiralayamazsınız.</p>
+          <p><b>3. Kopyalama ve Yeniden Satış Yasağı</b><br/>Yazılımın kaynak kodunu, tasarımını veya işlevselliğini kopyalayamaz, çoğaltamaz, tersine mühendislik yapamaz, başka bir ürün olarak yeniden paketleyip satamaz veya üçüncü kişilere devredemezsiniz. Bu maddenin ihlali hesabın askıya alınmasına ve hukuki yollara başvurulmasına sebep olabilir.</p>
+          <p><b>4. Öğrenci Verilerinin Sorumluluğu</b><br/>Sisteme girdiğiniz öğrenci/veli verilerinin doğruluğundan ve ilgili mevzuata (KVKK dahil) uygun şekilde işlenmesinden siz sorumlusunuz.</p>
+          <p><b>5. Ücretlendirme</b><br/>Hesabınızın aktif kalabilmesi için belirlenen ücretin ödenmesi veya tarafımızca ücretsiz kullanıcı olarak tanımlanmış olmanız gerekir. Ödeme yapılmayan hesaplar erişime kapatılabilir.</p>
+          <p><b>6. Hizmetin Sona Ermesi</b><br/>Bu şartların ihlali durumunda hesabınız önceden bildirim yapılmaksızın askıya alınabilir veya kapatılabilir.</p>
+        </div>
+        <button id="pdr-tos-close" style="width:100%;margin-top:16px;padding:11px;background:#1FA971;color:#fff;border:none;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;">Kapat</button>
+      </div>`;
+    el.style.display = "flex";
+    document.getElementById("pdr-tos-close").onclick = () => { el.style.display = "none"; };
+  });
+}
 
 if (pdrForgotPass) {
   pdrForgotPass.addEventListener("click", async (e) => {
@@ -548,6 +763,30 @@ if (pdrForgotPass) {
       if (err && err.code === "auth/invalid-email") msg = "Geçersiz e-posta adresi.";
       if (pdrLoginError) pdrLoginError.textContent = msg;
     }
+  });
+}
+
+if (pdrToggleMode) {
+  pdrToggleMode.addEventListener("click", (e) => {
+    e.preventDefault();
+    pdrIsRegisterMode = !pdrIsRegisterMode;
+    if (pdrIsRegisterMode) {
+      pdrLoginTitle.textContent = "📝 Kayıt Ol";
+      pdrLoginBtn.textContent = "Kayıt Ol";
+      pdrPass2.style.display = "block";
+      pdrPass2.required = true;
+      if (pdrTosRow) pdrTosRow.style.display = "flex";
+      pdrToggleMode.textContent = "Zaten hesabınız var mı? Giriş yapın";
+    } else {
+      pdrLoginTitle.textContent = "🔒 Giriş Yap";
+      pdrLoginBtn.textContent = "Giriş Yap";
+      pdrPass2.style.display = "none";
+      pdrPass2.required = false;
+      if (pdrTosRow) pdrTosRow.style.display = "none";
+      if (pdrTosCheckbox) pdrTosCheckbox.checked = false;
+      pdrToggleMode.textContent = "Hesabınız yok mu? Kayıt olun";
+    }
+    if (pdrLoginError) pdrLoginError.textContent = "";
   });
 }
 
@@ -594,18 +833,81 @@ document.addEventListener("visibilitychange", () => {
 });
 
 let pdrFirstReady = true;
+let pdrBasvuruUnsub = null; // admin onay durumunu canlı izleyen dinleyici — oturum boyunca aktif
 pdrAuth.onAuthStateChanged(async (user) => {
   const splashEl = document.getElementById("splash");
   if (user) {
     if (pdrLoginOverlay) pdrLoginOverlay.style.display = "none";
     if (pdrLogoutBtn) pdrLogoutBtn.style.display = "block";
+
+    // Admin hariç herkes için onay durumu kontrolü
+    if (user.email !== PDR_ADMIN_EMAIL) {
+      const basvuru = await pdrOnayDurumuGetir(user);
+      if (basvuru.durum !== "onayli") {
+        if (splashEl) splashEl.className = "hide";
+        pdrOnayEkraniGoster(basvuru.durum);
+        return;
+      }
+      // Onaylı ama ne ücretsiz ne de ödemesi alınmış, YA DA geçen yılın erişim
+      // süresi dolmuş (eğitim yılı sonu geçmiş, yeni yıl için ödeme gerekiyor) —
+      // erişimi ödeme bekleme ekranında durdur.
+      const pdrSuresiDolmus = !basvuru.ucretsiz && basvuru.erisimBitis && Date.now() > basvuru.erisimBitis;
+      if ((!basvuru.ucretsiz && !basvuru.odemeAlindi) || pdrSuresiDolmus) {
+        if (splashEl) splashEl.className = "hide";
+        pdrOdemeEkraniGoster();
+        return;
+      }
+      // Erişim ve ödeme sorunsuz — ama bu hesap, Kullanım Şartları onay kaydı
+      // eklenmeden önce oluşturulmuş olabilir (eski kayıt). Böyle bir durumda
+      // devam etmeden önce bir kereye mahsus onay istenir.
+      if (!basvuru.kosulOnay?.onaylandi) {
+        if (splashEl) splashEl.className = "hide";
+        pdrOnayEksikGoster(user.uid);
+        return;
+      }
+
+      // Erişim onaylandı — ama admin oturum SIRASINDA onayı geri alabilir (örn. birini
+      // reddetmek/beklemeye almak). Bunu anlık yakalamak için başvuru kaydını canlı izle:
+      // admin durumu değiştirir değiştirmez (birkaç saniye içinde), kullanıcı otomatik
+      // olarak ilgili engel ekranına düşer — sayfayı yenilemesi ya da yeniden giriş
+      // yapması gerekmez. Aynı şekilde tekrar onaylanırsa engel ekranı da otomatik kapanır.
+      if (pdrBasvuruUnsub) { pdrBasvuruUnsub(); pdrBasvuruUnsub = null; }
+      pdrBasvuruUnsub = pdrDb.collection("basvurular").doc(user.uid).onSnapshot(snap => {
+        const b = snap.data();
+        if (!b) return;
+        const suresiDolmus = !b.ucretsiz && b.erisimBitis && Date.now() > b.erisimBitis;
+        if (b.durum !== "onayli") {
+          pdrOdemeEkraniGizle();
+          pdrOnayEksikGizle();
+          pdrOnayEkraniGoster(b.durum);
+        } else if ((!b.ucretsiz && !b.odemeAlindi) || suresiDolmus) {
+          pdrOnayEkraniGizle();
+          pdrOnayEksikGizle();
+          pdrOdemeEkraniGoster();
+        } else if (!b.kosulOnay?.onaylandi) {
+          pdrOnayEkraniGizle();
+          pdrOdemeEkraniGizle();
+          pdrOnayEksikGoster(user.uid);
+        } else {
+          pdrOnayEkraniGizle();
+          pdrOdemeEkraniGizle();
+          pdrOnayEksikGizle();
+        }
+      });
+    }
+    pdrOnayEkraniGizle();
+    pdrOdemeEkraniGizle();
     pdrInaktiviteSifirla();
+
     await pdrSyncDown(user.uid);
     if (pdrFirstReady) { pdrFirstReady = false; pdrResolveReady(user); }
   } else {
+    if (pdrBasvuruUnsub) { pdrBasvuruUnsub(); pdrBasvuruUnsub = null; }
     if (splashEl) splashEl.className = "hide";
     if (pdrLoginOverlay) pdrLoginOverlay.style.display = "flex";
     if (pdrLogoutBtn) pdrLogoutBtn.style.display = "none";
+    pdrOnayEkraniGizle();
+    pdrOdemeEkraniGizle();
   }
 });
 
@@ -614,16 +916,47 @@ if (pdrLoginForm) {
     e.preventDefault();
     const email = document.getElementById("pdr-login-email").value.trim();
     const pass = document.getElementById("pdr-login-pass").value;
-    pdrLoginBtn.disabled = true;
-    pdrLoginBtn.textContent = "Giriş yapılıyor...";
+    const pass2 = pdrPass2.value;
     if (pdrLoginError) pdrLoginError.textContent = "";
+
+    if (pdrIsRegisterMode) {
+      if (pass.length < 6) {
+        pdrLoginError.textContent = "Şifre en az 6 karakter olmalı.";
+        return;
+      }
+      if (pass !== pass2) {
+        pdrLoginError.textContent = "Şifreler eşleşmiyor.";
+        return;
+      }
+      if (pdrTosCheckbox && !pdrTosCheckbox.checked) {
+        pdrLoginError.textContent = "Devam etmek için Kullanım Şartları'nı kabul etmeniz gerekiyor.";
+        return;
+      }
+    }
+
+    pdrLoginBtn.disabled = true;
+    pdrLoginBtn.textContent = pdrIsRegisterMode ? "Kayıt olunuyor..." : "Giriş yapılıyor...";
     try {
-      await pdrAuth.signInWithEmailAndPassword(email, pass);
+      if (pdrIsRegisterMode) {
+        const cred = await pdrAuth.createUserWithEmailAndPassword(email, pass);
+        if (cred && cred.user) {
+          await pdrDb.collection("basvurular").doc(cred.user.uid).set({
+            email: email, tarih: Date.now(), durum: "bekliyor", ucretsiz: false, odemeAlindi: false,
+            kosulOnay: { onaylandi: true, tarih: Date.now(), versiyon: "v1" }
+          });
+        }
+      } else {
+        await pdrAuth.signInWithEmailAndPassword(email, pass);
+      }
     } catch (err) {
-      if (pdrLoginError) pdrLoginError.textContent = "Giriş başarısız: e-posta veya şifre hatalı.";
+      let msg = pdrIsRegisterMode ? "Kayıt başarısız." : "Giriş başarısız: e-posta veya şifre hatalı.";
+      if (err && err.code === "auth/email-already-in-use") msg = "Bu e-posta zaten kayıtlı. Giriş yapmayı deneyin.";
+      if (err && err.code === "auth/weak-password") msg = "Şifre çok zayıf, en az 6 karakter kullanın.";
+      if (err && err.code === "auth/invalid-email") msg = "Geçersiz e-posta adresi.";
+      if (pdrLoginError) pdrLoginError.textContent = msg;
     }
     pdrLoginBtn.disabled = false;
-    pdrLoginBtn.textContent = "Giriş Yap";
+    pdrLoginBtn.textContent = pdrIsRegisterMode ? "Kayıt Ol" : "Giriş Yap";
   });
 }
 
@@ -657,7 +990,7 @@ if ("serviceWorker" in navigator) {
 window.storage = {
   get: async (key) => {
     try {
-      const v = localStorage.getItem("pdr__" + key);
+      const v = localStorage.getItem("rpusula__" + key);
       if (v !== null) return { key, value: v };
     } catch (e) { console.warn("Yerel okuma hatası:", key, e); }
     // Yerelde yoksa (örn. yeni cihaz, henüz senkronize olmadı) doğrudan buluttan dene
@@ -666,7 +999,7 @@ window.storage = {
     try {
       const bulutDeger = await pdrFirestoreOku(user.uid, key);
       if (bulutDeger !== null) {
-        try { localStorage.setItem("pdr__" + key, bulutDeger); } catch {}
+        try { localStorage.setItem("rpusula__" + key, bulutDeger); } catch {}
         return { key, value: bulutDeger };
       }
     } catch (e) { console.warn("Bulut okuma hatası:", key, e); }
@@ -675,7 +1008,7 @@ window.storage = {
   set: async (key, value) => {
     let yerelBasarili = true;
     try {
-      localStorage.setItem("pdr__" + key, value);
+      localStorage.setItem("rpusula__" + key, value);
     } catch (e) {
       yerelBasarili = false;
       console.warn("Yerel depolama dolu — bu cihazda kapasite doldu, sadece buluta yazılacak:", key, e);
@@ -687,7 +1020,7 @@ window.storage = {
     return yerelBasarili ? { key, value } : (user ? { key, value } : null);
   },
   delete: async (key) => {
-    localStorage.removeItem("pdr__" + key);
+    localStorage.removeItem("rpusula__" + key);
     const user = pdrAuth.currentUser;
     if (user) {
       pdrDb.collection("users").doc(user.uid).collection("data").doc(key).delete().catch(() => {});
@@ -699,8 +1032,8 @@ window.storage = {
     const keys = [];
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
-      if (k && k.startsWith("pdr__" + (prefix || ""))) {
-        keys.push(k.replace("pdr__", ""));
+      if (k && k.startsWith("rpusula__" + (prefix || ""))) {
+        keys.push(k.replace("rpusula__", ""));
       }
     }
     return { keys };
@@ -821,14 +1154,15 @@ function oogSonucHesapla(cevaplar) {
 }
 
 
-const PROF_HAKAN = "Sen Prof. Dr. Hakan'sin. Klinik psikoloji, cocuk-ergen psikiyatrisi, egitim psikolojisi, PDR, psikoterapi, norobiyoloji ve aile sistemleri alanlarinda 30 yillik akademik ve klinik deneyime sahip ust duzey bir supervizor ve akademisyensin. BDT, psikanalitik, humanistik, varoluşcu, sistem teorisi ve norobiyolojik perspektifleri entegre kullanırsın. Diger AI degerlendirmelerini de okuyarak butunsel klinik supervizyon sunarsın. ONEMLI: Degerlendirmeni yaptiktan sonra mutlaka vakayı daha iyi anlamak icin 2-3 adet derinlestirilmis soru sor. Bu sorular: danismanin dogrudan gozlemlemedigi bilgileri ortaya cikarmalı, ogrenci hakkinda kritik eksik bilgileri tamamlamalı, veya fark edilmemis bir boyutu aydınlatmalıdır. Sorularını 'DAHA İYİ ANLAYABİLMEK İÇİN SORULARIM:' basligi altında yaz. Turkce yaz, akademik ama anlasilir ol, Markdown kullanma. Ogrencinin en yuksek yararını on planda tut.";
 
-const LGS_KOCLUK = "Sen Dr. Ayse Kara'sin. 20 yillik klinik deneyime sahip PDR uzmani, psikolog ve ogrenci kocusun. BDT, baglanma teorisi ve gelisim psikolojisi perspektifinden analiz yaparsın. LGS PUAN REHBERI (2024 yaklasik): 85 ustu net = yuzde 1-5 = en iyi Anadolu Liseleri. 75-85 net = yuzde 5-15 = iyi Anadolu Liseleri. 60-75 net = yuzde 15-35 = orta-iyi Anadolu Liseleri. 45-60 net = yuzde 35-60 = Anadolu Liseleri. 30-45 net = yuzde 60-80 = Imam Hatip Anadolu. 30 alti = yuzde 80 ustu = Mahalle Lisesi veya Meslek Lisesi. CALISMA KOÇLUGU: Hata analizi yap o konulara yogunlas. Aralikli tekrar (1-3-7-30 gun). Aktif ogrenme: sorular coz ozetle. Kolay sorudan zora. BDT ile kaygı yonetimi. Deneme ortalamasina gore somut hedef okul turu belirt. Turkce yaz, sade ve anlasilir ol, markdown kullanma.";
 
 const EMPTY_SCORES = { akademik: 3, sosyal: 3, duygusal: 3, aile: 3, ozguven: 3, uyum: 3, kariyer: 3, akran: 3 };
 
 // ── API ───────────────────────────────────────────────────────────────────────
 
+// Kütüphaneye yüklenen kaynakların (klinik makale ya da yönetmelik) özetlerini
+// AI'a bağlam olarak eklemek için ortak yardımcı — Profil, Risk, Deneme ve
+// Müdahale planı AI önerilerinin hepsi bunu kullanır.
 function pdrKutuphaneBaglam(kutuphaneOzetleri = []) {
   return kutuphaneOzetleri.length > 0
     ? "\n\nKÜTÜPHANE REFERANSLARI:\n" + kutuphaneOzetleri.map((k, i) => `[${i+1}] ${k.baslik}${k.tur === "yonetmelik" ? " (Yönetmelik/Mevzuat)" : ""}:\n${k.ozet}`).join("\n\n")
@@ -858,66 +1192,24 @@ function kademeBaglamMetni(kademe) {
   return k ? `\n\nGELİŞİMSEL BAĞLAM (${k.ad}): ${k.baglam}` : "";
 }
 
+// AI'a gönderilen asıl talimatlar (prompt) artık tarayıcıda değil, Cloudflare
+// Worker'da — kod kopyalansa bile risk analizinin gerçek mantığı görünmez.
+// Client sadece ham veriyi Worker'a gönderir, kendi API anahtarını kullanarak.
+const PDR_AI_WORKER_URL = "https://rehber-pusula-ai.hakanhas1989.workers.dev";
 async function getRiskAnalizi(riskForm, gorusmeler, profil1, kutuphaneOzetleri = [], kademe = "", denemeOzet = null) {
-  const gorusmeBolum = gorusmeler.length > 0
-    ? "GÖRÜŞME NOTLARI:\n" + gorusmeler.map((r,i)=>`Görüşme ${i+1} (${r.date}): ${r.summary}`).join("\n\n")
-    : "Görüşme kaydı yok.";
-  const profilBolum = profil1
-    ? "PDR PROFİL PUANLARI:\n" + Object.entries(profil1.scores||{}).map(([k,v])=>`${k}: ${v}/5`).join(", ")
-    : "";
-  // Deneme özeti — öğrenci listesindeki otomatik risk rozetiyle AYNI veriye
-  // dayanır (deneme ortalaması + risk düzeyi). Amaç: özellikle "Akademik" risk
-  // türünde değerlendirmenin sadece görüşme notlarına değil, gerçek akademik
-  // performansa da dayanmasını sağlamak; ayrıca iki farklı sinyal (deneme vs.
-  // görüşme) birbirinden çok farklı bir tablo çiziyorsa bunu AI'ın fark edip
-  // açıkça belirtmesini sağlamak — danışman ekranda "Riskli" rozeti görüp,
-  // AI analizinde "Hafif" okuyunca kafası karışmasın.
-  const denemeBolum = denemeOzet
-    ? `DENEME/AKADEMİK DURUM:\nOrtalama: ${denemeOzet.ortalama}${denemeOzet.toplam?`/${denemeOzet.toplam}`:""}\nDeneme bazlı risk düzeyi: ${denemeOzet.risk || "belirsiz"} (kaynak: ${denemeOzet.kaynak})\n`
-    : "";
-  const kutuphaneBaglam = pdrKutuphaneBaglam(kutuphaneOzetleri);
-  const kademeMetni = kademeBaglamMetni(kademe);
-  const prompt = `Öğrenci: ${riskForm.studentName} (${riskForm.className})
-Risk Türü: ${riskForm.riskTuru}
-Öncelik: ${riskForm.oncelik}
-Açıklama: ${riskForm.aciklama}
-${kademeMetni}
-
-${gorusmeBolum}
-${profilBolum}
-${denemeBolum}${kutuphaneBaglam}
-
-Bu öğrencinin risk durumunu değerlendir:
-
-RİSK TÜRÜ: (Şu türlerden EN UYGUN birini seç — sadece türün adını yaz: Davranış / Akademik / Aile / Akran-Zorbalık / Duygusal / Devamsızlık / Öz Zarar / Sağlık / Madde Kullanımı / Teknoloji-Ekran Bağımlılığı / Ekonomik Güçlük / Yas-Kayıp / Travma / Özel Öğrenme Güçlüğü / Diğer)
-RİSK DÜZEYİ: (HAFİF / ORTA / YÜKSEK — net belirt. Deneme/akademik veri varsa bunu da hesaba kat, sadece görüşme notlarına dayanma.)
-RİSK DEĞERLENDİRMESİ: (Bu risk neden önemli, nasıl yorumlanmalı — 2-3 cümle. Deneme sonucu ile görüşme notlarının işaret ettiği tablo BİRBİRİNDEN BELİRGİN ŞEKİLDE FARKLIYSA — örn. deneme riski yüksek ama görüşme notu yoksa/hafifse, ya da tam tersi — bunu açıkça "Not: Deneme sonuçları ile görüşme notları farklı bir tablo çiziyor" diyerek belirt.)
-KORUYUCU FAKTÖRLER: (Öğrencinin güçlü yönleri ve koruyucu faktörler)
-ACİL MÜDAHALE GEREKTİRİR Mİ: (Evet/Hayır — gerekçesiyle)
-ÖNERİLEN ADIMLAR:
-1.
-2.
-3.
-
-TEKNOLOJİ/EKRAN BAĞIMLILIĞI TARAMASI: (Ana risk türünden bağımsız, HER ZAMAN yap — görüşme notlarında ekran/telefon/oyun kullanımına dair ipucu olsun ya da olmasın.) Önce şu klinik ölçütleri gözden geçir: (1) uyku düzeninde bozulma / geç saatlere kadar ekran başında kalma, (2) sosyal etkinliklerden veya yüz yüze arkadaşlıklardan çekilme, (3) akademik performansta gözle görülür düşüş, (4) ekran süresini azaltma girişimlerinde başarısızlık veya bu konuda huzursuzluk/öfke, (5) aile içi çatışmaların ekran kullanımı etrafında yoğunlaşması. Bu ölçütlere göre SADECE görüşme notlarında somut dayanak varsa değerlendirme yap; not yoksa ya da yetersizse "Yetersiz Veri" de, tahmin yürütme. Şu formatta yaz:
-BELİRTİ: (Var / Yok / Yetersiz Veri)
-GEREKÇE: (hangi ölçütlere ve görüşme notlarındaki hangi ifadelere dayandığını 1-2 cümlede belirt; "Yetersiz Veri" ise nedenini belirt)
-
-GÖRÜŞME NOTLARINDA TON/İÇERİK DEĞİŞİMİ: (En az 3 görüşme kaydı varsa yap; azsa "Yetersiz Veri — en az 3 görüşme gerekir" de.) İlk görüşmeler ile son görüşmeleri karşılaştır: dil, duygu durumu, konu içeriği belirgin şekilde kötüleşmiş mi (örn. önceden nötr/olumlu notlar sonradan sürekli olumsuz/içine kapanık/öfkeli bir tona dönüşmüş mü)? Şu formatta yaz:
-DEĞİŞİM: (Var / Yok / Yetersiz Veri)
-GEREKÇE: (somut hangi ifadelerin değiştiğini 1-2 cümlede belirt)
-
-${kademe ? "Değerlendirmeyi öğrencinin yaş/gelişim dönemine uygun şekilde yap. " : ""}${kutuphaneOzetleri.length > 0 ? "Kütüphane referanslarından (özellikle varsa yönetmelik/mevzuat maddelerinden) yararlan. " : ""}Sade, PDR diline uygun yaz. Markdown kullanma.`;
-
-  const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
-    method: "POST", headers: { "Content-Type": "application/json" },
+  const apiKey = pdrGetApiKey();
+  if (!apiKey) throw new Error("API_KEY_MISSING");
+  const res = await fetch(PDR_AI_WORKER_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "claude-sonnet-4-6", max_tokens: 2000,
-      system: "Sen Dr. Ayse Kara'sin — 20 yillik klinik deneyime sahip PDR uzmani ve psikologsun. BDT, baglanma teorisi, gelisim psikolojisi ve aile sistemleri perspektifinden risk degerlendirmesi yaparsın. Risk duzeyini net belirt: HAFIF (gunluk isleyisi minimal etkiliyor), ORTA (mudahale gerekiyor, takip sart), YUKSEK (acil mudahale, uzman yonlendirme gerekebilir).",
-      messages: [{ role: "user", content: prompt }]
-    })
+      action: "risk_analizi",
+      apiKey,
+      data: { riskForm, gorusmeler, profil1, kutuphaneOzetleri, kademe, denemeOzet },
+    }),
   });
   const data = await res.json();
+  if (data.error) throw new Error(data.error);
   return data.content?.[0]?.text || "";
 }
 
@@ -928,20 +1220,16 @@ async function getDenemeAnalizi(studentName, gorusmeler, denemeGirilen, kutuphan
   const gorusmeBolum = gorusmeler.length > 0
     ? "GORUSME NOTLARI:\n" + gorusmeler.map((r,i)=>`Gorusme ${i+1} (${r.date}${r.topic?", "+r.topic:""}): ${r.summary}`).join("\n\n")
     : "Gorusme kaydi yok.";
-
   const denemeBolum = denemeGirilen.length > 0
     ? "DENEME SONUCLARI:\n" + denemeGirilen.map(d=>{
         const dersMetni = dersListesi.map(ld=>`${ld.label.substring(0,3)}: ${parseFloat(d.nets?.[ld.key]||0).toFixed(1)}/${ld.maks}`).join(", ");
         return `D${d.no}: Toplam ${d.toplam.toFixed(1)}/${toplamSoru} — ${dersMetni}`;
       }).join("\n")
     : "Deneme verisi yok.";
-
   const avg = denemeGirilen.length > 0
     ? (denemeGirilen.reduce((s,d)=>s+d.toplam,0)/denemeGirilen.length).toFixed(1) : null;
   const trend = denemeGirilen.length > 1
     ? (denemeGirilen[denemeGirilen.length-1].toplam - denemeGirilen[0].toplam).toFixed(1) : null;
-
-  // En zayif ve guclu dersler
   let dersOrtalamalari = {};
   if (denemeGirilen.length > 0) {
     dersListesi.forEach(ld => {
@@ -954,57 +1242,40 @@ async function getDenemeAnalizi(studentName, gorusmeler, denemeGirilen, kutuphan
   const hedefSatiri = sinavTuru === "lgs"
     ? `HEDEF OKUL ARALIĞI: (Mevcut ${avg||"?"}/${toplamSoru} ortalamaya gore hangi liselere gidebilir — somut okul turu belirt)`
     : `HEDEF ÜNİVERSİTE/BÖLÜM ARALIĞI: (Mevcut ${avg||"?"}/${toplamSoru} ortalamaya gore hangi bölüm/üniversite düzeyine yönelebilir — somut belirt)`;
-
-  const prompt = `Ogrenci: ${studentName}
-${avg ? `Deneme Ortalamasi: ${avg}/${toplamSoru}` : ""}
-${trend ? `Trend: ${parseFloat(trend)>=0?"+":""}${trend} net (ilk denemeden son denemeye)` : ""}
-${dersSirali.length > 0 ? `Ders Ortalamalari: ${dersSirali.map(([k,v])=>`${k}: ${v}`).join(", ")}` : ""}
-
-${denemeBolum}
-
-${gorusmeBolum}${kutuphaneBaglam}
-
-${sinavAdi} hazirlik surecini kapsamli analiz et:
-
-AKADEMIK DURUM: (Genel net performansi ve yuzdelik dilim tahmini)
-${hedefSatiri}
-TREND ANALIZI: (Gelisim mi, gerileme mi, neden — psikolojik ve akademik acikla)
-DERS BAZLI ANALIZ: (En guclu ve en zayif dersler, zayif derslerde calisma onerisi)
-PSIKOLOJIK BAGLAY: (Gorusme notlarina gore akademik performansi etkileyen psikolojik faktorler)
-CALISMA PLANI:
-1. (Hangi derse kac saat — somut plan)
-2. (Deneme stratejisi)
-3. (Kaygı yonetimi / motivasyon)
-HEDEF: (Son denemeler icin gercekci hedef net ve hedef okul)
-
-${kutuphaneOzetleri.length > 0 ? "Kutuphane referanslarindan (varsa yonetmelik/mevzuat maddeleri dahil) yararlan. " : ""}Sade, somut, PDR ve ogr. koçlugu diline uygun yaz. Markdown kullanma.`;
-
-  const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
-    method: "POST", headers: { "Content-Type": "application/json" },
+  const apiKey = pdrGetApiKey();
+  if (!apiKey) throw new Error("API_KEY_MISSING");
+  const res = await fetch(PDR_AI_WORKER_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "claude-sonnet-4-6", max_tokens: 4000,
-      system: LGS_KOCLUK,
-      messages: [{ role: "user", content: prompt }]
-    })
+      action: "deneme_analizi",
+      apiKey,
+      data: {
+        studentName,
+        avg: avg ? `${avg}/${toplamSoru}` : null,
+        trend: trend ? `${parseFloat(trend)>=0?"+":""}${trend} net (ilk denemeden son denemeye)` : null,
+        dersSiraliText: dersSirali.length > 0 ? dersSirali.map(([k,v])=>`${k}: ${v}`).join(", ") : null,
+        denemeBolum, gorusmeBolum, kutuphaneBaglam, hedefSatiri, sinavAdi,
+      },
+    }),
   });
   const data = await res.json();
+  if (data.error) throw new Error(data.error);
   return data.content?.[0]?.text || "";
 }
 
 
 async function getScoresFromNotes(studentName, notlar) {
   const boyutlar = DIMENSIONS.map(d => d.key + " (" + d.label + ")").join(", ");
-  const prompt = "Ogrenci: " + studentName + "\n\nAsagidaki notlara dayanarak ogrenciyi 8 boyutta 1-5 arasinda puanla:\n" + boyutlar + "\n\n1=Cok Dusuk, 2=Dusuk, 3=Orta, 4=Iyi, 5=Cok Iyi. Notlarda bilgi yoksa 3 ver.\n\nNotlar:\n" + notlar + "\n\nSADECE su formatta JSON dondur:\n{\"akademik\":X,\"sosyal\":X,\"duygusal\":X,\"aile\":X,\"ozguven\":X,\"uyum\":X,\"kariyer\":X,\"akran\":X}";
-  const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+  const apiKey = pdrGetApiKey();
+  if (!apiKey) throw new Error("API_KEY_MISSING");
+  const res = await fetch(PDR_AI_WORKER_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-6", max_tokens: 200,
-      system: "Sen 20 yillik klinik deneyime sahip PDR uzmani Dr. Ayse Kara'sin. Gorusme notlarini analiz edip SADECE JSON formatinda puan dondur. Baska hicbir sey yazma.",
-      messages: [{ role: "user", content: prompt }],
-    }),
+    body: JSON.stringify({ action: "scores_from_notes", apiKey, data: { studentName, notlar, boyutlar } }),
   });
   const data = await res.json();
+  if (data.error) return { ...EMPTY_SCORES };
   const text = data.content?.[0]?.text || "{}";
   try {
     const clean = text.replace(/```json|```/g, "").trim();
@@ -1028,131 +1299,60 @@ async function getP2Analiz({ studentName, className, sinavlar, d2, ilgiler, kari
     if (!isNaN(vo)) return `${d.label}: ${vo}/100`;
     return null;
   }).filter(Boolean).join(", ");
-
   const d2Metni = d2 && (d2.TN || d2.TN_E) ? `D2 Dikkat Testi: TN=${d2.TN||"—"}, E1=${d2.E1||"—"}, E2=${d2.E2||"—"}, TN-E=${d2.TN_E||"—"}, E%=${d2.E_yuzde||"—"}, PR=${d2.PR||"—"}` : "";
-
   const denemeBolum = denemeGirilen && denemeGirilen.length > 0
     ? "DENEME SONUCLARI:\n" + denemeGirilen.map(d => {
         const dersMetni2 = dersListesi.map(ld => `${ld.label.substring(0,3)}: ${parseFloat(d.nets?.[ld.key]||0).toFixed(1)}`).join(", ");
         return `D${d.no}: ${d.toplam.toFixed(1)}/${toplamSoru} (${dersMetni2})`;
       }).join("\n")
     : "";
-
   const avg = denemeGirilen && denemeGirilen.length > 0
     ? (denemeGirilen.reduce((s,d)=>s+d.toplam,0)/denemeGirilen.length).toFixed(1)
     : null;
-
-  const prompt = `Ogrenci: ${studentName}${className ? `, Sinif: ${className}` : ""}
-${gorusmeler ? "\nGORUSME NOTLARI:\n" + gorusmeler : ""}
-YAZILI SINAV PUANLARI: ${dersMetni || "Girilmemis"}
-${d2Metni}
-${denemeBolum}
-${avg ? `Deneme Ortalamasi: ${avg}/90` : ""}
-Ilgi Alanlari: ${ilgiler?.join(", ") || "Belirtilmemis"}
-Kariyer Hedefi: ${kariyer_hedef || "Belirtilmemis"}
-Aile Notu: ${aile_notu || "Yok"}
-
-Bu ogrencinin akademik ve dikkat profil analizini yap:
-
-AKADEMIK DURUM: (yazili sinav puanlarina gore guclu/zayif dersler, genel akademik profil)
-DIKKAT PROFİLİ: ${d2Metni ? "(D2 sonuclarini yorumla — TN psikomotor hiz, E1 secici dikkat, TN-E performans, E% hata orani, PR yuzdelik. Dikkat destegi gerekip gerekmedigini belirt)" : "(D2 verisi girilmemis)"}
-DENEME ANALİZİ: ${avg ? `(Deneme ortalamasi ${avg}/90 — LGS hedef okul araligini belirt, gidebilecegi liseleri soylet, trend varsa yorum yap)` : "(Deneme verisi yok)"}
-İLGİ-KARİYER UYUMU: (ilgi alanlari ile kariyer hedefi arasindaki uyum)
-LGS CALISMA ONERISI: (ders bazli somut calisma stratejisi, hangi derse ne kadar agirlik verilmeli)
-ONERILER:
-1. (Akademik destek)
-2. (Psikolojik destek)  
-3. (Aile/cevre onerisi)
-
-Sade, PDR diline uygun, somut yaz. Markdown kullanma.`;
-
-  const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
-    method: "POST", headers: { "Content-Type": "application/json" },
+  const apiKey = pdrGetApiKey();
+  if (!apiKey) throw new Error("API_KEY_MISSING");
+  const res = await fetch(PDR_AI_WORKER_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "claude-sonnet-4-6", max_tokens: 4000,
-      system: LGS_KOCLUK,
-      messages: [{ role: "user", content: prompt }]
-    })
+      action: "p2_analiz",
+      apiKey,
+      data: { studentName, className, gorusmeler, dersMetni, d2Metni, denemeBolum, avg, ilgiler: ilgiler?.join(", "), kariyer_hedef, aile_notu },
+    }),
   });
   const data = await res.json();
+  if (data.error) throw new Error(data.error);
   return data.content?.[0]?.text || "";
 }
 
 
 
 async function getAISummary(rawText) {
-  const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+  const apiKey = pdrGetApiKey();
+  if (!apiKey) throw new Error("API_KEY_MISSING");
+  const res = await fetch(PDR_AI_WORKER_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-6", max_tokens: 1000,
-      system: `Sen Dr. Ayse Kara'sin - 20 yillik klinik deneyime sahip, okul psikolojik danismanligi alaninda uzmanlasmis bir psikolog ve PDR uzmanisin. Bilissel Davranisci Terapi (BDT) temel yonelimindir: otomatik dusunceler, bilissel carpitmalar, sema teorisi, davranissal aktivasyon ve maruz birakma tekniklerini klinik pratikte ustaca kullanirsin. Baglanma teorisi (Bowlby, Ainsworth), aile sistemleri terapisi (Minuchin, Bowen) ve gelisim psikolojisi (Piaget, Vygotsky, Erikson) perspektifinden bireyi cevresiyle birlikte degerlendirirsin. Sosyolojide Bourdieu'nun habitus ve kulturel sermaye kavramlari, Giddens'in yapilasmasi ve sosyal tabakalasmanin psikolojik etkilerini Turkiye baglaminda okursun: aile baskisi, toplumsal cinsiyet rolleri, sinav odakli egitimin cocuk uzerindeki yukunu sosyolojik zemine oturtursun. Felsefi temetin: Frankl anlam terapisi, Sartre sorumluluk etigi, Stoa kontrol alani, fenomenolojinin oznel deneyim odagi. Uslubun: yargilamayan, merak eden, guclu yonlere odaklanan, somut ve uygulanabilir oneriler sunan, Turkce yazan, PDR diline hakim bir klinisyen.
-
-GOREV - GORUSME NOTU OZETI: Danismanin anlattigi gorusme notunu kisa ve net ozete donustur. Basliklar (sadece ilgililer): Ogrenci durumu (BDT: bilissel-duygusal-davranissal oruntu), Gorusmede one cikan (baglanma, otomatik dusunceler, stres-basa cikma, sosyal dinamikler, varolussel temalar), Yapilan/planlanan, Takip notu. Max 5-6 cumle. Sade PDR dili. JSON veya markdown kullanma.
-
-Ozetin en sonuna, AYRI bir satirda, su formatta bir hatirlatma tespiti ekle (bu, ozetin bir parcasi degil, ayri islenecek):
----HATIRLATMA---
-(Notta belirli bir tarih/sure icinde yapilacak somut bir takip, randevu, tekrar gorusme, kontrol varsa bunu KISA bir cumleyle yaz - ornek: "3 gun sonra tekrar gorusulecek" ya da "Bugun saat 14:00'te hastane randevusu var". Boyle bir sey YOKSA sadece "Yok" yaz. Tahmin yurutme, sadece notta ACIKCA belirtilen bir tarih/sure/randevu varsa yaz.)`,
-      messages: [{ role: "user", content: rawText }],
-    }),
+    body: JSON.stringify({ action: "ai_summary", apiKey, data: { rawText } }),
   });
   const data = await res.json();
+  if (data.error) throw new Error(data.error);
   return data.content?.[0]?.text || "";
 }
 
 async function getProfileAnalysis(studentName, className, scores, notes, kutuphaneOzetleri = []) {
   const boyutlar = DIMENSIONS.map(d => `${d.label}: ${scores[d.key] || 0}/5`).join(", ");
-  const kutuphaneBaglam = kutuphaneOzetleri.length > 0
-    ? "\n\nKÜTÜPHANE REFERANSLARI:\n" + kutuphaneOzetleri.map((k, i) => `[${i+1}] ${k.baslik}:\n${k.ozet}`).join("\n\n")
-    : "";
+  const kutuphaneBaglam = pdrKutuphaneBaglam(kutuphaneOzetleri);
   const onerilerNot = kutuphaneOzetleri.length > 0 ? ", kütüphane referanslarından yararlan" : "";
-  const prompt = `Öğrenci: ${studentName}, Sınıf: ${className}
-Rehberlik Profil Puanları (1-5): ${boyutlar}
-${notes ? `Ek notlar: ${notes}` : ""}${kutuphaneBaglam}
-
-Bu öğrencinin PDR profil analizini yaz. Şu yapıyı kullan:
-GÜÇLÜ YÖNLER: (yüksek puan alan boyutlar hakkında 1-2 cümle)
-GELİŞİM ALANLARI: (düşük puan alan boyutlar hakkında 1-2 cümle)
-ÖNERİLER: (danışman olarak yapılabilecek 2-3 somut öneri${onerilerNot})
-RİSK NOTU: (varsa dikkat edilmesi gereken bir şey, yoksa "Belirgin risk faktörü gözlemlenmedi" yaz)
-
-Sade, profesyonel ve PDR diline uygun yaz. Markdown veya JSON kullanma.`;
-  const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+  const apiKey = pdrGetApiKey();
+  if (!apiKey) throw new Error("API_KEY_MISSING");
+  const res = await fetch(PDR_AI_WORKER_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-6", max_tokens: 2000,
-      system: `Sen Dr. Ayse Kara'sin - 20 yillik klinik deneyime sahip PDR uzmani ve psikologsun. BDT (otomatik dusunceler, sema teorisi, maruz birakma), baglanma teorisi (Bowlby), aile sistemleri (Minuchin), gelisim psikolojisi (Erikson, Vygotsky), Bourdieu sosyolojisi, Frankl anlam terapisi ve Stoa felsefesi perspektifinden degerlendirir; somut, uygulanabilir PDR onerileri sunarsın. Yargilamayan, guclu yonlere odaklanan, Turkce yazan bir klinisyensin.
-
-COK KAYNAKLI CERCEVE:
-
-BOYUT-TEORİ EŞLEŞTİRMESİ:
-- Akademik Gelişim → Bandura'nın Öz-Yeterlilik Teorisi, Vygotsky'nin Yakınsak Gelişim Alanı
-- Sosyal Beceriler → Sosyal Öğrenme Teorisi, Goleman'ın Duygusal Zeka Modeli
-- Duygusal Denge → Duygu Düzenleme Teorisi (Gross), Lazarus'un Stres-Başa Çıkma Modeli
-- Aile İlişkileri → Bowlby'nin Bağlanma Teorisi, Bronfenbrenner'in Ekolojik Sistem Teorisi
-- Öz Güven → Adler'in Bireysel Psikoloji, Maslow'un İhtiyaçlar Hiyerarşisi
-- Okul Uyumu → MEB Okul Rehberlik Hizmetleri Yönergesi, Ekosistem uyum modeli
-- Kariyer Farkındalığı → Super'in Kariyer Gelişim Teorisi, Holland'ın RIASEC Modeli
-- Akran İlişkileri → Sullivan'ın Kişilerarası Teori, Sosyometri (Moreno)
-
-MEB OKUL REHBERLİK ÇERÇEVESİ:
-- Bireysel farkındalık ve kendini tanıma kazanımları
-- Sosyal-duygusal öğrenme becerileri
-- Akademik gelişim ve öğrenme stratejileri
-- Kariyer gelişimi ve yaşam becerileri
-- Aile ve çevre ilişkileri
-
-Analiz yaparken:
-1. Her boyutu ilgili teorik çerçeveden yorumla
-2. MEB rehberlik kazanımlarına atıfta bulun
-3. Kütüphane kaynakları varsa öncelikli referans olarak kullan
-4. Öneri yaparken teorik temeli belirt (örn. "Bandura'nın öz-yeterlilik yaklaşımına göre...")
-5. Pratik ve uygulanabilir öneriler ver`,
-      messages: [{ role: "user", content: prompt }],
-    }),
+    body: JSON.stringify({ action: "profil_analiz", apiKey, data: { studentName, className, boyutlar, notes, kutuphaneBaglam, onerilerNot } }),
   });
   const data = await res.json();
+  if (data.error) throw new Error(data.error);
   return data.content?.[0]?.text || "";
 }
 
@@ -1165,7 +1365,7 @@ async function storageKapasite() {
     let total = 0;
     for (let i=0; i<localStorage.length; i++) {
       const k = localStorage.key(i);
-      if (k && k.startsWith("pdr__")) total += (localStorage.getItem(k)||"").length * 2;
+      if (k && k.startsWith("rpusula__")) total += (localStorage.getItem(k)||"").length * 2;
     }
     const mb = (total/1024/1024).toFixed(2);
     return { used: parseFloat(mb), limit: 5, yuzde: Math.round((parseFloat(mb)/5)*100) };
@@ -1294,6 +1494,12 @@ async function loadRehberGorunduMu() {
 async function saveRehberGorunduMu() {
   try { await window.storage.set("pdr-rehber-gorundu", "1"); } catch(e) { console.warn(e); }
 }
+async function loadKvkkBildirimGorunduMu() {
+  try { const r = await window.storage.get("pdr-kvkk-bildirim-gorundu"); return r ? r.value === "1" : false; } catch { return false; }
+}
+async function saveKvkkBildirimGorunduMu() {
+  try { await window.storage.set("pdr-kvkk-bildirim-gorundu", "1"); } catch(e) { console.warn(e); }
+}
 async function loadAktifYil() {
   try { const r = await window.storage.get("pdr-aktif-yil"); return r ? r.value : "2026-2027"; } catch { return "2026-2027"; }
 }
@@ -1325,6 +1531,12 @@ async function loadHatirlatmalar() {
 }
 async function saveHatirlatmalar(items) {
   try { await window.storage.set("pdr-hatirlatmalar", JSON.stringify(items)); } catch(e) { console.warn(e); }
+}
+async function loadNetHaritasi() {
+  try { const r = await window.storage.get("pdr-net-haritasi"); return r ? JSON.parse(r.value) : []; } catch { return []; }
+}
+async function saveNetHaritasi(items) {
+  try { await window.storage.set("pdr-net-haritasi", JSON.stringify(items)); } catch(e) { console.warn(e); }
 }
 
 async function loadHazirlikNotlari() {
@@ -1461,29 +1673,12 @@ async function pdfMetinCikar(file) {
     reader.onload = async (e) => {
       const base64 = e.target.result.split(",")[1];
       try {
-        const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+        const apiKey = pdrGetApiKey();
+        if (!apiKey) throw new Error("API_KEY_MISSING");
+        const res = await fetch(PDR_AI_WORKER_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: "claude-sonnet-4-6",
-            max_tokens: 1000,
-            system: `Sen Dr. Ayse Kara'sin - 20 yillik klinik deneyime sahip PDR uzmani ve psikologsun. BDT (otomatik dusunceler, sema teorisi, maruz birakma), baglanma teorisi (Bowlby), aile sistemleri (Minuchin), gelisim psikolojisi (Erikson, Vygotsky), Bourdieu sosyolojisi, Frankl anlam terapisi ve Stoa felsefesi perspektifinden degerlendirir; somut, uygulanabilir PDR onerileri sunarsın. Yargilamayan, guclu yonlere odaklanan, Turkce yazan bir klinisyensin.
-
-GOREV - PDF ANALIZI: Yuklenen belgeden cikar:
-1. KAYNAK BİLGİSİ: Yazar, başlık, yıl (varsa)
-2. ANA TEMALAR: Belgede işlenen başlıca konular (madde madde)
-3. PDR AÇISINDAN ÖNEMLİ NOKTALAR: Okul psikolojik danışmanlığı için kullanılabilecek teori, model veya yaklaşımlar
-4. ANAHTAR KAVRAMLAR: Önemli terimler ve kısa açıklamaları
-
-Maksimum 400 kelime. Sade ve yapılandırılmış yaz. JSON veya markdown kullanma.`,
-            messages: [{
-              role: "user",
-              content: [
-                { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } },
-                { type: "text", text: "Bu belgeyi PDR perspektifinden analiz et ve özetle." }
-              ]
-            }]
-          })
+          body: JSON.stringify({ action: "pdf_analiz", apiKey, data: { pdfBase64: base64 } }),
         });
         const data = await res.json();
         resolve(data.content?.[0]?.text || "Metin çıkarılamadı.");
@@ -1504,33 +1699,15 @@ async function getDegerlendirmeAnalysis(studentName, className, cevaplar, notlar
     const p = degBoyutPuan(cevaplar, b.key);
     return `${DIMENSIONS.find(d => d.key === b.key)?.label}: ${p ?? "?"}/5`;
   }).join(", ");
-
-  const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+  const apiKey = pdrGetApiKey();
+  if (!apiKey) throw new Error("API_KEY_MISSING");
+  const res = await fetch(PDR_AI_WORKER_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-6", max_tokens: 2000,
-      system: `Sen Dr. Ayse Kara'sin - 20 yillik klinik deneyime sahip PDR uzmani ve psikologsun. BDT (otomatik dusunceler, sema teorisi, maruz birakma), baglanma teorisi (Bowlby), aile sistemleri (Minuchin), gelisim psikolojisi (Erikson, Vygotsky), Bourdieu sosyolojisi, Frankl anlam terapisi ve Stoa felsefesi perspektifinden degerlendirir; somut, uygulanabilir PDR onerileri sunarsın. Yargilamayan, guclu yonlere odaklanan, Turkce yazan bir klinisyensin.
-
-DEGERLENDIRME CERCEVESI:
-
-BOYUT-TEORİ EŞLEŞTİRMESİ:
-- Akademik Gelişim → Bandura öz-yeterlilik, Vygotsky yakınsak gelişim alanı
-- Sosyal Beceriler → Goleman duygusal zeka, Sosyal öğrenme teorisi
-- Duygusal Denge → Gross duygu düzenleme, Lazarus stres-başa çıkma
-- Aile İlişkileri → Bowlby bağlanma teorisi, Bronfenbrenner ekolojik sistem
-- Öz Güven → Adler bireysel psikoloji, Maslow ihtiyaçlar hiyerarşisi
-- Okul Uyumu → MEB rehberlik yönergesi, Ekosistem uyum modeli
-- Kariyer Farkındalığı → Super kariyer gelişim, Holland RIASEC modeli
-- Akran İlişkileri → Sullivan kişilerarası teori, Moreno sosyometri
-
-MEB OKUL REHBERLİK ÇERÇEVESİ: Bireysel farkındalık, sosyal-duygusal öğrenme, akademik gelişim, kariyer gelişimi, aile-çevre ilişkileri kazanımları.
-
-Analiz yaparken: Her boyutu ilgili teorik çerçeveden yorumla, hangi teoriden baktığını belirt, MEB kazanımlarına atıfta bulun, pratik ve uygulanabilir öneriler ver. Markdown veya JSON kullanma.`,
-      messages: [{ role: "user", content: `Öğrenci: ${studentName}${className ? `, Sınıf: ${className}` : ""}\nPuan Özeti: ${puanOzet}\n\n${boyutMetni}\n\nBu öğrencinin PDR analizini şu yapıda yaz:\nGENEL DEĞERLENDİRME: (öğrencinin genel profilini teorik perspektiften 2-3 cümle)\nGÜÇLÜ YÖNLER: (hangi teoriye göre güçlü olduğunu belirt)\nGELİŞİM ALANLARI: (hangi teorik çerçeveden müdahale önerilebileceğini belirt)\nÖNERİLER: (teorik temelli 3 somut öneri, kaynağını belirt)\nRİSK NOTU: (varsa teorik dayanaklı risk değerlendirmesi)` }],
-    }),
+    body: JSON.stringify({ action: "degerlendirme_analiz", apiKey, data: { studentName, className, puanOzet, boyutMetni } }),
   });
   const data = await res.json();
+  if (data.error) throw new Error(data.error);
   return data.content?.[0]?.text || "";
 }
 
@@ -1924,6 +2101,37 @@ function aniDegisimHesapla(ogr, records, riskListesi, sevkler, denemeler, testKa
   return { sinyalSayisi: sinyaller.length, sinyaller };
 }
 
+
+// Eğitim yılı Eylül'de başlar — erişim kesin bitiş tarihi 31 Ağustos (yaz
+// boyunca kullanım kesilmez, yenileme sadece bir sonraki eğitim yılı
+// başlarken/Eylül'de gerekir). Kim ne zaman katılırsa katılsın erişimi aynı
+// tarihte biter, ödeme ise sadece kalan aya göre orantılı alınır.
+function pdrEgitimYiliBitisi(tarihMs = Date.now()) {
+  const d = new Date(tarihMs);
+  const ay = d.getMonth(); // 0=Ocak ... 8=Eylül ... 11=Aralık
+  const yil = d.getFullYear();
+  if (ay >= 8) return new Date(yil + 1, 7, 31, 23, 59, 59).getTime(); // Eylül-Aralık → gelecek yıl 31 Ağustos
+  return new Date(yil, 7, 31, 23, 59, 59).getTime(); // Ocak-Ağustos → bu takvim yılının 31 Ağustos'u
+}
+function pdrKalanAySayisi(tarihMs = Date.now()) {
+  const bitis = pdrEgitimYiliBitisi(tarihMs);
+  const gun = Math.max(0, Math.ceil((bitis - tarihMs) / (1000*60*60*24)));
+  return Math.max(0, Math.ceil(gun / 30));
+}
+// Aylık lisans ücreti — tam yıl fiyatının (600 TL) 10 ay (Eylül-Haziran) üzerinden
+// eşdeğeri. Bu değişirse tek yerden güncellenir.
+const PDR_AYLIK_UCRET = 60;
+// Ücretlendirilen ay sayısı — pdrKalanAySayisi'nden FARKLI: erişim Ağustos sonuna
+// kadar uzatılmış olsa da (yaz bonus/ücretsiz), ÜCRET sadece Eylül-Haziran'ın 10 ayı
+// üzerinden hesaplanır. Temmuz-Ağustos'ta katılan biri hâlihazırda gelecek eğitim
+// yılının tam 10 ayını (+ bu yazı bonus olarak) ödüyor sayılır.
+function pdrUcretlendirmeAySayisi(tarihMs = Date.now()) {
+  const d = new Date(tarihMs);
+  const ay = d.getMonth(); // 0=Ocak ... 8=Eylül ... 11=Aralık
+  if (ay >= 8) return 10 - (ay - 8); // Eylül→10, Ekim→9 ... Aralık→7
+  if (ay <= 5) return 6 - ay; // Ocak→6, Şubat→5 ... Haziran→1
+  return 10; // Temmuz-Ağustos (yaz) → gelecek eğitim yılının tam ücreti
+}
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
 
 // 150+ öğrencilik bir okulda aynı isimde birden fazla öğrenci olması olası
@@ -2884,7 +3092,6 @@ function Profile2Card({ p, onDelete }) {
 
 // ── Öğrenci Yönetim Bileşeni ─────────────────────────────────────────────────
 
-// ── Testler Bileşeni ──────────────────────────────────────────────────────────
 // Program hiçbir testi UYGULAMAZ — sadece danışmanın başka bir ortamda uyguladığı
 // standart test/envanterlerin kaydını tutar. Bazı testler (özellikle zeka
 // testleri) yalnızca lisanslı psikolog tarafından uygulanabilir; bu liste sadece
@@ -3220,29 +3427,16 @@ function MudahalePlanEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, mud
     const notlar = ogrRec.map((r,i) => `Görüşme ${i+1} (${r.date}): ${r.summary}`).join("\n\n");
     const kutuphaneBaglam = pdrKutuphaneBaglam(kutuphane);
     const kademeMetni = kademeBaglamMetni(kademe);
-    const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
-      method:"POST", headers:{"Content-Type":"application/json"},
+    const apiKey = pdrGetApiKey();
+    if (!apiKey) { setAiLoading(false); return; }
+    const res = await fetch(PDR_AI_WORKER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model:"claude-sonnet-4-6", max_tokens:1500,
-        system:"Sen Dr. Ayse Kara'sin — 20 yillik klinik PDR uzmanisin. BDT ve varoluşçu perspektiften somut müdahale plani olusturursun.",
-        messages:[{role:"user", content:`Öğrenci: ${seciliAd}
-${kademeMetni}
-
-Görüşme Notları:
-${notlar||"Henüz görüşme notu yok."}${kutuphaneBaglam}
-
-Bu öğrenci için somut bir PDR müdahale planı oluştur:
-
-HEDEF: (tek cümle, ölçülebilir)
-MÜDAHALE ADIMLARI:
-1.
-2.
-3.
-SÜRE: (kaç hafta/ay)
-KONTROL KRİTERİ: (nasıl değerlendireceğiz)
-
-${kademe ? "Planı öğrencinin yaş/gelişim dönemine uygun şekilde oluştur. " : ""}${kutuphane?.length > 0 ? "Kütüphane referanslarından (varsa ilgili yönetmelik/mevzuat maddeleri dahil) yararlan. " : ""}Sade yaz, Markdown kullanma.`}]
-      })
+        action: "mudahale_plani",
+        apiKey,
+        data: { studentName: seciliAd, notlar, kademeMetni, kutuphaneBaglam, kademe, kutuphaneVarMi: kutuphane?.length > 0 },
+      }),
     });
     const data = await res.json();
     const analiz = data.content?.[0]?.text || "";
@@ -3371,6 +3565,12 @@ ${kademe ? "Planı öğrencinin yaş/gelişim dönemine uygun şekilde oluştur.
   );
 }
 
+// ── Hatırlatıcı Bileşeni ─────────────────────────────────────────────────────
+// Amaç: "3 gün sonra görüşülecek", "bugün hastane randevusu var" gibi takip
+// edilmesi gereken şeyleri unutmamak. İki kaynaktan gelir: danışmanın elle
+// eklediği (manuel) ya da AI'ın görüşme notunu özetlerken fark edip önerdiği
+// (AI önerisi, danışman onaylarsa eklenir — AI kendiliğinden hiçbir şey
+// eklemez, karar her zaman danışmanda kalır).
 // Bugünle hedef tarih arasındaki gün farkını hesaplar (saat farkını yok
 // sayarak, sadece takvim günü bazında) — negatifse gecikmiş demektir.
 function pdrKalanGunHesapla(tarihStr) {
@@ -3738,6 +3938,223 @@ function HatirlaticiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, hati
   );
 }
 
+// ── Net Haritası Bileşeni ────────────────────────────────────────────────────
+// Amaç: deneme sonuç belgelerini (PDF) yükleyip, AI'ın ders VE kazanım/konu
+// bazında hangi konularda eksik olduğunu otomatik çıkarmasını sağlamak. Mevcut
+// "Deneme" sekmesindeki basit ders-bazlı net takibinden farklı — burada asıl
+// değer, her kazanımın S/D/Y/B% detayını görebilmek. AI'ın PDF'ten çıkardığı
+// veri, kaydedilmeden ÖNCE danışmana gösterilir — okuma hataları olabileceği
+// için onay/düzeltme adımı zorunlu, AI hiçbir şeyi kendiliğinden kaydetmez.
+function NetHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, netHaritasiKayitlari, setNetHaritasiKayitlari }) {
+  const [seciliAd, setSeciliAd] = useState(aktifOgrenci?.name || "");
+  const [ogrenciArama, setOgrenciArama] = useState("");
+  const [yukleniyor, setYukleniyor] = useState(false);
+  const [taslak, setTaslak] = useState(null);
+  const [detayAcikId, setDetayAcikId] = useState(null);
+
+  useEffect(() => {
+    if (aktifOgrenci?.name) setSeciliAd(aktifOgrenci.name);
+    else setSeciliAd("");
+  }, [aktifOgrenci?.name]);
+
+  const seciliOgr = kayitliListesi.find(o => o.name === seciliAd);
+  const seciliSinif = seciliOgr?.className || aktifOgrenci?.className || "";
+  const seciliNumara = seciliOgr?.numara || aktifOgrenci?.numara || "";
+
+  const ogrKayitlar = (netHaritasiKayitlari||[]).filter(k => k.studentName === seciliAd).sort((a,b) => pdrTarihMs(b.tarih) - pdrTarihMs(a.tarih));
+
+  async function handlePdfSec(file) {
+    if (!file || !seciliAd) return;
+    setYukleniyor(true);
+    try {
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = e => resolve(e.target.result.split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const apiKey = pdrGetApiKey();
+      if (!apiKey) throw new Error("Önce Ayarlar'dan API anahtarını gir.");
+      const res = await fetch(PDR_AI_WORKER_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "net_haritasi_cikar", apiKey, data: { pdfBase64: base64 } }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      const text = data.content?.[0]?.text || "{}";
+      const temiz = text.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(temiz);
+      if (!parsed.dersler || parsed.dersler.length === 0) throw new Error("Belgeden ders verisi çıkarılamadı — belge formatı desteklenmiyor olabilir.");
+      setTaslak(parsed);
+    } catch (e) {
+      alert("PDF okunamadı: " + e.message);
+    }
+    setYukleniyor(false);
+  }
+
+  async function handleTaslakKaydet() {
+    if (!taslak || !seciliAd) return;
+    const yeni = {
+      id: uid(), studentName: seciliAd, className: seciliSinif, numara: seciliNumara,
+      tarih: today(), denemeAdi: taslak.denemeAdi || "", dersler: taslak.dersler || []
+    };
+    const guncel = [yeni, ...(netHaritasiKayitlari||[])];
+    setNetHaritasiKayitlari(guncel);
+    await saveNetHaritasi(guncel);
+    setTaslak(null);
+  }
+
+  function taslakSayiGuncelle(dersIdx, konuIdx, alan, deger) {
+    setTaslak(t => {
+      const yeni = { ...t, dersler: t.dersler.map((d, i) => i !== dersIdx ? d : {
+        ...d,
+        ...(konuIdx === null ? { [alan]: deger } : {}),
+        konular: konuIdx === null ? d.konular : d.konular.map((k, j) => j !== konuIdx ? k : { ...k, [alan]: deger })
+      })};
+      return yeni;
+    });
+  }
+
+  async function handleKayitSil(id) {
+    const guncel = (netHaritasiKayitlari||[]).filter(k => k.id !== id);
+    setNetHaritasiKayitlari(guncel);
+    await saveNetHaritasi(guncel);
+  }
+
+  const inp = { width:"100%", padding:"9px 11px", border:`1px solid ${BORDER}`, borderRadius:9, fontSize:13, boxSizing:"border-box" };
+
+  return (
+    <div style={{ padding: 16, maxWidth: 640 }}>
+      <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 4, color:PURPLE }}>🎯 Net Haritası</div>
+      <div style={{ fontSize: 12, color: MUTED, marginBottom: 16, lineHeight: 1.5 }}>
+        Deneme sonuç belgesini (PDF) yükle — AI, ders ve kazanım bazında hangi konularda eksik olduğunu otomatik çıkarır. Deneme sekmesindeki ders-bazlı net takibi ayrı, bu konu-seviyesinde ek bir analiz.
+      </div>
+
+      {/* Öğrenci seçimi */}
+      {seciliAd ? (
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", background:PURPLE, border:`1px solid ${PURPLE}`, borderRadius:10, padding:"8px 12px", marginBottom:16 }}>
+          <div style={{ fontSize:13, fontWeight:700, color:"#fff" }}>👤 {seciliAd}{seciliSinif?` — ${seciliSinif}`:""}</div>
+          <button onClick={() => { setSeciliAd(""); setAktifOgrenci({ name:"", className:"" }); setOgrenciArama(""); setTaslak(null); }} style={{
+            background:"rgba(255,255,255,0.2)", border:"1px solid #fff", color:"#fff", borderRadius:8, padding:"3px 9px", fontSize:11, fontWeight:600, cursor:"pointer"
+          }}>✕ Değiştir</button>
+        </div>
+      ) : (
+        <>
+          <input value={ogrenciArama} onChange={e=>setOgrenciArama(e.target.value)} placeholder="Öğrenci ara… (en az 2 karakter)" style={{...inp, marginBottom:8}} />
+          {ogrenciArama.trim().length >= 2 && (
+            <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:16 }}>
+              {kayitliListesi.filter(o =>
+                o.name.toLocaleLowerCase("tr").includes(ogrenciArama.toLocaleLowerCase("tr")) ||
+                o.className?.toLocaleLowerCase("tr").includes(ogrenciArama.toLocaleLowerCase("tr"))
+              ).slice(0,20).map(o => (
+                <button key={pdrOgrAnahtar(o.name, o.className, o.numara)} onClick={() => { setSeciliAd(o.name); setAktifOgrenci({ name:o.name, className:o.className||"" }); setOgrenciArama(""); }} style={{
+                  padding:"5px 12px", borderRadius:20, border:`2px solid ${BORDER}`, background:"#fff", color:MUTED, fontSize:12, fontWeight:500, cursor:"pointer"
+                }}>{o.name}{o.className?` · ${o.className}`:""}</button>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* PDF yükleme */}
+      {seciliAd && !taslak && (
+        <label style={{ display:"block", width:"100%", padding:18, background:"#fff", border:`2px dashed ${PURPLE}`, borderRadius:12, textAlign:"center", color:PURPLE, fontWeight:700, cursor:"pointer", marginBottom:20, boxSizing:"border-box" }}>
+          {yukleniyor ? "⏳ PDF okunuyor, konu bazlı veri çıkarılıyor… (biraz sürebilir)" : "📄 Deneme Sonuç Belgesi Yükle (PDF)"}
+          <input type="file" accept="application/pdf" onChange={e => handlePdfSec(e.target.files?.[0])} style={{ display:"none" }} disabled={yukleniyor} />
+        </label>
+      )}
+
+      {/* AI'ın çıkardığı taslak — onay bekliyor */}
+      {taslak && (
+        <div style={{ background:"#FFF8E7", border:"1px solid #F0D68A", borderRadius:12, padding:14, marginBottom:20 }}>
+          <div style={{ fontSize:13, fontWeight:800, color:"#B07D1A", marginBottom:4 }}>⚠️ AI Çıkardı — Kaydetmeden Önce Kontrol Et</div>
+          <div style={{ fontSize:11, color:"#B07D1A", marginBottom:10 }}>Sayılar yanlışsa aşağıdan düzeltebilirsin. Sadece yanlış yapılan kazanımlar listeleniyor (tümünü görmek istersen "Tüm Konular"a bas).</div>
+          {taslak.denemeAdi && <div style={{ fontSize:12, fontWeight:700, marginBottom:10 }}>📋 {taslak.denemeAdi}</div>}
+          {taslak.dersler.map((ders, di) => (
+            <div key={di} style={{ marginBottom:10, background:"#fff", borderRadius:8, padding:10 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+                <div style={{ fontWeight:800, fontSize:13 }}>{ders.ders}</div>
+                <div style={{ fontSize:11, color:MUTED }}>Soru:
+                  <input type="number" value={ders.soru} onChange={e=>taslakSayiGuncelle(di,null,"soru",parseFloat(e.target.value)||0)} style={{ width:36, marginLeft:3, marginRight:6, border:`1px solid ${BORDER}`, borderRadius:4, fontSize:11 }} />
+                  D:<input type="number" value={ders.dogru} onChange={e=>taslakSayiGuncelle(di,null,"dogru",parseFloat(e.target.value)||0)} style={{ width:32, marginLeft:2, marginRight:6, border:`1px solid ${BORDER}`, borderRadius:4, fontSize:11 }} />
+                  Y:<input type="number" value={ders.yanlis} onChange={e=>taslakSayiGuncelle(di,null,"yanlis",parseFloat(e.target.value)||0)} style={{ width:32, marginLeft:2, marginRight:6, border:`1px solid ${BORDER}`, borderRadius:4, fontSize:11 }} />
+                  Net:<input type="number" value={ders.net} onChange={e=>taslakSayiGuncelle(di,null,"net",parseFloat(e.target.value)||0)} style={{ width:40, marginLeft:2, border:`1px solid ${BORDER}`, borderRadius:4, fontSize:11 }} />
+                </div>
+              </div>
+              {(ders.konular||[]).filter(k => k.yanlis > 0).length > 0 && (
+                <div style={{ fontSize:11 }}>
+                  {ders.konular.filter(k => k.yanlis > 0).map((k, kiOrig) => {
+                    const ki = ders.konular.indexOf(k);
+                    return (
+                      <div key={ki} style={{ padding:"5px 0", borderTop:"1px solid #F0F0F0", color: k.basari < 50 ? "#C0392B" : TEXT }}>
+                        {k.kazanim} — <b>{k.dogru}/{k.soru}</b> (%{k.basari})
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {(ders.konular||[]).length === 0 && <div style={{ fontSize:11, color:MUTED }}>Bu ders için kazanım detayı bulunamadı.</div>}
+            </div>
+          ))}
+          <div style={{ display:"flex", gap:8, marginTop:10 }}>
+            <button onClick={handleTaslakKaydet} style={{ flex:1, padding:11, background:PURPLE, color:"#fff", border:"none", borderRadius:10, fontWeight:800, fontSize:13, cursor:"pointer" }}>✓ Doğru, Kaydet</button>
+            <button onClick={()=>setTaslak(null)} style={{ padding:11, background:"none", border:`1px solid ${BORDER}`, color:MUTED, borderRadius:10, fontWeight:700, fontSize:13, cursor:"pointer" }}>İptal</button>
+          </div>
+        </div>
+      )}
+
+      {/* Geçmiş yüklenen belgeler */}
+      {seciliAd && ogrKayitlar.length > 0 && (
+        <div>
+          <label style={{ fontSize:11, fontWeight:600, color:MUTED, display:"block", marginBottom:8 }}>YÜKLENEN BELGELER ({ogrKayitlar.length})</label>
+          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+            {ogrKayitlar.map(k => {
+              const acik = detayAcikId === k.id;
+              const toplamYanlisKonu = (k.dersler||[]).reduce((s,d) => s + (d.konular||[]).filter(x=>x.yanlis>0).length, 0);
+              return (
+                <div key={k.id} style={{ background:CARD, border:`1px solid ${BORDER}`, borderRadius:10, padding:"10px 12px" }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer" }} onClick={()=>setDetayAcikId(acik?null:k.id)}>
+                    <div>
+                      <div style={{ fontSize:13, fontWeight:700 }}>{k.denemeAdi || "Deneme"} <span style={{ fontWeight:400, color:MUTED }}>· {k.tarih}</span></div>
+                      <div style={{ fontSize:11, color:MUTED, marginTop:2 }}>{(k.dersler||[]).length} ders · {toplamYanlisKonu} zayıf konu</div>
+                    </div>
+                    <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                      <span style={{ fontSize:11, color:PURPLE }}>{acik?"▲":"▼"}</span>
+                      <button onClick={(e)=>{e.stopPropagation(); handleKayitSil(k.id);}} style={{ background:"none", border:"none", color:"#C0392B", fontSize:13, cursor:"pointer" }}>🗑</button>
+                    </div>
+                  </div>
+                  {acik && (
+                    <div style={{ marginTop:10, borderTop:`1px solid ${BORDER}`, paddingTop:10 }}>
+                      {(k.dersler||[]).map((ders, di) => (
+                        <div key={di} style={{ marginBottom:10 }}>
+                          <div style={{ fontSize:12, fontWeight:700, marginBottom:4 }}>{ders.ders} — {ders.dogru}/{ders.soru} (Net: {ders.net})</div>
+                          {(ders.konular||[]).filter(x=>x.yanlis>0).length === 0 ? (
+                            <div style={{ fontSize:11, color:"#1A8C5B" }}>✓ Zayıf konu yok</div>
+                          ) : (
+                            <div style={{ fontSize:11 }}>
+                              {ders.konular.filter(x=>x.yanlis>0).map((x,xi) => (
+                                <div key={xi} style={{ padding:"3px 0", color: x.basari < 50 ? "#C0392B" : TEXT }}>• {x.kazanim} (%{x.basari})</div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      {seciliAd && ogrKayitlar.length === 0 && !taslak && (
+        <div style={{ fontSize:12, color:MUTED }}>Bu öğrenci için henüz Net Haritası kaydı yok.</div>
+      )}
+    </div>
+  );
+}
+
 // ── Sevk Takip Bileşeni ───────────────────────────────────────────────────────
 function SevkTakipEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, sevkler, setSevkler }) {
   const [aramaMetni, setAramaMetni] = useState("");
@@ -3895,22 +4312,12 @@ Başlıca Görüşme Konuları: ${topKonular.map(([k,v])=>k+": "+v).join(", ")}
 Risk Türleri: ${Object.entries(riskTurleri).map(([k,v])=>k+": "+v).join(", ")}
     `.trim();
 
-    const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
-      method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({
-        model:"claude-sonnet-4-6", max_tokens:2000,
-        system:"Sen okul PDR danismanisın. MEB formatinda, resmi ve özlü dönem sonu raporu yazarsın.",
-        messages:[{role:"user", content:`${istatistik}
-
-Bu istatistiklere dayalı MEB formatında dönem sonu PDR faaliyet raporu yaz. Şu bölümleri içersin:
-1. GENEL DEĞERLENDİRME
-2. BİREYSEL GÖRÜŞMELER
-3. RİSK DEĞERLENDİRMESİ
-4. SEVK VE YÖNLENDİRME
-5. ÖNERİLER
-
-Resmi dil kullan, Markdown kullanma.`}]
-      })
+    const apiKey = pdrGetApiKey();
+    if (!apiKey) { setAiLoading(false); return; }
+    const res = await fetch(PDR_AI_WORKER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "meb_donem_raporu", apiKey, data: { istatistik } }),
     });
     const data = await res.json();
     setAiRapor(data.content?.[0]?.text || "");
@@ -4010,18 +4417,16 @@ function VeliMektubu({ kayitliListesi, aktifOgrenci, records }) {
       bildirim:"Öğrenci hakkında acil durum/risk bildirimi mektubu",
       tesekkur:"Veli iş birliği için teşekkür mektubu"
     };
-    const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
-      method:"POST", headers:{"Content-Type":"application/json"},
+    const apiKey = pdrGetApiKey();
+    if (!apiKey) { setAiLoading(false); return; }
+    const res = await fetch(PDR_AI_WORKER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model:"claude-sonnet-4-6", max_tokens:1500,
-        system:"Sen okul PDR danismanisın. MEB resmi yazı formatında, sade ve profesyonel veli mektupları yazarsın.",
-        messages:[{role:"user", content:`Öğrenci: ${seciliAd}
-Mektup Tipi: ${tipler[mektupTipi]}
-Görüşme Özeti:
-${ozet||"Henüz görüşme yok."}
-
-MEB resmi yazı formatında veli mektubu yaz. T.C. başlığı, tarih, konu, sayın velimiz hitabı, içerik ve imza bölümü olsun. Markdown kullanma.`}]
-      })
+        action: "veli_mektubu",
+        apiKey,
+        data: { studentName: seciliAd, mektupTipiAciklama: tipler[mektupTipi], ozet },
+      }),
     });
     const data = await res.json();
     setMektup(data.content?.[0]?.text || "");
@@ -4245,27 +4650,16 @@ function OzetKarti({ ogrenci, ogrenciSinif, ogrRec, ogrP1, ogrP2, ogrRisk, denem
       : "";
     const deneme = denemeAvg ? `Deneme Ortalaması: ${denemeAvg}/90` : "";
 
-    const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
-      method:"POST", headers:{"Content-Type":"application/json"},
+    const apiKey = pdrGetApiKey();
+    if (!apiKey) { setHazirlikAiLoading(false); return; }
+    const res = await fetch(PDR_AI_WORKER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model:"claude-sonnet-4-6", max_tokens:1000,
-        system:"Sen Dr. Ayse Kara'sin — 20 yillik klinik PDR uzmanisin. Danismana bir sonraki seans icin pratik hazirlik notu yazarsın.",
-        messages:[{role:"user", content:`Öğrenci: ${ogrenci}
-${gorusmeler}
-${mudahaleBolum}
-${risk}
-${deneme}
-
-Bu öğrenciyle bir sonraki görüşme için seans hazırlık notu yaz:
-
-ÖNCEKİ SEANSLARDAN ÖZET: (en önemli 2-3 nokta)
-TAKİP EDİLMESİ GEREKENLER: (son görüşmede kalan konular)
-BU SEANSTA ODAKLANILACAKLAR: (somut 2-3 madde)
-SORULACAK SORULAR: (açıcı, terapötik sorular)
-DİKKAT EDİLECEKLER: (öğrenciye özel hassas noktalar)
-
-Kısa ve pratik yaz, Markdown kullanma.`}]
-      })
+        action: "seans_hazirlik",
+        apiKey,
+        data: { ogrenci, gorusmeler, mudahaleBolum, risk, deneme },
+      }),
     });
     const data = await res.json();
     setHazirlikNotu(data.content?.[0]?.text || "");
@@ -4297,9 +4691,9 @@ Kısa ve pratik yaz, Markdown kullanma.`}]
               {label:"Aktif Risk",val:ogrRisk.length>0?"⚠ Var":"✓",color:ogrRisk.length>0?"#C0392B":"#1A8C5B"},
               {label:"Müdahale",val:ogrMudahale.length>0?ogrMudahale.length+" aktif":"—",color:ogrMudahale.length>0?PURPLE:MUTED},
             ].map(c=>(
-              <div key={c.label} style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:10,padding:"10px",textAlign:"center"}}>
-                <div style={{fontSize:18,fontWeight:900,color:c.color}}>{c.val}</div>
-                <div style={{fontSize:10,color:MUTED}}>{c.label}</div>
+              <div key={c.label} style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:14,padding:"16px 10px",textAlign:"center"}}>
+                <div style={{fontSize:26,fontWeight:900,color:c.color,letterSpacing:-0.5}}>{c.val}</div>
+                <div style={{fontSize:11,color:MUTED,fontWeight:600,marginTop:2}}>{c.label}</div>
               </div>
             ))}
           </div>
@@ -4641,41 +5035,16 @@ function IlerlemeYazisi({ ogrenci, ogrenciSinif, ogrRec, ogrP1, denemeGirilen, i
       ? "DENEME NETLERI: " + denemeGirilen.map(d => `D${d.no}: ${d.toplam.toFixed(1)}`).join(", ")
       : "";
 
-    const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
-      method:"POST", headers:{"Content-Type":"application/json"},
+    const apiKey = pdrGetApiKey();
+    if (!apiKey) { setLoading(false); return; }
+    const res = await fetch(PDR_AI_WORKER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model:"claude-sonnet-4-6", max_tokens:2000,
-        system:"Sen Dr. Ayse Kara'sin — 20 yillik klinik PDR uzmanisin. BDT, baglanma teorisi ve varoluşçu perspektiften seans süreci değerlendirmesi yazarsın. Gelişmeleri somut ve destekleyici dille aktarırsın.",
-        messages:[{role:"user", content:`Öğrenci: ${ogrenci}
-
-SEANS GEÇMİŞİ (kronolojik):
-${seanslar}
-
-${profilBolum}
-${denemeBolum}
-
-Bu öğrencinin seans süreci boyunca gösterdiği ilerlemeyi kapsamlı değerlendir:
-
-GENEL İLERLEME DEĞERLENDİRMESİ:
-(Süreç boyunca gözlemlenen genel değişim ve gelişme)
-
-OLUMLU GELİŞMELER:
-(Seanslar arasında öne çıkan somut iyileşmeler, güçlenen alanlar, kazanılan beceriler)
-
-SEANS ARASI FARK:
-(İlk seanstan bu yana ne değişti, hangi konularda dönüşüm yaşandı)
-
-DEVAM EDEN ÇALIŞMA ALANLARI:
-(Hâlâ gelişim gerektiren, üzerinde çalışılmaya devam edilecek konular)
-
-GÜÇLÜ YÖNLERİ:
-(Öğrencinin terapötik süreçteki güç kaynakları, koruyucu faktörler)
-
-GENEL GÖRÜŞ:
-(Süreç hakkında kısa ve destekleyici genel değerlendirme)
-
-Sade, klinik ama sıcak bir dil kullan. Markdown kullanma.`}]
-      })
+        action: "seans_degerlendirme",
+        apiKey,
+        data: { ogrenci, seanslar, profilBolum, denemeBolum },
+      }),
     });
     const data = await res.json();
     setYazi(data.content?.[0]?.text || "");
@@ -4720,395 +5089,364 @@ Sade, klinik ama sıcak bir dil kullan. Markdown kullanma.`}]
 }
 
 
-// ── Prof. Dr. Hakan Süpervizyon Bileşeni ─────────────────────────────────────
-function ProfDanismaEkrani({
-  kayitliListesi, aktifOgrenci, records, profiles, profiles2,
-  denemeler, riskListesi, mudahalePlan, sevkler,
-  hazirlikNotlari, ilerlemeNotlari, profNotlari, setProfNotlari
-}) {
-  const [seciliAd, setSeciliAd] = useState(aktifOgrenci?.name || "");
-  const [aramaMetni, setAramaMetni] = useState("");
-  const [soru, setSoru] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [mod, setMod] = useState("genel"); // genel | soru
+// ── Ayarlar Ekranı (kendi Anthropic API anahtarı) ─────────────────
+function PdrToggle({ checked, onChange, color, label }) {
+  return (
+    <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+      <span
+        onClick={() => onChange(!checked)}
+        style={{
+          position: "relative", width: 38, height: 22, borderRadius: 999, flexShrink: 0,
+          background: checked ? color : "#d7dbd9", transition: "background 0.2s ease",
+        }}
+      >
+        <span style={{
+          position: "absolute", top: 2, left: checked ? 18 : 2, width: 18, height: 18,
+          borderRadius: "50%", background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+          transition: "left 0.2s ease",
+        }} />
+      </span>
+      <span style={{ fontSize: 11, fontWeight: 700, color: checked ? color : MUTED }}>{label}</span>
+    </label>
+  );
+}
 
-  useEffect(() => { if (aktifOgrenci?.name) setSeciliAd(aktifOgrenci.name); }, [aktifOgrenci?.name]);
+function KullaniciOnaylari() {
+  const [basvurular, setBasvurular] = useState([]);
+  const [yukleniyor, setYukleniyor] = useState(true);
 
-  const seciliSinif = kayitliListesi.find(o => o.name === seciliAd)?.className || aktifOgrenci?.className || "";
-  const ogrKonusma = pdrSozlukOku(profNotlari, seciliAd, seciliSinif) || [];
+  // Liste canlı — bir kullanıcının onay durumu değiştiğinde ekran otomatik güncellenir.
+  useEffect(() => {
+    const unsub = window.pdrDb.collection("basvurular").onSnapshot(snap => {
+      const liste = [];
+      snap.forEach(doc => liste.push({ uid: doc.id, ...doc.data() }));
+      liste.sort((a, b) => (b.tarih || 0) - (a.tarih || 0));
+      setBasvurular(liste);
+      setYukleniyor(false);
+    }, e => { console.log("Onay listesi yüklenemedi:", e); setYukleniyor(false); });
+    return () => unsub();
+  }, []);
 
-  function tumVeriHazirla(ad, sinif) {
-    const adLower = ad.toLocaleLowerCase("tr").trim();
-    const ogrRec = records.filter(r => pdrAyniOgrenci(r.studentName, r.className, ad, sinif));
-    const ogrP1 = profiles.find(p => pdrAyniOgrenci(p.studentName, p.className, ad, sinif));
-    const ogrP2 = profiles2.find(p => pdrAyniOgrenci(p.studentName, p.className, ad, sinif));
-    const ogrDen = pdrSozlukOku(denemeler, ad, sinif) || {};
-    const ogrRisk = riskListesi.filter(r => pdrAyniOgrenci(r.studentName, r.className, ad, sinif) && !r.kapandi);
-    const ogrMud = (pdrSozlukOku(mudahalePlan, ad, sinif) || []).filter(p => p.durum === "Devam Ediyor");
-    const ogrSevk = sevkler.filter(s => pdrAyniOgrenci(s.studentName, s.className, ad, sinif));
-    const ogrHazirlik = pdrSozlukOku(hazirlikNotlari, ad, sinif) || "";
-    const ogrIlerleme = pdrSozlukOku(ilerlemeNotlari, ad, sinif) || "";
-
-    const denemeGirilen = Object.entries(ogrDen).sort((a,b)=>a[0]-b[0]).map(([no,nets])=>({
-      no:parseInt(no), nets,
-      toplam: dersler.reduce((s,d)=>s+(parseFloat(nets[d.key])||0),0)
-    }));
-    const denemeAvg = denemeGirilen.length > 0
-      ? (denemeGirilen.reduce((s,d)=>s+d.toplam,0)/denemeGirilen.length).toFixed(1) : null;
-
-    return `
-ÖĞRENCİ: ${ad}
-
-GÖRÜŞME GEÇMİŞİ (${ogrRec.length} görüşme):
-${ogrRec.map((r,i)=>`Seans ${i+1} (${r.date}, ${r.meetingType||"Öğrenci"}): ${r.summary}`).join("\n") || "Yok"}
-
-
-PROFİL 1 — PSİKOSOSYAL BOYUTLAR:
-${ogrP1?.scores ? DIMENSIONS.map(d=>`${d.label}: ${ogrP1.scores[d.key]||0}/5`).join(", ") : "Girilmemiş"}
-${ogrP1?.analiz ? `PDR Analizi: ${ogrP1.analiz}` : ""}
-
-PROFİL 2 — AKADEMİK:
-${ogrP2?.sinavlar ? DERSLER.map(d=>`${d.label}: 1.Yazılı ${ogrP2.sinavlar[d.key+"1"]||"-"}, 2.Yazılı ${ogrP2.sinavlar[d.key+"2"]||"-"}`).join(", ") : "Girilmemiş"}
-${ogrP2?.d2 ? `D2 Dikkat: TN=${ogrP2.d2.TN||"-"}, E%=${ogrP2.d2.E_yuzde||"-"}, PR=${ogrP2.d2.PR||"-"}` : ""}
-${ogrP2?.kariyer_hedef ? `Kariyer Hedefi: ${ogrP2.kariyer_hedef}` : ""}
-
-DENEME SONUÇLARI:
-${denemeGirilen.length > 0 ? `Ortalama: ${denemeAvg}/90
-${denemeGirilen.map(d=>`D${d.no}: ${d.toplam.toFixed(1)}/90`).join(", ")}` : "Girilmemiş"}
-
-AKTİF RİSKLER (${ogrRisk.length}):
-${ogrRisk.map(r=>`${r.oncelik} - ${r.riskTuru}: ${r.aciklama} ${r.aiAnaliz||""}`).join("\n") || "Yok"}
-
-
-
-AKTİF MÜDAHALE PLANLARI:
-${ogrMud.map(p=>`Hedef: ${p.hedef} | Süre: ${p.sure||"-"}`).join("\n") || "Yok"}
-
-
-SEVK KAYITLARI:
-${ogrSevk.map(s=>`${s.tarih} - ${s.sevkYeri}: ${s.sevkNedeni} [${s.sonucBekleniyor?"Bekliyor":"Tamamlandi"}]`).join("\n") || "Yok"}
-
-
-DR. AYŞE KARA'NIN DEĞERLENDİRMELERİ:
-Seans Hazırlık Notu: ${ogrHazirlik || "Henüz oluşturulmamış"}
-İlerleme Değerlendirmesi: ${ogrIlerleme || "Henüz oluşturulmamış"}
-    `.trim();
+  async function guncelle(uid, fields) {
+    await window.pdrDb.collection("basvurular").doc(uid).update(fields);
+    setBasvurular(list => list.map(b => b.uid === uid ? { ...b, ...fields } : b));
   }
 
-  async function handleGenel() {
-    if (!seciliAd) return;
-    setLoading(true);
-    const veri = tumVeriHazirla(seciliAd, seciliSinif);
-    const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
-      method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({
-        model:"claude-sonnet-4-6", max_tokens:4000,
-        system: PROF_HAKAN,
-        messages:[{role:"user", content:`${veri}
-
-Bu öğrencinin tüm verilerini ve Dr. Ayşe Kara'nın değerlendirmelerini inceleyerek kapsamlı bir klinik süpervizyon raporu yaz:
-
-KLİNİK İZLENİM:
-(Öğrencinin genel psikolojik profili, güçlü ve zayıf yanları)
-
-DR. AYŞE KARA DEĞERLENDİRMELERİNİN SÜPERVİZYONU:
-(Yapılan değerlendirmeleri üst düzey perspektiften yorumla, eksik veya dikkat edilmesi gereken noktaları belirt)
-
-ENTEGRATİF ANALİZ:
-(Tüm veriler bir arada ne anlatıyor — akademik, duygusal, sosyal, ailesel boyutlar arası etkileşim)
-
-KRİTİK GÖZLEMLER:
-(Gözden kaçmış olabilecek önemli noktalar, uyarılar)
-
-ÖNERİLEN YAKLAŞIM:
-(Bundan sonraki süreçte PDR danışmanına öneriler — teorik temel ve pratik adımlar)
-
-UZUN VADELİ PROGNOZ:
-(Mevcut gidişatla ne beklenebilir, nasıl önlenebilir veya desteklenebilir)
-
-Akademik ama sıcak, yapıcı bir dil kullan. Markdown kullanma.`}]
-      })
-    });
-    const data = await res.json();
-    const cevap = data.content?.[0]?.text || "";
-    const yeniKayit = { id: uid(), tarih: today(), tip: "genel", soru: "Genel Süpervizyon", cevap };
-    const updated = pdrSozlukYaz(profNotlari, seciliAd, seciliSinif, [yeniKayit, ...(pdrSozlukOku(profNotlari, seciliAd, seciliSinif)||[])]);
-    setProfNotlari(updated);
-    await saveProfNotlari(updated);
-    setLoading(false);
-  }
-
-  async function handleSoru() {
-    if (!seciliAd || !soru.trim()) return;
-    setLoading(true);
-    const veri = tumVeriHazirla(seciliAd, seciliSinif);
-    const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
-      method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({
-        model:"claude-sonnet-4-6", max_tokens:3000,
-        system: PROF_HAKAN,
-        messages:[{role:"user", content:`${veri}
-
-DANIŞMANIN SORUSU: ${soru}
-
-Bu soruyu tüm verileri ve Dr. Ayşe Kara'nın değerlendirmelerini göz önünde bulundurarak yanıtla. Akademik derinlikte ama pratik ve uygulanabilir bir yanıt ver. Yanıtının sonunda gerekli görürsen 1-2 adet takip sorusu sor — 'TAKIP SORULARIM:' başlığı altında. Markdown kullanma.`}]
-      })
-    });
-    const data = await res.json();
-    const cevap = data.content?.[0]?.text || "";
-    const yeniKayit = { id: uid(), tarih: today(), tip: "soru", soru, cevap };
-    const updated = pdrSozlukYaz(profNotlari, seciliAd, seciliSinif, [yeniKayit, ...(pdrSozlukOku(profNotlari, seciliAd, seciliSinif)||[])]);
-    setProfNotlari(updated);
-    await saveProfNotlari(updated);
-    setSoru("");
-    setLoading(false);
-  }
-
-  const inp = { width:"100%", padding:"9px 11px", border:`1px solid ${BORDER}`, borderRadius:9, fontSize:13, background:CARD, color:TEXT, outline:"none", boxSizing:"border-box", fontFamily:"inherit" };
+  const renkler = {
+    bekliyor: { bg: "#FDF6E3", color: "#B07D1A", label: "⏳ Bekliyor" },
+    onayli: { bg: "#E6F5EE", color: "#1A8C5B", label: "✓ Onaylı" },
+    reddedildi: { bg: "#FDECEA", color: "#C0392B", label: "🚫 Reddedildi" },
+  };
 
   return (
     <div>
-      {/* Başlık */}
-      <div style={{background:"linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)", borderRadius:12, padding:"14px 16px", marginBottom:14, color:"#fff"}}>
-        <div style={{fontSize:10, opacity:0.7, textTransform:"uppercase", letterSpacing:1, marginBottom:4}}>Klinik Süpervizyon</div>
-        <div style={{fontSize:18, fontWeight:900}}>Prof. Dr. Hakan</div>
-        <div style={{fontSize:11, opacity:0.8, marginTop:2}}>Klinik Psikoloji · Çocuk-Ergen Psikiyatrisi · Eğitim Psikolojisi · PDR</div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <div style={{ fontSize: 15, fontWeight: 800, color: TEXT }}>🛠 Kullanıcı Onayları</div>
+        <span style={{ fontSize: 11, fontWeight: 700, color: "#1A8C5B", display: "flex", alignItems: "center", gap: 5 }}>
+          <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#2ECC71" }} /> Canlı
+        </span>
       </div>
 
-      {/* Öğrenci seç */}
-      <input placeholder="Öğrenci ara..." value={aramaMetni} onChange={e=>setAramaMetni(e.target.value)} style={{...inp, marginBottom:8}} />
-      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:14}}>
-        {kayitliListesi.filter(o=>o.name.toLocaleLowerCase("tr").includes(aramaMetni.toLocaleLowerCase("tr"))).slice(0,15).map(o=>{
-          const s=seciliAd===o.name;
-          return <button key={pdrOgrAnahtar(o.name, o.className, o.numara)} onClick={()=>setSeciliAd(o.name)} style={{padding:"4px 10px",borderRadius:16,border:`2px solid ${s?"#1a1a2e":BORDER}`,background:s?"#1a1a2e":CARD,color:s?"#fff":MUTED,fontSize:11,fontWeight:s?700:500,cursor:"pointer"}}>{o.name}</button>;
-        })}
-      </div>
-
-      {seciliAd && (
-        <>
-          {/* Mod seç */}
-          <div style={{display:"flex",gap:8,marginBottom:14}}>
-            <button onClick={()=>setMod("genel")} style={{flex:1,padding:"10px",borderRadius:10,border:`2px solid ${mod==="genel"?"#1a1a2e":BORDER}`,background:mod==="genel"?"#1a1a2e":CARD,color:mod==="genel"?"#fff":MUTED,fontSize:13,fontWeight:700,cursor:"pointer"}}>
-              📊 Genel Süpervizyon
-            </button>
-            <button onClick={()=>setMod("soru")} style={{flex:1,padding:"10px",borderRadius:10,border:`2px solid ${mod==="soru"?"#1a1a2e":BORDER}`,background:mod==="soru"?"#1a1a2e":CARD,color:mod==="soru"?"#fff":MUTED,fontSize:13,fontWeight:700,cursor:"pointer"}}>
-              💬 Soru Sor
-            </button>
-          </div>
-
-          {/* Genel süpervizyon */}
-          {mod === "genel" && (
-            <button onClick={handleGenel} disabled={loading} style={{
-              width:"100%", padding:"13px", marginBottom:14,
-              background:loading?"#666":"#1a1a2e",
-              color:"#fff", border:"none", borderRadius:12, fontSize:14, fontWeight:800, cursor:"pointer"
-            }}>
-              {loading ? "⏳ Prof. Dr. Hakan değerlendiriyor..." : "🎓 Tüm Verileri Değerlendir"}
-            </button>
-          )}
-
-          {/* Soru sor */}
-          {mod === "soru" && (
-            <div style={{marginBottom:14}}>
-              <textarea
-                placeholder="Prof. Dr. Hakan'a sorunuzu yazın...&#10;Örn: Bu öğrencide kaygıyı nasıl ele almalıyım?&#10;Örn: Aile görüşmesinde ne söylemeliyim?&#10;Örn: Risk değerlendirmesi doğru mu?"
-                value={soru}
-                onChange={e=>setSoru(e.target.value)}
-                rows={4}
-                style={{...inp, resize:"vertical", marginBottom:8}}
-              />
-              <button onClick={handleSoru} disabled={!soru.trim()||loading} style={{
-                width:"100%", padding:"12px",
-                background:soru.trim()&&!loading?"#1a1a2e":BORDER,
-                color:soru.trim()&&!loading?"#fff":MUTED,
-                border:"none", borderRadius:10, fontSize:14, fontWeight:800, cursor:"pointer"
-              }}>
-                {loading ? "⏳ Yanıtlanıyor..." : "💬 Soruyu Gönder"}
-              </button>
-            </div>
-          )}
-
-          {/* Konuşma geçmişi */}
-          {ogrKonusma.length > 0 && (
-            <div>
-              <div style={{fontSize:11,fontWeight:700,color:MUTED,textTransform:"uppercase",marginBottom:10}}>
-                Süpervizyon Geçmişi ({ogrKonusma.length})
-              </div>
-              {ogrKonusma.map((k,i) => (
-                <div key={k.id} style={{
-                  background:CARD, border:`1px solid ${BORDER}`,
-                  borderLeft:"4px solid #1a1a2e",
-                  borderRadius:10, padding:14, marginBottom:12
-                }}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                    <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                      <span style={{background:"#1a1a2e",color:"#fff",borderRadius:20,padding:"2px 10px",fontSize:10,fontWeight:700}}>
-                        {k.tip === "genel" ? "📊 Genel Süpervizyon" : "💬 Soru-Cevap"}
-                      </span>
-                      <span style={{fontSize:10,color:MUTED}}>{k.tarih}</span>
-                    </div>
-                    <button onClick={async()=>{
-                      const updated = pdrSozlukYaz(profNotlari, seciliAd, seciliSinif, (pdrSozlukOku(profNotlari, seciliAd, seciliSinif)||[]).filter(x=>x.id!==k.id));
-                      setProfNotlari(updated);await saveProfNotlari(updated);
-                    }} style={{background:"none",border:"none",color:MUTED,cursor:"pointer",fontSize:12}}>✕</button>
+      {yukleniyor ? (
+        <div style={{ textAlign: "center", color: MUTED, marginTop: 30, fontSize: 13 }}>Yükleniyor...</div>
+      ) : basvurular.length === 0 ? (
+        <div style={{ textAlign: "center", color: MUTED, marginTop: 30, fontSize: 13 }}>Henüz başvuru yok.</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {basvurular.map(b => {
+            const durumStil = renkler[b.durum] || renkler.bekliyor;
+            return (
+              <div key={b.uid} style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 10, padding: "12px 14px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: TEXT }}>{b.email}</div>
+                    <div style={{ fontSize: 11, color: MUTED }}>{b.tarih ? new Date(b.tarih).toLocaleDateString("tr-TR") : ""}</div>
+                    {b.kosulOnay?.onaylandi ? (
+                      <div style={{ fontSize: 10, color: "#1A8C5B", marginTop: 2 }}>
+                        ✓ Kullanım Şartları onaylandı — {new Date(b.kosulOnay.tarih).toLocaleDateString("tr-TR")}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 10, color: "#B07D1A", marginTop: 2 }}>⚠ Onay kaydı yok (eski kayıt)</div>
+                    )}
+                    {b.durum === "onayli" && b.erisimBitis && (
+                      <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>
+                        📅 Erişim bitişi: {new Date(b.erisimBitis).toLocaleDateString("tr-TR")}
+                        {!b.ucretsiz && ` · Erişim kalan: ${pdrKalanAySayisi(Date.now())} ay`}
+                      </div>
+                    )}
+                    {!b.ucretsiz && !b.odemeAlindi && (
+                      <div style={{ fontSize: 11, color: "#3B4FD8", marginTop: 2, fontWeight: 700 }}>
+                        💰 Önerilen tutar: {pdrUcretlendirmeAySayisi(Date.now()) * PDR_AYLIK_UCRET} TL ({pdrUcretlendirmeAySayisi(Date.now())} ay × {PDR_AYLIK_UCRET} TL)
+                      </div>
+                    )}
                   </div>
-                  {k.tip === "soru" && (
-                    <div style={{fontSize:12,fontWeight:700,color:"#1a1a2e",marginBottom:8,background:"#f0f0f8",borderRadius:6,padding:"6px 10px"}}>
-                      ❓ {k.soru}
-                    </div>
-                  )}
-                  <div style={{fontSize:13,color:TEXT,lineHeight:1.8,whiteSpace:"pre-wrap"}}>{k.cevap}</div>
-                  {/* Prof'un sorularına cevap ver */}
-                  {(k.cevap.includes("DAHA İYİ ANLAYABİLMEK İÇİN") || k.cevap.includes("TAKİP SORULARIM")) && (
-                    <ProfCevapAlani
-                      konusmaId={k.id}
-                      seciliAd={seciliAd}
-                      oncekiVeri={k.cevap}
-                      profNotlari={profNotlari}
-                      setProfNotlari={setProfNotlari}
-                    />
-                  )}
-
-                  <button onClick={()=>{
-                    // Geçici div oluştur, raporIndir çağır
-                    const tmpId = "prof-rapor-tmp-"+k.id;
-                    let tmp = document.getElementById(tmpId);
-                    if (!tmp) {
-                      tmp = document.createElement("div");
-                      tmp.id = tmpId;
-                      tmp.style.position = "absolute";
-                      tmp.style.left = "-9999px";
-                      tmp.style.top = "0";
-                      tmp.style.width = "800px";
-                      tmp.style.fontFamily = "Arial, sans-serif";
-                      tmp.style.fontSize = "13px";
-                      tmp.style.color = "#1a1a1a";
-                      tmp.style.padding = "20px";
-                      tmp.innerHTML = `
-                        <div style="border-bottom:3px solid #1a1a2e;padding-bottom:12px;margin-bottom:16px">
-                          <div style="font-size:10px;color:#666;text-transform:uppercase;letter-spacing:1px">Klinik Süpervizyon Raporu</div>
-                          <div style="font-size:22px;font-weight:900;color:#1a1a2e">Prof. Dr. Hakan</div>
-                          <div style="font-size:11px;color:#555;margin-top:2px">Klinik Psikoloji · Çocuk-Ergen Psikiyatrisi · Eğitim Psikolojisi · PDR</div>
-                        </div>
-                        <table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:12px">
-                          <tr><td style="padding:4px 8px;background:#f5f5f5;font-weight:700;width:140px">Öğrenci</td><td style="padding:4px 8px">${seciliAd}</td></tr>
-                          <tr><td style="padding:4px 8px;background:#f5f5f5;font-weight:700">Tarih</td><td style="padding:4px 8px">${k.tarih}</td></tr>
-                          <tr><td style="padding:4px 8px;background:#f5f5f5;font-weight:700">Tür</td><td style="padding:4px 8px">${k.tip === "genel" ? "Genel Süpervizyon" : "Soru-Cevap"}</td></tr>
-                          ${k.tip === "soru" ? `<tr><td style="padding:4px 8px;background:#f5f5f5;font-weight:700">Soru</td><td style="padding:4px 8px">${k.soru}</td></tr>` : ""}
-                        </table>
-                        <div style="font-size:11px;font-weight:700;color:#1a1a2e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;padding-bottom:4px;border-bottom:1px solid #ddd">Süpervizyon Değerlendirmesi</div>
-                        <div style="font-size:13px;line-height:1.9;white-space:pre-wrap;color:#1a1a1a">${k.cevap}</div>
-                        <div style="margin-top:30px;padding-top:12px;border-top:1px solid #eee;display:flex;justify-content:space-between;font-size:11px;color:#666">
-                          <div>PDR Danışmanı: ___________________</div>
-                          <div>Tarih: ${k.tarih}</div>
-                        </div>
-                      `;
-                      document.body.appendChild(tmp);
-                    }
-                    raporIndir(tmpId, "ProfDrHakan_Supervizyon_" + seciliAd.replace(/\s+/g,"_") + "_" + k.tarih.replace(/\./g,"-"));
-                    setTimeout(()=>{ const el=document.getElementById(tmpId); if(el) el.remove(); }, 8000);
-                  }} style={{
-                    marginTop:10, padding:"7px 16px", background:"#1a1a2e", color:"#fff",
-                    border:"none", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer"
-                  }}>📄 PDF Olarak İndir</button>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <span style={{ background: durumStil.bg, color: durumStil.color, borderRadius: 12, padding: "3px 10px", fontSize: 11, fontWeight: 700 }}>{durumStil.label}</span>
+                    {b.durum === "onayli" && (
+                      (b.ucretsiz || b.odemeAlindi)
+                        ? <span style={{ background: "#E6F5EE", color: "#1A8C5B", borderRadius: 12, padding: "3px 10px", fontSize: 11, fontWeight: 700 }}>🔓 Erişim Açık</span>
+                        : <span style={{ background: "#FDECEA", color: "#C0392B", borderRadius: 12, padding: "3px 10px", fontSize: 11, fontWeight: 700 }}>🔒 Ödeme Bekliyor</span>
+                    )}
+                  </div>
                 </div>
-              ))}
-            </div>
-          )}
-
-          {ogrKonusma.length === 0 && (
-            <div style={{textAlign:"center",color:MUTED,marginTop:40,fontSize:13}}>
-              <div style={{fontSize:48,marginBottom:12}}>🎓</div>
-              <div style={{fontWeight:700,color:TEXT,marginBottom:6}}>Prof. Dr. Hakan</div>
-              <div>Öğrencinin tüm verilerini değerlendirmek veya<br/>soru sormak için yukarıdaki butonları kullanın</div>
-            </div>
-          )}
-        </>
+                {b.durum !== "onayli" && pdrUcretlendirmeAySayisi(Date.now()) <= 1 && (
+                  <div style={{ fontSize: 11, color: "#B07D1A", background: "#FDF6E3", borderRadius: 8, padding: "5px 9px", marginBottom: 8 }}>
+                    ℹ️ Eğitim yılının son ayındayız — onaylarsan otomatik ücretsiz işaretlenir, ücret bir sonraki yıldan itibaren alınır.
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                  <button onClick={() => {
+                    const ucretliAy = pdrUcretlendirmeAySayisi(Date.now());
+                    const alanlar = { durum: "onayli", onayTarihi: Date.now(), erisimBitis: pdrEgitimYiliBitisi(Date.now()) };
+                    if (ucretliAy <= 1) alanlar.ucretsiz = true; // son ay — ücret alınmaz, otomatik ücretsiz
+                    guncelle(b.uid, alanlar);
+                  }} disabled={b.durum === "onayli"} style={{ padding: "6px 12px", background: b.durum === "onayli" ? BORDER : ACCENT, color: b.durum === "onayli" ? MUTED : "#fff", border: "none", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: b.durum === "onayli" ? "default" : "pointer" }}>✓ Onayla</button>
+                  <button onClick={() => guncelle(b.uid, { durum: "reddedildi" })} disabled={b.durum === "reddedildi"} style={{ padding: "6px 12px", background: "none", border: "1px solid #F28B82", color: "#C5221F", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: b.durum === "reddedildi" ? "default" : "pointer" }}>🚫 Reddet</button>
+                  <button onClick={() => guncelle(b.uid, { durum: "bekliyor" })} disabled={b.durum === "bekliyor"} style={{ padding: "6px 12px", background: "none", border: `1px solid ${BORDER}`, color: MUTED, borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: b.durum === "bekliyor" ? "default" : "pointer" }}>↺ Beklemeye Al</button>
+                </div>
+                <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "center", marginTop: 8, paddingTop: 8, borderTop: `1px solid ${BORDER}` }}>
+                  <PdrToggle checked={!!b.odemeAlindi} onChange={v => guncelle(b.uid, { odemeAlindi: v })} color="#1A8C5B" label="💳 Ödeme Alındı" />
+                  <PdrToggle checked={!!b.ucretsiz} onChange={v => guncelle(b.uid, { ucretsiz: v })} color={ACCENT} label="🎁 Ücretsiz kullanıcı" />
+                  {b.durum === "onayli" && (
+                    <button onClick={() => guncelle(b.uid, { onayTarihi: Date.now(), erisimBitis: pdrEgitimYiliBitisi(Date.now()), odemeAlindi: false, ucretsiz: false })} style={{
+                      padding: "5px 10px", background: "none", border: `1px solid ${BORDER}`, color: MUTED, borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer"
+                    }}>🔄 Yeni Yıl İçin Yenile</button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );
 }
 
+function AyarlarEkrani({ ogrenciler, setOgrenciler, records, setRecords, profiles, setProfiles, profiles2, setProfiles2, oogDegerlendirmeler, setOogDegerlendirmeler, riskListesi, setRiskListesi, denemeler, setDenemeler, sevkler, setSevkler, mudahalePlan, setMudahalePlan, hazirlikNotlari, setHazirlikNotlari, ilerlemeNotlari, setIlerlemeNotlari, profNotlari, setProfNotlari, kutuphane, setKutuphane, yillar, setYillar, sinifListesi, setSinifListesi, aktifYil, setAktifYil, kademe, setKademe, sinavTuru, setSinavTuru }) {
+  const [key, setKey] = useState(() => pdrGetApiKey());
+  const [gosterKey, setGosterKey] = useState(false);
+  const [kaydedildi, setKaydedildi] = useState(false);
+  const [yedekIndiriliyor, setYedekIndiriliyor] = useState(false);
+  const [geriYuklemeOnay, setGeriYuklemeOnay] = useState(null); // dosyadan okunan veri, onay bekliyor
+  const [geriYukleniyor, setGeriYukleniyor] = useState(false);
+  const [geriYuklemeSonuc, setGeriYuklemeSonuc] = useState("");
 
-// ── Prof. Cevap Alanı Bileşeni ───────────────────────────────────────────────
-function ProfCevapAlani({ konusmaId, seciliAd, oncekiVeri, profNotlari, setProfNotlari }) {
-  const [cevap, setCevap] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [goster, setGoster] = useState(false);
-
-  async function handleCevapGonder() {
-    if (!cevap.trim()) return;
-    setLoading(true);
-    const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
-      method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({
-        model:"claude-sonnet-4-6", max_tokens:3000,
-        system: PROF_HAKAN,
-        messages:[{role:"user", content:`Öğrenci: ${seciliAd}
-
-Önceki değerlendirmem ve sorularım:
-${oncekiVeri}
-
-Danışmanın cevabı:
-${cevap}
-
-Bu bilgiyi de göz önünde bulundurarak değerlendirmeni güncelle ve derinleştir. Gerekirse ek sorular sorabilirsin. Markdown kullanma.`}]
-      })
-    });
-    const data = await res.json();
-    const yeniCevap = data.content?.[0]?.text || "";
-    const yeniKayit = {
-      id: uid(), tarih: today(), tip: "takip",
-      soru: "Takip cevabı: " + cevap.substring(0,50) + "...",
-      cevap: yeniCevap
-    };
-    const updated = pdrSozlukYaz(profNotlari, seciliAd, seciliSinif, [yeniKayit, ...(pdrSozlukOku(profNotlari, seciliAd, seciliSinif)||[])]);
-    setProfNotlari(updated);
-    await saveProfNotlari(updated);
-    setCevap("");
-    setGoster(false);
-    setLoading(false);
+  function handleKaydet() {
+    pdrSetApiKey(key);
+    setKaydedildi(true);
+    setTimeout(() => setKaydedildi(false), 2500);
   }
 
-  if (!goster) return (
-    <button onClick={()=>setGoster(true)} style={{
-      marginTop:8, padding:"6px 14px",
-      background:"#EEF2FF", color:"#3B4FD8",
-      border:"1px solid #c7ccf5", borderRadius:8,
-      fontSize:11, fontWeight:700, cursor:"pointer"
-    }}>
-      💬 Prof'un Sorularını Yanıtla
-    </button>
-  );
+  function handleYedekDosyaSec(e) {
+    const dosya = e.target.files?.[0];
+    if (!dosya) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const veri = JSON.parse(ev.target.result);
+        // Basit bir doğrulama — en azından tanıdık bir alan içermeli, rastgele bir
+        // JSON dosyasının yanlışlıkla yüklenmesini önler.
+        if (!veri || typeof veri !== "object" || (!veri.ogrenciler && !veri.records && !veri.yedekTarihi)) {
+          alert("Bu dosya geçerli bir Rehber Pusula yedeği gibi görünmüyor.");
+          return;
+        }
+        setGeriYuklemeOnay(veri);
+      } catch (err) {
+        alert("Dosya okunamadı: " + err.message);
+      }
+    };
+    reader.readAsText(dosya);
+    e.target.value = ""; // aynı dosyayı tekrar seçebilmek için
+  }
+
+  async function handleGeriYuklemeOnayla() {
+    const veri = geriYuklemeOnay;
+    if (!veri) return;
+    setGeriYukleniyor(true);
+    try {
+      const alanlar = [
+        ["ogrenciler", setOgrenciler, saveOgrenciler],
+        ["records", setRecords, saveRecords],
+        ["profiles", setProfiles, saveProfiles],
+        ["profiles2", setProfiles2, saveProfiles2],
+        ["oogDegerlendirmeler", setOogDegerlendirmeler, saveOogDegerlendirmeler],
+        ["riskListesi", setRiskListesi, saveRiskListesi],
+        ["denemeler", setDenemeler, saveDenemeler],
+        ["sevkler", setSevkler, saveSevkler],
+        ["mudahalePlan", setMudahalePlan, saveMudahalePlan],
+        ["hazirlikNotlari", setHazirlikNotlari, saveHazirlikNotlari],
+        ["ilerlemeNotlari", setIlerlemeNotlari, saveIlerlemeNotlari],
+        ["profNotlari", setProfNotlari, saveProfNotlari],
+        ["kutuphane", setKutuphane, saveKutuphane],
+        ["yillar", setYillar, saveYillar],
+        ["sinifListesi", setSinifListesi, saveSinifListesi],
+      ];
+      let guncellenenSayisi = 0;
+      for (const [alan, setter, saver] of alanlar) {
+        if (veri[alan] !== undefined && setter && saver) {
+          setter(veri[alan]);
+          await saver(veri[alan]);
+          guncellenenSayisi++;
+        }
+      }
+      if (veri.aktifYil && setAktifYil) {
+        setAktifYil(veri.aktifYil);
+        await saveAktifYil(veri.aktifYil);
+      }
+      setGeriYuklemeSonuc(`✓ ${guncellenenSayisi} veri alanı başarıyla geri yüklendi.`);
+      setGeriYuklemeOnay(null);
+      setTimeout(() => setGeriYuklemeSonuc(""), 6000);
+    } catch (e) {
+      alert("Geri yükleme sırasında hata oluştu: " + e.message);
+    }
+    setGeriYukleniyor(false);
+  }
+
+  function handleYedekIndir() {
+    setYedekIndiriliyor(true);
+    try {
+      const yedek = {
+        yedekTarihi: new Date().toISOString(),
+        aktifYil, yillar, sinifListesi,
+        ogrenciler, records, profiles, profiles2, oogDegerlendirmeler,
+        riskListesi, denemeler, sevkler, mudahalePlan,
+        hazirlikNotlari, ilerlemeNotlari, profNotlari, kutuphane,
+      };
+      const blob = new Blob([JSON.stringify(yedek, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `pdr-yedek-${today().replace(/\./g,"-")}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) { alert("Yedek oluşturulamadı: " + e.message); }
+    setYedekIndiriliyor(false);
+  }
 
   return (
-    <div style={{marginTop:10, background:"#EEF2FF", borderRadius:10, padding:12}}>
-      <div style={{fontSize:11, fontWeight:700, color:"#3B4FD8", marginBottom:8}}>
-        Prof. Dr. Hakan'ın sorularını yanıtlayın
+    <div style={{ maxWidth: 520 }}>
+      <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 6 }}>⚙️ Ayarlar</div>
+
+      <div style={{ background: "#F0FDF4", borderRadius: 12, padding: 14, marginBottom: 16 }}>
+        <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 14, color: "#1A8C5B" }}>🎓 Okul Kademesi</div>
+        <div style={{ fontSize: 13, color: MUTED, marginBottom: 10, lineHeight: 1.5 }}>
+          Risk değerlendirmesi ve müdahale planı önerilerinde AI, öğrencinin yaş/gelişim dönemine uygun bağlamı (Erikson'un gelişim evreleri ve o yaşa özgü tipik konular) dikkate alır. Seçmezsen genel bir değerlendirme yapılır.
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {[["", "Belirtme"], ["ilkokul", "İlkokul"], ["ortaokul", "Ortaokul"], ["lise", "Lise"]].map(([k, l]) => (
+            <button key={k} onClick={() => {
+              setKademe(k);
+              // Kademe ile Deneme sekmesindeki sınav türü genelde birebir örtüşür — kolaylık
+              // olsun diye burada bir öneri olarak otomatik ayarlanır (Ortaokul→LGS,
+              // Lise→TYT). Bu sadece kademe DEĞİŞTİĞİNDE bir kerelik önerme; Deneme
+              // sekmesinden istediğin zaman elle farklı bir sınav türüne geçebilirsin
+              // (örn. lisede AYT-Sayısal, AYT-Sözel gibi) — üzerine yazmaya devam etmez.
+              if (k === "ortaokul" && setSinavTuru) setSinavTuru("lgs");
+              else if (k === "lise" && setSinavTuru) setSinavTuru("tyt");
+            }} style={{
+              flex: "1 1 100px", padding: "8px 6px", borderRadius: 8,
+              border: `2px solid ${(kademe||"")===k ? "#1A8C5B" : BORDER}`,
+              background: (kademe||"")===k ? "#F0FDF4" : CARD,
+              color: (kademe||"")===k ? "#1A8C5B" : MUTED,
+              fontSize: 12, fontWeight: 700, cursor: "pointer"
+            }}>{l}</button>
+          ))}
+        </div>
+        {(kademe === "ortaokul" || kademe === "lise") && (
+          <div style={{ fontSize: 11, color: "#1A8C5B", marginTop: 8 }}>
+            ✓ Deneme sekmesindeki sınav türü otomatik "{SINAV_TURLERI[sinavTuru]?.ad}" olarak ayarlandı — istersen Deneme sekmesinden değiştirebilirsin.
+          </div>
+        )}
       </div>
-      <textarea
-        placeholder="Prof'un sorularına cevabınızı yazın..."
-        value={cevap}
-        onChange={e=>setCevap(e.target.value)}
-        rows={4}
-        style={{width:"100%", padding:"8px 10px", border:"1px solid #c7ccf5", borderRadius:8, fontSize:12, resize:"vertical", boxSizing:"border-box", fontFamily:"inherit", marginBottom:8}}
-      />
-      <div style={{display:"flex", gap:8}}>
-        <button onClick={()=>setGoster(false)} style={{flex:1, padding:"8px", background:"#fff", color:MUTED, border:`1px solid ${BORDER}`, borderRadius:8, fontSize:12, cursor:"pointer"}}>
-          İptal
-        </button>
-        <button onClick={handleCevapGonder} disabled={!cevap.trim()||loading} style={{
-          flex:2, padding:"8px",
-          background:cevap.trim()&&!loading?"#1a1a2e":BORDER,
-          color:cevap.trim()&&!loading?"#fff":MUTED,
-          border:"none", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer"
+
+      <div style={{ background: "#EEF2FF", borderRadius: 12, padding: 14, marginBottom: 16 }}>
+        <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 14, color: BLUE }}>📥 Tüm Veriyi Yedekle</div>
+        <div style={{ fontSize: 13, color: MUTED, marginBottom: 10, lineHeight: 1.5 }}>
+          Öğrenciler, görüşmeler, risk kayıtları, deneme sonuçları, müdahale planları, sevkler ve kütüphane — sistemdeki her şeyi tek bir dosyaya indirir. Önemli bir işlem yapmadan önce (örn. sınıf/yıl silme) veya ayda bir yedek almanı öneririz.
+        </div>
+        <button onClick={handleYedekIndir} disabled={yedekIndiriliyor} style={{
+          width: "100%", padding: 12, background: BLUE, color: "#fff",
+          border: "none", borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: "pointer", opacity: yedekIndiriliyor?0.6:1
+        }}>{yedekIndiriliyor ? "Hazırlanıyor…" : "📥 Yedeği İndir (.json)"}</button>
+      </div>
+
+      <div style={{ background: "#FDF6E3", borderRadius: 12, padding: 14, marginBottom: 16 }}>
+        <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 14, color: "#B07D1A" }}>📤 Yedekten Geri Yükle</div>
+        <div style={{ fontSize: 13, color: MUTED, marginBottom: 10, lineHeight: 1.5 }}>
+          Daha önce indirdiğin bir yedek dosyasını (.json) seçerek mevcut verini geri yükle. <b>Dikkat:</b> bu işlem, dosyada bulunan veri türlerini (örn. öğrenciler, görüşmeler) şu andaki verinin üzerine yazar — geri alınamaz.
+        </div>
+        <label style={{
+          display: "block", width: "100%", padding: 12, background: "#fff", color: "#B07D1A",
+          border: `2px dashed #E9D18B`, borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: "pointer", textAlign: "center", boxSizing: "border-box"
         }}>
-          {loading ? "⏳ Prof. değerlendiriyor..." : "🎓 Gönder ve Derinleştir"}
-        </button>
+          📤 Yedek Dosyası Seç (.json)
+          <input type="file" accept=".json,application/json" onChange={handleYedekDosyaSec} style={{ display: "none" }} />
+        </label>
+        {geriYuklemeSonuc && <div style={{ fontSize: 13, color: "#1A8C5B", fontWeight: 700, marginTop: 8 }}>{geriYuklemeSonuc}</div>}
+      </div>
+
+      {geriYuklemeOnay && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ background: "#fff", borderRadius: 16, maxWidth: 420, width: "100%", padding: 22 }}>
+            <div style={{ fontSize: 17, fontWeight: 900, color: "#C0392B", marginBottom: 10 }}>⚠️ Emin misin?</div>
+            <div style={{ fontSize: 13, color: TEXT, lineHeight: 1.6, marginBottom: 8 }}>
+              Bu yedek {geriYuklemeOnay.yedekTarihi ? new Date(geriYuklemeOnay.yedekTarihi).toLocaleDateString("tr-TR") : "bilinmeyen bir tarihte"} alınmış. İçindeki veri türleri, <b>şu andaki verinin üzerine yazılacak</b> — bu işlem geri alınamaz.
+            </div>
+            <div style={{ fontSize: 12, color: MUTED, marginBottom: 16 }}>
+              Emin değilsen önce "Yedeği İndir" ile şu anki verini yedekle, sonra geri yüklemeye devam et.
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => setGeriYuklemeOnay(null)} style={{
+                flex: 1, padding: 12, background: "none", border: `1px solid ${BORDER}`, color: MUTED, borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: "pointer"
+              }}>Vazgeç</button>
+              <button onClick={handleGeriYuklemeOnayla} disabled={geriYukleniyor} style={{
+                flex: 1, padding: 12, background: "#C0392B", color: "#fff", border: "none", borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: "pointer", opacity: geriYukleniyor?0.6:1
+              }}>{geriYukleniyor ? "Yükleniyor…" : "Evet, Geri Yükle"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div style={{ fontSize: 14, color: MUTED, marginBottom: 16, lineHeight: 1.5 }}>
+        Yapay zeka özelliklerini (özet çıkarma, risk değerlendirmesi, müdahale planı vb.)
+        kullanabilmek için kendi Anthropic API anahtarınızı girmeniz gerekir. Anahtarınız
+        sadece bu tarayıcıda saklanır, hiçbir sunucuya gönderilmez.
+      </div>
+
+      <div style={{ background: "#f5f5f5", borderRadius: 12, padding: 14, marginBottom: 16 }}>
+        <div style={{ fontWeight: 700, marginBottom: 8, fontSize: 14 }}>Anthropic API Anahtarı</div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input
+            type={gosterKey ? "text" : "password"}
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            placeholder="sk-ant-..."
+            style={{ flex: 1, padding: 10, borderRadius: 8, border: "1px solid #ccc", fontSize: 14 }}
+          />
+          <button onClick={() => setGosterKey(!gosterKey)} style={{
+            padding: "0 12px", borderRadius: 8, border: "1px solid #ccc", background: "#fff", cursor: "pointer"
+          }}>{gosterKey ? "Gizle" : "Göster"}</button>
+        </div>
+        <button onClick={handleKaydet} style={{
+          marginTop: 10, width: "100%", padding: 12, background: ACCENT, color: "#fff",
+          border: "none", borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: "pointer"
+        }}>{kaydedildi ? "✅ Kaydedildi" : "Kaydet"}</button>
+      </div>
+
+      <div style={{ fontSize: 13, color: MUTED, lineHeight: 1.6 }}>
+        <b>Nasıl API anahtarı alırım?</b>
+        <ol style={{ paddingLeft: 18, marginTop: 6 }}>
+          <li>console.anthropic.com adresine gidip ücretsiz bir hesap açın</li>
+          <li>"API Keys" bölümünden yeni bir anahtar oluşturun</li>
+          <li>Oluşan anahtarı (sk-ant- ile başlar) kopyalayıp yukarıya yapıştırın</li>
+        </ol>
       </div>
     </div>
   );
 }
+
 
 
 // ── Excel Toplu Yükleme (7. Sınıf) ─────────────────────────────────────────
@@ -5189,7 +5527,6 @@ function ExcelTopluYukle({ ogrenciler, setOgrenciler, denemeler, setDenemeler, a
           const sube = String(row[colSube] || "").trim();
 
           if (!adSoyad || adSoyad.startsWith("*") || adSoyad.includes("OKUL") || adSoyad.includes("SINIF")) continue;
-
 
           // 7.sınıf 9 deneme netleri (başlıktan bulunan sütunlar)
           const deneme7 = {};
@@ -5375,6 +5712,31 @@ function OgrenciYonetim({
   const [sinifSiliniyor, setSinifSiliniyor] = useState(false);
   const [gorunumModu, setGorunumModu] = useState("liste"); // liste | aylik
   const [acikAylar, setAcikAylar] = useState({});
+  const [duzenlemeId, setDuzenlemeId] = useState(null);
+  const [duzenleForm, setDuzenleForm] = useState(null);
+  const [duzenleAiLoading, setDuzenleAiLoading] = useState(false);
+
+  async function handleDuzenleAiOzetle() {
+    if (!duzenleForm?.raw?.trim()) return;
+    setDuzenleAiLoading(true);
+    const tamCevap = await getAISummary(duzenleForm.raw);
+    const summary = tamCevap.split(/---HATIRLATMA---/i)[0].trim();
+    setDuzenleForm(f => ({ ...f, summary }));
+    setDuzenleAiLoading(false);
+  }
+
+  async function handleGorusmeGuncelle(id, fields) {
+    const updated = records.map(r => r.id === id ? { ...r, ...fields } : r);
+    setRecords(updated);
+    await saveRecords(updated);
+    setDuzenlemeId(null);
+    setDuzenleForm(null);
+  }
+  async function handleGorusmeSil(id) {
+    const updated = records.filter(r => r.id !== id);
+    setRecords(updated);
+    await saveRecords(updated);
+  }
 
   async function handleOgrenciSil(studentName) {
     const ad = studentName.toLocaleLowerCase("tr").trim();
@@ -5736,7 +6098,7 @@ function OgrenciYonetim({
             }}>🎓 Sınıf Güncelle</button>
             <div style={{ flex:1, minWidth:120 }}>
               <div style={{ fontWeight:800, fontSize:16, color:TEXT }}>{seciliOgrenci}</div>
-              <div style={{ fontSize:11, color:MUTED }}>{seciliOgrenciSinif}{seciliOgrenciNumara ? ` · No: ${seciliOgrenciNumara}` : ""}</div>
+              {(() => { const o = tumOgrenciler.find(x=>x.studentName===seciliOgrenci); return o ? <div style={{ fontSize:11, color:MUTED }}>{o.className}{o.numara ? ` · No: ${o.numara}` : ""}</div> : null; })()}
             </div>
             {ogrRisk.length > 0 && <span style={{ background:"#FDECEA", color:"#C0392B", borderRadius:8, padding:"4px 10px", fontSize:11, fontWeight:700 }}>⚠ Risk</span>}
             <button onClick={() => {
@@ -5888,8 +6250,39 @@ function OgrenciYonetim({
                               </div>
                               {gunFark!==null&&<span style={{fontSize:10,color:MUTED}}>{gunFark} gün önce</span>}
                             </div>
-                            {r.raw&&<div style={{fontSize:11,color:MUTED,fontStyle:"italic",marginBottom:4,background:"#fafafa",borderRadius:5,padding:"3px 7px"}}>{r.raw}</div>}
-                            <div style={{fontSize:12,color:TEXT,lineHeight:1.7}}>{r.summary}</div>
+                            {duzenlemeId===r.id ? (
+                              <div style={{marginTop:6}}>
+                                <div style={{display:"flex",gap:6,marginBottom:6}}>
+                                  {["Öğrenci","Veli","Öğretmen"].map(t=>(
+                                    <button key={t} onClick={()=>setDuzenleForm(f=>({...f,meetingType:t}))} style={{flex:1,padding:"6px",borderRadius:8,border:`2px solid ${duzenleForm?.meetingType===t?ACCENT:BORDER}`,background:duzenleForm?.meetingType===t?ACCENT_LIGHT:CARD,color:duzenleForm?.meetingType===t?ACCENT:MUTED,fontSize:11,fontWeight:700,cursor:"pointer"}}>{t}</button>
+                                  ))}
+                                </div>
+                                <select value={duzenleForm?.topic||""} onChange={e=>setDuzenleForm(f=>({...f,topic:e.target.value}))} style={{width:"100%",padding:"7px 9px",border:`1px solid ${BORDER}`,borderRadius:8,fontSize:12,marginBottom:6,boxSizing:"border-box",background:"#fff"}}>
+                                  <option value="">Konu seçilmedi</option>
+                                  {KONU_LISTESI.map(k => <option key={k} value={k}>{k}</option>)}
+                                </select>
+                                <label style={{fontSize:10,fontWeight:600,color:MUTED,display:"block",marginBottom:2}}>HAM NOT</label>
+                                <textarea value={duzenleForm?.raw||""} onChange={e=>setDuzenleForm(f=>({...f,raw:e.target.value}))} rows={3} style={{width:"100%",padding:"7px 9px",border:`1px solid ${BORDER}`,borderRadius:8,fontSize:12,resize:"vertical",boxSizing:"border-box",marginBottom:6}}/>
+                                <button onClick={handleDuzenleAiOzetle} disabled={!duzenleForm?.raw?.trim()||duzenleAiLoading} style={{width:"100%",padding:"7px",background:duzenleForm?.raw?.trim()&&!duzenleAiLoading?PURPLE:BORDER,color:duzenleForm?.raw?.trim()&&!duzenleAiLoading?"#fff":MUTED,border:"none",borderRadius:8,fontSize:11,fontWeight:700,cursor:"pointer",marginBottom:6}}>
+                                  {duzenleAiLoading?"⏳ Özetleniyor...":"✦ AI ile Yeniden Özetle"}
+                                </button>
+                                <label style={{fontSize:10,fontWeight:600,color:MUTED,display:"block",marginBottom:2}}>ÖZET</label>
+                                <textarea value={duzenleForm?.summary||""} onChange={e=>setDuzenleForm(f=>({...f,summary:e.target.value}))} rows={4} style={{width:"100%",padding:"7px 9px",border:`1px solid ${ACCENT_LIGHT}`,borderRadius:8,fontSize:12,resize:"vertical",boxSizing:"border-box",background:"#F0FAF4",marginBottom:8}}/>
+                                <div style={{display:"flex",gap:8}}>
+                                  <button onClick={()=>{setDuzenlemeId(null);setDuzenleForm(null);}} style={{flex:1,padding:"8px",background:BG,border:`1px solid ${BORDER}`,borderRadius:8,fontSize:12,fontWeight:700,color:MUTED,cursor:"pointer"}}>İptal</button>
+                                  <button onClick={()=>handleGorusmeGuncelle(r.id,duzenleForm)} disabled={!duzenleForm?.summary?.trim()} style={{flex:1,padding:"8px",background:duzenleForm?.summary?.trim()?ACCENT:BORDER,color:duzenleForm?.summary?.trim()?"#fff":MUTED,border:"none",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"}}>💾 Kaydet</button>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                {r.raw&&<div style={{fontSize:11,color:MUTED,fontStyle:"italic",marginBottom:4,background:"#fafafa",borderRadius:5,padding:"3px 7px"}}>{r.raw}</div>}
+                                <div style={{fontSize:12,color:TEXT,lineHeight:1.7,marginBottom:6}}>{r.summary}</div>
+                                <div style={{display:"flex",gap:6}}>
+                                  <button onClick={()=>{setDuzenlemeId(r.id);setDuzenleForm({meetingType:r.meetingType||"Öğrenci",topic:r.topic||"",raw:r.raw||"",summary:r.summary||""});}} style={{padding:"5px 10px",background:ACCENT_LIGHT,color:ACCENT,border:"none",borderRadius:8,fontSize:11,fontWeight:700,cursor:"pointer"}}>✎ Düzenle</button>
+                                  <button onClick={()=>{ if(window.confirm("Bu görüşme notunu silmek istediğinize emin misiniz?")) handleGorusmeSil(r.id); }} style={{padding:"5px 10px",background:"none",border:"1px solid #F28B82",color:"#C5221F",borderRadius:8,fontSize:11,fontWeight:700,cursor:"pointer"}}>🗑 Sil</button>
+                                </div>
+                              </>
+                            )}
                           </div>
                         </div>
                       );
@@ -6869,7 +7262,7 @@ function ProfilMerkez({
                   aile_notu: prof2Form.aile_notu || "",
                   d2_analiz: prof2Analiz || ""
                 };
-                onRaporAc({ogrenci:seciliAd, profil1:p1Rapor, profil2:p2Rapor, gorusmeler:ogrRec, denemeler:ogrDeneme});
+                onRaporAc({ogrenci:seciliAd, ogrenciSinif:seciliSinif, profil1:p1Rapor, profil2:p2Rapor, gorusmeler:ogrRec, denemeler:ogrDeneme});
               }} style={{
                 background:ACCENT, color:"#fff", border:"none", borderRadius:8, padding:"6px 12px", fontSize:12, fontWeight:700, cursor:"pointer"
               }}>📄 PDF Rapor</button>
@@ -7322,6 +7715,7 @@ function SinifProfili({ ogrenciler, setOgrenciler, records, riskListesi, aktifYi
     setSinifSilOnay(null);
   }
 
+
   if (seciliSinif) {
     const st = subeIstatistik(seciliSinif);
     const alfabetikOgrenciler = [...st.ogr].sort((a,b) => a.studentName.localeCompare(b.studentName, "tr"));
@@ -7331,6 +7725,7 @@ function SinifProfili({ ogrenciler, setOgrenciler, records, riskListesi, aktifYi
       let eklenen = 0, zatenVar = 0;
       const yeniOgrenciler = [...ogrenciler];
       satirlar.forEach(satir => {
+        // Satır formatı: "123  Ad Soyad" veya "123\tAd Soyad" veya sadece "Ad Soyad"
         const parcalar = satir.split(/\t/).length > 1 ? satir.split(/\t/) : satir.split(/\s+/);
         let numara = "", adSoyad = "";
         if (parcalar.length > 1 && /^\d+$/.test(parcalar[0].trim())) {
@@ -7371,9 +7766,6 @@ function SinifProfili({ ogrenciler, setOgrenciler, records, riskListesi, aktifYi
             </div>
             <div style={{fontSize:11, color:MUTED, marginBottom:8, lineHeight:1.6}}>
               Her satıra bir öğrenci — "Numara  Ad Soyad" (örn. e-okul'dan kopyala-yapıştır) ya da sadece "Ad Soyad" yeterli. Deneme Excel'inde olmayan ama sınıfta bulunan öğrenciler böylece eksiksiz eklenir; zaten kayıtlı olanlar tekrar eklenmez.
-            </div>
-            <div style={{fontSize:11, color:MUTED, background:BG, borderRadius:8, padding:"6px 10px", marginBottom:8, lineHeight:1.5}}>
-              💡 E-okul'dan yapıştırırken isimler genelde tam geliyor. Gizlilik önemsiyorsan, yapıştırmadan önce soyadları elle kısaltabilirsin (örn. "Ahmet Yılmaz" → "Ahmet Y.") — numara zaten öğrenciyi ayırt etmeye yetiyor.
             </div>
             <textarea value={listeMetni} onChange={e=>setListeMetni(e.target.value)} rows={8}
               placeholder={"101  Ahmet Yılmaz\n102  Zeynep Kaya\n..."}
@@ -7446,8 +7838,8 @@ function SinifProfili({ ogrenciler, setOgrenciler, records, riskListesi, aktifYi
             <div style={{textAlign:"center",color:MUTED,fontSize:12}}>Bu sınıfta kayıtlı öğrenci yok</div>
           )}
           {alfabetikOgrenciler.map(o => {
-            const gSayisi = records.filter(r => pdrAyniOgrenci(r.studentName, r.className, o.studentName, o.className)).length;
-            const oRisk = riskListesi.filter(r => pdrAyniOgrenci(r.studentName, r.className, o.studentName, o.className) && !r.kapandi);
+            const gSayisi = records.filter(r => pdrAyniOgrenci(r.studentName, r.className, o.studentName, o.className, r.numara, o.numara)).length;
+            const oRisk = riskListesi.filter(r => pdrAyniOgrenci(r.studentName, r.className, o.studentName, o.className, r.numara, o.numara) && !r.kapandi);
             const oTeknoloji = oRisk.some(r => r.teknolojiBagimliligi);
             return (
               <div key={pdrOgrAnahtar(o.studentName, o.className, o.numara)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 0",borderBottom:`1px solid ${BORDER}`}}>
@@ -7570,24 +7962,13 @@ function KutuphaneEkle({ kutuphane, setKutuphane }) {
   const stl = { width:"100%", padding:"9px 11px", border:`1px solid ${BORDER}`, borderRadius:9, fontSize:13, background:CARD, color:TEXT, outline:"none", boxSizing:"border-box", fontFamily:"inherit" };
   const lbl = { fontSize:11, fontWeight:600, color:MUTED, display:"block", marginBottom:4, textTransform:"uppercase" };
 
-  // İki farklı özetleme yönelimi: klinik/psikolojik kaynaklar (makale, kitap, araştırma)
-  // için PDR/klinik perspektifinden tema özeti; yönetmelik/mevzuat için ise yorum
-  // katmadan somut kural, süre, sayısal eşik ve prosedür çıkarımı.
-  function ozetSistemPrompt() {
-    if (kaynakTuru === "yonetmelik") {
-      return "Sen bir egitim mevzuati uzmanisin. Sana verilen belge bir MEB yonetmeligi, genelgesi veya mevzuat metnidir. Bunu okul PDR (rehberlik) uzmani icin, hicbir klinik/psikolojik yorum katmadan, SADECE somut ve uygulanabilir bilgiyi cikararak ozetle. Su yapida yaz: 1. KAPSAM (bu belge ne hakkinda, kimleri ilgilendiriyor) 2. SOMUT KURALLAR VE SAYISAL ESIKLER (sure, gun sayisi, oran, madde numaralari - varsa aynen koru, yuvarlama) 3. PROSEDUR / KIMIN NE YAPMASI GEREKTIGI (adim adim, sorumluluklar, hangi durumda hangi islem yapilir) 4. ISTISNALAR VE OZEL DURUMLAR. Sadece belgede yazani duzenli sekilde aktar, yorum veya oneri ekleme. Sayisal degerleri MUTLAKA aynen koru. Max 500 kelime. Sade yaz. Markdown kullanma.";
-    }
-    return "Sen Dr. Ayse Kara'sin - 20 yillik klinik deneyime sahip PDR uzmani ve psikologsun. BDT (otomatik dusunceler, sema teorisi, maruz birakma), baglanma teorisi (Bowlby), aile sistemleri (Minuchin), gelisim psikolojisi (Erikson, Vygotsky), Bourdieu sosyolojisi, Frankl anlam terapisi ve Stoa felsefesi perspektifinden degerlendirir; somut, uygulanabilir PDR onerileri sunarsın. Yargilamayan, guclu yonlere odaklanan, Turkce yazan bir klinisyensin. Verilen metni su yapida ozet: 1. ANA TEMALAR 2. PDR/KLINIK ACISINDAN ONEMLI NOKTALAR (BDT, baglanma, sosyoloji, felsefe) 3. ANAHTAR KAVRAMLAR. Max 350 kelime. Sade yaz. Markdown kullanma.";
-  }
-
   async function aiOzetle(metin, baslik) {
-    const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
-      method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({
-        model:"claude-sonnet-4-6", max_tokens:800,
-        system: ozetSistemPrompt(),
-        messages:[{role:"user", content:`Başlık: ${baslik||"Belirtilmemiş"}\n\nMetin:\n${metin.substring(0,8000)}`}]
-      })
+    const apiKey = pdrGetApiKey();
+    if (!apiKey) return metin.substring(0,400);
+    const res = await fetch(PDR_AI_WORKER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "kutuphane_ozet", apiKey, data: { metin, baslik, tur: kaynakTuru } }),
     });
     const data = await res.json();
     return data.content?.[0]?.text || metin.substring(0,400);
@@ -7613,18 +7994,12 @@ function KutuphaneEkle({ kutuphane, setKutuphane }) {
           r.onerror = rej;
           r.readAsDataURL(file);
         });
-        const resp = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
-          method:"POST", headers:{"Content-Type":"application/json"},
-          body: JSON.stringify({
-            model:"claude-sonnet-4-6", max_tokens:800,
-            system: ozetSistemPrompt(),
-            messages:[{role:"user", content:[
-              {type:"document", source:{type:"base64", media_type:"application/pdf", data:b64}},
-              {type:"text", text: kaynakTuru === "yonetmelik"
-                ? `Bu yönetmelik/mevzuat belgesini yukarıdaki talimata göre özetle. Başlık: ${baslik}`
-                : `Bu belgeyi PDR perspektifinden özetle. Başlık: ${baslik}`}
-            ]}]
-          })
+        const apiKey = pdrGetApiKey();
+        if (!apiKey) throw new Error("API_KEY_MISSING");
+        const resp = await fetch(PDR_AI_WORKER_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "kutuphane_ozet", apiKey, data: { pdfBase64: b64, baslik, tur: kaynakTuru } }),
         });
         const data = await resp.json();
         const ozet = data.content?.[0]?.text || "Özet alınamadı.";
@@ -7665,16 +8040,16 @@ function KutuphaneEkle({ kutuphane, setKutuphane }) {
           ? "Bu web sayfasındaki yönetmelik/mevzuat içeriğini yukarıdaki talimata göre özetle: " + yeniLink
           : "Bu web sayfasının içeriğini PDR perspektifinden özetle: " + yeniLink);
 
-      const bodyObj = {
-        model: "claude-sonnet-4-6", max_tokens: 800,
-        system: ozetSistemPrompt(),
-        messages: [{ role: "user", content: mesaj }]
-      };
-      if (!sayfaIcerigi) bodyObj.tools = [{ type: "web_search_20250305", name: "web_search" }];
-
-      const resp = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(bodyObj)
+      const apiKey = pdrGetApiKey();
+      if (!apiKey) throw new Error("API_KEY_MISSING");
+      const resp = await fetch(PDR_AI_WORKER_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "kutuphane_ozet",
+          apiKey,
+          data: { mesaj, tur: kaynakTuru, useWebSearch: !sayfaIcerigi },
+        }),
       });
       const data = await resp.json();
       const ozet = data.content?.find(b => b.type === "text")?.text || "İçerik okunamadı.";
@@ -7913,187 +8288,9 @@ function RecordCard({ rec, onDelete, onUpdate }) {
   );
 }
 
-function AyarlarEkrani({ ogrenciler, setOgrenciler, records, setRecords, profiles, setProfiles, profiles2, setProfiles2, oogDegerlendirmeler, setOogDegerlendirmeler, riskListesi, setRiskListesi, denemeler, setDenemeler, sevkler, setSevkler, mudahalePlan, setMudahalePlan, hazirlikNotlari, setHazirlikNotlari, ilerlemeNotlari, setIlerlemeNotlari, profNotlari, setProfNotlari, kutuphane, setKutuphane, yillar, setYillar, sinifListesi, setSinifListesi, aktifYil, setAktifYil, kademe, setKademe, sinavTuru, setSinavTuru }) {
-  const [yedekIndiriliyor, setYedekIndiriliyor] = useState(false);
-  const [geriYuklemeOnay, setGeriYuklemeOnay] = useState(null);
-  const [geriYukleniyor, setGeriYukleniyor] = useState(false);
-  const [geriYuklemeSonuc, setGeriYuklemeSonuc] = useState("");
-
-  function handleYedekDosyaSec(e) {
-    const dosya = e.target.files?.[0];
-    if (!dosya) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const veri = JSON.parse(ev.target.result);
-        if (!veri || typeof veri !== "object" || (!veri.ogrenciler && !veri.records && !veri.yedekTarihi)) {
-          alert("Bu dosya geçerli bir PDR Program yedeği gibi görünmüyor.");
-          return;
-        }
-        setGeriYuklemeOnay(veri);
-      } catch (err) {
-        alert("Dosya okunamadı: " + err.message);
-      }
-    };
-    reader.readAsText(dosya);
-    e.target.value = "";
-  }
-
-  async function handleGeriYuklemeOnayla() {
-    const veri = geriYuklemeOnay;
-    if (!veri) return;
-    setGeriYukleniyor(true);
-    try {
-      const alanlar = [
-        ["ogrenciler", setOgrenciler, saveOgrenciler],
-        ["records", setRecords, saveRecords],
-        ["profiles", setProfiles, saveProfiles],
-        ["profiles2", setProfiles2, saveProfiles2],
-        ["oogDegerlendirmeler", setOogDegerlendirmeler, saveOogDegerlendirmeler],
-        ["riskListesi", setRiskListesi, saveRiskListesi],
-        ["denemeler", setDenemeler, saveDenemeler],
-        ["sevkler", setSevkler, saveSevkler],
-        ["mudahalePlan", setMudahalePlan, saveMudahalePlan],
-        ["hazirlikNotlari", setHazirlikNotlari, saveHazirlikNotlari],
-        ["ilerlemeNotlari", setIlerlemeNotlari, saveIlerlemeNotlari],
-        ["profNotlari", setProfNotlari, saveProfNotlari],
-        ["kutuphane", setKutuphane, saveKutuphane],
-        ["yillar", setYillar, saveYillar],
-        ["sinifListesi", setSinifListesi, saveSinifListesi],
-      ];
-      let guncellenenSayisi = 0;
-      for (const [alan, setter, saver] of alanlar) {
-        if (veri[alan] !== undefined && setter && saver) {
-          setter(veri[alan]);
-          await saver(veri[alan]);
-          guncellenenSayisi++;
-        }
-      }
-      if (veri.aktifYil && setAktifYil) {
-        setAktifYil(veri.aktifYil);
-        await saveAktifYil(veri.aktifYil);
-      }
-      setGeriYuklemeSonuc(`✓ ${guncellenenSayisi} veri alanı başarıyla geri yüklendi.`);
-      setGeriYuklemeOnay(null);
-      setTimeout(() => setGeriYuklemeSonuc(""), 6000);
-    } catch (e) {
-      alert("Geri yükleme sırasında hata oluştu: " + e.message);
-    }
-    setGeriYukleniyor(false);
-  }
-
-  function handleYedekIndir() {
-    setYedekIndiriliyor(true);
-    try {
-      const yedek = {
-        yedekTarihi: new Date().toISOString(),
-        aktifYil, yillar, sinifListesi,
-        ogrenciler, records, profiles, profiles2, oogDegerlendirmeler,
-        riskListesi, denemeler, sevkler, mudahalePlan,
-        hazirlikNotlari, ilerlemeNotlari, profNotlari, kutuphane,
-      };
-      const blob = new Blob([JSON.stringify(yedek, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `pdr-yedek-${today().replace(/\./g,"-")}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (e) { alert("Yedek oluşturulamadı: " + e.message); }
-    setYedekIndiriliyor(false);
-  }
-
-  return (
-    <div style={{ maxWidth: 520 }}>
-      <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 6 }}>⚙️ Ayarlar</div>
-
-      <div style={{ background: "#F0FDF4", borderRadius: 12, padding: 14, marginBottom: 16 }}>
-        <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 14, color: "#1A8C5B" }}>🎓 Okul Kademesi</div>
-        <div style={{ fontSize: 13, color: MUTED, marginBottom: 10, lineHeight: 1.5 }}>
-          Risk değerlendirmesi ve müdahale planı önerilerinde AI, öğrencinin yaş/gelişim dönemine uygun bağlamı (Erikson'un gelişim evreleri ve o yaşa özgü tipik konular) dikkate alır. Seçmezsen genel bir değerlendirme yapılır.
-        </div>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {[["", "Belirtme"], ["ilkokul", "İlkokul"], ["ortaokul", "Ortaokul"], ["lise", "Lise"]].map(([k, l]) => (
-            <button key={k} onClick={() => {
-              setKademe(k);
-              // Kademe ile Deneme sekmesindeki sınav türü genelde birebir örtüşür — kolaylık
-              // olsun diye burada bir öneri olarak otomatik ayarlanır (Ortaokul→LGS,
-              // Lise→TYT). Bu sadece kademe DEĞİŞTİĞİNDE bir kerelik önerme; Deneme
-              // sekmesinden istediğin zaman elle farklı bir sınav türüne geçebilirsin
-              // (örn. lisede AYT-Sayısal, AYT-Sözel gibi) — üzerine yazmaya devam etmez.
-              if (k === "ortaokul" && setSinavTuru) setSinavTuru("lgs");
-              else if (k === "lise" && setSinavTuru) setSinavTuru("tyt");
-            }} style={{
-              flex: "1 1 100px", padding: "8px 6px", borderRadius: 8,
-              border: `2px solid ${(kademe||"")===k ? "#1A8C5B" : BORDER}`,
-              background: (kademe||"")===k ? "#F0FDF4" : CARD,
-              color: (kademe||"")===k ? "#1A8C5B" : MUTED,
-              fontSize: 12, fontWeight: 700, cursor: "pointer"
-            }}>{l}</button>
-          ))}
-        </div>
-        {(kademe === "ortaokul" || kademe === "lise") && (
-          <div style={{ fontSize: 11, color: "#1A8C5B", marginTop: 8 }}>
-            ✓ Deneme sekmesindeki sınav türü otomatik "{SINAV_TURLERI[sinavTuru]?.ad}" olarak ayarlandı — istersen Deneme sekmesinden değiştirebilirsin.
-          </div>
-        )}
-      </div>
-
-      <div style={{ background: "#EEF2FF", borderRadius: 12, padding: 14, marginBottom: 16 }}>
-        <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 14, color: BLUE }}>📥 Tüm Veriyi Yedekle</div>
-        <div style={{ fontSize: 13, color: MUTED, marginBottom: 10, lineHeight: 1.5 }}>
-          Öğrenciler, görüşmeler, risk kayıtları, deneme sonuçları, müdahale planları, sevkler ve kütüphane — sistemdeki her şeyi tek bir dosyaya indirir. Önemli bir işlem yapmadan önce (örn. sınıf/yıl silme) veya ayda bir yedek almanı öneririz.
-        </div>
-        <button onClick={handleYedekIndir} disabled={yedekIndiriliyor} style={{
-          width: "100%", padding: 12, background: BLUE, color: "#fff",
-          border: "none", borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: "pointer", opacity: yedekIndiriliyor?0.6:1
-        }}>{yedekIndiriliyor ? "Hazırlanıyor…" : "📥 Yedeği İndir (.json)"}</button>
-      </div>
-
-      <div style={{ background: "#FDF6E3", borderRadius: 12, padding: 14, marginBottom: 16 }}>
-        <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 14, color: "#B07D1A" }}>📤 Yedekten Geri Yükle</div>
-        <div style={{ fontSize: 13, color: MUTED, marginBottom: 10, lineHeight: 1.5 }}>
-          Daha önce indirdiğin bir yedek dosyasını (.json) seçerek mevcut verini geri yükle. <b>Dikkat:</b> bu işlem, dosyada bulunan veri türlerini (örn. öğrenciler, görüşmeler) şu andaki verinin üzerine yazar — geri alınamaz.
-        </div>
-        <label style={{
-          display: "block", width: "100%", padding: 12, background: "#fff", color: "#B07D1A",
-          border: `2px dashed #E9D18B`, borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: "pointer", textAlign: "center", boxSizing: "border-box"
-        }}>
-          📤 Yedek Dosyası Seç (.json)
-          <input type="file" accept=".json,application/json" onChange={handleYedekDosyaSec} style={{ display: "none" }} />
-        </label>
-        {geriYuklemeSonuc && <div style={{ fontSize: 13, color: "#1A8C5B", fontWeight: 700, marginTop: 8 }}>{geriYuklemeSonuc}</div>}
-      </div>
-
-      {geriYuklemeOnay && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-          <div style={{ background: "#fff", borderRadius: 16, maxWidth: 420, width: "100%", padding: 22 }}>
-            <div style={{ fontSize: 17, fontWeight: 900, color: "#C0392B", marginBottom: 10 }}>⚠️ Emin misin?</div>
-            <div style={{ fontSize: 13, color: TEXT, lineHeight: 1.6, marginBottom: 8 }}>
-              Bu yedek {geriYuklemeOnay.yedekTarihi ? new Date(geriYuklemeOnay.yedekTarihi).toLocaleDateString("tr-TR") : "bilinmeyen bir tarihte"} alınmış. İçindeki veri türleri, <b>şu andaki verinin üzerine yazılacak</b> — bu işlem geri alınamaz.
-            </div>
-            <div style={{ fontSize: 12, color: MUTED, marginBottom: 16 }}>
-              Emin değilsen önce "Yedeği İndir" ile şu anki verini yedekle, sonra geri yüklemeye devam et.
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => setGeriYuklemeOnay(null)} style={{
-                flex: 1, padding: 12, background: "none", border: `1px solid ${BORDER}`, color: MUTED, borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: "pointer"
-              }}>Vazgeç</button>
-              <button onClick={handleGeriYuklemeOnayla} disabled={geriYukleniyor} style={{
-                flex: 1, padding: 12, background: "#C0392B", color: "#fff", border: "none", borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: "pointer", opacity: geriYukleniyor?0.6:1
-              }}>{geriYukleniyor ? "Yükleniyor…" : "Evet, Geri Yükle"}</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── Başlarken Rehberi ────────────────────────────────────────────────────────
 const REHBER_ADIMLARI = [
+  { ikon: "🔑", baslik: "AI için API anahtarı al", metin: "Yapay zekâ özelliklerini (özet, risk analizi, müdahale planı) kullanabilmek için kendi Anthropic API anahtarını almalısın: console.anthropic.com adresinden ücretsiz hesap aç, küçük bir bakiye yükle (kullandıkça düşer, genelde aylık birkaç dolar civarında kalır), \"API Keys\" bölümünden yeni bir anahtar oluştur ve kopyala. Ayarlar sekmesindeki \"Anthropic API Anahtarı\" kutusuna yapıştırıp kaydet. Anahtar olmadan da programı kullanabilirsin, sadece AI destekli özellikler çalışmaz." },
   { ikon: "⚙️", baslik: "Ayarlar'dan başla", metin: "Okul kademeni (İlkokul/Ortaokul/Lise) ve varsa sınav türünü seç. Bu, AI önerilerinin öğrencinin yaşına uygun olmasını ve doğru deneme türünün kullanılmasını sağlar." },
   { ikon: "🏫", baslik: "Sınıflarını oluştur", metin: "Sınıf sekmesinden sınıf ekle, ya da doğrudan deneme Excel'ini / sınıf listesini yükleyerek öğrencilerini otomatik oluştur." },
   { ikon: "📝", baslik: "Görüşme notu kaydet", metin: "\"Görüşme Notu\" sekmesinden ilk kaydını gir — AI otomatik özetlesin, öğrenci profiline işlensin." },
@@ -8108,7 +8305,7 @@ function BaslarkenRehberi({ onKapat }) {
       <div style={{ background: "#fff", borderRadius: 18, maxWidth: 480, width: "100%", maxHeight: "88vh", overflowY: "auto", padding: 22 }}>
         <div style={{ fontSize: 22, fontWeight: 900, color: TEXT, marginBottom: 4 }}>👋 Hoş Geldiniz</div>
         <div style={{ fontSize: 13, color: MUTED, marginBottom: 18, lineHeight: 1.5 }}>
-          PDR Programı'nı ilk kez kullanıyorsan, aşağıdaki adımlar seni doğru yere yönlendirir. Bu rehbere istediğin zaman üstteki "?" simgesinden tekrar ulaşabilirsin.
+          Rehber Pusula'yı ilk kez kullanıyorsan, aşağıdaki adımlar seni doğru yere yönlendirir. Bu rehbere istediğin zaman üstteki "?" simgesinden tekrar ulaşabilirsin.
         </div>
         {REHBER_ADIMLARI.map((a, i) => (
           <div key={i} style={{ display: "flex", gap: 12, marginBottom: 16 }}>
@@ -8143,7 +8340,7 @@ export default function App() {
       setForm(f => ({ ...f, studentName: aktifOgrenci.name, className: aktifOgrenci.className || "", numara: bulunan?.numara || "" }));
     }
   }, [aktifOgrenci?.name]);
-  const [profForm, setProfForm] = useState({ studentName: "", className: "", notes: "", scores: { ...EMPTY_SCORES }, analysis: "" });
+  const [profForm, setProfForm] = useState({ studentName: "", className: "", numara: "", notes: "", scores: { ...EMPTY_SCORES }, analysis: "" });
   const [prof2Form, setProf2Form] = useState({ ...EMPTY_PROF2 });
   const [scoresSet, setScoresSet] = useState(false);
   const [scoresLoading, setScoresLoading] = useState(false);
@@ -8192,6 +8389,7 @@ export default function App() {
   const [rehberGoster, setRehberGoster] = useState(false);
   const [belgelerAltSekme, setBelgelerAltSekme] = useState("sevk"); // "sevk" | "meb_rapor" | "veli_mektubu"
   const [degerlendirmeAcik, setDegerlendirmeAcik] = useState(false);
+  const [kvkkBildirimGoster, setKvkkBildirimGoster] = useState(false);
   const [aktifYil, setAktifYil] = useState("2026-2027");
   const [yilEkranı, setYilEkrani] = useState(false); // true = yıl seçim ekranı
   const [mudahalePlan, setMudahalePlan] = useState({});
@@ -8201,6 +8399,7 @@ export default function App() {
   const [ilerlemeNotlari, setIlerlemeNotlari] = useState({});
   const [sevkler, setSevkler] = useState([]);
   const [hatirlatmalar, setHatirlatmalar] = useState([]);
+  const [netHaritasiKayitlari, setNetHaritasiKayitlari] = useState([]);
   const [kutuphane, setKutuphane] = useState([]);
   const [pdfYukleniyor, setPdfYukleniyor] = useState(false);
   const [search, setSearch] = useState("");
@@ -8220,6 +8419,7 @@ export default function App() {
     loadSinavTuru().then(v => { if (v) setSinavTuruState(v); });
     loadKademe().then(v => { if (v) setKademeState(v); });
     loadRehberGorunduMu().then(v => { if (!v) setRehberGoster(true); });
+    loadKvkkBildirimGorunduMu().then(v => { if (!v) setKvkkBildirimGoster(true); });
     loadAktifYil().then(setAktifYil);
     loadMudahalePlan().then(setMudahalePlan);
     loadTestKayitlari().then(setTestKayitlari);
@@ -8228,6 +8428,7 @@ export default function App() {
     loadIlerlemeNotlari().then(setIlerlemeNotlari);
     loadSevkler().then(setSevkler);
     loadHatirlatmalar().then(setHatirlatmalar);
+    loadNetHaritasi().then(setNetHaritasiKayitlari);
   }, []);
 
   // aktifOgrenci değişince formu güncelle
@@ -8327,7 +8528,7 @@ export default function App() {
     const p = { id: uid(), date: today(), ...profForm };
     const updated = [p, ...profiles];
     setProfiles(updated); await saveProfiles(updated);
-    setProfForm({ studentName: "", className: "", notes: "", scores: { ...EMPTY_SCORES }, analysis: "" });
+    setProfForm({ studentName: "", className: "", numara: "", notes: "", scores: { ...EMPTY_SCORES }, analysis: "" });
     setScoresSet(false);
     setProfSaved(true); setTimeout(() => setProfSaved(false), 2000); setTab("profil_merkez");
   }
@@ -8387,6 +8588,20 @@ export default function App() {
       else aiRiskTuru = bulunan.split("\n")[0].trim();
     }
 
+    // İkincil etkilenen alan — sınav kaygısı gibi durumlarda "kök neden" (örn.
+    // Duygusal) birincil, ama akademik performans da ciddi etkileniyorsa bunu
+    // ayrıca kaydeder. Mevcut tek-kategori yapıyı bozmadan (birincil hâlâ tek),
+    // ek bilgi olarak gösterilir.
+    let ikincilTur = "";
+    const ikincilMatch = aiAnaliz.match(/İKİNCİL ETKİLENEN ALAN:\s*(.+)/);
+    if (ikincilMatch) {
+      const bulunanIkincil = ikincilMatch[1].trim().replace(/-/g, " / ");
+      if (!/^yok/i.test(bulunanIkincil)) {
+        const eslesenIkincil = riskTurleriListesi.find(t => t.toLocaleLowerCase("tr").replace(/-/g," / ") === bulunanIkincil.toLocaleLowerCase("tr") || bulunanIkincil.toLocaleLowerCase("tr").includes(t.toLocaleLowerCase("tr").split("/")[0].trim().toLocaleLowerCase("tr")));
+        if (eslesenIkincil && eslesenIkincil !== aiRiskTuru) ikincilTur = eslesenIkincil;
+      }
+    }
+
     // Teknoloji/Ekran Bağımlılığı taraması — ana risk türünden bağımsız, AI'ın
     // her analizde görüşme notlarına dayanarak yaptığı ayrı bir tarama. Sadece
     // "Var" ise Sınıf görünümünde rozet olarak gösterilir.
@@ -8399,7 +8614,7 @@ export default function App() {
       if (gerekceMatch) teknolojiGerekce = gerekceMatch[1].split("\n")[0].trim();
     }
 
-    const item = { id: uid(), tarih: today(), ...riskForm, riskTuru: aiRiskTuru, oncelik: aiOncelik, aiAnaliz, kapandi: false, teknolojiBagimliligi, teknolojiGerekce };
+    const item = { id: uid(), tarih: today(), ...riskForm, riskTuru: aiRiskTuru, ikincilTur, oncelik: aiOncelik, aiAnaliz, kapandi: false, teknolojiBagimliligi, teknolojiGerekce };
     const updated = [item, ...riskListesi];
     setRiskListesi(updated); await saveRiskListesi(updated);
     setRiskForm({ studentName: "", className: "", numara: "", riskTuru: "", aciklama: "", oncelik: "Orta" });
@@ -8477,7 +8692,7 @@ export default function App() {
     const updated = [p, ...profiles];
     setProfiles(updated);
     await saveProfiles(updated);
-    setProfForm({ studentName: "", className: "", notes: "", scores: { ...EMPTY_SCORES }, analysis: "" });
+    setProfForm({ studentName: "", className: "", numara: "", notes: "", scores: { ...EMPTY_SCORES }, analysis: "" });
     setTab("profil_merkez");
   }
 
@@ -8543,11 +8758,13 @@ export default function App() {
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, "tr"));
   }, [ogrenciler, records, profiles, profiles2]);
 
+  const pdrIsAdmin = window.pdrAuth?.currentUser?.email === window.PDR_ADMIN_EMAIL;
   const TABS = [
     { key: "ogrenciler", label: "👥 Öğrenciler" },
     { key: "profil_merkez", label: "📋 Profil" },
     { key: "yeni", label: "📝 Görüşme Notu" },
     { key: "hatirlatici", label: "🔔 Hatırlatıcı" },
+    { key: "net_haritasi", label: "🎯 Net Haritası" },
     { key: "sinif_profili", label: "🏫 Sınıf" },
     { key: "risk", label: "⚠ Risk" },
     { key: "deneme", label: "📊 Deneme" },
@@ -8556,8 +8773,8 @@ export default function App() {
     { key: "belgeler", label: "📑 Belgeler" },
     { key: "kutuphane", label: "📚 Kütüphane" },
     { key: "istatistik", label: "İstatistik" },
-    { key: "prof_danisma", label: "🎓 Prof. Hakan" },
     { key: "ayarlar", label: "⚙️ Ayarlar" },
+    ...(pdrIsAdmin ? [{ key: "onaylar", label: "🛠 Onaylar" }] : []),
   ];
 
   return (
@@ -8592,7 +8809,19 @@ export default function App() {
         </div>
       </div>
 
-      {/* Canlı bilgi şeridi */}
+      {/* KVKK gizlilik bildirimi — girişten sonra bir kez gösterilir */}
+      {kvkkBildirimGoster && (
+        <div style={{ background: "#EEF2FF", borderBottom: "1px solid #C7D2FE", padding: "10px 16px", display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ fontSize: 12, color: "#3B4FD8", lineHeight: 1.5, flex: 1 }}>
+            🔒 Verileriniz güvende, kimse erişemez. Gizlilik için öğrenci soyadlarını kısaltabilirsiniz (örn. "Ahmet Y."). Veri gizliliği (KVKK) sorumluluğu kullanıcıya aittir.
+          </div>
+          <button onClick={async () => { setKvkkBildirimGoster(false); await saveKvkkBildirimGorunduMu(); }} style={{
+            background: "none", border: "none", color: "#3B4FD8", fontSize: 18, fontWeight: 800, cursor: "pointer", flexShrink: 0, lineHeight: 1, padding: 4
+          }}>✕</button>
+        </div>
+      )}
+
+      {/* Canlı bilgi şeridi (ticker) */}
       <div style={{ background: "#0F3D2E", overflow: "hidden", position: "sticky", top: 0, zIndex: 9, borderBottom: `1px solid ${BORDER}` }}>
         <div style={{ display: "inline-flex", whiteSpace: "nowrap", padding: "6px 0", animation: "pdrTickerScroll 26s linear infinite" }}>
           {[...tickerItems, ...tickerItems].map((item, i) => (
@@ -8627,7 +8856,11 @@ export default function App() {
             color: tab === t.key ? ACCENT : MUTED,
             fontSize: 11, cursor: "pointer",
             borderBottom: tab === t.key ? `3px solid ${ACCENT}` : "3px solid transparent",
-          }}>{t.label}</button>
+            display: "flex", alignItems: "center", gap: 4,
+          }}>
+            {t.label}
+            {t.key === "onaylar" && <span style={{ background: "#FB923C", color: "#fff", borderRadius: 8, padding: "1px 6px", fontSize: 8, fontWeight: 800, letterSpacing: 0.3 }}>YENİ</span>}
+          </button>
         ))}
       </div>
 
@@ -8791,47 +9024,6 @@ export default function App() {
           </div>
         )}
 
-        {/* ── PROF. DR. HAKAN ──────────────────────────────────────── */}
-        {tab === "prof_danisma" && (
-          <ProfDanismaEkrani
-            kayitliListesi={kayitliListesi}
-            aktifOgrenci={aktifOgrenci}
-            records={records}
-            profiles={profiles}
-            profiles2={profiles2}
-            denemeler={denemeler}
-            riskListesi={riskListesi}
-            mudahalePlan={mudahalePlan}
-            sevkler={sevkler}
-            hazirlikNotlari={hazirlikNotlari}
-            ilerlemeNotlari={ilerlemeNotlari}
-            profNotlari={profNotlari}
-            setProfNotlari={setProfNotlari}
-          />
-        )}
-
-        {/* ── AYARLAR ──────────────────────────────────────────────── */}
-        {tab === "ayarlar" && <AyarlarEkrani
-          ogrenciler={ogrenciler} setOgrenciler={setOgrenciler}
-          records={records} setRecords={setRecords}
-          profiles={profiles} setProfiles={setProfiles}
-          profiles2={profiles2} setProfiles2={setProfiles2}
-          oogDegerlendirmeler={oogDegerlendirmeler} setOogDegerlendirmeler={setOogDegerlendirmeler}
-          riskListesi={riskListesi} setRiskListesi={setRiskListesi}
-          denemeler={denemeler} setDenemeler={setDenemeler}
-          sevkler={sevkler} setSevkler={setSevkler}
-          mudahalePlan={mudahalePlan} setMudahalePlan={setMudahalePlan}
-          hazirlikNotlari={hazirlikNotlari} setHazirlikNotlari={setHazirlikNotlari}
-          ilerlemeNotlari={ilerlemeNotlari} setIlerlemeNotlari={setIlerlemeNotlari}
-          profNotlari={profNotlari} setProfNotlari={setProfNotlari}
-          kutuphane={kutuphane} setKutuphane={setKutuphane}
-          yillar={yillar} setYillar={setYillar}
-          sinifListesi={sinifListesi} setSinifListesi={setSinifListesi}
-          aktifYil={aktifYil} setAktifYil={setAktifYil}
-          kademe={kademe} setKademe={setKademe}
-          sinavTuru={sinavTuru} setSinavTuru={setSinavTuru}
-        />}
-
         {/* ── DEĞERLENDİRME (artık Profil'den açılan bir modal) ───── */}
         {degerlendirmeAcik && (
           <div style={{ position: "fixed", inset: 0, background: BG, zIndex: 9998, overflowY: "auto" }}>
@@ -8914,9 +9106,8 @@ export default function App() {
               const kalanOog = oogDegerlendirmeler.filter(o => !silinecekMi(o.studentName, o.className, o.numara));
               setOogDegerlendirmeler(kalanOog); await saveOogDegerlendirmeler(kalanOog);
 
-              // İsimle anahtarlanan sözlükler (deneme, müdahale planı, hazırlık/ilerleme notları,
-              // Prof. Dr. Hakan süpervizyon notları): silinen her öğrencinin hem yeni (isim+sınıf)
-              // hem eski (düz isim) anahtarını temizle
+              // İsimle anahtarlanan sözlükler (deneme, müdahale planı, hazırlık/ilerleme notları):
+              // silinen her öğrencinin hem yeni (isim+sınıf) hem eski (düz isim) anahtarını temizle
               function pdrSozlukTemizle(sozluk) {
                 const yeni = { ...sozluk };
                 silinecekler.forEach(o => {
@@ -8936,9 +9127,6 @@ export default function App() {
 
               const kalanIlerleme = pdrSozlukTemizle(ilerlemeNotlari);
               setIlerlemeNotlari(kalanIlerleme); await saveIlerlemeNotlari(kalanIlerleme);
-
-              const kalanProfNotlari = pdrSozlukTemizle(profNotlari);
-              setProfNotlari(kalanProfNotlari); await saveProfNotlari(kalanProfNotlari);
             }}
             onYilSifirla={async (yil) => {
               // Yılı yıllar listesinden ÇIKARMADAN, sadece o yıla ait öğrenci ve ilişkili
@@ -8988,9 +9176,6 @@ export default function App() {
 
               const kalanIlerleme2 = pdrSozlukTemizleSifirla(ilerlemeNotlari);
               setIlerlemeNotlari(kalanIlerleme2); await saveIlerlemeNotlari(kalanIlerleme2);
-
-              const kalanProfNotlari2 = pdrSozlukTemizleSifirla(profNotlari);
-              setProfNotlari(kalanProfNotlari2); await saveProfNotlari(kalanProfNotlari2);
             }}
           />
         )}
@@ -9068,9 +9253,6 @@ export default function App() {
               const yeniIlerleme = pdrSozlukSinifTasi(ilerlemeNotlari);
               setIlerlemeNotlari(yeniIlerleme); await saveIlerlemeNotlari(yeniIlerleme);
 
-              const yeniProfNotlari = pdrSozlukSinifTasi(profNotlari);
-              setProfNotlari(yeniProfNotlari); await saveProfNotlari(yeniProfNotlari);
-
               const yeniOog = oogDegerlendirmeler.map(o => ayniMi(o.studentName, o.className, o.numara) ? { ...o, className: yeniSinif } : o);
               setOogDegerlendirmeler(yeniOog); await saveOogDegerlendirmeler(yeniOog);
             }}
@@ -9118,9 +9300,6 @@ export default function App() {
 
               const updIlerleme = pdrSozlukOgrenciTemizle(ilerlemeNotlari);
               setIlerlemeNotlari(updIlerleme); await saveIlerlemeNotlari(updIlerleme);
-
-              const updProfNotlari = pdrSozlukOgrenciTemizle(profNotlari);
-              setProfNotlari(updProfNotlari); await saveProfNotlari(updProfNotlari);
             }}
             onSinifSil={async (className) => {
               const hedefSinif = (className || "").trim();
@@ -9169,9 +9348,6 @@ export default function App() {
 
               const updIlerleme2 = pdrSozlukSinifTemizle(ilerlemeNotlari);
               setIlerlemeNotlari(updIlerleme2); await saveIlerlemeNotlari(updIlerleme2);
-
-              const updProfNotlari2 = pdrSozlukSinifTemizle(profNotlari);
-              setProfNotlari(updProfNotlari2); await saveProfNotlari(updProfNotlari2);
             }}
             setAktifOgrenci={setAktifOgrenci}
             setTab={setTab}
@@ -9205,6 +9381,17 @@ export default function App() {
             setAktifOgrenci={setAktifOgrenci}
             hatirlatmalar={hatirlatmalar}
             setHatirlatmalar={setHatirlatmalar}
+          />
+        )}
+
+        {/* ── NET HARİTASI ─────────────────────────────────────────── */}
+        {tab === "net_haritasi" && (
+          <NetHaritasiEkrani
+            kayitliListesi={kayitliListesi}
+            aktifOgrenci={aktifOgrenci}
+            setAktifOgrenci={setAktifOgrenci}
+            netHaritasiKayitlari={netHaritasiKayitlari}
+            setNetHaritasiKayitlari={setNetHaritasiKayitlari}
           />
         )}
 
@@ -9351,6 +9538,7 @@ export default function App() {
             {(() => {
               const aktif = riskListesi.filter(r => !r.kapandi);
               const kapali = riskListesi.filter(r => r.kapandi);
+              // [ana renk, camsı arka plan gradyanı, parlaklık gölgesi]
               const oncelikRenk = {
                 "Yüksek": ["#FF5A4E", "linear-gradient(135deg, #E8443A 0%, #7B1610 100%)", "rgba(255,90,78,0.55)"],
                 "Orta":   ["#FFA53E", "linear-gradient(135deg, #E88A2E 0%, #7A4508 100%)", "rgba(255,165,62,0.5)"],
@@ -9375,6 +9563,7 @@ export default function App() {
                           <div style={{ display:"flex", gap:6, flexShrink:0 }}>
                             <span style={{ background:"rgba(255,255,255,0.22)", color:"#fff", borderRadius:20, padding:"3px 12px", fontSize:11, fontWeight:800, border:`1px solid ${rc}` }}>{r.oncelik}</span>
                             {r.riskTuru && <span style={{ background:"rgba(255,255,255,0.15)", color:"#fff", borderRadius:20, padding:"3px 12px", fontSize:11, fontWeight:700 }}>{r.riskTuru}</span>}
+                            {r.ikincilTur && <span title="İkincil etkilenen alan" style={{ background:"rgba(255,255,255,0.10)", color:"#fff", borderRadius:20, padding:"3px 10px", fontSize:10, fontWeight:600, border:"1px dashed rgba(255,255,255,0.4)" }}>+ {r.ikincilTur}</span>}
                           </div>
                         </div>
                         <div style={{ height:1, background:"rgba(255,255,255,0.25)", margin:"8px 0" }} />
@@ -9503,6 +9692,27 @@ export default function App() {
             }}>⬇ Excel'e Aktar</button>
           </div>
         )}
+        {tab === "ayarlar" && <AyarlarEkrani
+          ogrenciler={ogrenciler} setOgrenciler={setOgrenciler}
+          records={records} setRecords={setRecords}
+          profiles={profiles} setProfiles={setProfiles}
+          profiles2={profiles2} setProfiles2={setProfiles2}
+          oogDegerlendirmeler={oogDegerlendirmeler} setOogDegerlendirmeler={setOogDegerlendirmeler}
+          riskListesi={riskListesi} setRiskListesi={setRiskListesi}
+          denemeler={denemeler} setDenemeler={setDenemeler}
+          sevkler={sevkler} setSevkler={setSevkler}
+          mudahalePlan={mudahalePlan} setMudahalePlan={setMudahalePlan}
+          hazirlikNotlari={hazirlikNotlari} setHazirlikNotlari={setHazirlikNotlari}
+          ilerlemeNotlari={ilerlemeNotlari} setIlerlemeNotlari={setIlerlemeNotlari}
+          profNotlari={profNotlari} setProfNotlari={setProfNotlari}
+          kutuphane={kutuphane} setKutuphane={setKutuphane}
+          yillar={yillar} setYillar={setYillar}
+          sinifListesi={sinifListesi} setSinifListesi={setSinifListesi}
+          aktifYil={aktifYil} setAktifYil={setAktifYil}
+          kademe={kademe} setKademe={setKademe}
+          sinavTuru={sinavTuru} setSinavTuru={setSinavTuru}
+        />}
+        {tab === "onaylar" && pdrIsAdmin && <KullaniciOnaylari />}
       </div>
     </div>
   );

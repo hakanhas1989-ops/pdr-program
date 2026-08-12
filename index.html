@@ -640,13 +640,23 @@ document.addEventListener("visibilitychange", () => {
 });
 
 let pdrFirstReady = true;
+function pdrZamanAsimliBekle(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((resolve) => setTimeout(resolve, ms))
+  ]);
+}
 pdrAuth.onAuthStateChanged(async (user) => {
   const splashEl = document.getElementById("splash");
   if (user) {
     if (pdrLoginOverlay) pdrLoginOverlay.style.display = "none";
     if (pdrLogoutBtn) pdrLogoutBtn.style.display = "block";
     pdrInaktiviteSifirla();
-    await pdrSyncDown(user.uid);
+    // Firestore'a erişilemiyorsa (ağ engeli/zaman aşımı) uygulamayı sonsuza
+    // kadar bekletmemek için en fazla 8 saniye bekleriz; süre dolarsa
+    // yerelde önceden inmiş veriyle devam edilir, senkronizasyon arka
+    // planda tekrar denenmeye devam edebilir.
+    await pdrZamanAsimliBekle(pdrSyncDown(user.uid), 8000);
     if (pdrFirstReady) { pdrFirstReady = false; pdrResolveReady(user); }
   } else {
     if (splashEl) splashEl.className = "hide";

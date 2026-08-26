@@ -952,7 +952,7 @@ const KONU_LISTESI = ["Davranış","Akademik","Aile","Akran / Zorbalık","Duygus
 // Kaynaştırma/tanı listesi — e-Okul'dan sınıf bazında gelen kaynaştırma
 // öğrencilerini işaretlemek için. Bir öğrencide birden fazla tanı olabilir,
 // o yüzden çoklu seçim (dizi) olarak tutulur.
-const KAYNASTIRMA_TANILAR = ["Özel Öğrenme Güçlüğü","DEHB","Otizm Spektrum Bozukluğu","Zihinsel Yetersizlik","İşitme Yetersizliği","Görme Yetersizliği","Dil ve Konuşma Güçlüğü","Diğer"];
+const KAYNASTIRMA_TANILAR = ["Özel Öğrenme Güçlüğü","DEHB","Otizm Spektrum Bozukluğu","Zihinsel Yetersizlik","İşitme Yetersizliği","Görme Yetersizliği","Bedensel Yetersizlik","Süregelen Hastalık","Dil ve Konuşma Güçlüğü","Diğer"];
 const BIREYI_TANIMA_KATEGORILER = [
   { key:"aile", label:"👨‍👩‍👧‍👦 Aile Yapısı ve İlişkileri" },
   { key:"saglik", label:"🩺 Sağlık ve Gelişim Öyküsü" },
@@ -9315,6 +9315,130 @@ function BaslarkenRehberi({ onKapat }) {
   );
 }
 
+// ── ŞEMA (ZİHİN HARİTASI) ────────────────────────────────────────────────────
+// Programın sekmelerini bir zihin haritası olarak gösterir: merkezde program,
+// ondan çıkan dallar birbiriyle ilişkili sekme gruplarını, dalların uçlarındaki
+// yapraklar ise gerçek sekmeleri temsil eder. Bir yaprağa tıklamak doğrudan o
+// sekmeye geçer (setTab). Yapı SEMA_DALLARI sabitinden geliyor, ileride yeni
+// dal/yaprak eklemek tek satırlık bir değişiklik.
+const SEMA_DALLARI = [
+  { key: "ogrenci", label: "👤 Öğrenci Merkezi", renk: ACCENT,
+    aciklama: "Tüm kayıtların çekirdeği — diğer tüm sekmeler buradaki öğrenciye bağlanır.",
+    yapraklar: [
+      { tab: "ogrenciler", label: "👥 Öğrenciler" },
+      { tab: "profil_merkez", label: "📋 Profil" },
+      { tab: "sinif_profili", label: "🏫 Sınıf" },
+    ] },
+  { key: "gorusme", label: "💬 Görüşme & Takip", renk: BLUE,
+    aciklama: "Görüşme notları, hatırlatmalar, müdahale planı ve bunlardan üretilen belgeler.",
+    yapraklar: [
+      { tab: "yeni", label: "📝 Görüşme Notu" },
+      { tab: "hatirlatici", label: "🔔 Hatırlatıcı" },
+      { tab: "mudahale", label: "🎯 Müdahale" },
+      { tab: "belgeler", label: "📑 Belgeler" },
+    ] },
+  { key: "akademik", label: "📈 Akademik Takip", renk: PURPLE,
+    aciklama: "Sınav sonuçları ve yıllık rehberlik kazanımları planı.",
+    yapraklar: [
+      { tab: "net_haritasi", label: "🎯 Net Haritası" },
+      { tab: "deneme", label: "📊 Deneme" },
+      { tab: "kazanimlar", label: "📘 Kazanımlar" },
+    ] },
+  { key: "degerlendirme", label: "🧪 Değerlendirme", renk: "#C0392B",
+    aciklama: "Testler ve risk kayıtları — sonuçları öğrenci profiline ve sınıf özetine işler.",
+    yapraklar: [
+      { tab: "testler", label: "🧪 Testler" },
+      { tab: "risk", label: "⚠ Risk" },
+    ] },
+  { key: "kaynak", label: "📚 Kaynak & Destek", renk: "#1A8C5B",
+    aciklama: "Referans kütüphanesi ve süpervizyon desteği.",
+    yapraklar: [
+      { tab: "kutuphane", label: "📚 Kütüphane" },
+      { tab: "prof_danisma", label: "🎓 Prof. Hakan" },
+    ] },
+  { key: "sistem", label: "⚙️ Sistem", renk: MUTED,
+    aciklama: "Genel görünüm ve veri/ayar yönetimi — tüm sekmelerin verisini özetler ya da yapılandırır.",
+    yapraklar: [
+      { tab: "istatistik", label: "📊 İstatistik" },
+      { tab: "ayarlar", label: "⚙️ Ayarlar" },
+    ] },
+];
+
+function SemaEkrani({ setTab, tab }) {
+  const [acikDal, setAcikDal] = useState(null);
+  const TRUNK_X = 13;      // gövde çizgisinin Dallar kabındaki x konumu
+  const BRANCH_GAP = 14;   // gövdeden dal kutusuna kadar olan yatay boşluk
+
+  return (
+    <div>
+      <div style={{ background: "#EEF2FF", borderRadius: 10, padding: "10px 14px", marginBottom: 18, fontSize: 13, color: BLUE, fontWeight: 600, lineHeight: 1.5 }}>
+        🧭 Programın zihin haritası — bir dala dokun, altındaki sekmeleri gör; bir sekmeye dokun, doğrudan oraya git.
+      </div>
+
+      {/* Merkez düğüm */}
+      <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
+        <div style={{
+          background: `linear-gradient(135deg, ${ACCENT} 0%, #164A35 100%)`, color: "#fff",
+          borderRadius: 16, padding: "14px 22px", fontSize: 15, fontWeight: 900,
+          boxShadow: "0 4px 14px rgba(15,61,46,0.28)", textAlign: "center"
+        }}>
+          🧠 PDR Programı
+        </div>
+      </div>
+
+      {/* Gövdeden inen çizgi */}
+      <div style={{ display: "flex", justifyContent: "center" }}>
+        <div style={{ width: 2, height: 14, background: BORDER }} />
+      </div>
+
+      {/* Dallar */}
+      <div style={{ position: "relative", paddingLeft: TRUNK_X + BRANCH_GAP }}>
+        <div style={{ position: "absolute", left: TRUNK_X, top: 0, bottom: 18, width: 2, background: BORDER }} />
+        {SEMA_DALLARI.map((dal, i) => {
+          const acik = acikDal === dal.key;
+          const buDalAktif = dal.yapraklar.some(y => y.tab === tab);
+          return (
+            <div key={dal.key} style={{ position: "relative", marginBottom: i === SEMA_DALLARI.length - 1 ? 0 : 14 }}>
+              {/* Gövdeden dala yatay çizgi (dal kutusunun kendi konum bağlamına göre negatif ofset — gövdeye ulaşmak için) */}
+              <div style={{ position: "absolute", left: -BRANCH_GAP, top: 17, width: BRANCH_GAP, height: 2, background: dal.renk }} />
+              {/* Düğüm noktası — gövde çizgisinin üzerinde ortalanmış */}
+              <div style={{ position: "absolute", left: -BRANCH_GAP - 4, top: 12, width: 10, height: 10, borderRadius: "50%", background: dal.renk }} />
+
+              <button onClick={() => setAcikDal(acik ? null : dal.key)} style={{
+                width: "100%", textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+                background: acik || buDalAktif ? `${dal.renk}18` : CARD, border: `2px solid ${dal.renk}`, borderRadius: 12,
+                padding: "10px 12px", cursor: "pointer"
+              }}>
+                <span style={{ fontSize: 14, fontWeight: 800, color: dal.renk }}>{dal.label}</span>
+                <span style={{ fontSize: 12, color: dal.renk, transform: acik ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>▶</span>
+              </button>
+
+              {acik && (
+                <div style={{ marginTop: 8, marginLeft: 16, position: "relative", paddingLeft: 16 }}>
+                  <div style={{ position: "absolute", left: 0, top: 0, bottom: 14, width: 2, background: `${dal.renk}55` }} />
+                  <div style={{ fontSize: 11, color: MUTED, marginBottom: 8, lineHeight: 1.5 }}>{dal.aciklama}</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {dal.yapraklar.map(y => {
+                      const seciliMi = tab === y.tab;
+                      return (
+                        <button key={y.tab} onClick={() => setTab(y.tab)} style={{
+                          background: seciliMi ? dal.renk : `${dal.renk}18`, color: seciliMi ? "#fff" : dal.renk,
+                          border: `1.5px solid ${dal.renk}`, borderRadius: 20, padding: "6px 12px",
+                          fontSize: 12, fontWeight: 700, cursor: "pointer"
+                        }}>{y.label}</button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── MAIN ──────────────────────────────────────────────────────────────────────
 export default function App() {
   const [records, setRecords] = useState([]);
@@ -9847,6 +9971,7 @@ export default function App() {
     { key: "istatistik", label: "İstatistik" },
     { key: "prof_danisma", label: "🎓 Prof. Hakan" },
     { key: "ayarlar", label: "⚙️ Ayarlar" },
+    { key: "sema", label: "🧠 Şema" },
   ];
 
   return (
@@ -10141,6 +10266,9 @@ export default function App() {
           kademe={kademe} setKademe={setKademe}
           sinavTuru={sinavTuru} setSinavTuru={setSinavTuru}
         />}
+
+        {/* ── ŞEMA (ZİHİN HARİTASI) ────────────────────────────────── */}
+        {tab === "sema" && <SemaEkrani setTab={setTab} tab={tab} />}
 
         {/* ── DEĞERLENDİRME (artık Profil'den açılan bir modal) ───── */}
         {degerlendirmeAcik && (

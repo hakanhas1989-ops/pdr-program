@@ -2188,6 +2188,31 @@ function uid() { return Date.now().toString(36) + Math.random().toString(36).sli
 // numarada olan iki kayıt, isimleri birebir aynı yazılmasa bile AYNI öğrenci
 // sayılır. Numara taraflardan birinde yoksa ya da sınıf bilgisi tutmuyorsa,
 // eski isim+sınıf(+numara) eşleştirmesine geri dönülür.
+// Sınıf adından (örn. "8-A", "3/B", "12-C") okul kademesini çıkarır — kademe
+// seçimine göre öğrenci/sınıf listelerini filtrelemek için kullanılır.
+// 1-4: ilkokul, 5-8: ortaokul, 9-12: lise. Sınıf adı sayı ile başlamıyorsa
+// (örn. elle girilmiş "Şube" gibi özel adlar) null döner — bu durumda kayıt
+// hiçbir kademe filtresinde gizlenmez, güvenli tarafta kalınır.
+function sinifKademesi(className) {
+  const m = String(className || "").trim().match(/^(\d{1,2})/);
+  if (!m) return null;
+  const n = parseInt(m[1], 10);
+  if (n >= 1 && n <= 4) return "ilkokul";
+  if (n >= 5 && n <= 8) return "ortaokul";
+  if (n >= 9 && n <= 12) return "lise";
+  return null;
+}
+
+// Bir sınıfın, seçili okul kademesiyle uyumlu olup olmadığını söyler.
+// kademe boşsa (henüz Ayarlar'dan seçilmemişse) ya da sınıf adından kademe
+// çıkarılamıyorsa herkes uyumlu sayılır — böylece filtre asla veri kaybettirmez.
+function pdrKademeUyumlu(className, kademe) {
+  if (!kademe) return true;
+  const k = sinifKademesi(className);
+  if (!k) return true;
+  return k === kademe;
+}
+
 function pdrAyniOgrenci(ad1, sinif1, ad2, sinif2, no1, no2) {
   const s1 = (sinif1 || "").toLocaleLowerCase("tr").trim();
   const s2 = (sinif2 || "").toLocaleLowerCase("tr").trim();
@@ -6184,13 +6209,14 @@ function OgrenciYonetim({
     setSeciliOgrenci(null);
   }
 
-  // Öğrenci listesi — aktif yıla göre filtrele (useMemo ile cache)
+  // Öğrenci listesi — aktif yıla ve seçili okul kademesine göre filtrele (useMemo ile cache)
   const tumOgrenciler = useMemo(() =>
     ogrenciler
       .filter(o => !o.yil || o.yil === aktifYil)
+      .filter(o => pdrKademeUyumlu(o.className, kademe))
       .slice()
       .sort((a,b) => (a.studentName||"").localeCompare(b.studentName||"", "tr")),
-  [ogrenciler, aktifYil]);
+  [ogrenciler, aktifYil, kademe]);
 
   const filtreliListe = useMemo(() => tumOgrenciler.filter(o =>
     !aramaDebounce ||
@@ -8269,7 +8295,7 @@ function ProfilMerkez({
 }
 
 // ── Sınıf Profili Bileşeni ────────────────────────────────────────────────────
-function SinifProfili({ ogrenciler, setOgrenciler, records, riskListesi, aktifYil, sinifListesi, setSinifListesi, denemeler, sinavTuru, onSinifSilTumVeri }) {
+function SinifProfili({ ogrenciler, setOgrenciler, records, riskListesi, aktifYil, sinifListesi, setSinifListesi, denemeler, sinavTuru, onSinifSilTumVeri, kademe }) {
   const [seciliSinif, setSeciliSinif] = useState(null);
   const [listeYukleAcik, setListeYukleAcik] = useState(false);
   const [listeMetni, setListeMetni] = useState("");
@@ -8281,7 +8307,7 @@ function SinifProfili({ ogrenciler, setOgrenciler, records, riskListesi, aktifYi
   const RISK_TURLERI = ["Davranış","Akademik","Aile","Akran / Zorbalık","Duygusal","Devamsızlık","Öz Zarar","Sağlık","Madde Kullanımı","Teknoloji / Ekran Bağımlılığı","Ekonomik Güçlük","Yas / Kayıp","Travma","Özel Öğrenme Güçlüğü","Diğer"];
 
   // Yıl filtreli öğrenciler
-  const yilOgrencileri = ogrenciler.filter(o => !o.yil || o.yil === aktifYil);
+  const yilOgrencileri = ogrenciler.filter(o => !o.yil || o.yil === aktifYil).filter(o => pdrKademeUyumlu(o.className, kademe));
 
   // Her şube için istatistik
   function subeIstatistik(sube) {
@@ -8340,7 +8366,7 @@ function SinifProfili({ ogrenciler, setOgrenciler, records, riskListesi, aktifYi
 
   // Gösterilecek sınıflar: elle eklenen sınıflar + öğrencisi olan tüm sınıflar (birleşim)
   const ogrenciSiniflari = [...new Set(yilOgrencileri.map(o => (o.className||"").trim()).filter(Boolean))];
-  const gosterilecekSubeler = [...new Set([...(sinifListesi||[]), ...ogrenciSiniflari])].sort((a,b)=>a.localeCompare(b,"tr"));
+  const gosterilecekSubeler = [...new Set([...(sinifListesi||[]).filter(s => pdrKademeUyumlu(s, kademe)), ...ogrenciSiniflari])].sort((a,b)=>a.localeCompare(b,"tr"));
 
   async function handleSinifEkle() {
     const ad = yeniSinifAdi.trim();
@@ -9364,10 +9390,14 @@ const SEMA_DALLARI = [
     ] },
 ];
 
-function SemaEkrani({ setTab, tab }) {
+function SemaEkrani({ setTab, tab, kademe }) {
   const [acikDal, setAcikDal] = useState(null);
   const TRUNK_X = 13;      // gövde çizgisinin Dallar kabındaki x konumu
   const BRANCH_GAP = 14;   // gövdeden dal kutusuna kadar olan yatay boşluk
+  const gizlenecek = kademe === "ilkokul" ? ["net_haritasi", "deneme"] : [];
+  const dallar = SEMA_DALLARI
+    .map(dal => ({ ...dal, yapraklar: dal.yapraklar.filter(y => !gizlenecek.includes(y.tab)) }))
+    .filter(dal => dal.yapraklar.length > 0);
 
   return (
     <div>
@@ -9394,11 +9424,11 @@ function SemaEkrani({ setTab, tab }) {
       {/* Dallar */}
       <div style={{ position: "relative", paddingLeft: TRUNK_X + BRANCH_GAP }}>
         <div style={{ position: "absolute", left: TRUNK_X, top: 0, bottom: 18, width: 2, background: BORDER }} />
-        {SEMA_DALLARI.map((dal, i) => {
+        {dallar.map((dal, i) => {
           const acik = acikDal === dal.key;
           const buDalAktif = dal.yapraklar.some(y => y.tab === tab);
           return (
-            <div key={dal.key} style={{ position: "relative", marginBottom: i === SEMA_DALLARI.length - 1 ? 0 : 14 }}>
+            <div key={dal.key} style={{ position: "relative", marginBottom: i === dallar.length - 1 ? 0 : 14 }}>
               {/* Gövdeden dala yatay çizgi (dal kutusunun kendi konum bağlamına göre negatif ofset — gövdeye ulaşmak için) */}
               <div style={{ position: "absolute", left: -BRANCH_GAP, top: 17, width: BRANCH_GAP, height: 2, background: dal.renk }} />
               {/* Düğüm noktası — gövde çizgisinin üzerinde ortalanmış */}
@@ -9936,7 +9966,7 @@ export default function App() {
   const kayitliListesi = useMemo(() => {
     const map = new Map();
     // 1) Öğrenci listesi (ogrenciler) esas kaynak — numara varsa üçlü anahtar (isim+sınıf+numara) kullanılır
-    ogrenciler.forEach(o => {
+    ogrenciler.filter(o => pdrKademeUyumlu(o.className, kademe)).forEach(o => {
       const key = pdrOgrAnahtar(o.studentName.toLocaleLowerCase("tr").trim(), (o.className||"").toLocaleLowerCase("tr").trim(), o.numara);
       map.set(key, { name: o.studentName, className: o.className || "", numara: o.numara || "" });
     });
@@ -9946,15 +9976,19 @@ export default function App() {
     const varMiIsimSinif = (ad, sinif) => ogrenciler.some(o =>
       (o.studentName||"").toLocaleLowerCase("tr").trim() === (ad||"").toLocaleLowerCase("tr").trim() &&
       (o.className||"").toLocaleLowerCase("tr").trim() === (sinif||"").toLocaleLowerCase("tr").trim());
-    [...records.filter(r => (r.meetingType || "Öğrenci") === "Öğrenci"), ...profiles, ...profiles2].forEach(r => {
+    [...records.filter(r => (r.meetingType || "Öğrenci") === "Öğrenci"), ...profiles, ...profiles2].filter(r => pdrKademeUyumlu(r.className, kademe)).forEach(r => {
       if (varMiIsimSinif(r.studentName, r.className)) return;
       const key = pdrOgrAnahtar(r.studentName.toLocaleLowerCase("tr").trim(), (r.className||"").toLocaleLowerCase("tr").trim(), r.numara);
       if (!map.has(key)) map.set(key, { name: r.studentName, className: r.className || "", numara: r.numara || "" });
     });
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, "tr"));
-  }, [ogrenciler, records, profiles, profiles2]);
+  }, [ogrenciler, records, profiles, profiles2, kademe]);
 
-  const TABS = [
+  // Deneme/Net Haritası sekmeleri LGS/YKS tarzı sınav takibi içindir — ilkokul
+  // kademesinde anlamı yok, o yüzden kademe "ilkokul" iken sekme listesinden
+  // ve dolayısıyla arama/seçim listelerinden çıkarılır.
+  const ILKOKULDA_GIZLENECEK_SEKMELER = ["net_haritasi", "deneme"];
+  const TABS_TUMU = [
     { key: "ogrenciler", label: "👥 Öğrenciler" },
     { key: "profil_merkez", label: "📋 Profil" },
     { key: "yeni", label: "📝 Görüşme Notu" },
@@ -9973,6 +10007,13 @@ export default function App() {
     { key: "ayarlar", label: "⚙️ Ayarlar" },
     { key: "sema", label: "🧠 Şema" },
   ];
+  const TABS = TABS_TUMU.filter(t => !(kademe === "ilkokul" && ILKOKULDA_GIZLENECEK_SEKMELER.includes(t.key)));
+
+  // Kademe "ilkokul"a değiştiğinde, o an açık olan sekme gizlenen sekmelerden
+  // biriyse boş ekranda kalmamak için Öğrenciler'e yönlendir.
+  useEffect(() => {
+    if (kademe === "ilkokul" && ILKOKULDA_GIZLENECEK_SEKMELER.includes(tab)) setTab("ogrenciler");
+  }, [kademe]);
 
   return (
     <div style={{ minHeight: "100vh", background: BG, fontFamily: "'Segoe UI', system-ui, sans-serif", color: TEXT }}>
@@ -10268,7 +10309,7 @@ export default function App() {
         />}
 
         {/* ── ŞEMA (ZİHİN HARİTASI) ────────────────────────────────── */}
-        {tab === "sema" && <SemaEkrani setTab={setTab} tab={tab} />}
+        {tab === "sema" && <SemaEkrani setTab={setTab} tab={tab} kademe={kademe} />}
 
         {/* ── DEĞERLENDİRME (artık Profil'den açılan bir modal) ───── */}
         {degerlendirmeAcik && (
@@ -10645,6 +10686,7 @@ export default function App() {
             denemeler={denemeler}
             sinavTuru={sinavTuru}
             onSinifSilTumVeri={handleSinifSilTumVeri}
+            kademe={kademe}
           />
         )}
 

@@ -4117,7 +4117,33 @@ function netIlerlemeSVGOlustur(ogrKayitlar, genislik, yukseklik) {
 // değer, her kazanımın S/D/Y/B% detayını görebilmek. AI'ın PDF'ten çıkardığı
 // veri, kaydedilmeden ÖNCE danışmana gösterilir — okuma hataları olabileceği
 // için onay/düzeltme adımı zorunlu, AI hiçbir şeyi kendiliğinden kaydetmez.
-function NetHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, netHaritasiKayitlari, setNetHaritasiKayitlari }) {
+// TYT/AYT (YKS) güncel soru dağılımı — ÖSYM'nin yıllardır kullandığı stabil test
+// yapısı (yıldan yıla küçük farklar olabilir). Net Haritası'nın "Yanlış Analizi"
+// önerisinde, kademe "lise" olduğunda AI'a bağlam olarak veriliyor; böylece
+// tekrar eden zayıf konuları önceliklendirirken sınavdaki gerçek ağırlığı da
+// göz önünde bulundurabiliyor. Konu (kazanım) düzeyinde çıkmış soru dağılımı
+// yıldan yıla değişken olduğu için burada yok — böyle bir veri elde edilirse
+// (danışman kendi kaynağından girerse) ayrıca eklenebilir.
+const TYT_AYT_SORU_DAGILIMI = `TYT (120 soru, 165 dk): Türkçe 40, Temel Matematik 40, Sosyal Bilimler 20 (Tarih 5, Coğrafya 5, Felsefe 5, Din Kültürü ve Ahlak Bilgisi 5), Fen Bilimleri 20 (Fizik 7, Kimya 7, Biyoloji 6). Tüm adaylar TYT'ye girer.
+AYT (160 soru, 180 dk, alana göre ilgili testler): Matematik 40 · Fen Bilimleri 40 (Fizik 14, Kimya 13, Biyoloji 13) · Türk Dili ve Edebiyatı-Sosyal Bilimler-1 40 (Edebiyat 24, Tarih-1 10, Coğrafya-1 6) · Sosyal Bilimler-2 40 (Tarih-2 11, Coğrafya-2 11, Felsefe Grubu 12, Din Kültürü ve Ahlak Bilgisi 6).
+Alan bazında sorumluluk: Sayısal → TYT + AYT Matematik + AYT Fen Bilimleri; Eşit Ağırlık → TYT + AYT Matematik + AYT Türk Dili ve Edebiyatı-Sosyal Bilimler-1; Sözel → TYT + AYT Türk Dili ve Edebiyatı-Sosyal Bilimler-1 + AYT Sosyal Bilimler-2.`;
+
+// Net Haritası'nın hangi sınava göre bağlam kuracağını belirler — kademeye göre
+// LGS ya da TYT/AYT (YKS) diline geçer. kademe boşsa/tanınmıyorsa nötr kalır.
+function netHaritasiSinavBaglami(kademe) {
+  if (kademe === "lise") {
+    return { sinavAdi: "TYT/AYT (YKS)", koc: "TYT/AYT (YKS) hazırlık sürecinde uzmanlaşmış",
+      ekBaglam: `\n\nGüncel TYT/AYT soru dağılımı (referans için):\n${TYT_AYT_SORU_DAGILIMI}\nÖncelik listesini oluştururken, mümkün olduğunca bu dağılımı da göz önünde bulundur: sınavda soru sayısı daha yüksek olan derslerdeki (örn. Matematik, Fen Bilimleri) tekrar eden zayıf konulara biraz daha ağırlık verebilirsin — ama tek ölçüt bu olmasın, asıl belirleyici veri, öğrencinin kendi tekrarlayan hatalarıdır.`,
+      ornekDeneme: "3D TYT Genel Deneme-4" };
+  }
+  if (kademe === "ortaokul") {
+    return { sinavAdi: "LGS", koc: "LGS hazırlık sürecinde uzmanlaşmış", ekBaglam: "", ornekDeneme: "ARI 8. Sınıf SDS-2" };
+  }
+  return { sinavAdi: "deneme sınavı", koc: "sınav hazırlık sürecinde uzmanlaşmış", ekBaglam: "", ornekDeneme: "ARI 8. Sınıf SDS-2" };
+}
+
+function NetHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, netHaritasiKayitlari, setNetHaritasiKayitlari, kademe }) {
+  const sinavBaglami = netHaritasiSinavBaglami(kademe);
   const [seciliAd, setSeciliAd] = useState(aktifOgrenci?.name || "");
   const [ogrenciArama, setOgrenciArama] = useState("");
   const [yukleniyor, setYukleniyor] = useState(false);
@@ -4164,7 +4190,7 @@ GÖREVİN: Bu belgeden ders bazlı özeti VE her ders altındaki kazanım/konu s
 {
   "ogrenciAdi": "belgeden okunan öğrenci adı (yoksa boş string)",
   "sinif": "belgeden okunan sınıf (yoksa boş string)",
-  "denemeAdi": "belgede geçen deneme/sınav adı (örn. 'ARI 8. Sınıf SDS-2', yoksa boş string)",
+  "denemeAdi": "belgede geçen deneme/sınav adı (örn. '${sinavBaglami.ornekDeneme}', yoksa boş string)",
   "dersler": [
     {
       "ders": "Türkçe",
@@ -4265,10 +4291,11 @@ KURALLAR:
     try {
       const ozet = konuOzetiOlustur();
       const prompt = `Öğrenci: ${seciliAd}
+Sınav: ${sinavBaglami.sinavAdi}
 
 Aşağıda, bu öğrencinin şimdiye kadar yüklenen TÜM deneme sonuç belgelerinden derlenmiş, ders ve kazanım bazında bir özet var. Her satır: ders, kazanım, kaç denemede bu kazanımdan soru geldi, kaç tanesinde yanlış yapıldı, en son hangi denemede kaçta kaç alındı.
 
-${ozet}
+${ozet}${sinavBaglami.ekBaglam}
 
 Bu veriye dayanarak:
 
@@ -4294,7 +4321,7 @@ Sade, somut, öğretmenin doğrudan kullanabileceği şekilde yaz. Markdown kull
         body: JSON.stringify({
           model: "claude-sonnet-4-6",
           max_tokens: 2000,
-          system: "Sen LGS hazırlık sürecinde uzmanlaşmış bir öğrenci koçu ve PDR uzmanısın. Deneme sonuçlarındaki tekrar eden örüntüleri fark edip, öğretmenin doğrudan kullanabileceği somut, önceliklendirilmiş çalışma önerileri sunarsın. Veriye sadık kalırsın, veride olmayan bir şeyi uydurmazsın.",
+          system: `Sen ${sinavBaglami.koc} bir öğrenci koçu ve PDR uzmanısın. Deneme sonuçlarındaki tekrar eden örüntüleri fark edip, öğretmenin doğrudan kullanabileceği somut, önceliklendirilmiş çalışma önerileri sunarsın. Veriye sadık kalırsın, veride olmayan bir şeyi uydurmazsın.`,
           messages: [{ role: "user", content: prompt }],
         }),
       });
@@ -4384,7 +4411,7 @@ Sade, somut, öğretmenin doğrudan kullanabileceği şekilde yaz. Markdown kull
 
   return (
     <div style={{ padding: 16, maxWidth: 640 }}>
-      <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 4, color:PURPLE }}>🎯 Net Haritası</div>
+      <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 4, color:PURPLE }}>🎯 Net Haritası {kademe && <span style={{fontSize:12, fontWeight:700, background:PURPLE_LIGHT, color:PURPLE, borderRadius:8, padding:"2px 8px", marginLeft:4}}>{sinavBaglami.sinavAdi}</span>}</div>
       <div style={{ fontSize: 12, color: MUTED, marginBottom: 16, lineHeight: 1.5 }}>
         Deneme sonuç belgesini (PDF ya da ekran görüntüsü) yükle — AI, ders ve kazanım bazında hangi konularda eksik olduğunu otomatik çıkarır. Deneme sekmesindeki ders-bazlı net takibi ayrı, bu konu-seviyesinde ek bir analiz.
       </div>
@@ -10670,6 +10697,7 @@ export default function App() {
             setAktifOgrenci={setAktifOgrenci}
             netHaritasiKayitlari={netHaritasiKayitlari}
             setNetHaritasiKayitlari={setNetHaritasiKayitlari}
+            kademe={kademe}
           />
         )}
 

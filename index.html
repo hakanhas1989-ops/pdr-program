@@ -4343,6 +4343,25 @@ function netHaritasiSinavBaglami(kademe) {
   return { sinavAdi: "deneme sınavı", koc: "sınav hazırlık sürecinde uzmanlaşmış", ekBaglam: "", ornekDeneme: "ARI 8. Sınıf SDS-2" };
 }
 
+// ── Dikkat ve Odaklanma Hatası Analizi ───────────────────────────────────────
+// Amaç: bir dersteki yanlışın NEDENİNİ (bilgi eksikliği mi, dikkat/okuma hatası
+// mı, kodlama hatası mı, zaman yetersizliği mi) danışmanın öğrenciyle görüşme
+// sırasında işaretlemesi — AI tahmin etmez, sadece danışmanın öğrenciden aldığı
+// bilgiyi kaydeder. Her deneme kaydında (netHaritasiKayitlari[i].hataAnalizi)
+// ders başına saklanır: { [ders]: { [hataTuru]: sayı } }.
+const HATA_TURLERI_VARSAYILAN = ["Bilgi / Konu eksikliği", "Yanlış okuma veya anlama", "Yanlış kodlama", "Zaman yetersizliği"];
+function hataTurleriIcin(dersAdi) {
+  const ad = (dersAdi || "").toLocaleLowerCase("tr");
+  if (ad.includes("matemat")) return ["Bilgi / Konu eksikliği", "İşlem hatası", "Yanlış okuma veya anlama", "Yanlış kodlama", "Zaman yetersizliği"];
+  if (ad.includes("ingiliz") || ad.includes("yabancı")) return ["Bilgi / Konu / Kelime eksikliği", "Yanlış okuma veya anlama", "Yanlış kodlama", "Zaman yetersizliği"];
+  return HATA_TURLERI_VARSAYILAN;
+}
+// Ders adları AI'ın PDF'ten okuduğu haliyle geldiği için (örn. "Fen Bilimleri"
+// yerine "Fen B." ya da tam tersi) birebir eşleşmeyebilir — toplam tablosunda
+// dersleri anlamlı bir sırada göstermek için en yaygın adları esas alan bir
+// öncelik sırası. Listede olmayan bir ders adı sona düşer, kaybolmaz.
+const HATA_ANALIZI_DERS_SIRASI = ["Türkçe", "Matematik", "Fen Bilimleri", "T.C. İnkılap Tarihi ve Atatürkçülük", "İnkılap Tarihi", "Din Kültürü ve Ahlak Bilgisi", "Din Kültürü", "İngilizce", "Yabancı Dil"];
+
 function NetHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, netHaritasiKayitlari, setNetHaritasiKayitlari, kademe }) {
   const sinavBaglami = netHaritasiSinavBaglami(kademe);
   const [seciliAd, setSeciliAd] = useState(aktifOgrenci?.name || "");
@@ -4352,6 +4371,7 @@ function NetHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, netH
   const [detayAcikId, setDetayAcikId] = useState(null);
   const [tekrarListesi, setTekrarListesi] = useState(null);
   const [tekrarYukleniyor, setTekrarYukleniyor] = useState(false);
+  const [hataOzetiAcik, setHataOzetiAcik] = useState(false);
 
   useEffect(() => {
     if (aktifOgrenci?.name) setSeciliAd(aktifOgrenci.name);
@@ -4363,6 +4383,21 @@ function NetHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, netH
   const seciliNumara = seciliOgr?.numara || aktifOgrenci?.numara || "";
 
   const ogrKayitlar = (netHaritasiKayitlari||[]).filter(k => k.studentName === seciliAd).sort((a,b) => pdrTarihMs(b.tarih) - pdrTarihMs(a.tarih));
+
+  // Öğrencinin tüm denemelerindeki hata türü işaretlemelerini tek bir tabloya
+  // toplar: ders → hata türü → (her deneme için sayı) + toplam. Hiç işaretleme
+  // yapılmamışsa boş dizi döner, tablo gösterilmez.
+  const hataOzeti = useMemo(() => {
+    const kronolojik = [...ogrKayitlar].sort((a,b) => pdrTarihMs(a.tarih) - pdrTarihMs(b.tarih));
+    const isaretliVarMi = kronolojik.some(k => k.hataAnalizi && Object.values(k.hataAnalizi).some(d => Object.values(d).some(v => v > 0)));
+    if (!isaretliVarMi) return null;
+    const dersler = [...new Set(kronolojik.flatMap(k => (k.dersler||[]).map(d => d.ders)))];
+    dersler.sort((a,b) => {
+      const ia = HATA_ANALIZI_DERS_SIRASI.indexOf(a), ib = HATA_ANALIZI_DERS_SIRASI.indexOf(b);
+      return (ia===-1?99:ia) - (ib===-1?99:ib);
+    });
+    return { kayitlar: kronolojik, dersler };
+  }, [ogrKayitlar]);
 
   async function handlePdfSec(file) {
     if (!file || !seciliAd) return;
@@ -4456,6 +4491,19 @@ KURALLAR:
 
   async function handleKayitSil(id) {
     const guncel = (netHaritasiKayitlari||[]).filter(k => k.id !== id);
+    setNetHaritasiKayitlari(guncel);
+    await saveNetHaritasi(guncel);
+  }
+
+  // Bir deneme kaydındaki bir dersin bir hata türü hücresini günceller.
+  async function handleHataGuncelle(kayitId, ders, hataTuru, deger) {
+    const sayi = deger === "" ? 0 : Math.max(0, parseInt(deger, 10) || 0);
+    const guncel = (netHaritasiKayitlari||[]).map(k => {
+      if (k.id !== kayitId) return k;
+      const mevcutHata = k.hataAnalizi || {};
+      const mevcutDersHata = mevcutHata[ders] || {};
+      return { ...k, hataAnalizi: { ...mevcutHata, [ders]: { ...mevcutDersHata, [hataTuru]: sayi } } };
+    });
     setNetHaritasiKayitlari(guncel);
     await saveNetHaritasi(guncel);
   }
@@ -4757,6 +4805,30 @@ Sade, somut, öğretmenin doğrudan kullanabileceği şekilde yaz. Markdown kull
                               ))}
                             </div>
                           )}
+                          {ders.yanlis > 0 && (() => {
+                            const dersHata = (k.hataAnalizi && k.hataAnalizi[ders.ders]) || {};
+                            const girilenToplam = Object.values(dersHata).reduce((s,v)=>s+(v||0),0);
+                            return (
+                              <div style={{ marginTop:8, background:BG, borderRadius:8, padding:8 }}>
+                                <div style={{ fontSize:10, fontWeight:700, color:MUTED, marginBottom:6 }}>
+                                  Bu derste {ders.yanlis} yanlış — öğrenciyle konuşurken nedenini işaretle:
+                                </div>
+                                <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                                  {hataTurleriIcin(ders.ders).map(hataTuru => (
+                                    <div key={hataTuru} style={{ display:"flex", alignItems:"center", gap:4, background:"#fff", border:`1px solid ${BORDER}`, borderRadius:6, padding:"3px 6px" }}>
+                                      <span style={{ fontSize:10, color:TEXT }}>{hataTuru}</span>
+                                      <input type="number" min="0" value={dersHata[hataTuru] || ""} placeholder="0"
+                                        onChange={e=>handleHataGuncelle(k.id, ders.ders, hataTuru, e.target.value)}
+                                        style={{ width:32, border:`1px solid ${BORDER}`, borderRadius:4, fontSize:11, textAlign:"center" }} />
+                                    </div>
+                                  ))}
+                                </div>
+                                <div style={{ fontSize:9, color: girilenToplam===ders.yanlis ? "#1A8C5B" : MUTED, marginTop:4 }}>
+                                  İşaretlenen: {girilenToplam} / {ders.yanlis} yanlış
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </div>
                       ))}
                     </div>
@@ -4767,6 +4839,57 @@ Sade, somut, öğretmenin doğrudan kullanabileceği şekilde yaz. Markdown kull
           </div>
         </div>
       )}
+      {/* Toplam Dikkat ve Odaklanma Hatası Analizi — tüm denemelerden derlenmiş */}
+      {hataOzeti && (
+        <div style={{ marginTop:20 }}>
+          <button onClick={()=>setHataOzetiAcik(v=>!v)} style={{
+            width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center", padding:"11px 14px",
+            background: hataOzetiAcik ? PURPLE : "#fff", color: hataOzetiAcik ? "#fff" : PURPLE,
+            border:`2px solid ${PURPLE}`, borderRadius:12, fontSize:13, fontWeight:800, cursor:"pointer"
+          }}>
+            <span>🔎 Dikkat ve Odaklanma Hatası Analizi — Toplam</span>
+            <span>{hataOzetiAcik ? "▲" : "▼"}</span>
+          </button>
+          {hataOzetiAcik && (
+            <div style={{ marginTop:8, background:CARD, border:`1px solid ${BORDER}`, borderRadius:12, padding:10, overflowX:"auto" }}>
+              <table style={{ borderCollapse:"collapse", fontSize:10.5, minWidth: 340 + hataOzeti.kayitlar.length*34 }}>
+                <thead>
+                  <tr>
+                    <th style={{ position:"sticky", left:0, background:CARD, textAlign:"left", padding:"4px 6px", borderBottom:`2px solid ${BORDER}` }}>Ders</th>
+                    <th style={{ textAlign:"left", padding:"4px 6px", borderBottom:`2px solid ${BORDER}`, minWidth:140 }}>Hata Türü</th>
+                    {hataOzeti.kayitlar.map((k, ki) => (
+                      <th key={k.id} title={`${k.denemeAdi||"Deneme"} · ${k.tarih}`} style={{ padding:"4px 4px", borderBottom:`2px solid ${BORDER}`, fontWeight:700, color:MUTED }}>D{ki+1}</th>
+                    ))}
+                    <th style={{ padding:"4px 6px", borderBottom:`2px solid ${BORDER}`, fontWeight:900, color:PURPLE }}>Toplam</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {hataOzeti.dersler.map(ders => {
+                    const hataTurleri = hataTurleriIcin(ders);
+                    return hataTurleri.map((hataTuru, hi) => (
+                      <tr key={ders+hataTuru}>
+                        {hi === 0 && (
+                          <td rowSpan={hataTurleri.length} style={{ position:"sticky", left:0, background:CARD, fontWeight:800, padding:"4px 6px", borderBottom:`1px solid ${BORDER}`, verticalAlign:"top" }}>{ders}</td>
+                        )}
+                        <td style={{ padding:"4px 6px", borderBottom:`1px solid ${BORDER}`, color:TEXT }}>{hataTuru}</td>
+                        {hataOzeti.kayitlar.map(k => {
+                          const deger = k.hataAnalizi?.[ders]?.[hataTuru] || 0;
+                          return <td key={k.id} style={{ textAlign:"center", padding:"4px 4px", borderBottom:`1px solid ${BORDER}`, color: deger>0?TEXT:BORDER }}>{deger || "–"}</td>;
+                        })}
+                        {(() => {
+                          const toplam = hataOzeti.kayitlar.reduce((s,k) => s + (k.hataAnalizi?.[ders]?.[hataTuru] || 0), 0);
+                          return <td style={{ textAlign:"center", padding:"4px 6px", borderBottom:`1px solid ${BORDER}`, fontWeight:900, color: toplam>0?PURPLE:BORDER }}>{toplam || "–"}</td>;
+                        })()}
+                      </tr>
+                    ));
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {seciliAd && ogrKayitlar.length === 0 && !taslak && (
         <div style={{ fontSize:12, color:MUTED }}>Bu öğrenci için henüz Net Haritası kaydı yok.</div>
       )}

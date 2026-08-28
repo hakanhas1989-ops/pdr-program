@@ -3401,6 +3401,39 @@ function mesleklEgilimSonucHesapla(isaretliMaddeler) {
     .sort((a, b) => b.puan - a.puan);
 }
 
+// Meslek grubu (A-İ) → lise türü eşleşmesi. Bu bir KILAVUZ/İPUCU'dur, kesin bir
+// yönlendirme değildir — nihai karar öğrencinin LGS başarısına, o lise türünün
+// bulunduğu ile erişimine ve kişisel tercihine bağlıdır (özellikle Fen Lisesi
+// ve Sosyal Bilimler Lisesi'nin taban puanları çok yüksektir).
+const LISE_TURU_ONERI = {
+  A: ["Fen Lisesi", "Anadolu Lisesi (Sayısal)"],
+  B: ["Anadolu Lisesi (Sayısal)", "Mesleki ve Teknik Anadolu Lisesi (ilgili teknik alan varsa)"],
+  C: ["Anadolu Lisesi (Eşit Ağırlık / Sözel)"],
+  D: ["Güzel Sanatlar Lisesi", "Spor Lisesi"],
+  E: ["Anadolu Lisesi (Sözel)", "Anadolu İmam Hatip Lisesi (ilahiyat ağırlıklıysa)"],
+  F: ["Sosyal Bilimler Lisesi", "Anadolu Lisesi (Sözel)"],
+  G: ["Anadolu Lisesi (yoğun yabancı dil programı)"],
+  H: ["Fen Lisesi", "Anadolu Lisesi (Sayısal)"],
+  I: ["Anadolu Lisesi (Eşit Ağırlık)"],
+  "İ": ["Fen Lisesi", "Anadolu Lisesi (Sayısal)"],
+};
+// Sonuçtaki güçlü sütunlara (puan >= 101, yani resmi kılavuzdaki "normal" ve
+// "ideal" bantları — 0-100 arası "ilginiz yok/yeterli değil/bir kez daha
+// düşünün" demek, lise önerisine temel oluşturacak kadar güçlü bir sinyal
+// değil) bakarak en fazla 3 sütunu esas alır, ilişkili lise türlerini toplar.
+function mesleklEgilimLiseOnerisiHesapla(sonucSirali) {
+  const guclu = (sonucSirali || []).filter(s => s.puan >= 101).slice(0, 3);
+  if (guclu.length === 0) return null;
+  const liseSeti = new Map();
+  guclu.forEach(s => {
+    (LISE_TURU_ONERI[s.harf] || []).forEach(lise => {
+      const mevcut = liseSeti.get(lise) || [];
+      if (!mevcut.includes(s.harf)) liseSeti.set(lise, [...mevcut, s.harf]);
+    });
+  });
+  return { sutunlar: guclu, liseler: Array.from(liseSeti.entries()).map(([lise, harfler]) => ({ lise, harfler })) };
+}
+
 // ── BEİER Cümle Tamamlama Testi — Form A (8-16 yaş) ──────────────────────────
 // Kaynak: BEİER Cümle Tamamlama Testi uygulama/puanlama kılavuzu (Form A, 56
 // madde, 8-16 yaş için). Danışman öğrenciyle uyguladıktan sonra doldurulmuş
@@ -3610,6 +3643,112 @@ function testFormGecerliMi(tip, form) {
   }
 }
 
+// ── Mesleki Eğilim Testi — Google Forms/Excel Toplu Yükleme ──────────────────
+// Google Forms yanıtlarının indirildiği E-Tablo'yu (Excel/CSV) okuyup her
+// öğrenci satırı için otomatik puanlayıp testKayitlari'na ekler. AI'a hiç
+// gitmez — form yanıtları zaten düzenli/yazılı metin olduğu için (el yazısı
+// okuma gerekmiyor), madde metniyle doğrudan eşleştirme yeterli ve daha
+// güvenilir. Sütunlar BAŞLIK METNİNE göre bulunur (Deneme'nin toplu
+// yüklemesindeki yöntemle aynı): "Ad Soyad" zorunlu, "Sınıf"/"Numara" varsa
+// kullanılır; kimlik sütunları dışındaki her hücre madde metinleriyle
+// karşılaştırılır (Google Forms'ta çoklu seçim soruları virgülle ayrılmış
+// metin olarak tek hücrede gelir).
+function MesEgilimTopluYukle({ testKayitlari, setTestKayitlari, onKapat }) {
+  const [yukleniyor, setYukleniyor] = useState(false);
+  const [sonuc, setSonuc] = useState(null);
+
+  function handleDosya(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setYukleniyor(true);
+    setSonuc(null);
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const wb = XLSX.read(evt.target.result, { type: "binary" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+        if (rows.length < 2) throw new Error("Dosyada veri satırı bulunamadı.");
+
+        function trNormalize(s) {
+          return String(s || "").toUpperCase()
+            .replace(/İ/g,"I").replace(/I/g,"I").replace(/Ş/g,"S").replace(/Ğ/g,"G")
+            .replace(/Ü/g,"U").replace(/Ö/g,"O").replace(/Ç/g,"C")
+            .replace(/\s+/g," ").trim();
+        }
+        const headers = rows[0].map(trNormalize);
+        const colAd = headers.findIndex(h => h.includes("AD SOYAD") || h.includes("ADI SOYADI") || h.includes("ISIM"));
+        const colSinif = headers.findIndex(h => h.includes("SINIF") || h.includes("SUBE"));
+        const colNumara = headers.findIndex(h => h.includes("NUMARA") || h === "NO" || h.includes("OKUL NO"));
+        if (colAd < 0) throw new Error('"Ad Soyad" sütunu bulunamadı — Google Forms sorusunun başlığında bu ifadenin geçtiğinden emin ol.');
+
+        const zamanIdx = headers.findIndex(h => h.includes("ZAMAN") || h.includes("TIMESTAMP"));
+        const kimlikSutunlari = new Set([colAd, colSinif, colNumara, zamanIdx].filter(i => i >= 0));
+
+        const yeniKayitlar = { ...testKayitlari };
+        let islenenOgrenci = 0, toplamIsaretli = 0;
+        const eslesmeyenSatir = [];
+
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i];
+          const adSoyad = String(row[colAd] || "").trim();
+          if (!adSoyad) continue;
+          const sinif = colSinif >= 0 ? String(row[colSinif] || "").trim() : "";
+          const numara = colNumara >= 0 ? String(row[colNumara] || "").trim() : "";
+
+          const cevapMetni = row.map((hucre, idx) => kimlikSutunlari.has(idx) ? "" : String(hucre || "")).join(" | ");
+          const isaretli = [];
+          MESLEKI_EGILIM_MADDELERI.forEach((madde, mIdx) => {
+            if (cevapMetni.includes(madde)) isaretli.push(mIdx + 1);
+          });
+
+          if (isaretli.length === 0) { eslesmeyenSatir.push(adSoyad); continue; }
+
+          const yeni = { id: uid(), kategori: "objektif", testAdi: "Mesleki Eğilim Belirleme Testi (160 Madde)", tip: "mesleki_egilim_160", tarih: today(), not: "Google Forms toplu yükleme", veri: { isaretliMaddeler: isaretli, genelYorum: "", guvenlikUyarisi: "" } };
+          const key = pdrOgrAnahtar(adSoyad, sinif, numara);
+          const mevcutListe = pdrSozlukOku(yeniKayitlar, adSoyad, sinif, numara) || [];
+          yeniKayitlar[key] = [yeni, ...mevcutListe];
+          islenenOgrenci++;
+          toplamIsaretli += isaretli.length;
+        }
+
+        setTestKayitlari(yeniKayitlar);
+        await saveTestKayitlari(yeniKayitlar);
+        setSonuc({ islenenOgrenci, toplamIsaretli, eslesmeyenSatir });
+      } catch (err) {
+        alert("Dosya okunamadı: " + err.message);
+      }
+      setYukleniyor(false);
+    };
+    reader.readAsBinaryString(file);
+  }
+
+  return (
+    <div style={{ background:CARD, border:`2px solid ${PURPLE}`, borderRadius:12, padding:14, marginBottom:16 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+        <div style={{ fontSize:13, fontWeight:800, color:PURPLE }}>📊 Mesleki Eğilim — Toplu Yükle</div>
+        <button onClick={onKapat} style={{ background:"none", border:"none", color:MUTED, fontSize:14, cursor:"pointer" }}>✕</button>
+      </div>
+      <div style={{ fontSize:11, color:MUTED, marginBottom:10, lineHeight:1.5 }}>
+        Google E-Tablosu'nu Dosya → İndir → Microsoft Excel (.xlsx) olarak indirip buradan yükle. Sütun başlıklarında "Ad Soyad" (zorunlu), varsa "Sınıf" ve "Numara" geçmesi yeterli — geri kalan sütunlar (madde işaretlemeleri) otomatik taranır, AI kullanılmaz.
+      </div>
+      <label style={{ display:"block", width:"100%", padding:14, background:"#fff", border:`2px dashed ${PURPLE}`, borderRadius:12, textAlign:"center", color:PURPLE, fontWeight:700, cursor:"pointer", boxSizing:"border-box" }}>
+        {yukleniyor ? "⏳ İşleniyor…" : "📂 Excel Dosyası Seç (.xlsx)"}
+        <input type="file" accept=".xlsx,.xls,.csv" onChange={handleDosya} style={{ display:"none" }} disabled={yukleniyor} />
+      </label>
+      {sonuc && (
+        <div style={{ marginTop:10, background:"#E6F5EE", borderRadius:8, padding:10 }}>
+          <div style={{ fontSize:12, fontWeight:700, color:"#1A8C5B" }}>✓ {sonuc.islenenOgrenci} öğrenci işlendi, toplam {sonuc.toplamIsaretli} madde işaretlendi.</div>
+          {sonuc.eslesmeyenSatir.length > 0 && (
+            <div style={{ fontSize:11, color:"#B07D1A", marginTop:6, lineHeight:1.5 }}>⚠️ {sonuc.eslesmeyenSatir.length} satırda hiç madde eşleşmedi ({sonuc.eslesmeyenSatir.slice(0,5).join(", ")}{sonuc.eslesmeyenSatir.length>5?"...":""}) — cevap metinleri madde listesiyle tam eşleşmiyor olabilir.</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TestlerEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, testKayitlari, setTestKayitlari }) {
   const [seciliAd, setSeciliAd] = useState(aktifOgrenci?.name || "");
   const [ogrenciArama, setOgrenciArama] = useState("");
@@ -3620,6 +3759,7 @@ function TestlerEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, testKayi
   const [mesEgilimYukleniyor, setMesEgilimYukleniyor] = useState(false);
   const [beierYukleniyor, setBeierYukleniyor] = useState(false);
   const [acikTestId, setAcikTestId] = useState(null);
+  const [topluYuklemeAcik, setTopluYuklemeAcik] = useState(false);
 
   useEffect(() => {
     if (aktifOgrenci?.name) setSeciliAd(aktifOgrenci.name);
@@ -3799,6 +3939,16 @@ SADECE aşağıdaki JSON formatında cevap ver, başka hiçbir açıklama/markdo
         Program hiçbir testi uygulamaz — burada sadece başka bir ortamda uyguladığın standart test/envanterlerin sonucunu kaydedersin. Kayıtlar öğrenci raporuna otomatik eklenir.
       </div>
 
+      {/* Mesleki Eğilim Testi — Google Forms/Excel toplu yükleme (öğrenci seçiminden bağımsız, sınıf/okul geneli) */}
+      {topluYuklemeAcik ? (
+        <MesEgilimTopluYukle testKayitlari={testKayitlari} setTestKayitlari={setTestKayitlari} onKapat={()=>setTopluYuklemeAcik(false)} />
+      ) : (
+        <button onClick={()=>setTopluYuklemeAcik(true)} style={{
+          width:"100%", padding:"10px 14px", background:"#fff", border:`2px dashed ${PURPLE}`, borderRadius:12,
+          color:PURPLE, fontWeight:700, fontSize:12.5, cursor:"pointer", marginBottom:16, textAlign:"left"
+        }}>📊 Mesleki Eğilim Testi — Google Forms/Excel Toplu Yükle (tüm sınıf birden)</button>
+      )}
+
       {/* Öğrenci seç */}
       <div style={{ marginBottom: 16 }}>
         <label style={lbl}>ÖĞRENCİ</label>
@@ -3935,6 +4085,7 @@ SADECE aşağıdaki JSON formatında cevap ver, başka hiçbir açıklama/markdo
                   return { ...f, isaretliMaddeler: yeni };
                 });
                 const canliSonuc = mesleklEgilimSonucHesapla(isaretli).filter(s=>s.puan>0).slice(0,3);
+                const liseOnerisi = mesleklEgilimLiseOnerisiHesapla(mesleklEgilimSonucHesapla(isaretli));
                 return (
                   <>
                     <label style={{ display:"block", width:"100%", padding:14, background:"#fff", border:`2px dashed ${PURPLE}`, borderRadius:12, textAlign:"center", color:PURPLE, fontWeight:700, cursor:"pointer", marginBottom:12, boxSizing:"border-box" }}>
@@ -3951,6 +4102,15 @@ SADECE aşağıdaki JSON formatında cevap ver, başka hiçbir açıklama/markdo
                             {s.harf}: {s.puan}p
                           </div>
                         ))}
+                      </div>
+                    )}
+                    {liseOnerisi && (
+                      <div style={{ background:"#EEF2FF", border:`1px solid ${BLUE}`, borderRadius:10, padding:10, marginBottom:10 }}>
+                        <div style={{ fontSize:11, fontWeight:800, color:BLUE, marginBottom:6 }}>🎓 Lise Türü İpucu ({liseOnerisi.sutunlar.map(s=>s.harf).join(", ")} sütunlarına göre)</div>
+                        {liseOnerisi.liseler.map(l => (
+                          <div key={l.lise} style={{ fontSize:11.5, color:TEXT, marginBottom:2 }}>• {l.lise}</div>
+                        ))}
+                        <div style={{ fontSize:10, color:MUTED, marginTop:6, lineHeight:1.5 }}>Bu sadece ilgi profiline dayalı bir ipucudur, kesin bir yönlendirme değildir — LGS puanı/net ortalaması ve o lise türünün erişilebilirliği de birlikte değerlendirilmeli.</div>
                       </div>
                     )}
                     <div style={{ maxHeight:320, overflowY:"auto", border:`1px solid ${BORDER}`, borderRadius:10, padding:8, marginBottom:10 }}>
@@ -4093,8 +4253,18 @@ SADECE aşağıdaki JSON formatında cevap ver, başka hiçbir açıklama/markdo
                     </div>
                     {mesEgilimMi && detayAcik && (() => {
                       const sonuc = mesleklEgilimSonucHesapla(k.veri?.isaretliMaddeler||[]);
+                      const liseOnerisi = mesleklEgilimLiseOnerisiHesapla(sonuc);
                       return (
                         <div style={{ marginTop:10, borderTop:`1px solid ${BORDER}`, paddingTop:10, display:"flex", flexDirection:"column", gap:6 }}>
+                          {liseOnerisi && (
+                            <div style={{ background:"#EEF2FF", border:`1px solid ${BLUE}`, borderRadius:10, padding:10, marginBottom:2 }}>
+                              <div style={{ fontSize:11, fontWeight:800, color:BLUE, marginBottom:6 }}>🎓 Lise Türü İpucu ({liseOnerisi.sutunlar.map(s=>s.harf).join(", ")} sütunlarına göre)</div>
+                              {liseOnerisi.liseler.map(l => (
+                                <div key={l.lise} style={{ fontSize:11.5, color:TEXT, marginBottom:2 }}>• {l.lise}</div>
+                              ))}
+                              <div style={{ fontSize:10, color:MUTED, marginTop:6, lineHeight:1.5 }}>Bu sadece ilgi profiline dayalı bir ipucudur, kesin bir yönlendirme değildir — LGS puanı/net ortalaması ve o lise türünün erişilebilirliği de birlikte değerlendirilmeli.</div>
+                            </div>
+                          )}
                           {sonuc.map(s => (
                             <div key={s.harf} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:8, padding:"6px 8px", background: s.puan>0 ? s.duzey.renk+"14" : BG, borderRadius:8 }}>
                               <div style={{ flex:1 }}>

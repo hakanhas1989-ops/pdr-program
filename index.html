@@ -971,6 +971,65 @@ const BIREYI_TANIMA_KATEGORILER = [
   { key:"okul", label:"🏫 Okul Geçmişi" },
 ];
 
+// ── BDT — Bilişsel Çarpıtma Analizi ──────────────────────────────────────────
+// Görüşme notlarından öğrencinin olumsuz ifadelerini AI'ın 12 klasik bilişsel
+// çarpıtma kategorisinden birine yerleştirmesi için. Danışman AI önerisini
+// gözden geçirip onaylamadan hiçbir şey kaydedilmez; elle de madde eklenebilir.
+const BDT_CARPITMA_KATEGORILERI = [
+  { key:"asiri_genelleme", ad:"Aşırı Genelleme", aciklama:"Başınıza gelen bir durumu hayatınızın tümüne genellemenizdir. (Her zaman, herkes, hiç kimse)" },
+  { key:"kisisellestirme", ad:"Kişiselleştirme", aciklama:"Aslında sizinle ilgili olmayan bir olayla kendiniz arasında gerçekçi olmayan bir ilişki bulup kendinizi suçlamanızdır." },
+  { key:"keyfi_cikarsama", ad:"Keyfi Çıkarsama", aciklama:"Bir durum karşısında yeterince kayda değer kanıt olmadan öznel bir çıkarım yapmaya denir." },
+  { key:"olumsuz_etiketleme", ad:"Olumsuz Etiketleme", aciklama:"Kişinin kendisini veya karşısındaki kişiyi bir davranışına dayanarak tutumu hakkında bir genelleme yapmak." },
+  { key:"ya_hep_ya_hic", ad:"Ya Hep Ya Hiç Tarzı Düşünme", aciklama:"Hayatınızda her şeyin siyah ya da beyaz olması durumu, grilere yer vermemek anlamına gelir." },
+  { key:"meli_mali", ad:"Meli/Malı Cümleleri", aciklama:"Yaşamın kesin kuralları olduğu ve bu kuralların yerine getirilmediğinde felaketlere neden olabileceği inancıdır." },
+  { key:"felaket_tellalligi", ad:"Felaket Tellallığı", aciklama:"Bir olay karşısında olayın etkilerinin çok ötesinde felaket senaryoları kurmak ve onlara inanmaktır." },
+  { key:"olumluyu_yok_sayma", ad:"Olumluyu Yok Sayma (Büyütme-Küçültme)", aciklama:"Pozitif bir şey olduğunda bunu yok sayma, şansa bağlama." },
+  { key:"akil_okuma", ad:"Akıl Okuma", aciklama:"Karşıdakinden herhangi bir tepki ya da bilgi alınmamasına rağmen, kişiye karşı negatif davrandığı/düşündüğü sonucuna atlamaktır." },
+  { key:"falcilik", ad:"Falcılık", aciklama:"Gelecekle ilgili kesin yargılarda bulunmaya denir." },
+  { key:"secici_soyutlama", ad:"Seçici Soyutlama", aciklama:"Yaşadığınız bir durumun sadece negatif bir yönüne odaklanıp onu genele yorarsanız seçici soyutlama yapmış olursunuz." },
+  { key:"abartma", ad:"Abartma", aciklama:"Yaşanan olumsuz olaylardan kendisi, çevre ve gelecek ile ilgili abartılı sonuçlar çıkarmaktır." },
+];
+
+// ── Sınav Kaygısı ─────────────────────────────────────────────────────────────
+// Üç ayrı ölçüm: (1) 10 maddelik "Sınav Kaygı Seviyem" Likert testi — elle
+// puanlanır, TOPLAM tamamen program tarafından hesaplanır (AI yok, ücretsiz);
+// (2) haftalık 0-10 "Kaygı Düzeyim" öz-değerlendirmesi — elle girilir;
+// (3) 4 kategorili "Hangi Belirtiler Var?" checklist — AI görüşme notlarından
+// önerebilir, danışman onaylar.
+const SINAV_KAYGISI_MADDELERI = [
+  "Sınav öncesi çok gergin ve huzursuz oluyorum.",
+  "Sınav düşüncesi kalbimin hızlı atmasına neden oluyor.",
+  "Sınavdan önce midem bulanıyor ya da başım ağrıyor.",
+  "Sınav sırasında bildiklerimi unutuyorum.",
+  "Sınavlar hakkında sürekli kötü senaryolar düşünüyorum.",
+  "Sınava ne kadar çok çalışırsam çalışayım eksik hissediyorum.",
+  "Sınavdan sonra kendime çok yükleniyorum.",
+  "Hiçbir zaman sınavlara tam olarak hazırlandığım duygusunu yaşamıyorum.",
+  "Bir sınavdan sonra çoğunlukla yapmış olduğumdan daha iyi yapabileceğimi düşünürüm.",
+  "Önemli bir sınav öncesi uyumakta zorluk çekerim.",
+];
+const SINAV_KAYGISI_SECENEKLER = [
+  { deger: 0, ad: "Hiçbir Zaman" },
+  { deger: 1, ad: "Nadiren" },
+  { deger: 2, ad: "Bazen" },
+  { deger: 3, ad: "Sık Sık" },
+  { deger: 4, ad: "Her Zaman" },
+];
+// Toplam 0-40 arası olabilir (10 madde × 4 puan) — en düşük ve en yüksek puan
+// arasını 4 eşit dilime bölerek düşük/orta/yüksek/çok yüksek kaygı bandı verir.
+function sinavKaygiDuzeyHesapla(toplam) {
+  if (toplam <= 10) return { ad: "Düşük Kaygı", renk: "#1A8C5B" };
+  if (toplam <= 20) return { ad: "Orta Düzey Kaygı", renk: "#B07D1A" };
+  if (toplam <= 30) return { ad: "Yüksek Kaygı", renk: "#E67E22" };
+  return { ad: "Çok Yüksek Kaygı", renk: "#C0392B" };
+}
+const SINAV_KAYGISI_BELIRTILER = {
+  fiziksel: { label: "🫀 Fiziksel Belirtiler", maddeler: ["Kalp çarpıntısı","Mide bulantısı, karın ağrısı","Terleme","Titreme","Sık tuvalete çıkma isteği","Nefes darlığı veya hızlı nefes alma","Baş dönmesi veya baş ağrısı","Ağız kuruluğu"] },
+  bilissel: { label: "🧠 Bilişsel Belirtiler", maddeler: ["Olumsuz düşünceler","Dikkat dağınıklığı","Unutkanlık","Odaklanma güçlüğü","Soruları okuma ya da anlamada güçlük","Zihni olumsuz senaryolarla meşgul etme"] },
+  davranissal: { label: "🏃 Davranışsal Belirtiler", maddeler: ["Ders çalışmaktan kaçınma","Sınav sırasında aşırı hareketlilik","Sınavdan önce ya da sırasında ağlama","Sınavdan önce aşırı tekrar yapma","Soruları aceleyle cevaplama ya da erken bitirme","Sınavdan kaçma ya da sınava girmeme","Yanlış cevapladığını düşünüp sürekli silip yeniden yazma"] },
+  duygusal: { label: "💭 Duygusal Belirtiler", maddeler: ["Huzursuzluk, endişe","Kendine güvensizlik, yetersizlik hissi","Karamsarlık","Hata yapma korkusu","Kendini sürekli eleştirme","Aşırı heyecan, panik hali","Sinirlilik, tahammülsüzlük","Üzüntü, isteksizlik","Başarısızlık korkusu"] },
+};
+
 // ── PDR Boyutları ─────────────────────────────────────────────────────────────
 const DIMENSIONS = [
   { key: "akademik", label: "Akademik Gelişim", color: BLUE },
@@ -1342,6 +1401,14 @@ METIN: kisa aciklama (ornek: "Hastane randevusu", "Tekrar görüşme")
 Hesaplama ornekleri: not "3 gun sonra tekrar gorusulecek" diyorsa bugunun tarihinden tam 3 gun sonrasini hesapla. Not "yarin" diyorsa bugunden 1 gun sonrasini yaz. Not "haftaya carsamba" ya da "gelecek hafta carsamba" diyorsa BU HAFTANIN DEGIL, BIR SONRAKI HAFTANIN carsamba gununu hesapla. Not "2 hafta sonra sali" diyorsa iki hafta sonraki saliyi hesapla. Gun/hafta sayimini dikkatlice, bugunun gun adini baz alarak yap — asla bu haftaki en yakin gunu yazma, ifadede "haftaya/gelecek hafta/X hafta sonra" gibi bir kaydirma varsa mutlaka o kadar ileri git.
 Boyle bir sey YOKSA sadece "Yok" yaz. Tahmin yurutme, sadece notta ACIKCA belirtilen bir tarih/sure/randevu varsa hesapla ve yaz.)
 
+Bundan sonra, YENI bir satirda, su formatta bir "Bilissel Carpitma" tespiti ekle (ogrencinin gorusmede dile getirdigi OLUMSUZ ifadeleri, hangi bilissel carpitma kategorisine girdigini belirterek):
+---BDT_CARPITMA---
+(Notta ogrencinin kendi agzindan ya da danismanin aktardigi ACIKCA olumsuz/carpitilmis bir dusunce ifadesi varsa, bunu asagidaki 12 kategoriden EN UYGUN olanina yerlestir ve HER BIRINI ayri bir satirda 'kategori_key: "ifade"' formatinda yaz (ifadeyi ogrencinin soyledigine olabildigince yakin, tirnak icinde yaz):
+kategori_key SADECE su degerlerden biri olmali: asiri_genelleme, kisisellestirme, keyfi_cikarsama, olumsuz_etiketleme, ya_hep_ya_hic, meli_mali, felaket_tellalligi, olumluyu_yok_sayma, akil_okuma, falcilik, secici_soyutlama, abartma
+Ornekler: asiri_genelleme: "Kimse beni sevmiyor" / felaket_tellalligi: "Bu sinavi kaybedersem hayatim biter" / meli_mali: "Her zaman en iyisi olmaliyim"
+Boyle bir ifade YOKSA sadece "Yok" yaz. Tahmin yurutme, sadece notta ACIKCA gecen bir ifade varsa kategorilendir - danismanin kendi yorumunu degil, OGRENCININ soyledigini yaz.
+GUVENLIK UYARISI: Eger notta acikca kendine zarar verme, intihar dusuncesi, umutsuzluk ("yasamak istemiyorum" gibi) ya da acil bir tehlike belirtisi gorursen, bunu ASLA sadece bir carpitma kategorisine yerlestirip gecistirme - ayrica YENI bir satirda "GUVENLIK_UYARISI: [aciklama]" seklinde ayrica belirt.)
+
 Bundan sonra, YENI bir satirda, su formatta "Bireyi Tanima" tespiti ekle (sosyo-demografik/psikososyal bilgiler icin - AILE, SAGLIK, YASAM OLAYLARI, SOSYOEKONOMIK, ILGI/YETENEK/SOSYAL, OKUL GECMISI kategorilerinden):
 ---BIREYI_TANIMA---
 (Notta ACIKCA belirtilen, kalici/onemli sosyo-demografik veya psikososyal bir bilgi varsa - ornek: kardes sayisi, ebeveyn calisma durumu, aile yapisi, gecirilen bir hastalik/ameliyat, dogum oykusu, bir kayip/bosanma/tasinma gibi yasam olayi, ailenin ekonomik durumuna dair bir ipucu, bir ilgi/yetenek, onceki okul deneyimi, ogrencinin yasi (not icinde yil VE ay olarak acikca belirtilmisse, ornegin "13 yas 3 aylik" ya da "13 yasinda, 3 aylik" gibi — sadece yil belirtilmisse yazma, mutlaka ay bilgisi de olmali; bu bilgiyi "saglik" kategorisine "Yaşı: 13 yaş 3 ay" seklinde yaz), devamsizlik/okula gitmeme durumu (notta acikca gun sayisi ya da somut bir devamsizlik durumu belirtilmisse, ornegin "bu donem 5 gun devamsizlik yapti" ya da "sik sik okula gelmiyor" — bu bilgiyi "okul" kategorisine yaz) - HER BIRINI ayri bir satirda 'kategori_key: kisa cumle' formatinda yaz. kategori_key SADECE su degerlerden biri olmali: aile, saglik, olaylar, sosyoekonomik, ilgi, okul. Boyle bir bilgi YOKSA sadece "Yok" yaz. ONEMLI: tahmin yurutme, yorum katma, sadece notta ACIKCA soylenmis somut bilgileri yaz - ozellikle saglik/aile gibi hassas konularda kesinlikle uydurma yapma.)`,
@@ -1597,6 +1664,18 @@ async function loadBireyiTanima() {
 }
 async function saveBireyiTanima(items) {
   try { await window.storage.set("pdr-bireyi-tanima", JSON.stringify(items)); } catch(e) { console.warn(e); }
+}
+async function loadBdtAnaliz() {
+  try { const r = await window.storage.get("pdr-bdt-analiz"); return r ? JSON.parse(r.value) : []; } catch { return []; }
+}
+async function saveBdtAnaliz(items) {
+  try { await window.storage.set("pdr-bdt-analiz", JSON.stringify(items)); } catch(e) { console.warn(e); }
+}
+async function loadSinavKaygisi() {
+  try { const r = await window.storage.get("pdr-sinav-kaygisi"); return r ? JSON.parse(r.value) : {}; } catch { return {}; }
+}
+async function saveSinavKaygisi(data) {
+  try { await window.storage.set("pdr-sinav-kaygisi", JSON.stringify(data)); } catch(e) { console.warn(e); }
 }
 
 async function loadHazirlikNotlari() {
@@ -7476,7 +7555,7 @@ function OgrenciYonetim({
   hazirlikNotlari, setHazirlikNotlari,
   ilerlemeNotlari, setIlerlemeNotlari,
   onRaporAc, setAktifOgrenci, aktifOgrenci, setTab, onSinifGuncelle, onOgrenciSil, onSinifSil, sinifListesi, sinavTuru, sevkler, testKayitlari, kademe,
-  bireyiTanima, setBireyiTanima
+  bireyiTanima, setBireyiTanima, bdtAnaliz, setBdtAnaliz, sinavKaygisi, setSinavKaygisi
 }) {
   const dersler = aktifDersler(sinavTuru);
 
@@ -7491,6 +7570,9 @@ function OgrenciYonetim({
   const [gdoDegeri, setGdoDegeri] = useState("");
   const [bireyiTanimaAcikKategori, setBireyiTanimaAcikKategori] = useState(null);
   const [bireyiTanimaMetni, setBireyiTanimaMetni] = useState("");
+  const [bdtAcikKategori, setBdtAcikKategori] = useState(null);
+  const [bdtMetni, setBdtMetni] = useState("");
+  const [sinavKaygiAktifHafta, setSinavKaygiAktifHafta] = useState(1);
 
   // "Aktif öğrenci" başka bir sekmede seçilip buraya dönülürse, o öğrencinin
   // detayını göstermeye devam et — sadece açıkça "Geri" ile çıkıldığında
@@ -7608,6 +7690,122 @@ function OgrenciYonetim({
     const guncel = (bireyiTanima||[]).filter(x => x.id !== id);
     setBireyiTanima(guncel);
     await saveBireyiTanima(guncel);
+  }
+
+  // BDT — Bilişsel Çarpıtma Analizi: tamamen manuel de eklenebilir (AI çağrısı
+  // yok), AI önerisi ise Görüşme Notu ekranındaki "AI Özetle" akışından gelir
+  // (bkz. handleSummarize) — danışman onaylamadan hiçbir şey buraya düşmez.
+  async function handleBdtEkle(kategori, ifade) {
+    if (!ifade.trim() || !seciliOgrenci) return;
+    const yeni = { id: uid(), studentName: seciliOgrenci, className: seciliOgrenciSinif, numara: seciliOgrenciNumara, kategori, ifade: ifade.trim(), tarih: today() };
+    const guncel = [yeni, ...(bdtAnaliz||[])];
+    setBdtAnaliz(guncel);
+    await saveBdtAnaliz(guncel);
+  }
+  async function handleBdtSil(id) {
+    const guncel = (bdtAnaliz||[]).filter(x => x.id !== id);
+    setBdtAnaliz(guncel);
+    await saveBdtAnaliz(guncel);
+  }
+
+  // Sınav Kaygısı — üç ayrı ölçüm, öğrenci anahtarına göre saklanır.
+  async function handleSinavKaygiHaftaGuncelle(haftaNo, cevaplar, aciklama) {
+    if (!seciliOgrenci) return;
+    const ogrKey = pdrOgrAnahtar(seciliOgrenci, seciliOgrenciSinif, seciliOgrenciNumara);
+    const mevcut = sinavKaygisi[ogrKey] || { haftalar:{}, kaygiDuzeyleri:{}, belirtiler:{fiziksel:[],bilissel:[],davranissal:[],duygusal:[]} };
+    const toplam = cevaplar.reduce((s,v)=>s+(v||0),0);
+    const guncelOgr = { ...mevcut, haftalar: { ...mevcut.haftalar, [haftaNo]: { cevaplar, toplam, aciklama } } };
+    const guncel = { ...sinavKaygisi, [ogrKey]: guncelOgr };
+    setSinavKaygisi(guncel);
+    await saveSinavKaygisi(guncel);
+  }
+  async function handleKaygiDuzeyiGuncelle(haftaNo, deger) {
+    if (!seciliOgrenci) return;
+    const ogrKey = pdrOgrAnahtar(seciliOgrenci, seciliOgrenciSinif, seciliOgrenciNumara);
+    const mevcut = sinavKaygisi[ogrKey] || { haftalar:{}, kaygiDuzeyleri:{}, belirtiler:{fiziksel:[],bilissel:[],davranissal:[],duygusal:[]} };
+    const guncelOgr = { ...mevcut, kaygiDuzeyleri: { ...mevcut.kaygiDuzeyleri, [haftaNo]: deger } };
+    const guncel = { ...sinavKaygisi, [ogrKey]: guncelOgr };
+    setSinavKaygisi(guncel);
+    await saveSinavKaygisi(guncel);
+  }
+  async function handleBelirtiToggle(kategori, belirti) {
+    if (!seciliOgrenci) return;
+    const ogrKey = pdrOgrAnahtar(seciliOgrenci, seciliOgrenciSinif, seciliOgrenciNumara);
+    const mevcut = sinavKaygisi[ogrKey] || { haftalar:{}, kaygiDuzeyleri:{}, belirtiler:{fiziksel:[],bilissel:[],davranissal:[],duygusal:[]} };
+    const mevcutListe = mevcut.belirtiler[kategori] || [];
+    const yeniListe = mevcutListe.includes(belirti) ? mevcutListe.filter(x=>x!==belirti) : [...mevcutListe, belirti];
+    const guncelOgr = { ...mevcut, belirtiler: { ...mevcut.belirtiler, [kategori]: yeniListe } };
+    const guncel = { ...sinavKaygisi, [ogrKey]: guncelOgr };
+    setSinavKaygisi(guncel);
+    await saveSinavKaygisi(guncel);
+  }
+  // AI ile bu öğrencinin BÜTÜN görüşme notlarını tarayıp sabit belirti
+  // listelerinden hangilerinin geçtiğini önerir — danışman onaylamadan hiçbiri
+  // kaydedilmez (aşağıdaki onay kutusunda tek tek/toplu onaylanır).
+  const [belirtiTaraLoading, setBelirtiTaraLoading] = useState(false);
+  const [onerilenBelirtiler, setOnerilenBelirtiler] = useState(null);
+  async function handleBelirtiTara() {
+    if (!seciliOgrenci) return;
+    setBelirtiTaraLoading(true);
+    try {
+      const ogrGorusmeler = records.filter(r => pdrAyniOgrenci(r.studentName, r.className, seciliOgrenci, seciliOgrenciSinif, r.numara, seciliOgrenciNumara));
+      if (ogrGorusmeler.length === 0) { alert("Bu öğrenci için görüşme notu bulunamadı."); setBelirtiTaraLoading(false); return; }
+      const notMetni = ogrGorusmeler.map(r => `${r.date}: ${r.summary || r.raw || ""}`).join("\n");
+      const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 1000,
+          system: `Sen bir PDR uzmanısın. Aşağıdaki SABİT belirti listelerinden, öğrencinin görüşme notlarında AÇIKÇA ifade ettiği ya da danışmanın gözlemlediği sınav kaygısı belirtilerini seç.
+
+FİZİKSEL: Kalp çarpıntısı, Mide bulantısı, karın ağrısı, Terleme, Titreme, Sık tuvalete çıkma isteği, Nefes darlığı veya hızlı nefes alma, Baş dönmesi veya baş ağrısı, Ağız kuruluğu
+BİLİŞSEL: Olumsuz düşünceler, Dikkat dağınıklığı, Unutkanlık, Odaklanma güçlüğü, Soruları okuma ya da anlamada güçlük, Zihni olumsuz senaryolarla meşgul etme
+DAVRANIŞSAL: Ders çalışmaktan kaçınma, Sınav sırasında aşırı hareketlilik, Sınavdan önce ya da sırasında ağlama, Sınavdan önce aşırı tekrar yapma, Soruları aceleyle cevaplama ya da erken bitirme, Sınavdan kaçma ya da sınava girmeme, Yanlış cevapladığını düşünüp sürekli silip yeniden yazma
+DUYGUSAL: Huzursuzluk, endişe, Kendine güvensizlik, yetersizlik hissi, Karamsarlık, Hata yapma korkusu, Kendini sürekli eleştirme, Aşırı heyecan, panik hali, Sinirlilik, tahammülsüzlük, Üzüntü, isteksizlik, Başarısızlık korkusu
+
+KURALLAR: Sadece notlarda AÇIKÇA belirtilen ya da güçlü şekilde ima edilen belirtileri seç, tahmin yürütme. Listedeki maddelerin METNİNİ AYNEN, harfi harfine kullan (kısaltma/değiştirme yapma) — yukarıdaki listede olmayan bir metin ASLA üretme.
+
+SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
+{"fiziksel": [], "bilissel": [], "davranissal": [], "duygusal": []}`,
+          messages: [{ role: "user", content: `Öğrencinin görüşme notları (kronolojik):\n${notMetni}\n\nYukarıdaki talimata göre belirtileri seç.` }]
+        }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      const text = data.content?.[0]?.text || "{}";
+      const temiz = text.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(temiz);
+      const gecerliListe = (kategori, secilenler) => (secilenler||[]).filter(x => (SINAV_KAYGISI_BELIRTILER[kategori]?.maddeler||[]).includes(x));
+      const filtrelenmis = {
+        fiziksel: gecerliListe("fiziksel", parsed.fiziksel),
+        bilissel: gecerliListe("bilissel", parsed.bilissel),
+        davranissal: gecerliListe("davranissal", parsed.davranissal),
+        duygusal: gecerliListe("duygusal", parsed.duygusal),
+      };
+      const hicYok = Object.values(filtrelenmis).every(l => l.length === 0);
+      if (hicYok) { alert("Notlarda belirgin bir belirti bulunamadı."); setOnerilenBelirtiler(null); }
+      else setOnerilenBelirtiler(filtrelenmis);
+    } catch (e) {
+      alert("Belirti taraması yapılamadı: " + e.message);
+    }
+    setBelirtiTaraLoading(false);
+  }
+  async function handleBelirtiOneriOnayla(secilenler) {
+    if (!seciliOgrenci) return;
+    const ogrKey = pdrOgrAnahtar(seciliOgrenci, seciliOgrenciSinif, seciliOgrenciNumara);
+    const mevcut = sinavKaygisi[ogrKey] || { haftalar:{}, kaygiDuzeyleri:{}, belirtiler:{fiziksel:[],bilissel:[],davranissal:[],duygusal:[]} };
+    const yeniBelirtiler = { ...mevcut.belirtiler };
+    ["fiziksel","bilissel","davranissal","duygusal"].forEach(kat => {
+      const eklenecek = secilenler[kat] || [];
+      const mevcutListe = yeniBelirtiler[kat] || [];
+      yeniBelirtiler[kat] = [...new Set([...mevcutListe, ...eklenecek])];
+    });
+    const guncelOgr = { ...mevcut, belirtiler: yeniBelirtiler };
+    const guncel = { ...sinavKaygisi, [ogrKey]: guncelOgr };
+    setSinavKaygisi(guncel);
+    await saveSinavKaygisi(guncel);
+    setOnerilenBelirtiler(null);
   }
 
   async function handleOgrenciEkle() {
@@ -7996,6 +8194,8 @@ function OgrenciYonetim({
               { key:"deneme", label:`Deneme (${Object.keys(ogrDeneme).length})` },
               { key:"profil", label:"Profil" },
               { key:"bireyi_tanima", label:"🔍 Bireyi Tanıma" },
+              { key:"bdt_analiz", label:"🧠 BDT Analiz" },
+              { key:"sinav_kaygisi", label:"😰 Sınav Kaygısı" },
             ].map(s => (
               <button key={s.key} onClick={() => setAktifSekme(s.key)} style={{
                 padding:"6px 12px", border:`1px solid ${aktifSekme===s.key ? ACCENT : BORDER}`,
@@ -8272,6 +8472,160 @@ function OgrenciYonetim({
               })}
             </div>
           )}
+          {aktifSekme === "bdt_analiz" && (
+            <div>
+              <div style={{ fontSize:11, color:MUTED, marginBottom:14, lineHeight:1.5 }}>
+                Öğrencinin görüşme sırasında dile getirdiği olumsuz ifadeleri, hangi bilişsel çarpıtma kategorisine girdiğini belirterek kaydet. AI, "Görüşme Notu → AI Özetle" akışında bir öneri çıkarabilir (danışman onaylamadan kaydolmaz); burada elle de ekleyebilirsin.
+              </div>
+              {BDT_CARPITMA_KATEGORILERI.map(kat => {
+                const ifadeler = (bdtAnaliz||[]).filter(b => pdrAyniOgrenci(b.studentName, b.className, seciliOgrenci, seciliOgrenciSinif, b.numara, seciliOgrenciNumara) && b.kategori === kat.key);
+                const formAcik = bdtAcikKategori === kat.key;
+                return (
+                  <div key={kat.key} style={{ marginBottom:16 }}>
+                    <div style={{ fontSize:12, fontWeight:700, color:TEXT, marginBottom:2 }}>{kat.ad} {ifadeler.length>0 && <span style={{color:MUTED,fontWeight:500}}>({ifadeler.length})</span>}</div>
+                    <div style={{ fontSize:10, color:MUTED, marginBottom:8, lineHeight:1.4 }}>{kat.aciklama}</div>
+                    {ifadeler.length === 0 && !formAcik && (
+                      <div style={{ fontSize:11, color:MUTED, marginBottom:6 }}>Henüz ifade eklenmedi.</div>
+                    )}
+                    {ifadeler.map(m => (
+                      <div key={m.id} style={{ display:"flex", alignItems:"flex-start", gap:6, marginBottom:5, fontSize:12, color:TEXT }}>
+                        <span style={{ color:"#8E5B3C", fontWeight:800, marginTop:1 }}>•</span>
+                        <span style={{ flex:1 }}>"{m.ifade}" <span style={{ fontSize:10, color:MUTED }}>({m.tarih})</span></span>
+                        <button onClick={()=>handleBdtSil(m.id)} style={{ background:"none", border:"none", color:"#C0392B", fontSize:12, cursor:"pointer", flexShrink:0 }}>🗑</button>
+                      </div>
+                    ))}
+                    {formAcik ? (
+                      <div style={{ display:"flex", gap:6, marginTop:6 }}>
+                        <input autoFocus value={bdtMetni} onChange={e=>setBdtMetni(e.target.value)}
+                          onKeyDown={e=>{ if(e.key==="Enter"){ handleBdtEkle(kat.key, bdtMetni); setBdtMetni(""); } }}
+                          placeholder='Örn. "Kimse beni sevmiyor"'
+                          style={{ flex:1, padding:"7px 10px", border:`1px solid ${BORDER}`, borderRadius:8, fontSize:12, boxSizing:"border-box" }} />
+                        <button onClick={()=>{ handleBdtEkle(kat.key, bdtMetni); setBdtMetni(""); }} disabled={!bdtMetni.trim()} style={{
+                          background:bdtMetni.trim()?"#8E5B3C":BORDER, color:bdtMetni.trim()?"#fff":MUTED, border:"none", borderRadius:8, padding:"7px 12px", fontSize:12, fontWeight:700, cursor:"pointer"
+                        }}>Ekle</button>
+                        <button onClick={()=>{ setBdtAcikKategori(null); setBdtMetni(""); }} style={{ background:"none", border:`1px solid ${BORDER}`, color:MUTED, borderRadius:8, padding:"7px 10px", fontSize:12, cursor:"pointer" }}>✕</button>
+                      </div>
+                    ) : (
+                      <button onClick={()=>setBdtAcikKategori(kat.key)} style={{
+                        background:"none", border:"1px dashed #8E5B3C", color:"#8E5B3C", borderRadius:8, padding:"5px 10px", fontSize:11, fontWeight:700, cursor:"pointer"
+                      }}>+ İfade Ekle</button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {aktifSekme === "sinav_kaygisi" && (() => {
+            const ogrKey = pdrOgrAnahtar(seciliOgrenci, seciliOgrenciSinif, seciliOgrenciNumara);
+            const kayit = sinavKaygisi[ogrKey] || { haftalar:{}, kaygiDuzeyleri:{}, belirtiler:{fiziksel:[],bilissel:[],davranissal:[],duygusal:[]} };
+            const haftaVerisi = kayit.haftalar[sinavKaygiAktifHafta] || { cevaplar: new Array(10).fill(null), toplam: 0, aciklama: "" };
+            const cevaplanan = haftaVerisi.cevaplar.filter(c => c !== null && c !== undefined).length;
+            const duzey = sinavKaygiDuzeyHesapla(haftaVerisi.toplam);
+            return (
+              <div>
+                {/* 1) Sınav Kaygı Seviyem — 10 madde, haftalık, elle puanlanır, toplam ücretsiz hesaplanır */}
+                <div style={{ fontSize:13, fontWeight:800, color:TEXT, marginBottom:8 }}>📋 Sınav Kaygı Seviyem</div>
+                <div style={{ display:"flex", gap:5, flexWrap:"wrap", marginBottom:10 }}>
+                  {[1,2,3,4,5,6,7,8].map(h => (
+                    <button key={h} onClick={()=>setSinavKaygiAktifHafta(h)} style={{
+                      padding:"5px 10px", borderRadius:8, border:`2px solid ${sinavKaygiAktifHafta===h?ACCENT:BORDER}`,
+                      background:sinavKaygiAktifHafta===h?ACCENT:"#fff", color:sinavKaygiAktifHafta===h?"#fff":MUTED, fontSize:11, fontWeight:700, cursor:"pointer"
+                    }}>{h}. Hafta</button>
+                  ))}
+                </div>
+                <div style={{ background:BG, borderRadius:8, padding:"8px 10px", marginBottom:10, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <span style={{ fontSize:11, color:MUTED }}>{cevaplanan}/10 madde cevaplandı</span>
+                  <span style={{ fontSize:12, fontWeight:800, color:duzey.renk }}>Toplam: {haftaVerisi.toplam}/40 — {duzey.ad}</span>
+                </div>
+                {SINAV_KAYGISI_MADDELERI.map((madde, i) => (
+                  <div key={i} style={{ marginBottom:10 }}>
+                    <div style={{ fontSize:11.5, color:TEXT, marginBottom:4 }}>{i+1}. {madde}</div>
+                    <div style={{ display:"flex", gap:4 }}>
+                      {SINAV_KAYGISI_SECENEKLER.map(sec => {
+                        const secili = haftaVerisi.cevaplar[i] === sec.deger;
+                        return (
+                          <button key={sec.deger} onClick={()=>{
+                            const yeniCevaplar = [...haftaVerisi.cevaplar];
+                            yeniCevaplar[i] = sec.deger;
+                            handleSinavKaygiHaftaGuncelle(sinavKaygiAktifHafta, yeniCevaplar, haftaVerisi.aciklama);
+                          }} style={{
+                            flex:1, padding:"5px 2px", borderRadius:6, border:`1.5px solid ${secili?ACCENT:BORDER}`,
+                            background:secili?ACCENT:"#fff", color:secili?"#fff":MUTED, fontSize:9, fontWeight:700, cursor:"pointer"
+                          }}>{sec.ad}</button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+                <label style={{ fontSize:10, fontWeight:600, color:MUTED, display:"block", marginBottom:3, marginTop:6 }}>AÇIKLAMA ({sinavKaygiAktifHafta}. hafta)</label>
+                <textarea rows={2} value={haftaVerisi.aciklama} onChange={e=>handleSinavKaygiHaftaGuncelle(sinavKaygiAktifHafta, haftaVerisi.cevaplar, e.target.value)}
+                  placeholder="Bu haftaya dair kısa not..."
+                  style={{ width:"100%", padding:"7px 10px", border:`1px solid ${BORDER}`, borderRadius:8, fontSize:12, boxSizing:"border-box", resize:"vertical", marginBottom:18 }} />
+
+                {/* 2) Kaygı Düzeyim — haftalık 0-10 öz-değerlendirme */}
+                <div style={{ fontSize:13, fontWeight:800, color:TEXT, marginBottom:8 }}>🌡️ Kaygı Düzeyim (0-10, Düşük → Yüksek)</div>
+                {[1,2,3,4,5,6,7,8].map(h => {
+                  const deger = kayit.kaygiDuzeyleri[h];
+                  return (
+                    <div key={h} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
+                      <span style={{ fontSize:11, fontWeight:700, color:MUTED, width:52, flexShrink:0 }}>{h}. Hafta</span>
+                      <div style={{ display:"flex", gap:3, flex:1 }}>
+                        {Array.from({length:11}, (_,n)=>n).map(n => (
+                          <button key={n} onClick={()=>handleKaygiDuzeyiGuncelle(h, n)} style={{
+                            flex:1, padding:"4px 0", borderRadius:5, border:`1px solid ${deger===n?ACCENT:BORDER}`,
+                            background:deger===n?ACCENT:"#fff", color:deger===n?"#fff":MUTED, fontSize:9, fontWeight:700, cursor:"pointer"
+                          }}>{n}</button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* 3) Hangi Belirtiler Var? — AI önerebilir, danışman onaylar */}
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:22, marginBottom:8 }}>
+                  <div style={{ fontSize:13, fontWeight:800, color:TEXT }}>🩺 Hangi Belirtiler Var?</div>
+                  <button onClick={handleBelirtiTara} disabled={belirtiTaraLoading} style={{
+                    background:belirtiTaraLoading?BORDER:PURPLE, color:belirtiTaraLoading?MUTED:"#fff", border:"none", borderRadius:8, padding:"6px 12px", fontSize:11, fontWeight:700, cursor:"pointer"
+                  }}>{belirtiTaraLoading?"⏳ Taranıyor…":"✦ AI ile Notlardan Tara"}</button>
+                </div>
+                {onerilenBelirtiler && (
+                  <div style={{ background:"#F3EEFB", border:`1px solid ${PURPLE}`, borderRadius:10, padding:12, marginBottom:14 }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:PURPLE, marginBottom:8 }}>AI'ın notlarda bulduğu belirtiler — onaylarsan aşağıdaki listeye eklenir:</div>
+                    {Object.entries(SINAV_KAYGISI_BELIRTILER).map(([kat, info]) => {
+                      const oneriler = onerilenBelirtiler[kat] || [];
+                      if (oneriler.length === 0) return null;
+                      return (
+                        <div key={kat} style={{ marginBottom:6 }}>
+                          <div style={{ fontSize:10, fontWeight:700, color:MUTED }}>{info.label}</div>
+                          <div style={{ fontSize:11.5, color:TEXT }}>{oneriler.join(", ")}</div>
+                        </div>
+                      );
+                    })}
+                    <div style={{ display:"flex", gap:8, marginTop:8 }}>
+                      <button onClick={()=>handleBelirtiOneriOnayla(onerilenBelirtiler)} style={{ flex:1, padding:"7px", background:PURPLE, color:"#fff", border:"none", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer" }}>✓ Onayla ve Ekle</button>
+                      <button onClick={()=>setOnerilenBelirtiler(null)} style={{ padding:"7px 14px", background:"none", border:`1px solid ${BORDER}`, color:MUTED, borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer" }}>Yoksay</button>
+                    </div>
+                  </div>
+                )}
+                {Object.entries(SINAV_KAYGISI_BELIRTILER).map(([kat, info]) => (
+                  <div key={kat} style={{ marginBottom:14 }}>
+                    <div style={{ fontSize:12, fontWeight:700, color:TEXT, marginBottom:6 }}>{info.label}</div>
+                    <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                      {info.maddeler.map(m => {
+                        const secili = (kayit.belirtiler[kat]||[]).includes(m);
+                        return (
+                          <button key={m} onClick={()=>handleBelirtiToggle(kat, m)} style={{
+                            padding:"5px 10px", borderRadius:14, border:`1.5px solid ${secili?ACCENT:BORDER}`,
+                            background:secili?ACCENT:"#fff", color:secili?"#fff":MUTED, fontSize:10.5, fontWeight:600, cursor:"pointer"
+                          }}>{m}</button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>
@@ -10838,7 +11192,7 @@ function RecordCard({ rec, onDelete, onUpdate }) {
   );
 }
 
-function AyarlarEkrani({ ogrenciler, setOgrenciler, records, setRecords, profiles, setProfiles, profiles2, setProfiles2, oogDegerlendirmeler, setOogDegerlendirmeler, riskListesi, setRiskListesi, denemeler, setDenemeler, sevkler, setSevkler, mudahalePlan, setMudahalePlan, hazirlikNotlari, setHazirlikNotlari, ilerlemeNotlari, setIlerlemeNotlari, profNotlari, setProfNotlari, kutuphane, setKutuphane, yillar, setYillar, sinifListesi, setSinifListesi, aktifYil, setAktifYil, kademe, setKademe, sinavTuru, setSinavTuru, testKayitlari, setTestKayitlari, hatirlatmalar, setHatirlatmalar, netHaritasiKayitlari, setNetHaritasiKayitlari, konuHaritasiVerisi, setKonuHaritasiVerisi, bireyiTanima, setBireyiTanima }) {
+function AyarlarEkrani({ ogrenciler, setOgrenciler, records, setRecords, profiles, setProfiles, profiles2, setProfiles2, oogDegerlendirmeler, setOogDegerlendirmeler, riskListesi, setRiskListesi, denemeler, setDenemeler, sevkler, setSevkler, mudahalePlan, setMudahalePlan, hazirlikNotlari, setHazirlikNotlari, ilerlemeNotlari, setIlerlemeNotlari, profNotlari, setProfNotlari, kutuphane, setKutuphane, yillar, setYillar, sinifListesi, setSinifListesi, aktifYil, setAktifYil, kademe, setKademe, sinavTuru, setSinavTuru, testKayitlari, setTestKayitlari, hatirlatmalar, setHatirlatmalar, netHaritasiKayitlari, setNetHaritasiKayitlari, konuHaritasiVerisi, setKonuHaritasiVerisi, bireyiTanima, setBireyiTanima, bdtAnaliz, setBdtAnaliz, sinavKaygisi, setSinavKaygisi }) {
   const [yedekIndiriliyor, setYedekIndiriliyor] = useState(false);
   const [geriYuklemeOnay, setGeriYuklemeOnay] = useState(null);
   const [geriYukleniyor, setGeriYukleniyor] = useState(false);
@@ -10890,6 +11244,8 @@ function AyarlarEkrani({ ogrenciler, setOgrenciler, records, setRecords, profile
         ["netHaritasiKayitlari", setNetHaritasiKayitlari, saveNetHaritasi],
         ["konuHaritasiVerisi", setKonuHaritasiVerisi, saveKonuHaritasi],
         ["bireyiTanima", setBireyiTanima, saveBireyiTanima],
+        ["bdtAnaliz", setBdtAnaliz, saveBdtAnaliz],
+        ["sinavKaygisi", setSinavKaygisi, saveSinavKaygisi],
       ];
       let guncellenenSayisi = 0;
       for (const [alan, setter, saver] of alanlar) {
@@ -10921,7 +11277,7 @@ function AyarlarEkrani({ ogrenciler, setOgrenciler, records, setRecords, profile
         ogrenciler, records, profiles, profiles2, oogDegerlendirmeler,
         riskListesi, denemeler, sevkler, mudahalePlan,
         hazirlikNotlari, ilerlemeNotlari, profNotlari, kutuphane,
-        testKayitlari, hatirlatmalar, netHaritasiKayitlari, konuHaritasiVerisi, bireyiTanima,
+        testKayitlari, hatirlatmalar, netHaritasiKayitlari, konuHaritasiVerisi, bireyiTanima, bdtAnaliz, sinavKaygisi,
       };
       const blob = new Blob([JSON.stringify(yedek, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
@@ -11209,6 +11565,7 @@ export default function App() {
   const [aiLoading, setAiLoading] = useState(false);
   const [onerilenHatirlatma, setOnerilenHatirlatma] = useState(null); // {metin} | null
   const [onerilenBireyiTanima, setOnerilenBireyiTanima] = useState(null); // [{kategori,metin,secili}] | null
+  const [onerilenBdt, setOnerilenBdt] = useState(null); // [{kategori,ifade,secili}] | null
   const [profAiLoading, setProfAiLoading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [profSaved, setProfSaved] = useState(false);
@@ -11269,6 +11626,8 @@ export default function App() {
   const [netHaritasiKayitlari, setNetHaritasiKayitlari] = useState([]);
   const [konuHaritasiVerisi, setKonuHaritasiVerisi] = useState({});
   const [bireyiTanima, setBireyiTanima] = useState([]);
+  const [bdtAnaliz, setBdtAnaliz] = useState([]);
+  const [sinavKaygisi, setSinavKaygisi] = useState({});
   const [kutuphane, setKutuphane] = useState([]);
   const [pdfYukleniyor, setPdfYukleniyor] = useState(false);
   const [search, setSearch] = useState("");
@@ -11299,6 +11658,8 @@ export default function App() {
     loadNetHaritasi().then(setNetHaritasiKayitlari);
     loadKonuHaritasi().then(setKonuHaritasiVerisi);
     loadBireyiTanima().then(setBireyiTanima);
+    loadBdtAnaliz().then(setBdtAnaliz);
+    loadSinavKaygisi().then(setSinavKaygisi);
   }, []);
 
   // aktifOgrenci değişince formu güncelle
@@ -11333,11 +11694,33 @@ export default function App() {
     const parcalar = tamCevap.split(/---HATIRLATMA---/i);
     const summary = parcalar[0].trim();
     const kalan = parcalar[1] || "";
-    const btParcalari = kalan.split(/---BIREYI_TANIMA---/i);
-    const hatirlatmaBlok = (btParcalari[0] || "").trim();
+    const bdtParcalari = kalan.split(/---BDT_CARPITMA---/i);
+    const hatirlatmaBlok = (bdtParcalari[0] || "").trim();
+    const kalan2 = bdtParcalari[1] || "";
+    const btParcalari = kalan2.split(/---BIREYI_TANIMA---/i);
+    const bdtBlok = (btParcalari[0] || "").trim();
     const bireyiTanimaBlok = (btParcalari[1] || "").trim();
     setForm(f => ({ ...f, summary }));
     setOnerilenHatirlatma(pdrHatirlatmaBlokParcala(hatirlatmaBlok));
+    // Bilişsel çarpıtma önerisi — güvenlik uyarısı varsa ayrı ve belirgin şekilde göster.
+    if (bdtBlok && !/^yok/i.test(bdtBlok)) {
+      const gecerliBdtKategoriler = BDT_CARPITMA_KATEGORILERI.map(k => k.key);
+      const guvenlikMatch = bdtBlok.match(/GUVENLIK_UYARISI:\s*(.+)/i);
+      if (guvenlikMatch && guvenlikMatch[1].trim()) {
+        alert("⚠️ DİKKAT: AI bu görüşme notunda olası bir güvenlik/risk işareti fark etti:\n\n" + guvenlikMatch[1].trim());
+      }
+      const oneriler = bdtBlok.split("\n").filter(s => !/^GUVENLIK_UYARISI/i.test(s)).map(satir => {
+        const m = satir.match(/^([a-z_]+)\s*:\s*"?(.+?)"?$/i);
+        if (!m) return null;
+        const kategori = m[1].trim().toLocaleLowerCase("tr");
+        const ifade = m[2].trim().replace(/^"|"$/g, "");
+        if (!gecerliBdtKategoriler.includes(kategori) || !ifade || /^yok$/i.test(ifade)) return null;
+        return { kategori, ifade, secili: true };
+      }).filter(Boolean);
+      setOnerilenBdt(oneriler.length > 0 ? oneriler : null);
+    } else {
+      setOnerilenBdt(null);
+    }
     if (bireyiTanimaBlok && !/^yok/i.test(bireyiTanimaBlok)) {
       const gecerliKategoriler = ["aile","saglik","olaylar","sosyoekonomik","ilgi","okul"];
       const oneriler = bireyiTanimaBlok.split("\n").map(satir => {
@@ -11383,6 +11766,24 @@ export default function App() {
     setBireyiTanima(guncel);
     await saveBireyiTanima(guncel);
     setOnerilenBireyiTanima(null);
+  }
+
+  function handleBdtOneriToggle(index) {
+    setOnerilenBdt(prev => prev.map((o,i) => i===index ? { ...o, secili: !o.secili } : o));
+  }
+
+  async function handleBdtOnayla() {
+    if (!onerilenBdt || !form.studentName.trim()) return;
+    const secilenler = onerilenBdt.filter(o => o.secili);
+    if (secilenler.length === 0) { setOnerilenBdt(null); return; }
+    const yeniMaddeler = secilenler.map(o => ({
+      id: uid(), studentName: form.studentName, className: form.className, numara: form.numara,
+      kategori: o.kategori, ifade: o.ifade, tarih: today()
+    }));
+    const guncel = [...yeniMaddeler, ...(bdtAnaliz||[])];
+    setBdtAnaliz(guncel);
+    await saveBdtAnaliz(guncel);
+    setOnerilenBdt(null);
   }
 
   async function handleSave() {
@@ -11999,6 +12400,27 @@ export default function App() {
                   </div>
                 </div>
               )}
+              {/* AI'ın fark ettiği bilişsel çarpıtmalar — hangileri eklensin seçebilirsin */}
+              {onerilenBdt && (
+                <div style={{ background:"#F5EFEA", border:"1px solid #C9AD94", borderRadius:10, padding:"10px 12px", marginBottom:10 }}>
+                  <div style={{ fontSize:11, fontWeight:700, color:"#8E5B3C", marginBottom:8 }}>🧠 AI, {onerilenBdt.length} bilişsel çarpıtma ifadesi fark etti — eklemek istediklerini seç:</div>
+                  <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:10 }}>
+                    {onerilenBdt.map((o,i) => {
+                      const katAd = (BDT_CARPITMA_KATEGORILERI.find(k=>k.key===o.kategori)||{}).ad || o.kategori;
+                      return (
+                        <label key={i} style={{ display:"flex", alignItems:"flex-start", gap:8, fontSize:12, cursor:"pointer" }}>
+                          <input type="checkbox" checked={o.secili} onChange={()=>handleBdtOneriToggle(i)} style={{ marginTop:2 }} />
+                          <span><span style={{ color:"#8E5B3C", fontWeight:700 }}>{katAd}:</span> "{o.ifade}"</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <div style={{ display:"flex", gap:8 }}>
+                    <button onClick={handleBdtOnayla} disabled={!form.studentName.trim()} style={{ flex:1, padding:"7px", background:"#8E5B3C", color:"#fff", border:"none", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer" }}>✓ Seçilenleri Ekle</button>
+                    <button onClick={()=>setOnerilenBdt(null)} style={{ padding:"7px 14px", background:"none", border:`1px solid ${BORDER}`, color:MUTED, borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer" }}>Yoksay</button>
+                  </div>
+                </div>
+              )}
               {/* Kaydet */}
               <button onClick={handleSave} disabled={!form.studentName.trim()||!(form.summary.trim()||form.raw.trim())} style={{ width:"100%", padding:"13px", background:form.studentName&&(form.summary||form.raw)?PURPLE:BORDER, color:form.studentName&&(form.summary||form.raw)?"#fff":MUTED, border:"none", borderRadius:12, fontSize:15, fontWeight:800, cursor:"pointer" }}>
                 {saved?"✓ Kaydedildi!":"💾 Görüşmeyi Kaydet"}
@@ -12123,6 +12545,8 @@ export default function App() {
           netHaritasiKayitlari={netHaritasiKayitlari} setNetHaritasiKayitlari={setNetHaritasiKayitlari}
           konuHaritasiVerisi={konuHaritasiVerisi} setKonuHaritasiVerisi={setKonuHaritasiVerisi}
           bireyiTanima={bireyiTanima} setBireyiTanima={setBireyiTanima}
+          bdtAnaliz={bdtAnaliz} setBdtAnaliz={setBdtAnaliz}
+          sinavKaygisi={sinavKaygisi} setSinavKaygisi={setSinavKaygisi}
         />}
 
         {/* ── ŞEMA (ZİHİN HARİTASI) ────────────────────────────────── */}
@@ -12321,6 +12745,10 @@ export default function App() {
             setIlerlemeNotlari={setIlerlemeNotlari}
             bireyiTanima={bireyiTanima}
             setBireyiTanima={setBireyiTanima}
+            bdtAnaliz={bdtAnaliz}
+            setBdtAnaliz={setBdtAnaliz}
+            sinavKaygisi={sinavKaygisi}
+            setSinavKaygisi={setSinavKaygisi}
             onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari }))}
             onSinifGuncelle={async (eskiAd, eskiSinif, eskiNumara, yeniAd, yeniSinif) => {
               const ayniMi = (ad, sinif, no) => pdrAyniOgrenci(eskiAd, eskiSinif, ad, sinif, eskiNumara, no);

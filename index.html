@@ -6441,6 +6441,7 @@ function YilSecimEkrani({ yillar, setYillar, aktifYil, setAktifYil, ogrenciler, 
 function OzetKarti({ ogrenci, ogrenciSinif, ogrRec, ogrP1, ogrP2, ogrRisk, denemeGirilen, denemeAvg, mudahalePlan, hazirlikNotlari, setHazirlikNotlari, ilerlemeNotlari, setIlerlemeNotlari, setTab, devamsizlikGecmisi, onDevamsizlikGuncelle, kademe, olayKayitlari, onOlayEkle }) {
   const [hazirlikAiLoading, setHazirlikAiLoading] = useState(false);
   const [ucretsizEtkinlikAlan, setUcretsizEtkinlikAlan] = useState(null);
+  const [ucretsizEtkinlikArama, setUcretsizEtkinlikArama] = useState("");
   const [aktifPanel, setAktifPanel] = useState("ozet"); // ozet | hazirlik | ilerleme
   const [devGuncelleAcik, setDevGuncelleAcik] = useState(false);
   const devSirali = [...(devamsizlikGecmisi||[])].sort((a,b) => new Date(a.tarih.split(".").reverse().join("-")) - new Date(b.tarih.split(".").reverse().join("-")));
@@ -6753,15 +6754,24 @@ Kısa ve pratik yaz, Markdown kullanma.`}]
             const etkinlikHavuzuTumu = ogrenciEtkinlikHavuzu(ogrenciSinif, kademe);
             if (etkinlikHavuzuTumu.length === 0) return null;
             const ALANLAR = ["Akademik", "Sosyal Duygusal", "Kariyer", "Tüm Alanlar"];
-            const filtrelenmis = !ucretsizEtkinlikAlan ? [] :
-              ucretsizEtkinlikAlan === "Tüm Alanlar" ? etkinlikHavuzuTumu :
-              etkinlikHavuzuTumu.filter(e => e.alan === ucretsizEtkinlikAlan || e.alan === "Tüm Alanlar");
+            const alanFiltrelenmis = !ucretsizEtkinlikAlan || ucretsizEtkinlikAlan === "Tüm Alanlar"
+              ? etkinlikHavuzuTumu
+              : etkinlikHavuzuTumu.filter(e => e.alan === ucretsizEtkinlikAlan || e.alan === "Tüm Alanlar");
+            const aramaMetni = ucretsizEtkinlikArama.trim().toLocaleLowerCase("tr");
+            // Anahtar kelime aranmadan sonuç gösterilmiyor — amaç, ihtiyaca göre
+            // hedefli birkaç sonuç bulmak, tüm listeyi dökmek değil.
+            const filtrelenmis = aramaMetni.length < 2 ? [] : alanFiltrelenmis.filter(e =>
+              (e.etkinlik + " " + e.kazanim + " " + e.yeterlik).toLocaleLowerCase("tr").includes(aramaMetni)
+            );
             const sinifGruplari = {};
             filtrelenmis.forEach(e => { (sinifGruplari[e.sinif] ||= []).push(e); });
             return (
               <div style={{ marginTop:20, background:CARD, border:`1px solid ${BORDER}`, borderRadius:12, padding:14 }}>
-                <div style={{ fontSize:12, fontWeight:800, color:TEXT, marginBottom:4 }}>🆓 Ücretsiz Etkinlik Bul</div>
-                <div style={{ fontSize:10.5, color:MUTED, marginBottom:10 }}>AI kullanmadan, alan seç — öğrencinin sınıf düzeyine kadarki (sarmal) tüm etkinlikler listelensin.</div>
+                <div style={{ fontSize:12, fontWeight:800, color:TEXT, marginBottom:4 }}>🔍 İhtiyaca Göre Etkinlik Ara</div>
+                <div style={{ fontSize:10.5, color:MUTED, marginBottom:10 }}>AI kullanmadan, öğrencinin ihtiyacına dair bir anahtar kelime yaz (örn. "kaygı", "öfke", "arkadaşlık") — sınıf düzeyine kadarki (sarmal) etkinlikler içinde bu kelimeye göre arama yapılır. İstersen alana göre de daraltabilirsin.</div>
+                <input value={ucretsizEtkinlikArama} onChange={e=>setUcretsizEtkinlikArama(e.target.value)}
+                  placeholder='Anahtar kelime yaz... (örn. "sınav kaygısı")'
+                  style={{ width:"100%", padding:"8px 10px", border:`1px solid ${BORDER}`, borderRadius:8, fontSize:12.5, boxSizing:"border-box", marginBottom:10 }} />
                 <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:12 }}>
                   {ALANLAR.map(a => (
                     <button key={a} onClick={()=>setUcretsizEtkinlikAlan(ucretsizEtkinlikAlan===a?null:a)} style={{
@@ -6770,7 +6780,10 @@ Kısa ve pratik yaz, Markdown kullanma.`}]
                     }}>{a}</button>
                   ))}
                 </div>
-                {ucretsizEtkinlikAlan && Object.entries(sinifGruplari).sort((a,b)=>a[0]-b[0]).map(([sinif, liste]) => (
+                {aramaMetni.length >= 2 && filtrelenmis.length === 0 && (
+                  <div style={{ fontSize:11.5, color:MUTED, textAlign:"center", padding:"10px 0" }}>Bu kelimeyle eşleşen bir etkinlik bulunamadı.</div>
+                )}
+                {aramaMetni.length >= 2 && Object.entries(sinifGruplari).sort((a,b)=>a[0]-b[0]).map(([sinif, liste]) => (
                   <div key={sinif} style={{ marginBottom:12 }}>
                     <div style={{ fontSize:11, fontWeight:800, color:MUTED, marginBottom:6 }}>{sinif}. SINIF ({liste.length})</div>
                     <div style={{ display:"flex", flexDirection:"column", gap:6 }}>

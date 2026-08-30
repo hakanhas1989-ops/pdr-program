@@ -842,6 +842,33 @@ function kazanimVeriKaynagi(kademe, cilt, sinif) {
   if (kademe === "lise") return ((cilt === "2" ? KAZANIM_VERI_LISE_CILT2 : KAZANIM_VERI_LISE) || {})[sinif];
   return ((cilt === "2" ? KAZANIM_VERI_CILT2 : KAZANIM_VERI) || {})[sinif];
 }
+// Seans Hazırlık'ta sınıf rehberlik etkinliği önermek için: öğrencinin sınıf
+// düzeyine uygun etkinlikleri toplar — sadece eşleştirme için gereken alanları
+// (etkinlik/kazanım/alan/yeterlik/sınıf) alır, ay/tarih bilgisini atar (token
+// tasarrufu). AI bu listeden seçim yapar, program tarafında sabittir — AI
+// kendiliğinden etkinlik uydurmaz.
+// SARMAL PROGRAM MANTIĞI: MEB rehberlik müfredatı sarmal ilerler — öğrenci
+// bulunduğu sınıfa gelene kadar kademesindeki ÖNCEKİ sınıfların kazanımlarını
+// da görmüş sayılır. Bu yüzden havuz, kademenin başından (ilkokul 1, ortaokul
+// 5, lise 9) öğrencinin GÜNCEL sınıfına kadar (dahil) TÜM sınıfları kapsar —
+// örn. 8. sınıf bir öğrenci için 5, 6, 7 ve 8. sınıf etkinlikleri birlikte
+// havuzda olur. Asla DAHA ÜST bir sınıfın etkinliği havuza girmez — henüz
+// işlenmemiş sayılır, gelişimsel olarak erken olur.
+function ogrenciEtkinlikHavuzu(ogrenciSinif, kademeTahmin) {
+  const sinifNoMatch = (ogrenciSinif || "").match(/\d+/);
+  if (!sinifNoMatch) return [];
+  const sinif = parseInt(sinifNoMatch[0], 10);
+  const kademe = kademeTahmin || (sinif <= 4 ? "ilkokul" : sinif <= 8 ? "ortaokul" : "lise");
+  const kademeBaslangic = kademe === "ilkokul" ? 1 : kademe === "ortaokul" ? 5 : 9;
+  const havuz = [];
+  for (let s = kademeBaslangic; s <= sinif; s++) {
+    const sStr = String(s);
+    const cilt1 = kazanimVeriKaynagi(kademe, "1", sStr) || [];
+    const cilt2 = kazanimVeriKaynagi(kademe, "2", sStr) || [];
+    [...cilt1, ...cilt2].forEach(k => havuz.push({ etkinlik: k.etkinlik, kazanim: k.kazanim, alan: k.alan, yeterlik: k.yeterlik, sinif: s }));
+  }
+  return havuz;
+}
 function KazanimlarSekmesi({ kademe }) {
   const aktifKademe = KADEME_SINIF_LISTESI[kademe] ? kademe : "ortaokul";
   const sinifListesi = KADEME_SINIF_LISTESI[aktifKademe];
@@ -6455,17 +6482,22 @@ function OzetKarti({ ogrenci, ogrenciSinif, ogrRec, ogrP1, ogrP2, ogrRisk, denem
       ? "Risk: " + ogrRisk.map(r => r.riskTuru).join(", ")
       : "";
     const deneme = denemeAvg ? `Deneme Ortalaması: ${denemeAvg}/90` : "";
+    const etkinlikHavuzu = ogrenciEtkinlikHavuzu(ogrenciSinif, kademe);
+    const etkinlikMetni = etkinlikHavuzu.length > 0
+      ? etkinlikHavuzu.map(e => `- [${e.sinif}. Sınıf] "${e.etkinlik}" (Alan: ${e.alan}, Yeterlik: ${e.yeterlik}) — Kazanım: ${e.kazanim}`).join("\n")
+      : "";
 
     const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({
-        model:"claude-sonnet-4-6", max_tokens:1000,
+        model:"claude-sonnet-4-6", max_tokens:1200,
         system:"Sen Dr. Ayse Kara'sin — 20 yillik klinik PDR uzmanisin. Danismana bir sonraki seans icin pratik hazirlik notu yazarsın.",
         messages:[{role:"user", content:`Öğrenci: ${ogrenci}
 ${gorusmeler}
 ${mudahaleBolum}
 ${risk}
 ${deneme}
+${etkinlikMetni ? `\nBU SINIF DÜZEYİ İÇİN SINIF REHBERLİK ETKİNLİKLERİ KÜTÜPHANESİ (kazanım/alan/yeterlik bilgileriyle):\n${etkinlikMetni}` : ""}
 
 Bu öğrenciyle bir sonraki görüşme için seans hazırlık notu yaz:
 
@@ -6473,7 +6505,8 @@ Bu öğrenciyle bir sonraki görüşme için seans hazırlık notu yaz:
 TAKİP EDİLMESİ GEREKENLER: (son görüşmede kalan konular)
 BU SEANSTA ODAKLANILACAKLAR: (somut 2-3 madde)
 SORULACAK SORULAR: (açıcı, terapötik sorular)
-DİKKAT EDİLECEKLER: (öğrenciye özel hassas noktalar)
+DİKKAT EDİLECEKLER: (öğrenciye özel hassas noktalar)${etkinlikMetni ? `
+ÖNERİLEN SINIF REHBERLİK ETKİNLİĞİ: (yukarıdaki kütüphaneden, görüşme temalarına EN UYGUN 1-2 etkinliği seç, hangi sınıf düzeyinden olduğunu ve adını AYNEN yaz, neden uygun olduğunu 1 cümlede açıkla — hangi görüşme teması/kazanım ihtiyacıyla eşleştiğini belirt. Öğrencinin güncel sınıfından daha alt bir sınıfın etkinliğini önerirsen bunun neden (örn. temel bir beceri pekiştirmesi için) uygun olduğunu da kısaca belirt. Listedeki hiçbir etkinlik gerçekten uygun değilse "Uygun bir etkinlik bulunamadı" yaz. Listede OLMAYAN bir etkinlik ASLA uydurma.)` : ""}
 
 Kısa ve pratik yaz, Markdown kullanma.`}]
       })

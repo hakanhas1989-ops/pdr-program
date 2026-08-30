@@ -6442,6 +6442,37 @@ function OzetKarti({ ogrenci, ogrenciSinif, ogrRec, ogrP1, ogrP2, ogrRisk, denem
   const [hazirlikAiLoading, setHazirlikAiLoading] = useState(false);
   const [ucretsizEtkinlikAlan, setUcretsizEtkinlikAlan] = useState(null);
   const [ucretsizEtkinlikArama, setUcretsizEtkinlikArama] = useState("");
+  const [aiEtkinlikOnerisi, setAiEtkinlikOnerisi] = useState("");
+  const [aiEtkinlikLoading, setAiEtkinlikLoading] = useState(false);
+  // "İhtiyaca Göre Etkinlik Ara" ile aynı amaca hizmet eder ama kelime
+  // eşleştirmesi yerine AI'ın görüşme notlarını anlayarak seçim yapmasını
+  // sağlar — Seans Hazırlık Notu'nun TAMAMINI üretmeden, SADECE etkinlik
+  // önerisi için ayrı, daha hafif bir AI çağrısı.
+  async function handleAiEtkinlikAra() {
+    setAiEtkinlikLoading(true);
+    setAiEtkinlikOnerisi("");
+    try {
+      const etkinlikHavuzu = ogrenciEtkinlikHavuzu(ogrenciSinif, kademe);
+      if (etkinlikHavuzu.length === 0) { alert("Bu öğrenci için sınıf düzeyine uygun etkinlik kütüphanesi bulunamadı."); setAiEtkinlikLoading(false); return; }
+      const gorusmeler = ogrRec.slice(0,8).map((r,i) => `Görüşme ${i+1} (${r.date}): ${r.summary}`).join("\n\n");
+      if (!gorusmeler) { alert("Bu öğrenci için görüşme notu bulunamadı."); setAiEtkinlikLoading(false); return; }
+      const etkinlikMetni = etkinlikHavuzu.map(e => `- [${e.sinif}. Sınıf] "${e.etkinlik}" (Alan: ${e.alan}, Yeterlik: ${e.yeterlik}) — Kazanım: ${e.kazanim}`).join("\n");
+      const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          model:"claude-sonnet-4-6", max_tokens:600,
+          system:"Sen bir PDR uzmanısın. Görüşme notlarını okuyup, verilen sınıf rehberlik etkinlikleri kütüphanesinden öğrencinin ihtiyacına en uygun etkinlikleri seçersin.",
+          messages:[{role:"user", content:`Öğrenci: ${ogrenci}\n${gorusmeler}\n\nSINIF REHBERLİK ETKİNLİKLERİ KÜTÜPHANESİ:\n${etkinlikMetni}\n\nYukarıdaki kütüphanedeki HER BİR sınıf düzeyi için, o düzeyden görüşme temalarına EN UYGUN TEK bir etkinlik seç ve şu formatta, her biri YENİ bir satırda yaz:\n[Sınıf]. Sınıftan: "Etkinlik Adı" — neden uygun olduğu, 1 kısa cümle.\nBir sınıf düzeyinde gerçekten uygun etkinlik yoksa o düzeyi atla. Hiçbirinde yoksa "Uygun bir etkinlik bulunamadı" yaz. Listede OLMAYAN bir etkinlik ASLA uydurma. Markdown kullanma, sadece istenen satırları yaz.`}]
+        })
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setAiEtkinlikOnerisi(data.content?.[0]?.text || "Öneri alınamadı.");
+    } catch (e) {
+      alert("AI önerisi alınamadı: " + e.message);
+    }
+    setAiEtkinlikLoading(false);
+  }
   const [aktifPanel, setAktifPanel] = useState("ozet"); // ozet | hazirlik | ilerleme
   const [devGuncelleAcik, setDevGuncelleAcik] = useState(false);
   const devSirali = [...(devamsizlikGecmisi||[])].sort((a,b) => new Date(a.tarih.split(".").reverse().join("-")) - new Date(b.tarih.split(".").reverse().join("-")));
@@ -6748,6 +6779,24 @@ Kısa ve pratik yaz, Markdown kullanma.`}]
               Butona bas, AI önceki görüşmelere bakarak<br/>bir sonraki seans için hazırlık notu hazırlasın
             </div>
           ) : null}
+
+          {/* AI ile Ara — Seans Hazırlık Notu'nun TAMAMINI üretmeden, sadece
+              görüşme notlarına bakıp etkinlik önerir. Ücretsiz kelime
+              aramasının yanında, anlam bazlı (ücretli) alternatif. */}
+          {ogrenciEtkinlikHavuzu(ogrenciSinif, kademe).length > 0 && (
+            <div style={{ marginTop:20, background:"#F3EEFB", border:`1px solid ${PURPLE}`, borderRadius:12, padding:14 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
+                <div style={{ fontSize:12, fontWeight:800, color:PURPLE }}>✦ AI ile Ara</div>
+                <button onClick={handleAiEtkinlikAra} disabled={aiEtkinlikLoading || ogrRec.length===0} style={{
+                  background:aiEtkinlikLoading?BORDER:PURPLE, color:aiEtkinlikLoading?MUTED:"#fff", border:"none", borderRadius:8, padding:"6px 12px", fontSize:11.5, fontWeight:700, cursor:"pointer"
+                }}>{aiEtkinlikLoading ? "⏳ Aranıyor…" : "Etkinlik Öner"}</button>
+              </div>
+              <div style={{ fontSize:10.5, color:MUTED, marginBottom:aiEtkinlikOnerisi?10:0 }}>AI, öğrencinin son görüşme notlarını okuyup her sınıf düzeyi için en uygun etkinliği seçer — anlam bazlı, kelime eşleşmesine bağlı değil.</div>
+              {aiEtkinlikOnerisi && (
+                <div style={{ background:"#fff", borderRadius:8, padding:"10px 12px", fontSize:12, color:TEXT, whiteSpace:"pre-wrap", lineHeight:1.6 }}>{aiEtkinlikOnerisi}</div>
+              )}
+            </div>
+          )}
 
           {/* Ücretsiz Etkinlik Bul — AI yok, alan seçip sarmal (kademe başından güncel sınıfa kadar) tüm etkinlikleri listeler */}
           {(() => {

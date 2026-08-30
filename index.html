@@ -6440,6 +6440,7 @@ function YilSecimEkrani({ yillar, setYillar, aktifYil, setAktifYil, ogrenciler, 
 // ── Özet Kartı Bileşeni (Seans Öncesi Hazırlık) ─────────────────────────────
 function OzetKarti({ ogrenci, ogrenciSinif, ogrRec, ogrP1, ogrP2, ogrRisk, denemeGirilen, denemeAvg, mudahalePlan, hazirlikNotlari, setHazirlikNotlari, ilerlemeNotlari, setIlerlemeNotlari, setTab, devamsizlikGecmisi, onDevamsizlikGuncelle, kademe, olayKayitlari, onOlayEkle }) {
   const [hazirlikAiLoading, setHazirlikAiLoading] = useState(false);
+  const [ucretsizEtkinlikAlan, setUcretsizEtkinlikAlan] = useState(null);
   const [aktifPanel, setAktifPanel] = useState("ozet"); // ozet | hazirlik | ilerleme
   const [devGuncelleAcik, setDevGuncelleAcik] = useState(false);
   const devSirali = [...(devamsizlikGecmisi||[])].sort((a,b) => new Date(a.tarih.split(".").reverse().join("-")) - new Date(b.tarih.split(".").reverse().join("-")));
@@ -6506,7 +6507,13 @@ TAKİP EDİLMESİ GEREKENLER: (son görüşmede kalan konular)
 BU SEANSTA ODAKLANILACAKLAR: (somut 2-3 madde)
 SORULACAK SORULAR: (açıcı, terapötik sorular)
 DİKKAT EDİLECEKLER: (öğrenciye özel hassas noktalar)${etkinlikMetni ? `
-ÖNERİLEN SINIF REHBERLİK ETKİNLİĞİ: (yukarıdaki kütüphaneden, görüşme temalarına EN UYGUN 1-2 etkinliği seç, hangi sınıf düzeyinden olduğunu ve adını AYNEN yaz, neden uygun olduğunu 1 cümlede açıkla — hangi görüşme teması/kazanım ihtiyacıyla eşleştiğini belirt. Öğrencinin güncel sınıfından daha alt bir sınıfın etkinliğini önerirsen bunun neden (örn. temel bir beceri pekiştirmesi için) uygun olduğunu da kısaca belirt. Listedeki hiçbir etkinlik gerçekten uygun değilse "Uygun bir etkinlik bulunamadı" yaz. Listede OLMAYAN bir etkinlik ASLA uydurma.)` : ""}
+ÖNERİLEN SINIF REHBERLİK ETKİNLİĞİ: (Yukarıdaki kütüphanedeki HER BİR sınıf düzeyi için (örn. öğrenci 8. sınıfsa: 5, 6, 7 ve 8. sınıfların HER BİRİ için AYRI AYRI) o düzeyden görüşme temalarına EN UYGUN TEK bir etkinlik seç ve şu formatta, her biri YENİ bir satırda yaz:
+[Sınıf]. Sınıftan: "Etkinlik Adı" — neden uygun olduğu (hangi görüşme teması/kazanım ihtiyacıyla eşleştiği), 1 kısa cümle.
+Örnek:
+6. Sınıftan: "Duygularımı Tanıyorum" — öğrencinin duygu ifade etmekte zorlanması temasına uygun.
+7. Sınıftan: "Kararlarımı Yönetiyorum" — sınav sonrası pişmanlık temasına uygun.
+8. Sınıftan: "Kaygım Kontrol Altında" — sınav kaygısı teması sık geçtiği için uygun.
+Bir sınıf düzeyinde görüşme temalarına gerçekten uygun HİÇBİR etkinlik yoksa o sınıf düzeyini atla, zorla bir şey seçme. Hiçbir düzeyde uygun etkinlik yoksa "Uygun bir etkinlik bulunamadı" yaz. Listede OLMAYAN bir etkinlik ASLA uydurma, sadece verilen listeden seç.)` : ""}
 
 Kısa ve pratik yaz, Markdown kullanma.`}]
       })
@@ -6740,6 +6747,45 @@ Kısa ve pratik yaz, Markdown kullanma.`}]
               Butona bas, AI önceki görüşmelere bakarak<br/>bir sonraki seans için hazırlık notu hazırlasın
             </div>
           ) : null}
+
+          {/* Ücretsiz Etkinlik Bul — AI yok, alan seçip sarmal (kademe başından güncel sınıfa kadar) tüm etkinlikleri listeler */}
+          {(() => {
+            const etkinlikHavuzuTumu = ogrenciEtkinlikHavuzu(ogrenciSinif, kademe);
+            if (etkinlikHavuzuTumu.length === 0) return null;
+            const ALANLAR = ["Akademik", "Sosyal Duygusal", "Kariyer", "Tüm Alanlar"];
+            const filtrelenmis = !ucretsizEtkinlikAlan ? [] :
+              ucretsizEtkinlikAlan === "Tüm Alanlar" ? etkinlikHavuzuTumu :
+              etkinlikHavuzuTumu.filter(e => e.alan === ucretsizEtkinlikAlan || e.alan === "Tüm Alanlar");
+            const sinifGruplari = {};
+            filtrelenmis.forEach(e => { (sinifGruplari[e.sinif] ||= []).push(e); });
+            return (
+              <div style={{ marginTop:20, background:CARD, border:`1px solid ${BORDER}`, borderRadius:12, padding:14 }}>
+                <div style={{ fontSize:12, fontWeight:800, color:TEXT, marginBottom:4 }}>🆓 Ücretsiz Etkinlik Bul</div>
+                <div style={{ fontSize:10.5, color:MUTED, marginBottom:10 }}>AI kullanmadan, alan seç — öğrencinin sınıf düzeyine kadarki (sarmal) tüm etkinlikler listelensin.</div>
+                <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:12 }}>
+                  {ALANLAR.map(a => (
+                    <button key={a} onClick={()=>setUcretsizEtkinlikAlan(ucretsizEtkinlikAlan===a?null:a)} style={{
+                      padding:"6px 12px", borderRadius:8, border:`1.5px solid ${ucretsizEtkinlikAlan===a?ACCENT:BORDER}`,
+                      background:ucretsizEtkinlikAlan===a?ACCENT:"#fff", color:ucretsizEtkinlikAlan===a?"#fff":MUTED, fontSize:11.5, fontWeight:700, cursor:"pointer"
+                    }}>{a}</button>
+                  ))}
+                </div>
+                {ucretsizEtkinlikAlan && Object.entries(sinifGruplari).sort((a,b)=>a[0]-b[0]).map(([sinif, liste]) => (
+                  <div key={sinif} style={{ marginBottom:12 }}>
+                    <div style={{ fontSize:11, fontWeight:800, color:MUTED, marginBottom:6 }}>{sinif}. SINIF ({liste.length})</div>
+                    <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                      {liste.map((e,i) => (
+                        <div key={i} style={{ background:BG, borderRadius:8, padding:"7px 10px" }}>
+                          <div style={{ fontSize:12, fontWeight:700, color:TEXT }}>{e.etkinlik}</div>
+                          <div style={{ fontSize:10, color:MUTED, marginTop:1 }}>{e.yeterlik} — {e.kazanim}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
         </div>
       )}
 

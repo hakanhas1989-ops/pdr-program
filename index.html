@@ -10444,7 +10444,7 @@ function GorusmeTakvimiEkrani({ records, aktifYil }) {
   );
 }
 
-function SinifProfili({ ogrenciler, setOgrenciler, records, riskListesi, aktifYil, sinifListesi, setSinifListesi, denemeler, sinavTuru, onSinifSilTumVeri, kademe, setTab, setAktifOgrenci }) {
+function SinifProfili({ ogrenciler, setOgrenciler, records, riskListesi, aktifYil, sinifListesi, setSinifListesi, denemeler, sinavTuru, onSinifSilTumVeri, kademe, setTab, setAktifOgrenci, profiles, profiles2, onRaporAc }) {
   const [seciliSinif, setSeciliSinif] = useState(null);
   const [listeYukleAcik, setListeYukleAcik] = useState(false);
   const [listeMetni, setListeMetni] = useState("");
@@ -10798,8 +10798,14 @@ function SinifProfili({ ogrenciler, setOgrenciler, records, riskListesi, aktifYi
                   {devamsizlikSayisi > 0 && <span title="Devamsızlık" style={{background:"#FFF4E5",color:"#B5651D",borderRadius:8,padding:"1px 6px",fontSize:9,fontWeight:700}}>🗓 {devamsizlikSayisi}g</span>}
                   {olaySayisi > 0 && <span title="Olay/Tutanak Kaydı" style={{background:"#FDECEA",color:"#8E2A20",borderRadius:8,padding:"1px 6px",fontSize:9,fontWeight:700}}>📋 {olaySayisi} olay</span>}
                   <span style={{background:ACCENT_LIGHT,color:ACCENT,borderRadius:8,padding:"1px 7px",fontSize:9,fontWeight:700}}>{gSayisi} görüşme</span>
-                  {setTab && setAktifOgrenci && (
-                    <button onClick={()=>{ setAktifOgrenci({ name:o.studentName, className:o.className }); setTab("profil_merkez"); }} style={{background:"#EEF2FF",color:BLUE,border:"none",borderRadius:8,padding:"1px 7px",fontSize:9,fontWeight:700,cursor:"pointer"}}>📋 Profil</button>
+                  {gSayisi > 0 && onRaporAc && (
+                    <button onClick={()=>{
+                      const ogrGorusmeler = records.filter(r => pdrAyniOgrenci(r.studentName, r.className, o.studentName, o.className, r.numara, o.numara));
+                      const ogrP1 = (profiles||[]).find(p => pdrAyniOgrenci(p.studentName, p.className, o.studentName, o.className, p.numara, o.numara)) || null;
+                      const ogrP2 = (profiles2||[]).find(p => pdrAyniOgrenci(p.studentName, p.className, o.studentName, o.className, p.numara, o.numara)) || null;
+                      const ogrDeneme = pdrSozlukOku(denemeler, o.studentName, o.className, o.numara) || {};
+                      onRaporAc({ ogrenci:o.studentName, ogrenciSinif:o.className, profil1:ogrP1, profil2:ogrP2, gorusmeler:ogrGorusmeler, denemeler:ogrDeneme, kaynastirma:o.kaynastirma||[] });
+                    }} style={{background:"#EEF2FF",color:BLUE,border:"none",borderRadius:8,padding:"1px 7px",fontSize:9,fontWeight:700,cursor:"pointer"}}>📄 Rapor</button>
                   )}
                   <button onClick={()=>setKaynastirmaAcikId(kaynastirmaAcik?null:ogrKey)} style={{background:"none",border:`1px solid ${BORDER}`,color:MUTED,borderRadius:8,padding:"1px 6px",fontSize:9,fontWeight:700,cursor:"pointer"}}>🧩 {kaynastirmaAcik?"Kapat":"Tanı Düzenle"}</button>
                 </div>
@@ -13033,6 +13039,9 @@ export default function App() {
             kademe={kademe}
             setTab={setTab}
             setAktifOgrenci={setAktifOgrenci}
+            profiles={profiles}
+            profiles2={profiles2}
+            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari }))}
           />
         )}
 

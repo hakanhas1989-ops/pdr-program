@@ -865,7 +865,8 @@ function ogrenciEtkinlikHavuzu(ogrenciSinif, kademeTahmin) {
     const sStr = String(s);
     const cilt1 = kazanimVeriKaynagi(kademe, "1", sStr) || [];
     const cilt2 = kazanimVeriKaynagi(kademe, "2", sStr) || [];
-    [...cilt1, ...cilt2].forEach(k => havuz.push({ etkinlik: k.etkinlik, kazanim: k.kazanim, alan: k.alan, yeterlik: k.yeterlik, sinif: s }));
+    cilt1.forEach(k => havuz.push({ etkinlik: k.etkinlik, kazanim: k.kazanim, alan: k.alan, yeterlik: k.yeterlik, sinif: s, cilt: "1", sayfa: k.sayfa }));
+    cilt2.forEach(k => havuz.push({ etkinlik: k.etkinlik, kazanim: k.kazanim, alan: k.alan, yeterlik: k.yeterlik, sinif: s, cilt: "2", sayfa: k.sayfa }));
   }
   return havuz;
 }
@@ -6836,12 +6837,20 @@ Kısa ve pratik yaz, Markdown kullanma.`}]
                   <div key={sinif} style={{ marginBottom:12 }}>
                     <div style={{ fontSize:11, fontWeight:800, color:MUTED, marginBottom:6 }}>{sinif}. SINIF ({liste.length})</div>
                     <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-                      {liste.map((e,i) => (
-                        <div key={i} style={{ background:BG, borderRadius:8, padding:"7px 10px" }}>
-                          <div style={{ fontSize:12, fontWeight:700, color:TEXT }}>{e.etkinlik}</div>
-                          <div style={{ fontSize:10, color:MUTED, marginTop:1 }}>{e.yeterlik} — {e.kazanim}</div>
-                        </div>
-                      ))}
+                      {liste.map((e,i) => {
+                        const pdfRawUrl = KAZANIM_PDF_MAP[`${e.sinif}-${e.cilt}`];
+                        const pdfSayfa = pdfRawUrl ? e.sayfa : null;
+                        return (
+                          <div key={i} onClick={pdfSayfa ? () => window.open(`https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(pdfRawUrl)}#page=${pdfSayfa}`, "_blank") : undefined}
+                            style={{ background:BG, borderRadius:8, padding:"7px 10px", cursor:pdfSayfa?"pointer":"default", border:pdfSayfa?`1px solid ${BORDER}`:"none" }}>
+                            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:6 }}>
+                              <div style={{ fontSize:12, fontWeight:700, color:TEXT }}>{e.etkinlik}</div>
+                              {pdfSayfa && <span style={{ fontSize:9, color:ACCENT, fontWeight:700, flexShrink:0 }}>📄 Aç</span>}
+                            </div>
+                            <div style={{ fontSize:10, color:MUTED, marginTop:1 }}>{e.yeterlik} — {e.kazanim}</div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 ))}

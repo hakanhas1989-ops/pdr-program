@@ -6443,15 +6443,18 @@ function OzetKarti({ ogrenci, ogrenciSinif, ogrRec, ogrP1, ogrP2, ogrRisk, denem
   const [hazirlikAiLoading, setHazirlikAiLoading] = useState(false);
   const [ucretsizEtkinlikAlan, setUcretsizEtkinlikAlan] = useState(null);
   const [ucretsizEtkinlikArama, setUcretsizEtkinlikArama] = useState("");
-  const [aiEtkinlikOnerisi, setAiEtkinlikOnerisi] = useState("");
+  const [aiEtkinlikOnerileri, setAiEtkinlikOnerileri] = useState(null); // [{sinif,etkinlik,kazanim,alan,yeterlik,cilt,sayfa,aciklama}] | null
   const [aiEtkinlikLoading, setAiEtkinlikLoading] = useState(false);
   // "İhtiyaca Göre Etkinlik Ara" ile aynı amaca hizmet eder ama kelime
   // eşleştirmesi yerine AI'ın görüşme notlarını anlayarak seçim yapmasını
   // sağlar — Seans Hazırlık Notu'nun TAMAMINI üretmeden, SADECE etkinlik
-  // önerisi için ayrı, daha hafif bir AI çağrısı.
+  // önerisi için ayrı, daha hafif bir AI çağrısı. AI'ın önerdiği her etkinlik,
+  // GERÇEK kütüphane kaydıyla (sinif+ad eşleşmesi) doğrulanır — eşleşmeyen
+  // (AI'ın uydurmuş olabileceği) bir öneri sessizce elenir, hiç gösterilmez.
+  // Eşleşen kayıtlar PDF sayfa bilgisiyle birlikte geldiği için tıklanabilir.
   async function handleAiEtkinlikAra() {
     setAiEtkinlikLoading(true);
-    setAiEtkinlikOnerisi("");
+    setAiEtkinlikOnerileri(null);
     try {
       const etkinlikHavuzu = ogrenciEtkinlikHavuzu(ogrenciSinif, kademe);
       if (etkinlikHavuzu.length === 0) { alert("Bu öğrenci için sınıf düzeyine uygun etkinlik kütüphanesi bulunamadı."); setAiEtkinlikLoading(false); return; }
@@ -6462,13 +6465,26 @@ function OzetKarti({ ogrenci, ogrenciSinif, ogrRec, ogrP1, ogrP2, ogrRisk, denem
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({
           model:"claude-sonnet-4-6", max_tokens:600,
-          system:"Sen bir PDR uzmanısın. Görüşme notlarını okuyup, verilen sınıf rehberlik etkinlikleri kütüphanesinden öğrencinin ihtiyacına en uygun etkinlikleri seçersin.",
-          messages:[{role:"user", content:`Öğrenci: ${ogrenci}\n${gorusmeler}\n\nSINIF REHBERLİK ETKİNLİKLERİ KÜTÜPHANESİ:\n${etkinlikMetni}\n\nYukarıdaki kütüphanedeki HER BİR sınıf düzeyi için, o düzeyden görüşme temalarına EN UYGUN TEK bir etkinlik seç ve şu formatta, her biri YENİ bir satırda yaz:\n[Sınıf]. Sınıftan: "Etkinlik Adı" — neden uygun olduğu, 1 kısa cümle.\nBir sınıf düzeyinde gerçekten uygun etkinlik yoksa o düzeyi atla. Hiçbirinde yoksa "Uygun bir etkinlik bulunamadı" yaz. Listede OLMAYAN bir etkinlik ASLA uydurma. Markdown kullanma, sadece istenen satırları yaz.`}]
+          system:'Sen bir PDR uzmanısın. Görüşme notlarını okuyup, verilen sınıf rehberlik etkinlikleri kütüphanesinden öğrencinin ihtiyacına en uygun etkinlikleri seçersin. SADECE JSON formatında cevap verirsin, başka hiçbir metin yazmazsın.',
+          messages:[{role:"user", content:`Öğrenci: ${ogrenci}\n${gorusmeler}\n\nSINIF REHBERLİK ETKİNLİKLERİ KÜTÜPHANESİ:\n${etkinlikMetni}\n\nYukarıdaki kütüphanedeki HER BİR sınıf düzeyi için, o düzeyden görüşme temalarına EN UYGUN TEK bir etkinlik seç. SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:\n[{"sinif": 6, "etkinlik": "Etkinlik Adı (listedeki gibi HARFİ HARFİNE aynı yaz)", "aciklama": "neden uygun olduğu, 1 kısa cümle"}]\nBir sınıf düzeyinde gerçekten uygun etkinlik yoksa o düzeyi listeye HİÇ ekleme. Hiçbirinde uygun yoksa boş dizi [] döndür. Listede OLMAYAN bir etkinlik adı ASLA yazma — sadece verilen listeden birebir kopyala.`}]
         })
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      setAiEtkinlikOnerisi(data.content?.[0]?.text || "Öneri alınamadı.");
+      const text = data.content?.[0]?.text || "[]";
+      const temiz = text.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(temiz);
+      const eslesenler = (Array.isArray(parsed) ? parsed : []).map(oneri => {
+        const oneriAdi = (oneri.etkinlik || "").trim().toLocaleLowerCase("tr").replace(/^["']|["']$/g, "");
+        // Önce tam eşleşme dene; olmazsa biri diğerini İÇERİYORSA da kabul et
+        // (AI ismi ufak bir kelimeyle farklı yazmış olabilir) — ama HER
+        // durumda eşleşme, o sınıf düzeyindeki GERÇEK bir kayıtla olmalı;
+        // hiçbir kayıtla örtüşmeyen bir isim (uydurma) her koşulda elenir.
+        const kayit = etkinlikHavuzu.find(e => e.sinif === oneri.sinif && e.etkinlik.trim().toLocaleLowerCase("tr") === oneriAdi)
+          || etkinlikHavuzu.find(e => e.sinif === oneri.sinif && oneriAdi.length > 3 && (e.etkinlik.trim().toLocaleLowerCase("tr").includes(oneriAdi) || oneriAdi.includes(e.etkinlik.trim().toLocaleLowerCase("tr"))));
+        return kayit ? { ...kayit, aciklama: oneri.aciklama || "" } : null;
+      }).filter(Boolean);
+      setAiEtkinlikOnerileri(eslesenler);
     } catch (e) {
       alert("AI önerisi alınamadı: " + e.message);
     }
@@ -6792,9 +6808,27 @@ Kısa ve pratik yaz, Markdown kullanma.`}]
                   background:aiEtkinlikLoading?BORDER:PURPLE, color:aiEtkinlikLoading?MUTED:"#fff", border:"none", borderRadius:8, padding:"6px 12px", fontSize:11.5, fontWeight:700, cursor:"pointer"
                 }}>{aiEtkinlikLoading ? "⏳ Aranıyor…" : "Etkinlik Öner"}</button>
               </div>
-              <div style={{ fontSize:10.5, color:MUTED, marginBottom:aiEtkinlikOnerisi?10:0 }}>AI, öğrencinin son görüşme notlarını okuyup her sınıf düzeyi için en uygun etkinliği seçer — anlam bazlı, kelime eşleşmesine bağlı değil.</div>
-              {aiEtkinlikOnerisi && (
-                <div style={{ background:"#fff", borderRadius:8, padding:"10px 12px", fontSize:12, color:TEXT, whiteSpace:"pre-wrap", lineHeight:1.6 }}>{aiEtkinlikOnerisi}</div>
+              <div style={{ fontSize:10.5, color:MUTED, marginBottom:aiEtkinlikOnerileri?10:0 }}>AI, öğrencinin son görüşme notlarını okuyup her sınıf düzeyi için en uygun etkinliği seçer — anlam bazlı, kelime eşleşmesine bağlı değil.</div>
+              {aiEtkinlikOnerileri && aiEtkinlikOnerileri.length === 0 && (
+                <div style={{ fontSize:11.5, color:MUTED, textAlign:"center", padding:"10px 0" }}>Görüşme temalarına gerçekten uygun bir etkinlik bulunamadı.</div>
+              )}
+              {aiEtkinlikOnerileri && aiEtkinlikOnerileri.length > 0 && (
+                <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                  {aiEtkinlikOnerileri.map((e,i) => {
+                    const pdfRawUrl = KAZANIM_PDF_MAP[`${e.sinif}-${e.cilt}`];
+                    const pdfSayfa = pdfRawUrl ? e.sayfa : null;
+                    return (
+                      <div key={i} onClick={pdfSayfa ? () => window.open(`https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(pdfRawUrl)}#page=${pdfSayfa}`, "_blank") : undefined}
+                        style={{ background:"#fff", borderRadius:8, padding:"9px 11px", cursor:pdfSayfa?"pointer":"default", border:pdfSayfa?`1px solid ${PURPLE}`:"1px solid transparent" }}>
+                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:6 }}>
+                          <div style={{ fontSize:12, fontWeight:700, color:TEXT }}>{e.sinif}. Sınıftan: "{e.etkinlik}"</div>
+                          {pdfSayfa && <span style={{ fontSize:9, color:PURPLE, fontWeight:700, flexShrink:0 }}>📄 Aç</span>}
+                        </div>
+                        <div style={{ fontSize:10.5, color:MUTED, marginTop:2, lineHeight:1.4 }}>{e.aciklama}</div>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
           )}

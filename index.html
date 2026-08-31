@@ -8481,7 +8481,7 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
                       return (
                         <div key={r.id} style={{marginBottom:14,position:"relative"}}>
                           <div style={{position:"absolute",left:-16,top:4,width:10,height:10,borderRadius:"50%",background:isVeli?ORANGE:ACCENT,border:"2px solid #fff",boxShadow:"0 0 0 2px "+(isVeli?ORANGE:ACCENT)}}/>
-                          <RecordCard rec={r} onDelete={handleGorusmeSil} onUpdate={handleGorusmeGuncelle} />
+                          <RecordCard rec={r} onDelete={handleGorusmeSil} onUpdate={handleGorusmeGuncelle} bdtAnaliz={bdtAnaliz} setBdtAnaliz={setBdtAnaliz} />
                         </div>
                       );
                     })}
@@ -8730,7 +8730,8 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
                         return (
                           <button key={sec.deger} onClick={()=>{
                             const yeniCevaplar = [...haftaVerisi.cevaplar];
-                            yeniCevaplar[i] = sec.deger;
+                            // Zaten seçili olan seçeneğe tekrar basılırsa işareti kaldır (null'a dön)
+                            yeniCevaplar[i] = secili ? null : sec.deger;
                             handleSinavKaygiHaftaGuncelle(sinavKaygiAktifHafta, yeniCevaplar, haftaVerisi.aciklama);
                           }} style={{
                             flex:1, padding:"5px 2px", borderRadius:6, border:`1.5px solid ${secili?ACCENT:BORDER}`,
@@ -8755,7 +8756,7 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
                       <span style={{ fontSize:11, fontWeight:700, color:MUTED, width:52, flexShrink:0 }}>{h}. Hafta</span>
                       <div style={{ display:"flex", gap:3, flex:1 }}>
                         {Array.from({length:11}, (_,n)=>n).map(n => (
-                          <button key={n} onClick={()=>handleKaygiDuzeyiGuncelle(h, n)} style={{
+                          <button key={n} onClick={()=>handleKaygiDuzeyiGuncelle(h, deger===n ? null : n)} style={{
                             flex:1, padding:"4px 0", borderRadius:5, border:`1px solid ${deger===n?ACCENT:BORDER}`,
                             background:deger===n?ACCENT:"#fff", color:deger===n?"#fff":MUTED, fontSize:9, fontWeight:700, cursor:"pointer"
                           }}>{n}</button>
@@ -11335,21 +11336,67 @@ function StatBar({ label, value, max, color = ACCENT }) {
   );
 }
 
-function RecordCard({ rec, onDelete, onUpdate }) {
+function RecordCard({ rec, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz }) {
   const [open, setOpen] = useState(false);
   const [duzenle, setDuzenle] = useState(false);
   const [editForm, setEditForm] = useState({ summary: rec.summary, topic: rec.topic || "", raw: rec.raw || "" });
   const [aiLoading, setAiLoading] = useState(false);
   const [kaydedildi, setKaydedildi] = useState(false);
+  const [onerilenBdt, setOnerilenBdt] = useState(null);
   const isVeli = rec.meetingType === "Veli";
 
+  // AI ile Özeti Güncelle — daha önce (ilk görüşme notu eklenirken) AI
+  // Özetle hiç kullanılmamış olsa bile, burada BDT çarpıtma çıkarımı da
+  // yapılır — tek fark, ilk eklemede App seviyesindeki onay kutusuna,
+  // burada bu kartın kendi onay kutusuna düşmesi. Kaydetme mantığı (onayla
+  // → bdtAnaliz listesine ekle) birebir aynı.
   async function handleAiRewrite() {
     if (!editForm.raw.trim()) return;
     setAiLoading(true);
     const tamCevap = await getAISummary(editForm.raw);
-    const summary = tamCevap.split(/---HATIRLATMA---/i)[0].trim();
+    const parcalar = tamCevap.split(/---HATIRLATMA---/i);
+    const summary = parcalar[0].trim();
+    const kalan = parcalar[1] || "";
+    const bdtParcalari = kalan.split(/---BDT_CARPITMA---/i);
+    const bdtBlok = (bdtParcalari[1] || "").split(/---BIREYI_TANIMA---/i)[0].trim();
     setEditForm(f => ({ ...f, summary }));
+    if (bdtBlok && !/^yok/i.test(bdtBlok)) {
+      const gecerliBdtKategoriler = BDT_CARPITMA_KATEGORILERI.map(k => k.key);
+      const guvenlikMatch = bdtBlok.match(/GUVENLIK_UYARISI:\s*(.+)/i);
+      if (guvenlikMatch && guvenlikMatch[1].trim()) {
+        alert("⚠️ DİKKAT: AI bu görüşme notunda olası bir güvenlik/risk işareti fark etti:\n\n" + guvenlikMatch[1].trim());
+      }
+      const oneriler = bdtBlok.split("\n").filter(s => !/^GUVENLIK_UYARISI/i.test(s)).map(satir => {
+        const m = satir.match(/^([a-z_]+)\s*:\s*"?(.+?)"?$/i);
+        if (!m) return null;
+        const kategori = m[1].trim().toLocaleLowerCase("tr");
+        const ifade = m[2].trim().replace(/^"|"$/g, "");
+        if (!gecerliBdtKategoriler.includes(kategori) || !ifade || /^yok$/i.test(ifade)) return null;
+        return { kategori, ifade, secili: true };
+      }).filter(Boolean);
+      setOnerilenBdt(oneriler.length > 0 ? oneriler : null);
+    } else {
+      setOnerilenBdt(null);
+    }
     setAiLoading(false);
+  }
+
+  function handleBdtOneriToggle(index) {
+    setOnerilenBdt(prev => prev.map((o,i) => i===index ? { ...o, secili: !o.secili } : o));
+  }
+
+  async function handleBdtOnayla() {
+    if (!onerilenBdt) return;
+    const secilenler = onerilenBdt.filter(o => o.secili);
+    if (secilenler.length === 0) { setOnerilenBdt(null); return; }
+    const yeniMaddeler = secilenler.map(o => ({
+      id: uid(), studentName: rec.studentName, className: rec.className, numara: rec.numara,
+      kategori: o.kategori, ifade: o.ifade, tarih: today()
+    }));
+    const guncel = [...yeniMaddeler, ...(bdtAnaliz||[])];
+    setBdtAnaliz(guncel);
+    await saveBdtAnaliz(guncel);
+    setOnerilenBdt(null);
   }
 
   function handleSave() {
@@ -11418,6 +11465,28 @@ function RecordCard({ rec, onDelete, onUpdate }) {
             background: aiLoading ? BORDER : PURPLE, color: "#fff", border: "none",
             borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", marginBottom: 10
           }}>{aiLoading ? "AI yeniden özetliyor…" : "✦ AI ile Özeti Güncelle"}</button>
+
+          {/* AI'ın fark ettiği bilişsel çarpıtmalar — hangileri eklensin seçebilirsin */}
+          {onerilenBdt && (
+            <div style={{ background:"#F5EFEA", border:"1px solid #C9AD94", borderRadius:10, padding:"10px 12px", marginBottom:10 }}>
+              <div style={{ fontSize:11, fontWeight:700, color:"#8E5B3C", marginBottom:8 }}>🧠 AI, {onerilenBdt.length} bilişsel çarpıtma ifadesi fark etti — eklemek istediklerini seç:</div>
+              <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:10 }}>
+                {onerilenBdt.map((o,i) => {
+                  const katAd = (BDT_CARPITMA_KATEGORILERI.find(k=>k.key===o.kategori)||{}).ad || o.kategori;
+                  return (
+                    <label key={i} style={{ display:"flex", alignItems:"flex-start", gap:8, fontSize:12, cursor:"pointer" }}>
+                      <input type="checkbox" checked={o.secili} onChange={()=>handleBdtOneriToggle(i)} style={{ marginTop:2 }} />
+                      <span><span style={{ color:"#8E5B3C", fontWeight:700 }}>{katAd}:</span> "{o.ifade}"</span>
+                    </label>
+                  );
+                })}
+              </div>
+              <div style={{ display:"flex", gap:8 }}>
+                <button onClick={handleBdtOnayla} style={{ flex:1, padding:"7px", background:"#8E5B3C", color:"#fff", border:"none", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer" }}>✓ Seçilenleri Ekle</button>
+                <button onClick={()=>setOnerilenBdt(null)} style={{ padding:"7px 14px", background:"none", border:`1px solid ${BORDER}`, color:MUTED, borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer" }}>Yoksay</button>
+              </div>
+            </div>
+          )}
 
           <label style={{ fontSize: 11, fontWeight: 600, color: MUTED, display: "block", marginBottom: 4 }}>ÖZET</label>
           <textarea value={editForm.summary} onChange={e => setEditForm(f => ({ ...f, summary: e.target.value }))}

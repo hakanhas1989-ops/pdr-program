@@ -3971,14 +3971,16 @@ function beierKategoriOzetiHesapla(maddeler) {
 // alanın +/-/0 sayımına bakıp, cevaplanan maddelerin çoğunluğu hangi yöndeyse
 // ona göre bir etiket üretir. Bu, AI'ın yazdığı "Genel Yorum"un YERİNE değil,
 // YANINA eklenen, danışmanın tek bakışta hangi alanların dikkat gerektirdiğini
-// görebileceği ücretsiz bir özet katmanıdır.
+// görebileceği ücretsiz bir özet katmanıdır. Eşitlik durumları (örn. + ile 0
+// eşitse) KESİN bir tarafa yazılmaz, "Karışık/dengeli yanıtlar"a düşer —
+// yanıltıcı netlik izlenimi vermemek için kurallar kasıtlı olarak katı (>).
 function beierKategoriYorumUret(kategoriOzeti) {
   return kategoriOzeti.map(k => {
     const cevaplanan = k["+"] + k["-"] + k["0"];
     let etiket = "Henüz cevaplanmadı", renk = MUTED, oncelik = -1;
     if (cevaplanan > 0) {
       if (k["-"] > k["+"] && k["-"] > k["0"]) { etiket = "Olumsuz tutum eğilimi"; renk = "#C0392B"; oncelik = 2; }
-      else if (k["+"] > k["-"] && k["+"] >= k["0"]) { etiket = "Olumlu tutum eğilimi"; renk = "#1A8C5B"; oncelik = 0; }
+      else if (k["+"] > k["-"] && k["+"] > k["0"]) { etiket = "Olumlu tutum eğilimi"; renk = "#1A8C5B"; oncelik = 0; }
       else if (k["0"] >= cevaplanan / 2) { etiket = "Belirgin bir eğilim yok (nötr ağırlıklı)"; renk = "#8B8698"; oncelik = 0; }
       else { etiket = "Karışık/dengeli yanıtlar"; renk = "#B07D1A"; oncelik = 1; }
     }

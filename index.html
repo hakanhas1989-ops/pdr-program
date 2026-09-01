@@ -2718,9 +2718,9 @@ async function raporIndir(elementId, dosyaAdi) {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${dosyaAdi}</title>
 <style>
-  @page { size: A4; margin: 8mm; }
+  @page { size: A4; margin: 6mm; }
   * { box-sizing: border-box; }
-  body { font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #1a1a1a; background: #fff; padding: 0; margin: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 10.5px; color: #1a1a1a; background: #fff; padding: 0; margin: 0; }
   @media print {
     .noprint { display: none !important; }
     body { -webkit-print-color-adjust: exact; print-color-adjust: exact; margin-top: 0 !important; }
@@ -2798,8 +2798,8 @@ async function raporIndir(elementId, dosyaAdi) {
 
 
 // ── PDF Rapor Verisi ─────────────────────────────────────────────────────────
-function raporVerisiOlustur({ ogrenci, ogrenciSinif, profil1, profil2, gorusmeler, denemeler, mudahalePlan, riskListesi, sinavTuru, testKayitlari, kaynastirma }) {
-  return { ogrenci, ogrenciSinif, profil1, profil2, gorusmeler, denemeler: denemeler || {}, mudahalePlan: mudahalePlan || {}, riskListesi: riskListesi || [], sinavTuru, testKayitlari: testKayitlari || [], kaynastirma: kaynastirma || [], tarih: new Date().toLocaleDateString("tr-TR") };
+function raporVerisiOlustur({ ogrenci, ogrenciSinif, profil1, profil2, gorusmeler, denemeler, mudahalePlan, riskListesi, sinavTuru, testKayitlari, kaynastirma, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler }) {
+  return { ogrenci, ogrenciSinif, profil1, profil2, gorusmeler, denemeler: denemeler || {}, mudahalePlan: mudahalePlan || {}, riskListesi: riskListesi || [], sinavTuru, testKayitlari: testKayitlari || [], kaynastirma: kaynastirma || [], bireyiTanima: bireyiTanima || [], bdtAnaliz: bdtAnaliz || [], sinavKaygisi: sinavKaygisi || {}, ogrenciler: ogrenciler || [], tarih: new Date().toLocaleDateString("tr-TR") };
 }
 
 // ── PDF Rapor Bileşeni ────────────────────────────────────────────────────────
@@ -2824,10 +2824,10 @@ function RaporModal({ rapor, onKapat }) {
   };
 
   const S = {
-    bolumBaslik: { background: "#1FA971", color: "#fff", padding: "6px 12px", borderRadius: "6px 6px 0 0", fontSize: 11, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase" },
-    bolumIcerik: { border: "1px solid #B7E4C7", borderTop: "none", borderRadius: "0 0 6px 6px", padding: 12, marginBottom: 16 },
-    bolumBaslik2: { background: "#457B9D", color: "#fff", padding: "6px 12px", borderRadius: "6px 6px 0 0", fontSize: 11, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase" },
-    bolumIcerik2: { border: "1px solid #AEC9DC", borderTop: "none", borderRadius: "0 0 6px 6px", padding: 12, marginBottom: 16 },
+    bolumBaslik: { background: "#1FA971", color: "#fff", padding: "4px 10px", borderRadius: "6px 6px 0 0", fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase" },
+    bolumIcerik: { border: "1px solid #B7E4C7", borderTop: "none", borderRadius: "0 0 6px 6px", padding: 8, marginBottom: 10 },
+    bolumBaslik2: { background: "#457B9D", color: "#fff", padding: "4px 10px", borderRadius: "6px 6px 0 0", fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase" },
+    bolumIcerik2: { border: "1px solid #AEC9DC", borderTop: "none", borderRadius: "0 0 6px 6px", padding: 8, marginBottom: 10 },
   };
 
   return (
@@ -2841,7 +2841,7 @@ function RaporModal({ rapor, onKapat }) {
             // Mobil için: rapor içeriğini data URI ile aç
             const el = document.getElementById("pdr-rapor-icerik");
             if (!el) return;
-            const htmlStr = `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PDR Raporu</title><style>@page{size:A4;margin:10mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:11px;color:#1a1a1a;padding:10px;margin:0}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.noprint{display:none}}table{width:100%;border-collapse:collapse}svg{max-width:100%}</style></head><body><div class="noprint" style="position:fixed;top:0;left:0;right:0;background:#1FA971;color:#fff;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;z-index:999"><span style="font-weight:700">PDR Raporu — ${ogrenci}</span><button onclick="window.print()" style="background:#fff;color:#1FA971;border:none;border-radius:6px;padding:6px 14px;font-weight:800;cursor:pointer">🖨️ Yazdır/PDF</button></div><div style="margin-top:50px">${el.innerHTML}</div></body></html>`;
+            const htmlStr = `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PDR Raporu</title><style>@page{size:A4;margin:6mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:10px;color:#1a1a1a;padding:6px;margin:0}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.noprint{display:none}}table{width:100%;border-collapse:collapse}svg{max-width:100%}</style></head><body><div class="noprint" style="position:fixed;top:0;left:0;right:0;background:#1FA971;color:#fff;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;z-index:999"><span style="font-weight:700">PDR Raporu — ${ogrenci}</span><button onclick="window.print()" style="background:#fff;color:#1FA971;border:none;border-radius:6px;padding:6px 14px;font-weight:800;cursor:pointer">🖨️ Yazdır/PDF</button></div><div style="margin-top:50px">${el.innerHTML}</div></body></html>`;
             // Base64 encode
             const b64 = btoa(unescape(encodeURIComponent(htmlStr)));
             window.location.href = "data:text/html;base64," + b64;
@@ -2851,16 +2851,23 @@ function RaporModal({ rapor, onKapat }) {
       </div>
 
       {/* Rapor içeriği */}
-      <div id="pdr-rapor-icerik" style={{ flex: 1, overflowY: "auto", padding: "20px 24px", background: "#fff" }}>
+      <div id="pdr-rapor-icerik" style={{ flex: 1, overflowY: "auto", padding: "14px 18px", background: "#fff" }}>
         {/* Başlık */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "3px solid #1FA971", paddingBottom: 12, marginBottom: 20 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "2px solid #1FA971", paddingBottom: 8, marginBottom: 12 }}>
           <div>
             <div style={{ fontSize: 10, color: "#1FA971", fontWeight: 700, letterSpacing: 1, textTransform: "uppercase" }}>PDR Servisi — Öğrenci Profil Raporu</div>
-            <div style={{ fontSize: 22, fontWeight: 900, color: "#1a1a1a", margin: "4px 0" }}>{ogrenci}</div>
+            <div style={{ fontSize: 18, fontWeight: 900, color: "#1a1a1a", margin: "2px 0" }}>{ogrenci}</div>
             {profil1?.className && <div style={{ fontSize: 13, color: "#666" }}>{profil1.className}</div>}
             {raporKaynastirma && raporKaynastirma.length > 0 && (
               <div style={{ fontSize: 11, color: "#8B5A00", fontWeight: 700, marginTop: 4 }}>🧩 Kaynaştırma / Tanı: {raporKaynastirma.join(", ")}</div>
             )}
+            {(() => {
+              const ogr = (rapor.ogrenciler||[]).find(o => pdrAyniOgrenci(o.studentName, o.className, ogrenci, ogrenciSinif, o.numara, profil1?.numara));
+              const devGecmis = [...(ogr?.devamsizlikGecmisi||[])].sort((a,b) => pdrTarihMs(b.tarih) - pdrTarihMs(a.tarih));
+              const son = devGecmis[0];
+              if (!son) return null;
+              return <div style={{ fontSize: 11, color: "#C0392B", fontWeight: 700, marginTop: 4 }}>📅 Devamsızlık: {son.gun} gün ({son.tarih} itibarıyla)</div>;
+            })()}
           </div>
           <div style={{ textAlign: "right", fontSize: 11, color: "#888" }}>
             <div>Rapor Tarihi</div>
@@ -2871,7 +2878,13 @@ function RaporModal({ rapor, onKapat }) {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
           {/* Sol */}
           <div>
-            {profil1 && (
+            {(() => {
+              // Profil 1 objesi var diye değil, GERÇEKTEN bir şey girilmişse
+              // (en az bir gelişim alanı puanlanmış ya da bir analiz yazılmışsa)
+              // gösterilir — boş bölüm başlığı sayfa israf etmesin.
+              const p1DoluMu = profil1 && ((profil1.analysis && profil1.analysis.trim()) || (profil1.scores && Object.values(profil1.scores).some(v => v > 0)));
+              return p1DoluMu;
+            })() && (
               <div style={{ marginBottom: 16 }}>
                 <div style={S.bolumBaslik}>Profil 1 — PDR Değerlendirmesi</div>
                 <div style={S.bolumIcerik}>
@@ -2929,11 +2942,70 @@ function RaporModal({ rapor, onKapat }) {
                 </div>
               </div>
             )}
+
+            {/* Bireyi Tanıma — görüşme notlarından biriken sosyo-demografik/psikososyal bilgiler */}
+            {(() => {
+              const ogrBireyiTanima = (rapor.bireyiTanima||[]).filter(b => pdrAyniOgrenci(b.studentName, b.className, ogrenci, ogrenciSinif));
+              if (ogrBireyiTanima.length === 0) return null;
+              const gruplu = {};
+              ogrBireyiTanima.forEach(b => { (gruplu[b.kategori] ||= []).push(b); });
+              return (
+                <div style={{ marginTop:16 }}>
+                  <div style={{ ...S.bolumBaslik2 }}>Bireyi Tanıma</div>
+                  <div style={S.bolumIcerik2}>
+                    {Object.entries(gruplu).map(([kat, maddeler]) => {
+                      const katLabel = (BIREYI_TANIMA_KATEGORILER.find(k=>k.key===kat)||{}).label || kat;
+                      return (
+                        <div key={kat} style={{ marginBottom:8 }}>
+                          <div style={{ fontSize:9, fontWeight:700, color:"#888", textTransform:"uppercase", marginBottom:3 }}>{katLabel}</div>
+                          {maddeler.map(m => (
+                            <div key={m.id} style={{ fontSize:10.5, color:"#333", marginBottom:2, lineHeight:1.5 }}>• {m.metin}</div>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* BDT — Bilişsel Çarpıtma Analizi */}
+            {(() => {
+              const ogrBdt = (rapor.bdtAnaliz||[]).filter(b => pdrAyniOgrenci(b.studentName, b.className, ogrenci, ogrenciSinif));
+              if (ogrBdt.length === 0) return null;
+              const gruplu = {};
+              ogrBdt.forEach(b => { (gruplu[b.kategori] ||= []).push(b); });
+              return (
+                <div style={{ marginTop:10, pageBreakInside:"avoid" }}>
+                  <div style={{ ...S.bolumBaslik2 }}>BDT — Bilişsel Çarpıtma Analizi</div>
+                  <div style={S.bolumIcerik2}>
+                    {Object.entries(gruplu).map(([kat, ifadeler]) => {
+                      const katAd = (BDT_CARPITMA_KATEGORILERI.find(k=>k.key===kat)||{}).ad || kat;
+                      return (
+                        <div key={kat} style={{ marginBottom:6, fontSize:10.5, lineHeight:1.6 }}>
+                          <span style={{ fontWeight:700, color:"#8E5B3C" }}>{katAd}: </span>
+                          <span style={{ color:"#555" }}>{ifadeler.map(m=>`"${m.ifade}"`).join(", ")}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Sağ */}
           <div>
-            {profil2 && (
+            {(() => {
+              // Aynı mantık: obje var diye değil, gerçekten en az bir sınav
+              // puanı, ilgi alanı ya da D2 sonucu girilmişse gösterilir.
+              const p2DoluMu = profil2 && (
+                (profil2.sinavlar && Object.values(profil2.sinavlar).some(v => v !== "" && v !== null && v !== undefined)) ||
+                (profil2.ilgiler && profil2.ilgiler.length > 0) ||
+                (profil2.d2 && (profil2.d2.TN || profil2.d2.TN_E || profil2.d2.E1))
+              );
+              return p2DoluMu;
+            })() && (
               <div>
                 <div style={{ ...S.bolumBaslik2 }}>Profil 2 — Akademik & İlgi Profili</div>
                 <div style={S.bolumIcerik2}>
@@ -3082,7 +3154,7 @@ function RaporModal({ rapor, onKapat }) {
               const min = Math.min(...girilen.map(d=>d.toplam));
               const trend = girilen.length > 1 ? girilen[girilen.length-1].toplam - girilen[0].toplam : 0;
               return (
-                <div style={{ marginTop: 16 }}>
+                <div style={{ marginTop: 10 }}>
                   <div style={{ ...S.bolumBaslik2 }}>LGS Deneme Sonuçları ({girilen.length} deneme)</div>
                   <div style={{ ...S.bolumIcerik2 }}>
                     {/* Özet */}
@@ -3137,7 +3209,7 @@ function RaporModal({ rapor, onKapat }) {
               const ogrTestleri = pdrSozlukOku(raporTestler, ogrenci, ogrenciSinif, profil1?.numara) || [];
               if (ogrTestleri.length === 0) return null;
               return (
-                <div style={{ marginTop:16, pageBreakInside:"avoid" }}>
+                <div style={{ marginTop:10, pageBreakInside:"avoid" }}>
                   <div style={{ ...S.bolumBaslik2 }}>Uygulanan Testler</div>
                   <div style={{ ...S.bolumIcerik2 }}>
                     {ogrTestleri.map(k => (
@@ -3154,6 +3226,52 @@ function RaporModal({ rapor, onKapat }) {
               );
             })()}
 
+            {/* Sınav Kaygısı Takibi */}
+            {(() => {
+              const ogrKey = pdrOgrAnahtar(ogrenci, ogrenciSinif, profil1?.numara);
+              const kaygiVerisi = (rapor.sinavKaygisi || {})[ogrKey];
+              if (!kaygiVerisi) return null;
+              const haftalar = Object.entries(kaygiVerisi.haftalar || {}).sort((a,b)=>a[0]-b[0]);
+              const kaygiDuzeyleri = Object.entries(kaygiVerisi.kaygiDuzeyleri || {}).sort((a,b)=>a[0]-b[0]);
+              const belirtiGruplari = Object.entries(kaygiVerisi.belirtiler || {}).filter(([,l])=>l && l.length>0);
+              if (haftalar.length===0 && kaygiDuzeyleri.length===0 && belirtiGruplari.length===0) return null;
+              return (
+                <div style={{ marginTop:10, pageBreakInside:"avoid" }}>
+                  <div style={{ ...S.bolumBaslik2 }}>Sınav Kaygısı Takibi</div>
+                  <div style={{ ...S.bolumIcerik2 }}>
+                    {haftalar.length > 0 && (
+                      <div style={{ marginBottom:8 }}>
+                        <div style={{ fontSize:9, fontWeight:700, color:"#888", textTransform:"uppercase", marginBottom:3 }}>Haftalık Test Sonucu (0-40)</div>
+                        <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                          {haftalar.map(([h, v]) => (
+                            <span key={h} style={{ fontSize:9.5, background:"#f5f5f5", borderRadius:4, padding:"2px 7px" }}>{h}. Hafta: {v.toplam}/40</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {kaygiDuzeyleri.length > 0 && (
+                      <div style={{ marginBottom:8 }}>
+                        <div style={{ fontSize:9, fontWeight:700, color:"#888", textTransform:"uppercase", marginBottom:3 }}>Haftalık Kaygı Düzeyi (0-10)</div>
+                        <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                          {kaygiDuzeyleri.map(([h, v]) => (
+                            <span key={h} style={{ fontSize:9.5, background:"#f5f5f5", borderRadius:4, padding:"2px 7px" }}>{h}. Hafta: {v}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {belirtiGruplari.length > 0 && (
+                      <div>
+                        <div style={{ fontSize:9, fontWeight:700, color:"#888", textTransform:"uppercase", marginBottom:3 }}>Gözlenen Belirtiler</div>
+                        {belirtiGruplari.map(([kat,liste]) => (
+                          <div key={kat} style={{ fontSize:10, color:"#555", marginBottom:2, lineHeight:1.5 }}>{liste.join(", ")}</div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Bir Sonraki Seans Planı */}
             {(() => {
               const aktifPlanlar = (raporMudahale[ogrenci] || []).filter(p => p.durum === "Devam Ediyor");
@@ -3163,7 +3281,7 @@ function RaporModal({ rapor, onKapat }) {
               })[0] : null;
               const aktifRisk = (raporRisk || []).filter(r => pdrAyniOgrenci(r.studentName, r.className, ogrenci, ogrenciSinif) && !r.kapandi);
               return (
-                <div style={{ marginTop:16, pageBreakInside:"avoid" }}>
+                <div style={{ marginTop:10, pageBreakInside:"avoid" }}>
                   <div style={{ ...S.bolumBaslik2 }}>Bir Sonraki Seans Planı</div>
                   <div style={{ ...S.bolumIcerik2 }}>
 
@@ -3203,25 +3321,25 @@ function RaporModal({ rapor, onKapat }) {
                       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
                         <div>
                           <div style={{ fontSize:9, fontWeight:700, color:"#333", marginBottom:4 }}>Bu seansta odaklanılacaklar:</div>
-                          <div style={{ height:50, border:"1px solid #eee", borderRadius:4 }}></div>
+                          <div style={{ height:24, border:"1px solid #eee", borderRadius:4 }}></div>
                         </div>
                         <div>
                           <div style={{ fontSize:9, fontWeight:700, color:"#333", marginBottom:4 }}>Sorulacak sorular:</div>
-                          <div style={{ height:50, border:"1px solid #eee", borderRadius:4 }}></div>
+                          <div style={{ height:24, border:"1px solid #eee", borderRadius:4 }}></div>
                         </div>
                         <div>
                           <div style={{ fontSize:9, fontWeight:700, color:"#333", marginBottom:4 }}>Seans sonrası notlar:</div>
-                          <div style={{ height:50, border:"1px solid #eee", borderRadius:4 }}></div>
+                          <div style={{ height:24, border:"1px solid #eee", borderRadius:4 }}></div>
                         </div>
                         <div>
                           <div style={{ fontSize:9, fontWeight:700, color:"#333", marginBottom:4 }}>Bir sonraki seans için:</div>
-                          <div style={{ height:50, border:"1px solid #eee", borderRadius:4 }}></div>
+                          <div style={{ height:24, border:"1px solid #eee", borderRadius:4 }}></div>
                         </div>
                       </div>
                     </div>
 
                     {/* İmza alanı */}
-                    <div style={{ display:"flex", justifyContent:"space-between", marginTop:16, paddingTop:10, borderTop:"1px solid #eee" }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", marginTop:10, paddingTop:10, borderTop:"1px solid #eee" }}>
                       <div style={{ textAlign:"center" }}>
                         <div style={{ height:30, width:120, borderBottom:"1px solid #333" }}></div>
                         <div style={{ fontSize:9, color:"#555", marginTop:4 }}>PDR Danışmanı İmzası</div>
@@ -13136,7 +13254,7 @@ export default function App() {
         const parse = d => { const [g, ay, y] = (d||"").split("."); return new Date(`${y}-${ay}-${g}`); };
         return parse(a.date) - parse(b.date);
       });
-    setRaporVerisi(raporVerisiOlustur({ ogrenci: ogrenciAdi, ogrenciSinif: profil1.className, profil1, profil2, gorusmeler, denemeler: pdrSozlukOku(denemeler, ogrenciAdi, profil1.className, profil1.numara) || {}, mudahalePlan, riskListesi, sinavTuru, testKayitlari }));
+    setRaporVerisi(raporVerisiOlustur({ ogrenci: ogrenciAdi, ogrenciSinif: profil1.className, profil1, profil2, gorusmeler, denemeler: pdrSozlukOku(denemeler, ogrenciAdi, profil1.className, profil1.numara) || {}, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler }));
   }
 
   async function handleProf2Analiz() {
@@ -13698,7 +13816,7 @@ export default function App() {
             records={records}
             kutuphane={kutuphane}
             sinavTuru={sinavTuru}
-            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari }))}
+            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler }))}
             onDegerlendirmeAc={() => setDegerlendirmeAcik(true)}
           />
         )}
@@ -13862,7 +13980,7 @@ export default function App() {
             setBdtAnaliz={setBdtAnaliz}
             sinavKaygisi={sinavKaygisi}
             setSinavKaygisi={setSinavKaygisi}
-            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari }))}
+            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler }))}
             onSinifGuncelle={async (eskiAd, eskiSinif, eskiNumara, yeniAd, yeniSinif) => {
               const ayniMi = (ad, sinif, no) => pdrAyniOgrenci(eskiAd, eskiSinif, ad, sinif, eskiNumara, no);
 
@@ -14070,7 +14188,7 @@ export default function App() {
             setAktifOgrenci={setAktifOgrenci}
             profiles={profiles}
             profiles2={profiles2}
-            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari }))}
+            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler }))}
           />
         )}
 

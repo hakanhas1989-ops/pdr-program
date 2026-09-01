@@ -833,6 +833,15 @@ const MUDAHALE_PDF_MAP = {
   "zorbalik-maruz-kalan": "https://raw.githubusercontent.com/hakanhas1989-ops/pdr-program/main/mudahale-zorbalik-maruz-kalan.pdf",
   "sosyal-duygusal": "https://raw.githubusercontent.com/hakanhas1989-ops/pdr-program/main/mudahale-sosyal-duygusal.pdf",
 };
+// Kütüphane ekranındaki program filtre butonlarında kullanılan kısa adlar —
+// tam adlar (MUDAHALE_PROGRAMLARI[].ad) çok uzun olduğu için buton üzerinde
+// bu kısa hallerini gösteriyoruz.
+const MUDAHALE_PROGRAM_KISA_ADLAR = {
+  "akademik-beceriler": "Akademik Beceriler",
+  "zorbalik-yapan": "Zorbalık Yapan",
+  "zorbalik-maruz-kalan": "Zorbalığa Maruz Kalan",
+  "sosyal-duygusal": "Sosyal Duygusal",
+};
 const MUDAHALE_PROGRAMLARI = [
   {
     key: "akademik-beceriler",
@@ -991,20 +1000,34 @@ function ogrenciEtkinlikHavuzu(ogrenciSinif, kademeTahmin) {
 // Rehberlik Etkinlikleri ile aynı iki yol: ücretsiz kelime arama ve AI'ın
 // görüşme notlarına göre önerisi. AI'ın önerisi, gerçek oturum kütüphanesiyle
 // (başlık eşleşmesi) doğrulanır — uydurma bir oturum asla gösterilmez.
-function MudahaleKutuphanesiEkrani({ kayitliListesi, records }) {
-  const [seciliAd, setSeciliAd] = useState("");
+function MudahaleKutuphanesiEkrani({ kayitliListesi, records, aktifOgrenci, setAktifOgrenci }) {
+  const [seciliAd, setSeciliAd] = useState(aktifOgrenci?.name || "");
   const [ogrenciArama, setOgrenciArama] = useState("");
   const [aramaMetni, setAramaMetni] = useState("");
+  const [seciliProgram, setSeciliProgram] = useState(null); // null = tüm programlar
   const [aiOnerileri, setAiOnerileri] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
 
-  const havuz = mudahaleOturumHavuzu();
+  // Diğer ekranlarla aynı davranış: uygulamanın herhangi bir yerinde seçilen
+  // "aktif öğrenci" buraya da yansır, burada seçilen de diğer ekranlara yansır.
+  useEffect(() => {
+    if (aktifOgrenci?.name) setSeciliAd(aktifOgrenci.name);
+    else setSeciliAd("");
+  }, [aktifOgrenci?.name]);
+
+  const havuzTumu = mudahaleOturumHavuzu();
+  const havuz = seciliProgram ? havuzTumu.filter(o => o.programKey === seciliProgram) : havuzTumu;
   const seciliOgr = kayitliListesi.find(o => o.name === seciliAd);
 
   const aramaMetniNorm = aramaMetni.trim().toLocaleLowerCase("tr");
-  const filtrelenmis = aramaMetniNorm.length < 2 ? [] : havuz.filter(o =>
+  const filtrelenmis = aramaMetniNorm.length < 2 ? havuz : havuz.filter(o =>
     (o.baslik + " " + o.ozet + " " + (o.modul||"") + " " + o.programAdi + " " + o.hedefKitle).toLocaleLowerCase("tr").includes(aramaMetniNorm)
   );
+  // Bir program seçilmişse (kategoriye göre göz atma), anahtar kelime hiç
+  // yazılmasa da o programın tüm oturumları listelenir; program seçilmemişse
+  // (tüm kütüphane), karışıklık olmasın diye en az 2 karakterlik bir kelime
+  // gerekir — 65 oturumun tamamı bir anda dökülmesin.
+  const sonucGoster = seciliProgram || aramaMetniNorm.length >= 2;
 
   async function handleAiAra() {
     if (!seciliAd) return;
@@ -1060,7 +1083,7 @@ function MudahaleKutuphanesiEkrani({ kayitliListesi, records }) {
         {seciliAd ? (
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", background:PURPLE, borderRadius:8, padding:"6px 10px", marginBottom:8 }}>
             <span style={{ fontSize:12, fontWeight:700, color:"#fff" }}>👤 {seciliAd}</span>
-            <button onClick={()=>{ setSeciliAd(""); setAiOnerileri(null); }} style={{background:"rgba(255,255,255,0.2)", border:"1px solid #fff", color:"#fff", borderRadius:6, padding:"2px 8px", fontSize:10, cursor:"pointer"}}>✕</button>
+            <button onClick={()=>{ setSeciliAd(""); if(setAktifOgrenci) setAktifOgrenci({name:"", className:""}); setAiOnerileri(null); }} style={{background:"rgba(255,255,255,0.2)", border:"1px solid #fff", color:"#fff", borderRadius:6, padding:"2px 8px", fontSize:10, cursor:"pointer"}}>✕</button>
           </div>
         ) : (
           <>
@@ -1068,7 +1091,7 @@ function MudahaleKutuphanesiEkrani({ kayitliListesi, records }) {
             {ogrenciArama.trim().length >= 2 && (
               <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:8 }}>
                 {kayitliListesi.filter(o=>o.name.toLocaleLowerCase("tr").includes(ogrenciArama.toLocaleLowerCase("tr"))).slice(0,15).map(o=>(
-                  <button key={pdrOgrAnahtar(o.name,o.className,o.numara)} onClick={()=>{ setSeciliAd(o.name); setOgrenciArama(""); }} style={{padding:"4px 10px", borderRadius:16, border:`1px solid ${BORDER}`, background:"#fff", color:MUTED, fontSize:11, cursor:"pointer"}}>{o.name}</button>
+                  <button key={pdrOgrAnahtar(o.name,o.className,o.numara)} onClick={()=>{ setSeciliAd(o.name); if(setAktifOgrenci) setAktifOgrenci({name:o.name, className:o.className||""}); setOgrenciArama(""); }} style={{padding:"4px 10px", borderRadius:16, border:`1px solid ${BORDER}`, background:"#fff", color:MUTED, fontSize:11, cursor:"pointer"}}>{o.name}</button>
                 ))}
               </div>
             )}
@@ -1100,11 +1123,20 @@ function MudahaleKutuphanesiEkrani({ kayitliListesi, records }) {
       {/* Ücretsiz Arama */}
       <div style={{ background:CARD, border:`1px solid ${BORDER}`, borderRadius:12, padding:14 }}>
         <div style={{ fontSize:12, fontWeight:800, color:TEXT, marginBottom:8 }}>🔍 İhtiyaca Göre Ara</div>
-        <input value={aramaMetni} onChange={e=>setAramaMetni(e.target.value)} placeholder='Anahtar kelime yaz… (örn. "zorbalık", "öfke")' style={{ width:"100%", padding:"8px 10px", border:`1px solid ${BORDER}`, borderRadius:8, fontSize:12.5, boxSizing:"border-box", marginBottom:10 }} />
-        {aramaMetniNorm.length>=2 && filtrelenmis.length===0 && (
-          <div style={{ fontSize:11.5, color:MUTED, textAlign:"center", padding:"10px 0" }}>Bu kelimeyle eşleşen bir oturum bulunamadı.</div>
+        <div style={{ fontSize:10.5, color:MUTED, marginBottom:8 }}>İstersen önce bir programa göre daralt (o programın tüm oturumları listelenir), istersen doğrudan kelime ara.</div>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:10 }}>
+          {MUDAHALE_PROGRAMLARI.map(p => (
+            <button key={p.key} onClick={()=>setSeciliProgram(seciliProgram===p.key?null:p.key)} style={{
+              padding:"6px 11px", borderRadius:8, border:`1.5px solid ${seciliProgram===p.key?ACCENT:BORDER}`,
+              background:seciliProgram===p.key?ACCENT:"#fff", color:seciliProgram===p.key?"#fff":MUTED, fontSize:11, fontWeight:700, cursor:"pointer"
+            }}>{MUDAHALE_PROGRAM_KISA_ADLAR[p.key] || p.ad}</button>
+          ))}
+        </div>
+        <input value={aramaMetni} onChange={e=>setAramaMetni(e.target.value)} placeholder='Anahtar kelime yaz… (örn. "zorba", "öfke")' style={{ width:"100%", padding:"8px 10px", border:`1px solid ${BORDER}`, borderRadius:8, fontSize:12.5, boxSizing:"border-box", marginBottom:10 }} />
+        {sonucGoster && filtrelenmis.length===0 && (
+          <div style={{ fontSize:11.5, color:MUTED, textAlign:"center", padding:"10px 0" }}>Eşleşen bir oturum bulunamadı.</div>
         )}
-        {aramaMetniNorm.length>=2 && (
+        {sonucGoster && (
           <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
             {filtrelenmis.map((o,i)=>(
               <div key={i} onClick={()=>pdfAc(o)} style={{ background:BG, borderRadius:8, padding:"9px 11px", cursor:"pointer", border:`1px solid ${BORDER}` }}>
@@ -14258,7 +14290,7 @@ export default function App() {
 
         {/* ── MÜDAHALE PROGRAMLARI KÜTÜPHANESİ ────────────────────────── */}
         {tab === "mudahale_kutuphane" && (
-          <MudahaleKutuphanesiEkrani kayitliListesi={kayitliListesi} records={records} />
+          <MudahaleKutuphanesiEkrani kayitliListesi={kayitliListesi} records={records} aktifOgrenci={aktifOgrenci} setAktifOgrenci={setAktifOgrenci} />
         )}
 
         {/* ── KAZANIMLAR ───────────────────────────────────────────── */}

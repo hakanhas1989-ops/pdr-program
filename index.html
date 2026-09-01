@@ -821,6 +821,123 @@ const KAZANIM_VERI_CILT2 = {"5":[{"ay":"Eylül","tarih":"8-12 Eylül","etkinlik"
 // deposunun köküne, index.html ile aynı seviyeye yüklenmeli. Şu an sadece
 // 5. sınıf 1. cilt için sayfa numaraları eklendi; diğer kademe/ciltler
 // geldikçe aynı desenle genişletilebilir.
+// ── Bireysel Müdahale Programları Kütüphanesi ────────────────────────────────
+// 4 kaynak PDF'den (Akademik Beceriler, Akran Zorbalığı Yapan/Maruz Kalan,
+// Ortaokul Sosyal Duygusal Beceriler) çıkarılan oturum indeksi. Her oturumun
+// başlığı, sayfa numarası ve kısa özeti PDF'in gerçek içindekiler/oturum
+// başlıklarından alınmıştır — hiçbiri uydurulmadı. Sayfa numaraları PDF'in
+// kendi sayfa numaralandırmasıyla (1'den başlayarak) eşleşir.
+const MUDAHALE_PDF_MAP = {
+  "akademik-beceriler": "https://raw.githubusercontent.com/hakanhas1989-ops/pdr-program/main/mudahale-akademik-beceriler.pdf",
+  "zorbalik-yapan": "https://raw.githubusercontent.com/hakanhas1989-ops/pdr-program/main/mudahale-zorbalik-yapan.pdf",
+  "zorbalik-maruz-kalan": "https://raw.githubusercontent.com/hakanhas1989-ops/pdr-program/main/mudahale-zorbalik-maruz-kalan.pdf",
+  "sosyal-duygusal": "https://raw.githubusercontent.com/hakanhas1989-ops/pdr-program/main/mudahale-sosyal-duygusal.pdf",
+};
+const MUDAHALE_PROGRAMLARI = [
+  {
+    key: "akademik-beceriler",
+    ad: "Akademik Becerileri Geliştirme Müdahale Programı",
+    hedefKitle: "Okuldan erken ayrılma riski, akademik motivasyon düşüklüğü",
+    oturumlar: [
+      { baslik: "Başlangıç", sayfa: 30, ozet: "Gruba/sürece katılım, tanışma ve müdahale çalışmasına hazırlık." },
+      { baslik: "Akademik Benlik Kavramı ve Zayıf Özgüven", sayfa: 36, ozet: "Akademik benlik kavramını tanıma ve olayları algılama biçiminin bu kavramı nasıl etkilediğini fark etme." },
+      { baslik: "Kendini Engelleme", sayfa: 44, ozet: "Kendini engelleme davranışlarını tanıma ve bunlarla başa çıkma." },
+      { baslik: "İletişim ve Çatışma Çözme Becerileri", sayfa: 55, ozet: "Etkili iletişim ve çatışma çözme becerilerinin geliştirilmesi." },
+      { baslik: "Öfke Yönetimi", sayfa: 71, ozet: "Öfke duygusunu tanıma ve yönetme becerileri." },
+      { baslik: "Öfke Yönetimi (Devam Oturumu)", sayfa: 82, ozet: "Öfke yönetimi becerilerinin pekiştirilmesi." },
+      { baslik: "İç ve Dış Göçler", sayfa: 88, ozet: "Göç deneyiminin okula uyum ve akademik yaşama etkisiyle baş etme." },
+      { baslik: "Yardım Arama Davranışı", sayfa: 97, ozet: "İhtiyaç duyduğunda yardım isteyebilme becerisinin geliştirilmesi." },
+      { baslik: "Okulla Bağ Kurma", sayfa: 107, ozet: "Okula aidiyet ve bağlılık duygusunun güçlendirilmesi." },
+      { baslik: "Akademik Motivasyon", sayfa: 116, ozet: "Akademik motivasyonun artırılmasına yönelik çalışma." },
+      { baslik: "Özdüzenlemeli Öğrenme", sayfa: 128, ozet: "Özdüzenlemeli öğrenme becerilerinin kazandırılması." },
+      { baslik: "Sonlandırma", sayfa: 142, ozet: "Programın değerlendirilmesi ve sonlandırılması." },
+    ]
+  },
+  {
+    key: "zorbalik-yapan",
+    ad: "Akran Zorbalığı Yapan Öğrencilere Yönelik Arkadaşlık İlişkileri Geliştirme Programı",
+    hedefKitle: "Akran zorbalığı yapan öğrenciler",
+    oturumlar: [
+      { baslik: "Tanışma ve Bireysel Farklılıklarımız", sayfa: 8, ozet: "Sürece tanışma ve bireysel farklılıkların fark edilmesi." },
+      { baslik: "Haklarımız ve Sorumluluklarımız", sayfa: 14, ozet: "Kişisel hak ve sorumlulukların ele alınması." },
+      { baslik: "Akran Zorbalığı", sayfa: 20, ozet: "Akran zorbalığının ne olduğunun ve etkilerinin ele alınması." },
+      { baslik: "Düşüncelerim, Duygularım ve Davranışlarım", sayfa: 26, ozet: "Düşünce-duygu-davranış ilişkisinin fark edilmesi." },
+      { baslik: "Nasıl İletişim Kuruyorum", sayfa: 34, ozet: "Kendi iletişim biçiminin fark edilmesi." },
+      { baslik: "Üç Rolde İletişim", sayfa: 40, ozet: "Farklı iletişim rollerinin (zorba/mağdur/izleyici) ele alınması." },
+      { baslik: "Öfkeni Anlat ve Yönet", sayfa: 50, ozet: "Öfke duygusunu ifade etme ve yönetme becerileri." },
+      { baslik: "Çatışma Çözüyorum", sayfa: 56, ozet: "Yapıcı çatışma çözme becerilerinin geliştirilmesi." },
+      { baslik: "Güçlü Yanlarım", sayfa: 66, ozet: "Öğrencinin güçlü yönlerinin fark ettirilmesi." },
+      { baslik: "Sonlandırma", sayfa: 70, ozet: "Programın değerlendirilmesi ve sonlandırılması." },
+    ]
+  },
+  {
+    key: "zorbalik-maruz-kalan",
+    ad: "Akran Zorbalığına Maruz Kalan Öğrencilere Yönelik Arkadaşlık İlişkileri Geliştirme Programı",
+    hedefKitle: "Akran zorbalığına maruz kalan öğrenciler",
+    oturumlar: [
+      { baslik: "Tanışma, Programın Amacı, Grup Kuralları", sayfa: 8, ozet: "Sürece tanışma, programın amacının açıklanması ve grup kurallarının belirlenmesi." },
+      { baslik: "Kişisel Haklarım, Sorumluluklarım ve Farklılıklarımız", sayfa: 14, ozet: "Kişisel hak, sorumluluk ve bireysel farklılıkların ele alınması." },
+      { baslik: "Akran Zorbalığını Tanıyorum", sayfa: 28, ozet: "Akran zorbalığının tanınması ve fark edilmesi." },
+      { baslik: "Düşüncelerim, Duygularım ve Davranışlarım", sayfa: 38, ozet: "Düşünce-duygu-davranış ilişkisinin fark edilmesi." },
+      { baslik: "İncinmelerim, Başa Çıkma Stratejileri ve Özsaygı", sayfa: 48, ozet: "Yaşanan incinmelerle başa çıkma stratejileri ve özsaygının güçlendirilmesi." },
+      { baslik: "Nasıl İletişim Kuruyorum? Güvenli Davranmaya Doğru", sayfa: 54, ozet: "Güvenli iletişim ve davranış biçimlerine yönelme." },
+      { baslik: "Güvenli Davranıyorum: Dur Diyebilme, Mizah, Hızlı Tepki", sayfa: 64, ozet: "Dur diyebilme, mizah kullanma ve hızlı tepki verebilme becerileri." },
+      { baslik: "Baş Etme Stratejileri: Görmezden Gelme, Kaçınma, Yardım İsteme", sayfa: 74, ozet: "Farklı baş etme stratejilerinin tanınması." },
+      { baslik: "Problem Çözme: Baş Etme Stratejilerini Seçiyorum", sayfa: 80, ozet: "Duruma uygun baş etme stratejisini seçebilme." },
+      { baslik: "Sonlandırma", sayfa: 94, ozet: "Programın değerlendirilmesi ve sonlandırılması." },
+    ]
+  },
+  {
+    key: "sosyal-duygusal",
+    ad: "Ortaokul Öğrencilerine Yönelik Sosyal Duygusal Beceriler Müdahale Programı",
+    hedefKitle: "Sosyal duygusal becerilerde risk taşıyan öğrenciler (CASEL modeli)",
+    oturumlar: [
+      { modul: "Öz Farkındalık", baslik: "Duygularım ve Hayatım", sayfa: 27, ozet: "Duyguları tanımanın yaşam için öneminin fark edilmesi." },
+      { modul: "Öz Farkındalık", baslik: "Düşüncelerim, Duygularım ve Davranışlarım", sayfa: 35, ozet: "Düşünce, duygu ve davranış arasında bağ kurulması." },
+      { modul: "Öz Farkındalık", baslik: "Yeni Durumlar Yeni Duygular", sayfa: 40, ozet: "Yeni durumlara ilişkin duyguların fark edilmesi." },
+      { modul: "Öz Farkındalık", baslik: "Özelliklerim", sayfa: 45, ozet: "Bireysel özelliklerin gerçekçi değerlendirilmesi ve güçlü yanların fark edilmesi." },
+      { modul: "Öz Farkındalık", baslik: "Ne Yapabilirim?", sayfa: 51, ozet: "Geliştirilebilir yönler için yapılabileceklerin fark edilmesi." },
+      { modul: "Öz Farkındalık", baslik: "Gelişmeye Açık Yönlerim", sayfa: 54, ozet: "Gelişmeye açık yönlerin ve bunlar için yapılabileceklerin fark edilmesi." },
+      { modul: "Öz Farkındalık", baslik: "Geliştirmek İstediğim Özelliklerim", sayfa: 59, ozet: "Özellikleri geliştirmek için çaba göstermenin öneminin fark edilmesi." },
+      { modul: "Sosyal Farkındalık", baslik: "Farklı Çerçevelerden Bakıyorum", sayfa: 67, ozet: "Bireysel farklılıkların ve çeşitliliğe saygının fark edilmesi." },
+      { modul: "Sosyal Farkındalık", baslik: "Kültürel Çeşitlilikleri Fark Etme ve Takdir Etme", sayfa: 76, ozet: "Kültürel çeşitliliği takdir etme ve saygı gösterme." },
+      { modul: "Sosyal Farkındalık", baslik: "Gelişimsel Farklılıklar", sayfa: 85, ozet: "Gelişimsel farklılıkları takdir etme ve saygı gösterme." },
+      { modul: "Sosyal Farkındalık", baslik: "İletişim Yolum", sayfa: 92, ozet: "Kendi iletişim biçiminin ve yargılamadan dinlemenin fark edilmesi." },
+      { modul: "Sosyal Farkındalık", baslik: "Karşımdakini Anlıyorum", sayfa: 97, ozet: "Empati kurma ve karşıdakinin bakış açısını anlama." },
+      { modul: "Sosyal Farkındalık", baslik: "Şefkatli Yanım", sayfa: 101, ozet: "Kendine şefkat (öz şefkat) gösterebilme farkındalığı." },
+      { modul: "Sosyal Farkındalık", baslik: "Herkes İçin Şefkat", sayfa: 104, ozet: "Çevresindekilere şefkat gösterebilmenin fark edilmesi." },
+      { modul: "Öz Yönetim", baslik: "Duygu Düzenleme", sayfa: 111, ozet: "İşlevsel olan/olmayan duygu düzenleme stratejilerinin öğrenilmesi." },
+      { modul: "Öz Yönetim", baslik: "Öfkemi Tanıyorum", sayfa: 119, ozet: "Öfke duygusunu tanıma ve yönetme yollarının öğrenilmesi." },
+      { modul: "Öz Yönetim", baslik: "Kaygımı Fark Ediyorum", sayfa: 125, ozet: "Kaygı duygusunun ve kaygı anındaki tepkilerin fark edilmesi." },
+      { modul: "Öz Yönetim", baslik: "Stres ile Dans", sayfa: 132, ozet: "Stresin etkilerinin tanınması ve stresle başa çıkma yollarının öğrenilmesi." },
+      { modul: "Öz Yönetim", baslik: "Hedef Belirleme", sayfa: 138, ozet: "Kısa ve uzun vadeli hedef belirlemenin öneminin fark edilmesi." },
+      { modul: "Öz Yönetim", baslik: "Plan Yapma", sayfa: 142, ozet: "Hedeflere ulaşmak için plan yapabilme becerisi." },
+      { modul: "Öz Yönetim", baslik: "Öz Disiplin", sayfa: 147, ozet: "Engellere rağmen hedefe odaklanabilme becerisi." },
+      { modul: "Öz Yönetim", baslik: "Motivasyon", sayfa: 156, ozet: "İçsel motivasyonun geliştirilmesi." },
+      { modul: "İlişki Geliştirme", baslik: "İletişimde Dinleme", sayfa: 165, ozet: "Aktif dinleme becerisinin ve duyguları ifade etmenin öğrenilmesi." },
+      { modul: "İlişki Geliştirme", baslik: "İletişim Süreci", sayfa: 170, ozet: "Etkili iletişim için gereken becerilerin öğrenilmesi." },
+      { modul: "İlişki Geliştirme", baslik: "İletişim Çatışmalarımız", sayfa: 175, ozet: "Müzakere ve kazan-kazan yöntemiyle çatışma çözme." },
+      { modul: "İlişki Geliştirme", baslik: "Güvengen, Çekingen, Saldırgan", sayfa: 181, ozet: "Davranış biçimlerinin öğrenilmesi ve 'Hayır' diyebilme." },
+      { modul: "İlişki Geliştirme", baslik: "İş Birliği ve Takım Çalışması", sayfa: 188, ozet: "İş birliği içinde çalışmanın öneminin öğrenilmesi." },
+      { modul: "İlişki Geliştirme", baslik: "Yardım Etme/İsteme", sayfa: 195, ozet: "Yardım isteyebilme ve yardım teklif edebilme becerisi." },
+      { modul: "Sorumlu Karar Verme", baslik: "Dedektifin Çözüm Arayışı", sayfa: 205, ozet: "Sorunları tanımlama ve birden fazla çözüm yolu üretebilme." },
+      { modul: "Sorumlu Karar Verme", baslik: "Problem Çözme Süreci", sayfa: 210, ozet: "Etkili problem çözme stratejilerinin öğrenilmesi." },
+      { modul: "Sorumlu Karar Verme", baslik: "Etkili Karar Verme", sayfa: 216, ozet: "Karar verme sürecine etkiyen duygu/düşünce/davranışların fark edilmesi." },
+      { modul: "Sorumlu Karar Verme", baslik: "Kararlarım ve Diğerlerine Etkileri", sayfa: 223, ozet: "Kararların kendisi ve başkaları için sonuçlarının fark edilmesi." },
+      { modul: "Sorumlu Karar Verme", baslik: "Karar Vermede Etik Davranma", sayfa: 228, ozet: "Etik ilkelere bağlı karar verebilme." },
+    ]
+  },
+];
+// Tüm programların oturumlarını tek düz listede toplar — arama ve AI eşleştirme
+// için. Her satıra programAdi/dosyaKey eklenir ki tıklanınca doğru PDF açılsın.
+function mudahaleOturumHavuzu() {
+  const havuz = [];
+  MUDAHALE_PROGRAMLARI.forEach(prog => {
+    prog.oturumlar.forEach(o => havuz.push({ ...o, programAdi: prog.ad, programKey: prog.key, hedefKitle: prog.hedefKitle }));
+  });
+  return havuz;
+}
+
 const KAZANIM_PDF_MAP = {
   "5-1": "https://raw.githubusercontent.com/hakanhas1989-ops/pdr-program/main/5-sinif-rehberlik-etkinlikleri.pdf",
   "6-1": "https://raw.githubusercontent.com/hakanhas1989-ops/pdr-program/main/6-sinif-rehberlik-etkinlikleri.pdf",
@@ -870,6 +987,142 @@ function ogrenciEtkinlikHavuzu(ogrenciSinif, kademeTahmin) {
   }
   return havuz;
 }
+// Bireysel müdahale programları kütüphanesinde arama/öneri ekranı — Sınıf
+// Rehberlik Etkinlikleri ile aynı iki yol: ücretsiz kelime arama ve AI'ın
+// görüşme notlarına göre önerisi. AI'ın önerisi, gerçek oturum kütüphanesiyle
+// (başlık eşleşmesi) doğrulanır — uydurma bir oturum asla gösterilmez.
+function MudahaleKutuphanesiEkrani({ kayitliListesi, records }) {
+  const [seciliAd, setSeciliAd] = useState("");
+  const [ogrenciArama, setOgrenciArama] = useState("");
+  const [aramaMetni, setAramaMetni] = useState("");
+  const [aiOnerileri, setAiOnerileri] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
+
+  const havuz = mudahaleOturumHavuzu();
+  const seciliOgr = kayitliListesi.find(o => o.name === seciliAd);
+
+  const aramaMetniNorm = aramaMetni.trim().toLocaleLowerCase("tr");
+  const filtrelenmis = aramaMetniNorm.length < 2 ? [] : havuz.filter(o =>
+    (o.baslik + " " + o.ozet + " " + (o.modul||"") + " " + o.programAdi + " " + o.hedefKitle).toLocaleLowerCase("tr").includes(aramaMetniNorm)
+  );
+
+  async function handleAiAra() {
+    if (!seciliAd) return;
+    setAiLoading(true);
+    setAiOnerileri(null);
+    try {
+      const ogrGorusmeler = records.filter(r => pdrAyniOgrenci(r.studentName, r.className, seciliAd, seciliOgr?.className, r.numara, seciliOgr?.numara));
+      const gorusmeler = ogrGorusmeler.slice(0,8).map((r,i) => `Görüşme ${i+1} (${r.date}): ${r.summary}`).join("\n\n");
+      if (!gorusmeler) { alert("Bu öğrenci için görüşme notu bulunamadı."); setAiLoading(false); return; }
+      const havuzMetni = havuz.map(o => `- "${o.baslik}"${o.modul?` [${o.modul} modülü]`:""} — Program: ${o.programAdi} (Hedef kitle: ${o.hedefKitle}) — ${o.ozet}`).join("\n");
+      const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          model:"claude-sonnet-4-6", max_tokens:700,
+          system:'Sen bir PDR uzmanısın. Görüşme notlarını okuyup, verilen bireysel müdahale programları kütüphanesinden öğrencinin ihtiyacına en uygun oturumu/oturumları seçersin. SADECE JSON formatında cevap verirsin.',
+          messages:[{role:"user", content:`Öğrenci: ${seciliAd}\n${gorusmeler}\n\nBİREYSEL MÜDAHALE PROGRAMLARI OTURUM KÜTÜPHANESİ:\n${havuzMetni}\n\nGörüşme temalarına EN UYGUN en fazla 3 oturum seç. SADECE şu JSON formatında cevap ver:\n[{"baslik": "Oturum Adı (listedeki gibi HARFİ HARFİNE aynı yaz)", "aciklama": "neden uygun olduğu, 1 kısa cümle"}]\nGerçekten uygun bir şey yoksa boş dizi [] döndür. Listede OLMAYAN bir oturum adı ASLA yazma — sadece verilen listeden birebir kopyala.`}]
+        })
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      const text = data.content?.[0]?.text || "[]";
+      const temiz = text.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(temiz);
+      const eslesenler = (Array.isArray(parsed) ? parsed : []).map(oneri => {
+        const oneriAdi = (oneri.baslik || "").trim().toLocaleLowerCase("tr").replace(/^["']|["']$/g, "");
+        const kayit = havuz.find(o => o.baslik.trim().toLocaleLowerCase("tr") === oneriAdi)
+          || havuz.find(o => oneriAdi.length > 3 && (o.baslik.trim().toLocaleLowerCase("tr").includes(oneriAdi) || oneriAdi.includes(o.baslik.trim().toLocaleLowerCase("tr"))));
+        return kayit ? { ...kayit, aciklama: oneri.aciklama || "" } : null;
+      }).filter(Boolean);
+      setAiOnerileri(eslesenler);
+    } catch (e) {
+      alert("AI önerisi alınamadı: " + e.message);
+    }
+    setAiLoading(false);
+  }
+
+  function pdfAc(o) {
+    const url = MUDAHALE_PDF_MAP[o.programKey];
+    if (!url) return;
+    window.open(`https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(url)}#page=${o.sayfa}`, "_blank");
+  }
+
+  return (
+    <div style={{ padding: 16, maxWidth: 640 }}>
+      <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 4, color:PURPLE }}>📁 Müdahale Programları Kütüphanesi</div>
+      <div style={{ fontSize: 12, color: MUTED, marginBottom: 16, lineHeight: 1.5 }}>
+        4 kaynak programdan (Akademik Beceriler, Akran Zorbalığı Yapan/Maruz Kalan, Sosyal Duygusal Beceriler) toplam {havuz.length} oturum. Anahtar kelime ara ya da bir öğrenci seçip AI'ın görüşme notlarına göre önermesini iste — her iki yolda da sonuca tıklayınca PDF'in ilgili sayfası açılır.
+      </div>
+
+      {/* AI ile Ara */}
+      <div style={{ background:"#F3EEFB", border:`1px solid ${PURPLE}`, borderRadius:12, padding:14, marginBottom:16 }}>
+        <div style={{ fontSize:12, fontWeight:800, color:PURPLE, marginBottom:8 }}>✦ AI ile Ara</div>
+        {seciliAd ? (
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", background:PURPLE, borderRadius:8, padding:"6px 10px", marginBottom:8 }}>
+            <span style={{ fontSize:12, fontWeight:700, color:"#fff" }}>👤 {seciliAd}</span>
+            <button onClick={()=>{ setSeciliAd(""); setAiOnerileri(null); }} style={{background:"rgba(255,255,255,0.2)", border:"1px solid #fff", color:"#fff", borderRadius:6, padding:"2px 8px", fontSize:10, cursor:"pointer"}}>✕</button>
+          </div>
+        ) : (
+          <>
+            <input value={ogrenciArama} onChange={e=>setOgrenciArama(e.target.value)} placeholder="Öğrenci ara…" style={{ width:"100%", padding:"7px 10px", border:`1px solid ${BORDER}`, borderRadius:8, fontSize:12.5, boxSizing:"border-box", marginBottom:8 }} />
+            {ogrenciArama.trim().length >= 2 && (
+              <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:8 }}>
+                {kayitliListesi.filter(o=>o.name.toLocaleLowerCase("tr").includes(ogrenciArama.toLocaleLowerCase("tr"))).slice(0,15).map(o=>(
+                  <button key={pdrOgrAnahtar(o.name,o.className,o.numara)} onClick={()=>{ setSeciliAd(o.name); setOgrenciArama(""); }} style={{padding:"4px 10px", borderRadius:16, border:`1px solid ${BORDER}`, background:"#fff", color:MUTED, fontSize:11, cursor:"pointer"}}>{o.name}</button>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+        <button onClick={handleAiAra} disabled={!seciliAd || aiLoading} style={{
+          width:"100%", padding:"8px", background: (!seciliAd||aiLoading)?BORDER:PURPLE, color:(!seciliAd||aiLoading)?MUTED:"#fff", border:"none", borderRadius:8, fontSize:12.5, fontWeight:700, cursor:"pointer"
+        }}>{aiLoading?"⏳ Aranıyor…":"Görüşme Notlarına Göre Öner"}</button>
+
+        {aiOnerileri && aiOnerileri.length===0 && (
+          <div style={{ fontSize:11.5, color:MUTED, textAlign:"center", padding:"10px 0" }}>Görüşme temalarına gerçekten uygun bir oturum bulunamadı.</div>
+        )}
+        {aiOnerileri && aiOnerileri.length>0 && (
+          <div style={{ display:"flex", flexDirection:"column", gap:6, marginTop:10 }}>
+            {aiOnerileri.map((o,i)=>(
+              <div key={i} onClick={()=>pdfAc(o)} style={{ background:"#fff", borderRadius:8, padding:"9px 11px", cursor:"pointer", border:`1px solid ${PURPLE}` }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:6 }}>
+                  <div style={{ fontSize:12, fontWeight:700, color:TEXT }}>{o.baslik}</div>
+                  <span style={{ fontSize:9, color:PURPLE, fontWeight:700, flexShrink:0 }}>📄 Aç</span>
+                </div>
+                <div style={{ fontSize:10, color:MUTED, marginTop:1 }}>{o.programAdi}{o.modul?` — ${o.modul}`:""}</div>
+                <div style={{ fontSize:10.5, color:MUTED, marginTop:2, lineHeight:1.4 }}>{o.aciklama}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Ücretsiz Arama */}
+      <div style={{ background:CARD, border:`1px solid ${BORDER}`, borderRadius:12, padding:14 }}>
+        <div style={{ fontSize:12, fontWeight:800, color:TEXT, marginBottom:8 }}>🔍 İhtiyaca Göre Ara</div>
+        <input value={aramaMetni} onChange={e=>setAramaMetni(e.target.value)} placeholder='Anahtar kelime yaz… (örn. "zorbalık", "öfke")' style={{ width:"100%", padding:"8px 10px", border:`1px solid ${BORDER}`, borderRadius:8, fontSize:12.5, boxSizing:"border-box", marginBottom:10 }} />
+        {aramaMetniNorm.length>=2 && filtrelenmis.length===0 && (
+          <div style={{ fontSize:11.5, color:MUTED, textAlign:"center", padding:"10px 0" }}>Bu kelimeyle eşleşen bir oturum bulunamadı.</div>
+        )}
+        {aramaMetniNorm.length>=2 && (
+          <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+            {filtrelenmis.map((o,i)=>(
+              <div key={i} onClick={()=>pdfAc(o)} style={{ background:BG, borderRadius:8, padding:"9px 11px", cursor:"pointer", border:`1px solid ${BORDER}` }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:6 }}>
+                  <div style={{ fontSize:12, fontWeight:700, color:TEXT }}>{o.baslik}</div>
+                  <span style={{ fontSize:9, color:ACCENT, fontWeight:700, flexShrink:0 }}>📄 Aç</span>
+                </div>
+                <div style={{ fontSize:10, color:MUTED, marginTop:1 }}>{o.programAdi}{o.modul?` — ${o.modul}`:""}</div>
+                <div style={{ fontSize:10.5, color:MUTED, marginTop:2, lineHeight:1.4 }}>{o.ozet}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function KazanimlarSekmesi({ kademe }) {
   const aktifKademe = KADEME_SINIF_LISTESI[kademe] ? kademe : "ortaokul";
   const sinifListesi = KADEME_SINIF_LISTESI[aktifKademe];
@@ -4566,7 +4819,7 @@ SADECE aşağıdaki JSON formatında cevap ver, başka hiçbir açıklama/markdo
 }
 
 // ── Müdahale Planı Bileşeni ───────────────────────────────────────────────────
-function MudahalePlanEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, mudahalePlan, setMudahalePlan, records, kutuphane, kademe }) {
+function MudahalePlanEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, mudahalePlan, setMudahalePlan, records, kutuphane, kademe, setTab }) {
   const [seciliAd, setSeciliAd] = useState(aktifOgrenci?.name || "");
   const [aramaMetni, setAramaMetni] = useState("");
   const [form, setForm] = useState({ hedef:"", adimlar:"", sorumlu:"pdr", sure:"", oncelik:"Orta", durum:"Devam Ediyor" });
@@ -4650,6 +4903,13 @@ ${kademe ? "Planı öğrencinin yaş/gelişim dönemine uygun şekilde oluştur.
       <div style={{background:"#EEF2FF",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:13,color:"#3B4FD8",fontWeight:600}}>
         🎯 Müdahale Planı — Hedef, adımlar ve süre takibi
       </div>
+
+      {setTab && (
+        <button onClick={()=>setTab("mudahale_kutuphane")} style={{
+          width:"100%", padding:"10px", marginBottom:14, background:PURPLE, color:"#fff",
+          border:"none", borderRadius:10, fontSize:13, fontWeight:800, cursor:"pointer"
+        }}>📁 Müdahale Programları Kütüphanesine Git</button>
+      )}
 
       {/* Öğrenci seç */}
       <input placeholder="Öğrenci ara..." value={aramaMetni} onChange={e=>setAramaMetni(e.target.value)} style={{...inp, marginBottom:8}} />
@@ -12963,6 +13223,7 @@ export default function App() {
     { key: "mudahale", label: "🎯 Müdahale" },
     { key: "belgeler", label: "📑 Belgeler" },
     { key: "kutuphane", label: "📚 Kütüphane" },
+    { key: "mudahale_kutuphane", label: "📁 Müdahale Kütüphanesi" },
     { key: "kazanimlar", label: "📘 Kazanımlar" },
     { key: "istatistik", label: "İstatistik" },
     { key: "prof_danisma", label: "🎓 Prof. Hakan" },
@@ -13212,6 +13473,7 @@ export default function App() {
             records={records}
             kutuphane={kutuphane}
             kademe={kademe}
+            setTab={setTab}
           />
         )}
 
@@ -13992,6 +14254,11 @@ export default function App() {
               </div>
             )}
           </div>
+        )}
+
+        {/* ── MÜDAHALE PROGRAMLARI KÜTÜPHANESİ ────────────────────────── */}
+        {tab === "mudahale_kutuphane" && (
+          <MudahaleKutuphanesiEkrani kayitliListesi={kayitliListesi} records={records} />
         )}
 
         {/* ── KAZANIMLAR ───────────────────────────────────────────── */}

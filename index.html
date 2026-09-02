@@ -6364,6 +6364,7 @@ function NetHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, netH
   const [ogrenciArama, setOgrenciArama] = useState("");
   const [yukleniyor, setYukleniyor] = useState(false);
   const [taslak, setTaslak] = useState(null);
+  const [taslakTarihi, setTaslakTarihi] = useState(today());
   const [detayAcikId, setDetayAcikId] = useState(null);
   const [tekrarListesi, setTekrarListesi] = useState(null);
   const [tekrarYukleniyor, setTekrarYukleniyor] = useState(false);
@@ -6466,12 +6467,13 @@ KURALLAR:
     if (!taslak || !seciliAd) return;
     const yeni = {
       id: uid(), studentName: seciliAd, className: seciliSinif, numara: seciliNumara,
-      tarih: today(), denemeAdi: taslak.denemeAdi || "", dersler: taslak.dersler || []
+      tarih: taslakTarihi || today(), denemeAdi: taslak.denemeAdi || "", dersler: taslak.dersler || []
     };
     const guncel = [yeni, ...(netHaritasiKayitlari||[])];
     setNetHaritasiKayitlari(guncel);
     await saveNetHaritasi(guncel);
     setTaslak(null);
+    setTaslakTarihi(today());
   }
 
   function taslakSayiGuncelle(dersIdx, konuIdx, alan, deger) {
@@ -6701,6 +6703,11 @@ Sade, somut, öğretmenin doğrudan kullanabileceği şekilde yaz. Markdown kull
           <div style={{ fontSize:13, fontWeight:800, color:"#B07D1A", marginBottom:4 }}>⚠️ AI Çıkardı — Kaydetmeden Önce Kontrol Et</div>
           <div style={{ fontSize:11, color:"#B07D1A", marginBottom:10 }}>Sayılar yanlışsa aşağıdan düzeltebilirsin. Sadece yanlış yapılan kazanımlar listeleniyor (tümünü görmek istersen "Tüm Konular"a bas).</div>
           {taslak.denemeAdi && <div style={{ fontSize:12, fontWeight:700, marginBottom:10 }}>📋 {taslak.denemeAdi}</div>}
+          <div style={{ marginBottom:10 }}>
+            <label style={{ fontSize:10, fontWeight:700, color:"#B07D1A", display:"block", marginBottom:3 }}>SINAV TARİHİ</label>
+            <input value={taslakTarihi} onChange={e=>setTaslakTarihi(e.target.value)} placeholder="GG.AA.YYYY"
+              style={{ width:"100%", padding:"7px 10px", border:"1px solid #F0D68A", borderRadius:8, fontSize:12, boxSizing:"border-box" }} />
+          </div>
           {taslak.dersler.map((ders, di) => (
             <div key={di} style={{ marginBottom:10, background:"#fff", borderRadius:8, padding:10 }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
@@ -7411,8 +7418,9 @@ function OzetKarti({ ogrenci, ogrenciSinif, ogrRec, ogrP1, ogrP2, ogrRisk, denem
   const devSirali = [...(devamsizlikGecmisi||[])].sort((a,b) => new Date(a.tarih.split(".").reverse().join("-")) - new Date(b.tarih.split(".").reverse().join("-")));
   const devSonKayit = devSirali[devSirali.length - 1];
   const [devInput, setDevInput] = useState(devSonKayit?.gun || 0);
+  const [devTarihInput, setDevTarihInput] = useState(today());
   const [olayFormAcik, setOlayFormAcik] = useState(false);
-  const [olayForm, setOlayForm] = useState({ tur: "Kavga", islem: "Tutanak Tutuldu", not: "" });
+  const [olayForm, setOlayForm] = useState({ tur: "Kavga", islem: "Tutanak Tutuldu", not: "", tarih: today() });
   const olaySirali = [...(olayKayitlari||[])].sort((a,b) => pdrTarihMs(a.tarih) - pdrTarihMs(b.tarih));
 
   // Storage'dan yükle
@@ -7543,11 +7551,15 @@ Kısa ve pratik yaz, Markdown kullanma.`}]
                 {devGuncelleAcik && (
                   <div style={{background:CARD,border:`1px solid ${BORDER}`,borderRadius:10,padding:10,marginTop:6}}>
                     <div style={{fontSize:11,color:MUTED,marginBottom:8,lineHeight:1.5}}>E-okul'dan kontrol ettiğin güncel devamsızlık gününü gir — üzerine yazmaz, tarihli yeni bir kayıt olarak eklenir, böylece artış hızı takip edilebilir.</div>
-                    <div style={{display:"flex",gap:8,marginBottom:devSirali.length>0?10:0}}>
+                    <div style={{display:"flex",gap:8,marginBottom:8}}>
                       <input type="number" min="0" value={devInput} onChange={e=>setDevInput(e.target.value)}
                         style={{flex:1,padding:"8px 10px",border:`1px solid ${BORDER}`,borderRadius:8,fontSize:14,boxSizing:"border-box"}} />
-                      <button onClick={() => { onDevamsizlikGuncelle(parseInt(devInput)||0); setDevGuncelleAcik(false); }}
-                        style={{padding:"8px 16px",background:ACCENT,color:"#fff",border:"none",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"}}>Kaydet</button>
+                      <input value={devTarihInput} onChange={e=>setDevTarihInput(e.target.value)} placeholder="GG.AA.YYYY"
+                        style={{width:100,padding:"8px 8px",border:`1px solid ${BORDER}`,borderRadius:8,fontSize:12,boxSizing:"border-box"}} />
+                    </div>
+                    <div style={{display:"flex",marginBottom:devSirali.length>0?10:0}}>
+                      <button onClick={() => { onDevamsizlikGuncelle(parseInt(devInput)||0, devTarihInput); setDevGuncelleAcik(false); setDevTarihInput(today()); }}
+                        style={{width:"100%",padding:"8px 16px",background:ACCENT,color:"#fff",border:"none",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"}}>Kaydet</button>
                     </div>
                     {devSirali.length > 0 && (
                       <div style={{borderTop:`1px solid ${BORDER}`,paddingTop:8}}>
@@ -7592,7 +7604,10 @@ Kısa ve pratik yaz, Markdown kullanma.`}]
                   <label style={{fontSize:11,fontWeight:600,color:MUTED,display:"block",marginBottom:3}}>NOT (opsiyonel)</label>
                   <textarea rows={2} value={olayForm.not} onChange={e=>setOlayForm(f=>({...f,not:e.target.value}))}
                     style={{width:"100%",padding:"8px 10px",border:`1px solid ${BORDER}`,borderRadius:8,fontSize:13,boxSizing:"border-box",marginBottom:8,resize:"vertical"}} />
-                  <button onClick={() => { onOlayEkle(olayForm); setOlayForm({ tur:"Kavga", islem:"Tutanak Tutuldu", not:"" }); setOlayFormAcik(false); }}
+                  <label style={{fontSize:11,fontWeight:600,color:MUTED,display:"block",marginBottom:3}}>TARİH</label>
+                  <input value={olayForm.tarih} onChange={e=>setOlayForm(f=>({...f,tarih:e.target.value}))} placeholder="GG.AA.YYYY"
+                    style={{width:"100%",padding:"8px 10px",border:`1px solid ${BORDER}`,borderRadius:8,fontSize:13,boxSizing:"border-box",marginBottom:8}} />
+                  <button onClick={() => { onOlayEkle(olayForm); setOlayForm({ tur:"Kavga", islem:"Tutanak Tutuldu", not:"", tarih:today() }); setOlayFormAcik(false); }}
                     style={{width:"100%",padding:"8px 16px",background:"#9B87F0",color:"#fff",border:"none",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer",marginBottom: olaySirali.length>0?10:0}}>Kaydet</button>
                   {olaySirali.length > 0 && (
                     <div style={{borderTop:`1px solid ${BORDER}`,paddingTop:8}}>
@@ -8819,9 +8834,13 @@ function OgrenciYonetim({
   async function handleSinavKaygiHaftaGuncelle(haftaNo, cevaplar, aciklama) {
     if (!seciliOgrenci) return;
     const ogrKey = pdrOgrAnahtar(seciliOgrenci, seciliOgrenciSinif, seciliOgrenciNumara);
-    const mevcut = sinavKaygisi[ogrKey] || { haftalar:{}, kaygiDuzeyleri:{}, belirtiler:{fiziksel:[],bilissel:[],davranissal:[],duygusal:[]} };
+    const mevcut = sinavKaygisi[ogrKey] || { haftalar:{}, kaygiDuzeyleri:{}, belirtiler:{fiziksel:[],bilissel:[],davranissal:[],duygusal:[]}, haftaTarihleri:{} };
     const toplam = cevaplar.reduce((s,v)=>s+(v||0),0);
-    const guncelOgr = { ...mevcut, haftalar: { ...mevcut.haftalar, [haftaNo]: { cevaplar, toplam, aciklama } } };
+    // O haftanın gerçek takvim tarihi hiç girilmemişse bugüne varsayılır —
+    // danışman isterse "GİRİŞ TARİHİ" alanından geriye tarihleyebilir.
+    const haftaTarihleri = { ...(mevcut.haftaTarihleri||{}) };
+    if (!haftaTarihleri[haftaNo]) haftaTarihleri[haftaNo] = today();
+    const guncelOgr = { ...mevcut, haftalar: { ...mevcut.haftalar, [haftaNo]: { cevaplar, toplam, aciklama } }, haftaTarihleri };
     const guncel = { ...sinavKaygisi, [ogrKey]: guncelOgr };
     setSinavKaygisi(guncel);
     await saveSinavKaygisi(guncel);
@@ -8829,8 +8848,21 @@ function OgrenciYonetim({
   async function handleKaygiDuzeyiGuncelle(haftaNo, deger) {
     if (!seciliOgrenci) return;
     const ogrKey = pdrOgrAnahtar(seciliOgrenci, seciliOgrenciSinif, seciliOgrenciNumara);
-    const mevcut = sinavKaygisi[ogrKey] || { haftalar:{}, kaygiDuzeyleri:{}, belirtiler:{fiziksel:[],bilissel:[],davranissal:[],duygusal:[]} };
-    const guncelOgr = { ...mevcut, kaygiDuzeyleri: { ...mevcut.kaygiDuzeyleri, [haftaNo]: deger } };
+    const mevcut = sinavKaygisi[ogrKey] || { haftalar:{}, kaygiDuzeyleri:{}, belirtiler:{fiziksel:[],bilissel:[],davranissal:[],duygusal:[]}, haftaTarihleri:{} };
+    const haftaTarihleri = { ...(mevcut.haftaTarihleri||{}) };
+    if (!haftaTarihleri[haftaNo]) haftaTarihleri[haftaNo] = today();
+    const guncelOgr = { ...mevcut, kaygiDuzeyleri: { ...mevcut.kaygiDuzeyleri, [haftaNo]: deger }, haftaTarihleri };
+    const guncel = { ...sinavKaygisi, [ogrKey]: guncelOgr };
+    setSinavKaygisi(guncel);
+    await saveSinavKaygisi(guncel);
+  }
+  // Bir haftanın takvim tarihini elle değiştirmek için — örn. geçmiş bir
+  // görüşmeye ait sınav kaygısı verisini sonradan girip doğru güne bağlamak.
+  async function handleHaftaTarihiGuncelle(haftaNo, tarih) {
+    if (!seciliOgrenci) return;
+    const ogrKey = pdrOgrAnahtar(seciliOgrenci, seciliOgrenciSinif, seciliOgrenciNumara);
+    const mevcut = sinavKaygisi[ogrKey] || { haftalar:{}, kaygiDuzeyleri:{}, belirtiler:{fiziksel:[],bilissel:[],davranissal:[],duygusal:[]}, haftaTarihleri:{} };
+    const guncelOgr = { ...mevcut, haftaTarihleri: { ...(mevcut.haftaTarihleri||{}), [haftaNo]: tarih } };
     const guncel = { ...sinavKaygisi, [ogrKey]: guncelOgr };
     setSinavKaygisi(guncel);
     await saveSinavKaygisi(guncel);
@@ -9332,10 +9364,10 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
               setIlerlemeNotlari={setIlerlemeNotlari}
               setTab={setTab}
               devamsizlikGecmisi={tumOgrenciler.find(x => x.studentName === seciliOgrenci)?.devamsizlikGecmisi || []}
-              onDevamsizlikGuncelle={async (yeniDeger) => {
+              onDevamsizlikGuncelle={async (yeniDeger, tarih) => {
                 const hedefOgr = tumOgrenciler.find(x => x.studentName === seciliOgrenci);
                 const eskiGecmis = hedefOgr?.devamsizlikGecmisi || [];
-                const yeniGecmis = [...eskiGecmis, { tarih: today(), gun: yeniDeger }];
+                const yeniGecmis = [...eskiGecmis, { tarih: tarih || today(), gun: yeniDeger }];
                 const updated = ogrenciler.map(o => pdrAyniOgrenci(o.studentName, o.className, seciliOgrenci, seciliOgrenciSinif, o.numara, seciliOgrenciNumara) ? { ...o, devamsizlik: yeniDeger, devamsizlikGecmisi: yeniGecmis } : o);
                 setOgrenciler(updated);
                 await saveOgrenciler(updated);
@@ -9345,7 +9377,7 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
               onOlayEkle={async (yeniOlay) => {
                 const hedefOgr = tumOgrenciler.find(x => x.studentName === seciliOgrenci);
                 const eskiOlaylar = hedefOgr?.olayKayitlari || [];
-                const yeniOlaylar = [...eskiOlaylar, { ...yeniOlay, tarih: today() }];
+                const yeniOlaylar = [...eskiOlaylar, { tarih: today(), ...yeniOlay }];
                 const updated = ogrenciler.map(o => pdrAyniOgrenci(o.studentName, o.className, seciliOgrenci, seciliOgrenciSinif, o.numara, seciliOgrenciNumara) ? { ...o, olayKayitlari: yeniOlaylar } : o);
                 setOgrenciler(updated);
                 await saveOgrenciler(updated);
@@ -9636,8 +9668,9 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
           )}
           {aktifSekme === "sinav_kaygisi" && (() => {
             const ogrKey = pdrOgrAnahtar(seciliOgrenci, seciliOgrenciSinif, seciliOgrenciNumara);
-            const kayit = sinavKaygisi[ogrKey] || { haftalar:{}, kaygiDuzeyleri:{}, belirtiler:{fiziksel:[],bilissel:[],davranissal:[],duygusal:[]} };
+            const kayit = sinavKaygisi[ogrKey] || { haftalar:{}, kaygiDuzeyleri:{}, belirtiler:{fiziksel:[],bilissel:[],davranissal:[],duygusal:[]}, haftaTarihleri:{} };
             const haftaVerisi = kayit.haftalar[sinavKaygiAktifHafta] || { cevaplar: new Array(10).fill(null), toplam: 0, aciklama: "" };
+            const haftaTarihi = (kayit.haftaTarihleri && kayit.haftaTarihleri[sinavKaygiAktifHafta]) || today();
             const cevaplanan = haftaVerisi.cevaplar.filter(c => c !== null && c !== undefined).length;
             const duzey = sinavKaygiDuzeyHesapla(haftaVerisi.toplam);
             return (
@@ -9651,6 +9684,11 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
                       background:sinavKaygiAktifHafta===h?ACCENT:"#fff", color:sinavKaygiAktifHafta===h?"#fff":MUTED, fontSize:11, fontWeight:700, cursor:"pointer"
                     }}>{h}. Hafta</button>
                   ))}
+                </div>
+                <div style={{ marginBottom:10 }}>
+                  <label style={{ fontSize:10, fontWeight:600, color:MUTED, display:"block", marginBottom:3 }}>GİRİŞ TARİHİ ({sinavKaygiAktifHafta}. hafta — geriye tarihlenebilir)</label>
+                  <input value={haftaTarihi} onChange={e=>handleHaftaTarihiGuncelle(sinavKaygiAktifHafta, e.target.value)} placeholder="GG.AA.YYYY"
+                    style={{ width:"100%", padding:"7px 10px", border:`1px solid ${BORDER}`, borderRadius:8, fontSize:12, boxSizing:"border-box" }} />
                 </div>
                 <div style={{ background:BG, borderRadius:8, padding:"8px 10px", marginBottom:10, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                   <span style={{ fontSize:11, color:MUTED }}>{cevaplanan}/10 madde cevaplandı</span>
@@ -12847,7 +12885,7 @@ export default function App() {
   const [profiles2, setProfiles2] = useState([]);
   const [oogDegerlendirmeler, setOogDegerlendirmeler] = useState([]);
   const [tab, setTab] = useState("ogrenci");
-  const [form, setForm] = useState({ studentName: "", className: "", numara: "", meetingType: "Öğrenci", topic: "", raw: "", summary: "" });
+  const [form, setForm] = useState({ studentName: "", className: "", numara: "", meetingType: "Öğrenci", topic: "", raw: "", summary: "", tarih: today() });
   const [notOgrenciArama, setNotOgrenciArama] = useState("");
   const [profForm, setProfForm] = useState({ studentName: "", className: "", notes: "", scores: { ...EMPTY_SCORES }, analysis: "" });
   const [prof2Form, setProf2Form] = useState({ ...EMPTY_PROF2 });
@@ -12877,7 +12915,7 @@ export default function App() {
     }
   }, [aktifOgrenci?.name]);
   const [profMerkezKey, setProfMerkezKey] = useState(0); // force re-render
-  const [riskForm, setRiskForm] = useState({ studentName: "", className: "", numara: "", riskTuru: "", aciklama: "", oncelik: "Orta" });
+  const [riskForm, setRiskForm] = useState({ studentName: "", className: "", numara: "", riskTuru: "", aciklama: "", oncelik: "Orta", tarih: today() });
   const [riskOgrenciArama, setRiskOgrenciArama] = useState("");
   useEffect(() => {
     if (aktifOgrenci?.name) {
@@ -12964,7 +13002,7 @@ export default function App() {
       const bulunanNumara = kayitliListesi.find(o => pdrAyniOgrenci(o.name, o.className, aktifOgrenci.name, aktifOgrenci.className))?.numara || "";
       setForm(f => ({ ...f, studentName: aktifOgrenci.name, className: aktifOgrenci.className || "", numara: bulunanNumara }));
     } else {
-      setForm({ studentName: "", className: "", numara: "", meetingType: "Öğrenci", topic: "", raw: "", summary: "" });
+      setForm({ studentName: "", className: "", numara: "", meetingType: "Öğrenci", topic: "", raw: "", summary: "", tarih: today() });
     }
   }, [aktifOgrenci?.name]);
 
@@ -13056,7 +13094,7 @@ export default function App() {
     if (secilenler.length === 0) { setOnerilenBireyiTanima(null); return; }
     const yeniMaddeler = secilenler.map(o => ({
       id: uid(), studentName: form.studentName, className: form.className, numara: form.numara,
-      kategori: o.kategori, metin: o.metin, tarih: today()
+      kategori: o.kategori, metin: o.metin, tarih: form.tarih || today()
     }));
     const guncel = [...yeniMaddeler, ...(bireyiTanima||[])];
     setBireyiTanima(guncel);
@@ -13074,7 +13112,7 @@ export default function App() {
     if (secilenler.length === 0) { setOnerilenBdt(null); return; }
     const yeniMaddeler = secilenler.map(o => ({
       id: uid(), studentName: form.studentName, className: form.className, numara: form.numara,
-      kategori: o.kategori, ifade: o.ifade, tarih: today()
+      kategori: o.kategori, ifade: o.ifade, tarih: form.tarih || today()
     }));
     const guncel = [...yeniMaddeler, ...(bdtAnaliz||[])];
     setBdtAnaliz(guncel);
@@ -13086,7 +13124,11 @@ export default function App() {
     if (!form.studentName.trim() || !(form.summary.trim() || form.raw.trim())) return;
     // AI ile özetlenmemişse (kullanıcı "AI Özetle" demeden direkt kaydetmek
     // istiyorsa), ham metni özet olarak kullan — kaydetmek için AI şart değil.
-    const rec = { id: uid(), date: today(), ...form, summary: form.summary.trim() || form.raw.trim() };
+    // "tarih" alanı sadece form üzerinde kullanılıyor — kayıt her yerde "date"
+    // adını kullandığı için burada temiz şekilde eşleniyor, form'daki "tarih"
+    // kalıntı olarak kayda karışmasın diye ayrıştırılıyor.
+    const { tarih: formTarihi, ...formGeri } = form;
+    const rec = { id: uid(), date: formTarihi || today(), ...formGeri, summary: form.summary.trim() || form.raw.trim() };
     const updated = [rec, ...records];
     setRecords(updated); await saveRecords(updated);
     // Öğrenci bilgisini SİLMİYORUZ — aynı öğrenciye art arda birden fazla
@@ -13158,7 +13200,7 @@ export default function App() {
     const item = { id: uid(), tarih: today(), ...riskForm, aiAnaliz: "", kapandi: false, teknolojiBagimliligi: false, teknolojiGerekce: "" };
     const updated = [item, ...riskListesi];
     setRiskListesi(updated); await saveRiskListesi(updated);
-    setRiskForm({ studentName: "", className: "", numara: "", riskTuru: "", aciklama: "", oncelik: "Orta" });
+    setRiskForm({ studentName: "", className: "", numara: "", riskTuru: "", aciklama: "", oncelik: "Orta", tarih: today() });
   }
   async function handleRiskEkle() {
     if (!riskForm.studentName.trim()) return;
@@ -13214,7 +13256,7 @@ export default function App() {
     const item = { id: uid(), tarih: today(), ...riskForm, riskTuru: aiRiskTuru, oncelik: aiOncelik, aiAnaliz, kapandi: false, teknolojiBagimliligi, teknolojiGerekce };
     const updated = [item, ...riskListesi];
     setRiskListesi(updated); await saveRiskListesi(updated);
-    setRiskForm({ studentName: "", className: "", numara: "", riskTuru: "", aciklama: "", oncelik: "Orta" });
+    setRiskForm({ studentName: "", className: "", numara: "", riskTuru: "", aciklama: "", oncelik: "Orta", tarih: today() });
     setRiskAiLoading(false);
   }
   async function handleRiskKapat(id) {
@@ -13640,6 +13682,12 @@ export default function App() {
                   <button key={t} onClick={()=>setForm(f=>({...f,meetingType:t}))} style={{ flex:1, padding:"8px", borderRadius:8, border:`2px solid ${PURPLE}`, background:form.meetingType===t?PURPLE:"#fff", color:form.meetingType===t?"#fff":PURPLE, fontSize:12, fontWeight:700, cursor:"pointer" }}>{t}</button>
                 ))}
               </div>
+              {/* Görüşme tarihi — bugün girmesen de geçmiş bir görüşmeyi bu
+                  tarihle kaydedebilirsin; BDT/Bireyi Tanıma önerileri de bu
+                  tarihle kaydolur, "O Gün Neler Girildi" bu tarihe göre eşleşir. */}
+              <label style={{ fontSize:11, fontWeight:600, color:MUTED, display:"block", marginBottom:4 }}>GÖRÜŞME TARİHİ</label>
+              <input value={form.tarih} onChange={e=>setForm(f=>({...f,tarih:e.target.value}))} placeholder="GG.AA.YYYY"
+                style={{ width:"100%", padding:"9px 11px", border:`1px solid ${BORDER}`, borderRadius:9, fontSize:13, marginBottom:10, boxSizing:"border-box" }} />
               {/* Konu — standart liste, İstatistik ve Excel'de tutarlı gruplama için */}
               <label style={{ fontSize:11, fontWeight:600, color:MUTED, display:"block", marginBottom:4 }}>KONU (İSTEĞE BAĞLI)</label>
               <select value={form.topic} onChange={e=>setForm(f=>({...f,topic:e.target.value}))} style={{ width:"100%", padding:"9px 11px", border:`1px solid ${BORDER}`, borderRadius:9, fontSize:13, marginBottom:10, boxSizing:"border-box", background:"#fff" }}>
@@ -14379,6 +14427,10 @@ export default function App() {
                 <textarea placeholder="Risk durumu hakkında kısa açıklama…" value={riskForm.aciklama}
                   onChange={e => setRiskForm(f=>({...f, aciklama:e.target.value}))}
                   rows={2} style={{...inputStyle, resize:"vertical"}} />
+              </div>
+              <div style={{ marginBottom: 10 }}>
+                <label style={labelStyle}>TARİH (geçmiş bir görüşmeye ait risk giriyorsan geriye tarihleyebilirsin)</label>
+                <input value={riskForm.tarih} onChange={e => setRiskForm(f=>({...f, tarih:e.target.value}))} placeholder="GG.AA.YYYY" style={inputStyle} />
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button onClick={handleRiskManuelKaydet} disabled={!riskForm.studentName.trim() || !riskForm.riskTuru || riskAiLoading} style={{

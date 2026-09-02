@@ -8867,13 +8867,31 @@ function OgrenciYonetim({
     setSinavKaygisi(guncel);
     await saveSinavKaygisi(guncel);
   }
+  // Sınav Kaygısı belirtileri artık HER HAFTA için ayrı tutulur (Kaygı Düzeyi
+  // ve haftalık testle tutarlı olsun diye) — eskiden tüm haftalar için tek,
+  // ortak bir liste olarak tutuluyordu, bu yüzden hafta değiştirince işaretler
+  // sıfırlanmıyordu. Eski (hafta ayrımı olmayan) kayıtlar otomatik olarak
+  // 1. haftaya ait sayılır, hiçbir veri kaybolmaz.
+  function belirtilerHaftaAl(kayit, haftaNo) {
+    const b = (kayit && kayit.belirtiler) || {};
+    const haftaVerisi = b[haftaNo];
+    if (haftaVerisi && typeof haftaVerisi === "object" && !Array.isArray(haftaVerisi)) {
+      return { fiziksel: haftaVerisi.fiziksel||[], bilissel: haftaVerisi.bilissel||[], davranissal: haftaVerisi.davranissal||[], duygusal: haftaVerisi.duygusal||[] };
+    }
+    if (haftaNo === 1 && (Array.isArray(b.fiziksel) || Array.isArray(b.bilissel) || Array.isArray(b.davranissal) || Array.isArray(b.duygusal))) {
+      return { fiziksel: b.fiziksel||[], bilissel: b.bilissel||[], davranissal: b.davranissal||[], duygusal: b.duygusal||[] };
+    }
+    return { fiziksel:[], bilissel:[], davranissal:[], duygusal:[] };
+  }
   async function handleBelirtiToggle(kategori, belirti) {
     if (!seciliOgrenci) return;
     const ogrKey = pdrOgrAnahtar(seciliOgrenci, seciliOgrenciSinif, seciliOgrenciNumara);
-    const mevcut = sinavKaygisi[ogrKey] || { haftalar:{}, kaygiDuzeyleri:{}, belirtiler:{fiziksel:[],bilissel:[],davranissal:[],duygusal:[]} };
-    const mevcutListe = mevcut.belirtiler[kategori] || [];
+    const mevcut = sinavKaygisi[ogrKey] || { haftalar:{}, kaygiDuzeyleri:{}, belirtiler:{}, haftaTarihleri:{} };
+    const haftaBelirti = belirtilerHaftaAl(mevcut, sinavKaygiAktifHafta);
+    const mevcutListe = haftaBelirti[kategori] || [];
     const yeniListe = mevcutListe.includes(belirti) ? mevcutListe.filter(x=>x!==belirti) : [...mevcutListe, belirti];
-    const guncelOgr = { ...mevcut, belirtiler: { ...mevcut.belirtiler, [kategori]: yeniListe } };
+    const yeniHaftaBelirti = { ...haftaBelirti, [kategori]: yeniListe };
+    const guncelOgr = { ...mevcut, belirtiler: { ...mevcut.belirtiler, [sinavKaygiAktifHafta]: yeniHaftaBelirti } };
     const guncel = { ...sinavKaygisi, [ogrKey]: guncelOgr };
     setSinavKaygisi(guncel);
     await saveSinavKaygisi(guncel);
@@ -8933,14 +8951,15 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
   async function handleBelirtiOneriOnayla(secilenler) {
     if (!seciliOgrenci) return;
     const ogrKey = pdrOgrAnahtar(seciliOgrenci, seciliOgrenciSinif, seciliOgrenciNumara);
-    const mevcut = sinavKaygisi[ogrKey] || { haftalar:{}, kaygiDuzeyleri:{}, belirtiler:{fiziksel:[],bilissel:[],davranissal:[],duygusal:[]} };
-    const yeniBelirtiler = { ...mevcut.belirtiler };
+    const mevcut = sinavKaygisi[ogrKey] || { haftalar:{}, kaygiDuzeyleri:{}, belirtiler:{}, haftaTarihleri:{} };
+    const haftaBelirti = belirtilerHaftaAl(mevcut, sinavKaygiAktifHafta);
+    const yeniHaftaBelirti = { ...haftaBelirti };
     ["fiziksel","bilissel","davranissal","duygusal"].forEach(kat => {
       const eklenecek = secilenler[kat] || [];
-      const mevcutListe = yeniBelirtiler[kat] || [];
-      yeniBelirtiler[kat] = [...new Set([...mevcutListe, ...eklenecek])];
+      const mevcutListe = yeniHaftaBelirti[kat] || [];
+      yeniHaftaBelirti[kat] = [...new Set([...mevcutListe, ...eklenecek])];
     });
-    const guncelOgr = { ...mevcut, belirtiler: yeniBelirtiler };
+    const guncelOgr = { ...mevcut, belirtiler: { ...mevcut.belirtiler, [sinavKaygiAktifHafta]: yeniHaftaBelirti } };
     const guncel = { ...sinavKaygisi, [ogrKey]: guncelOgr };
     setSinavKaygisi(guncel);
     await saveSinavKaygisi(guncel);
@@ -9739,13 +9758,15 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
                   );
                 })}
 
-                {/* 3) Hangi Belirtiler Var? — AI önerebilir, danışman onaylar */}
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:22, marginBottom:8 }}>
-                  <div style={{ fontSize:13, fontWeight:800, color:TEXT }}>🩺 Hangi Belirtiler Var?</div>
+                {/* 3) Hangi Belirtiler Var? — AI önerebilir, danışman onaylar. Diğer
+                    iki bölüm gibi seçili haftaya (sinavKaygiAktifHafta) özeldir. */}
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:22, marginBottom:2 }}>
+                  <div style={{ fontSize:13, fontWeight:800, color:TEXT }}>🩺 Hangi Belirtiler Var? <span style={{fontSize:10.5,fontWeight:600,color:MUTED}}>({sinavKaygiAktifHafta}. hafta)</span></div>
                   <button onClick={handleBelirtiTara} disabled={belirtiTaraLoading} style={{
                     background:belirtiTaraLoading?BORDER:PURPLE, color:belirtiTaraLoading?MUTED:"#fff", border:"none", borderRadius:8, padding:"6px 12px", fontSize:11, fontWeight:700, cursor:"pointer"
                   }}>{belirtiTaraLoading?"⏳ Taranıyor…":"✦ AI ile Notlardan Tara"}</button>
                 </div>
+                <div style={{ fontSize:10, color:MUTED, marginBottom:8 }}>Yukarıda hangi haftayı seçtiysen, bu belirtiler o haftaya kaydedilir — hafta değiştirince başka bir hafta göreceksin.</div>
                 {onerilenBelirtiler && (
                   <div style={{ background:"#F3EEFB", border:`1px solid ${PURPLE}`, borderRadius:10, padding:12, marginBottom:14 }}>
                     <div style={{ fontSize:11, fontWeight:700, color:PURPLE, marginBottom:8 }}>AI'ın notlarda bulduğu belirtiler — onaylarsan aşağıdaki listeye eklenir:</div>
@@ -9765,12 +9786,14 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
                     </div>
                   </div>
                 )}
-                {Object.entries(SINAV_KAYGISI_BELIRTILER).map(([kat, info]) => (
-                  <div key={kat} style={{ marginBottom:14 }}>
-                    <div style={{ fontSize:12, fontWeight:700, color:TEXT, marginBottom:6 }}>{info.label}</div>
-                    <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
-                      {info.maddeler.map(m => {
-                        const secili = (kayit.belirtiler[kat]||[]).includes(m);
+                {(() => {
+                  const haftaBelirtileri = belirtilerHaftaAl(kayit, sinavKaygiAktifHafta);
+                  return Object.entries(SINAV_KAYGISI_BELIRTILER).map(([kat, info]) => (
+                    <div key={kat} style={{ marginBottom:14 }}>
+                      <div style={{ fontSize:12, fontWeight:700, color:TEXT, marginBottom:6 }}>{info.label}</div>
+                      <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                        {info.maddeler.map(m => {
+                          const secili = (haftaBelirtileri[kat]||[]).includes(m);
                         return (
                           <button key={m} onClick={()=>handleBelirtiToggle(kat, m)} style={{
                             padding:"5px 10px", borderRadius:14, border:`1.5px solid ${secili?ACCENT:BORDER}`,
@@ -9780,7 +9803,8 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
                       })}
                     </div>
                   </div>
-                ))}
+                  ));
+                })()}
               </div>
             );
           })()}

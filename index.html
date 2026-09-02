@@ -6115,15 +6115,26 @@ const AYT_KONU_HARITASI = {
 const AYT_KONU_HARITASI_DERSLER = Object.keys(AYT_KONU_HARITASI);
 
 
-// Bir konunun tamamlanma değerini okur — yeni veri 0/25/50/75/100 gibi bir
-// yüzde sayısıdır; eski veri (bu özellik yüzdeye geçmeden önce kaydedilmiş)
-// sadece true/false (tik/tik değil) idi — geriye dönük uyumluluk için true
-// otomatik %100 sayılır, false/boş %0 sayılır. Hiçbir eski kayıt kaybolmaz.
+// Bir konunun tamamlanma değerini okur — üç olası biçimi de destekler:
+// 1) en yeni: {yuzde, tarih} nesnesi (tarih takibiyle)
+// 2) ara dönem: düz 0/25/50/75/100 sayısı (tarihsiz, yüzde takibi eklendiğinde)
+// 3) en eski: true/false (tik/tik değil) — true otomatik %100 sayılır.
+// Hiçbir eski kayıt kaybolmaz, sadece tarihi bilinmez (aşağıdaki
+// konuTarihiAl bu durumda null döner).
 function konuDegeriAl(checkedMap, konu) {
   const v = checkedMap && checkedMap[konu];
   if (v === true) return 100;
   if (typeof v === "number") return v;
+  if (v && typeof v === "object" && typeof v.yuzde === "number") return v.yuzde;
   return 0;
+}
+// O konunun EN SON hangi tarihte güncellendiğini döner — sadece yeni
+// {yuzde, tarih} formatında saklanan kayıtlar için bilinir, eski düz sayı ya
+// da true/false kayıtlarında tarih hiç tutulmadığı için null döner.
+function konuTarihiAl(checkedMap, konu) {
+  const v = checkedMap && checkedMap[konu];
+  if (v && typeof v === "object" && v.tarih) return v.tarih;
+  return null;
 }
 // Bir öğrencinin bir dersteki konuların ORTALAMA tamamlanma yüzdesini
 // hesaplar (her konu 0/25/50/75/100 olabilir, tam bitmiş/bitmemiş değil).
@@ -6171,7 +6182,9 @@ function KonuHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, kon
     const mevcutYuzde = konuDegeriAl(mevcutDers, konu);
     // Zaten seçili olan yüzdeye tekrar basılırsa işareti kaldır (0'a döner)
     const yeniYuzde = mevcutYuzde === yuzde ? 0 : yuzde;
-    const yeniDers = { ...mevcutDers, [konu]: yeniYuzde };
+    // {yuzde, tarih} olarak saklanır — "O Gün Neler Girildi" özetinin bu
+    // güncellemeyi doğru tarihte gösterebilmesi için.
+    const yeniDers = { ...mevcutDers, [konu]: { yuzde: yeniYuzde, tarih: today() } };
     const yeni = { ...konuHaritasiVerisi, [ogrAnahtar]: { ...ogrVerisi, [anahtar]: yeniDers } };
     setKonuHaritasiVerisi(yeni);
     await saveKonuHaritasi(yeni);
@@ -8642,7 +8655,7 @@ function OgrenciYonetim({
   hazirlikNotlari, setHazirlikNotlari,
   ilerlemeNotlari, setIlerlemeNotlari,
   onRaporAc, setAktifOgrenci, aktifOgrenci, setTab, onSinifGuncelle, onOgrenciSil, onSinifSil, sinifListesi, sinavTuru, sevkler, testKayitlari, kademe,
-  bireyiTanima, setBireyiTanima, bdtAnaliz, setBdtAnaliz, sinavKaygisi, setSinavKaygisi
+  bireyiTanima, setBireyiTanima, bdtAnaliz, setBdtAnaliz, sinavKaygisi, setSinavKaygisi, konuHaritasiVerisi
 }) {
   const dersler = aktifDersler(sinavTuru);
 
@@ -8662,8 +8675,10 @@ function OgrenciYonetim({
   const [gdoDegeri, setGdoDegeri] = useState("");
   const [bireyiTanimaAcikKategori, setBireyiTanimaAcikKategori] = useState(null);
   const [bireyiTanimaMetni, setBireyiTanimaMetni] = useState("");
+  const [bireyiTanimaTarihi, setBireyiTanimaTarihi] = useState(today());
   const [bdtAcikKategori, setBdtAcikKategori] = useState(null);
   const [bdtMetni, setBdtMetni] = useState("");
+  const [bdtTarihi, setBdtTarihi] = useState(today());
   const [sinavKaygiAktifHafta, setSinavKaygiAktifHafta] = useState(1);
 
   // "Aktif öğrenci" başka bir sekmede seçilip buraya dönülürse, o öğrencinin
@@ -8770,9 +8785,9 @@ function OgrenciYonetim({
   // Bireyi Tanıma — tamamen manuel, AI çağrısı yok. Danışman istediği kategoriye
   // kısa bir madde ekliyor, silebiliyor. Sosyo-demografik/psikososyal bilgiler
   // için düşük maliyetli, tam kontrolü danışmanda bırakan bir not sistemi.
-  async function handleBireyiTanimaEkle(kategori, metin) {
+  async function handleBireyiTanimaEkle(kategori, metin, tarih) {
     if (!metin.trim() || !seciliOgrenci) return;
-    const yeni = { id: uid(), studentName: seciliOgrenci, className: seciliOgrenciSinif, numara: seciliOgrenciNumara, kategori, metin: metin.trim(), tarih: today() };
+    const yeni = { id: uid(), studentName: seciliOgrenci, className: seciliOgrenciSinif, numara: seciliOgrenciNumara, kategori, metin: metin.trim(), tarih: tarih || today() };
     const guncel = [yeni, ...(bireyiTanima||[])];
     setBireyiTanima(guncel);
     await saveBireyiTanima(guncel);
@@ -8787,9 +8802,9 @@ function OgrenciYonetim({
   // BDT — Bilişsel Çarpıtma Analizi: tamamen manuel de eklenebilir (AI çağrısı
   // yok), AI önerisi ise Görüşme Notu ekranındaki "AI Özetle" akışından gelir
   // (bkz. handleSummarize) — danışman onaylamadan hiçbir şey buraya düşmez.
-  async function handleBdtEkle(kategori, ifade) {
+  async function handleBdtEkle(kategori, ifade, tarih) {
     if (!ifade.trim() || !seciliOgrenci) return;
-    const yeni = { id: uid(), studentName: seciliOgrenci, className: seciliOgrenciSinif, numara: seciliOgrenciNumara, kategori, ifade: ifade.trim(), tarih: today() };
+    const yeni = { id: uid(), studentName: seciliOgrenci, className: seciliOgrenciSinif, numara: seciliOgrenciNumara, kategori, ifade: ifade.trim(), tarih: tarih || today() };
     const guncel = [yeni, ...(bdtAnaliz||[])];
     setBdtAnaliz(guncel);
     await saveBdtAnaliz(guncel);
@@ -9389,7 +9404,7 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
                       return (
                         <div key={r.id} style={{marginBottom:14,position:"relative"}}>
                           <div style={{position:"absolute",left:-16,top:4,width:10,height:10,borderRadius:"50%",background:isVeli?ORANGE:ACCENT,border:"2px solid #fff",boxShadow:"0 0 0 2px "+(isVeli?ORANGE:ACCENT)}}/>
-                          <RecordCard rec={r} onDelete={handleGorusmeSil} onUpdate={handleGorusmeGuncelle} bdtAnaliz={bdtAnaliz} setBdtAnaliz={setBdtAnaliz} />
+                          <RecordCard rec={r} onDelete={handleGorusmeSil} onUpdate={handleGorusmeGuncelle} bdtAnaliz={bdtAnaliz} setBdtAnaliz={setBdtAnaliz} bireyiTanima={bireyiTanima} riskListesi={riskListesi} denemeler={denemeler} konuHaritasiVerisi={konuHaritasiVerisi} />
                         </div>
                       );
                     })}
@@ -9544,18 +9559,24 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
                       </div>
                     ))}
                     {formAcik ? (
-                      <div style={{ display:"flex", gap:6, marginTop:6 }}>
-                        <input autoFocus value={bireyiTanimaMetni} onChange={e=>setBireyiTanimaMetni(e.target.value)}
-                          onKeyDown={e=>{ if(e.key==="Enter"){ handleBireyiTanimaEkle(kat.key, bireyiTanimaMetni); setBireyiTanimaMetni(""); } }}
-                          placeholder="Örn. 2 kardeşi var, babası çalışmıyor"
-                          style={{ flex:1, padding:"7px 10px", border:`1px solid ${BORDER}`, borderRadius:8, fontSize:12, boxSizing:"border-box" }} />
-                        <button onClick={()=>{ handleBireyiTanimaEkle(kat.key, bireyiTanimaMetni); setBireyiTanimaMetni(""); }} disabled={!bireyiTanimaMetni.trim()} style={{
-                          background:bireyiTanimaMetni.trim()?ACCENT:BORDER, color:bireyiTanimaMetni.trim()?"#fff":MUTED, border:"none", borderRadius:8, padding:"7px 12px", fontSize:12, fontWeight:700, cursor:"pointer"
-                        }}>Ekle</button>
-                        <button onClick={()=>{ setBireyiTanimaAcikKategori(null); setBireyiTanimaMetni(""); }} style={{ background:"none", border:`1px solid ${BORDER}`, color:MUTED, borderRadius:8, padding:"7px 10px", fontSize:12, cursor:"pointer" }}>✕</button>
+                      <div style={{ display:"flex", flexDirection:"column", gap:6, marginTop:6 }}>
+                        <div style={{ display:"flex", gap:6 }}>
+                          <input autoFocus value={bireyiTanimaMetni} onChange={e=>setBireyiTanimaMetni(e.target.value)}
+                            onKeyDown={e=>{ if(e.key==="Enter"){ handleBireyiTanimaEkle(kat.key, bireyiTanimaMetni, bireyiTanimaTarihi); setBireyiTanimaMetni(""); } }}
+                            placeholder="Örn. 2 kardeşi var, babası çalışmıyor"
+                            style={{ flex:1, padding:"7px 10px", border:`1px solid ${BORDER}`, borderRadius:8, fontSize:12, boxSizing:"border-box" }} />
+                          <input value={bireyiTanimaTarihi} onChange={e=>setBireyiTanimaTarihi(e.target.value)} placeholder="GG.AA.YYYY"
+                            style={{ width:90, padding:"7px 8px", border:`1px solid ${BORDER}`, borderRadius:8, fontSize:11, boxSizing:"border-box", flexShrink:0 }} />
+                        </div>
+                        <div style={{ display:"flex", gap:6 }}>
+                          <button onClick={()=>{ handleBireyiTanimaEkle(kat.key, bireyiTanimaMetni, bireyiTanimaTarihi); setBireyiTanimaMetni(""); }} disabled={!bireyiTanimaMetni.trim()} style={{
+                            flex:1, background:bireyiTanimaMetni.trim()?ACCENT:BORDER, color:bireyiTanimaMetni.trim()?"#fff":MUTED, border:"none", borderRadius:8, padding:"7px 12px", fontSize:12, fontWeight:700, cursor:"pointer"
+                          }}>Ekle</button>
+                          <button onClick={()=>{ setBireyiTanimaAcikKategori(null); setBireyiTanimaMetni(""); setBireyiTanimaTarihi(today()); }} style={{ background:"none", border:`1px solid ${BORDER}`, color:MUTED, borderRadius:8, padding:"7px 10px", fontSize:12, cursor:"pointer" }}>✕</button>
+                        </div>
                       </div>
                     ) : (
-                      <button onClick={()=>setBireyiTanimaAcikKategori(kat.key)} style={{
+                      <button onClick={()=>{ setBireyiTanimaAcikKategori(kat.key); setBireyiTanimaTarihi(today()); }} style={{
                         background:"none", border:`1px dashed ${ACCENT}`, color:ACCENT, borderRadius:8, padding:"5px 10px", fontSize:11, fontWeight:700, cursor:"pointer"
                       }}>+ Madde Ekle</button>
                     )}
@@ -9587,18 +9608,24 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
                       </div>
                     ))}
                     {formAcik ? (
-                      <div style={{ display:"flex", gap:6, marginTop:6 }}>
-                        <input autoFocus value={bdtMetni} onChange={e=>setBdtMetni(e.target.value)}
-                          onKeyDown={e=>{ if(e.key==="Enter"){ handleBdtEkle(kat.key, bdtMetni); setBdtMetni(""); } }}
-                          placeholder='Örn. "Kimse beni sevmiyor"'
-                          style={{ flex:1, padding:"7px 10px", border:`1px solid ${BORDER}`, borderRadius:8, fontSize:12, boxSizing:"border-box" }} />
-                        <button onClick={()=>{ handleBdtEkle(kat.key, bdtMetni); setBdtMetni(""); }} disabled={!bdtMetni.trim()} style={{
-                          background:bdtMetni.trim()?"#8E5B3C":BORDER, color:bdtMetni.trim()?"#fff":MUTED, border:"none", borderRadius:8, padding:"7px 12px", fontSize:12, fontWeight:700, cursor:"pointer"
-                        }}>Ekle</button>
-                        <button onClick={()=>{ setBdtAcikKategori(null); setBdtMetni(""); }} style={{ background:"none", border:`1px solid ${BORDER}`, color:MUTED, borderRadius:8, padding:"7px 10px", fontSize:12, cursor:"pointer" }}>✕</button>
+                      <div style={{ display:"flex", flexDirection:"column", gap:6, marginTop:6 }}>
+                        <div style={{ display:"flex", gap:6 }}>
+                          <input autoFocus value={bdtMetni} onChange={e=>setBdtMetni(e.target.value)}
+                            onKeyDown={e=>{ if(e.key==="Enter"){ handleBdtEkle(kat.key, bdtMetni, bdtTarihi); setBdtMetni(""); } }}
+                            placeholder='Örn. "Kimse beni sevmiyor"'
+                            style={{ flex:1, padding:"7px 10px", border:`1px solid ${BORDER}`, borderRadius:8, fontSize:12, boxSizing:"border-box" }} />
+                          <input value={bdtTarihi} onChange={e=>setBdtTarihi(e.target.value)} placeholder="GG.AA.YYYY"
+                            style={{ width:90, padding:"7px 8px", border:`1px solid ${BORDER}`, borderRadius:8, fontSize:11, boxSizing:"border-box", flexShrink:0 }} />
+                        </div>
+                        <div style={{ display:"flex", gap:6 }}>
+                          <button onClick={()=>{ handleBdtEkle(kat.key, bdtMetni, bdtTarihi); setBdtMetni(""); }} disabled={!bdtMetni.trim()} style={{
+                            flex:1, background:bdtMetni.trim()?"#8E5B3C":BORDER, color:bdtMetni.trim()?"#fff":MUTED, border:"none", borderRadius:8, padding:"7px 12px", fontSize:12, fontWeight:700, cursor:"pointer"
+                          }}>Ekle</button>
+                          <button onClick={()=>{ setBdtAcikKategori(null); setBdtMetni(""); setBdtTarihi(today()); }} style={{ background:"none", border:`1px solid ${BORDER}`, color:MUTED, borderRadius:8, padding:"7px 10px", fontSize:12, cursor:"pointer" }}>✕</button>
+                        </div>
                       </div>
                     ) : (
-                      <button onClick={()=>setBdtAcikKategori(kat.key)} style={{
+                      <button onClick={()=>{ setBdtAcikKategori(kat.key); setBdtTarihi(today()); }} style={{
                         background:"none", border:"1px dashed #8E5B3C", color:"#8E5B3C", borderRadius:8, padding:"5px 10px", fontSize:11, fontWeight:700, cursor:"pointer"
                       }}>+ İfade Ekle</button>
                     )}
@@ -10171,6 +10198,11 @@ function DenemeTabip({ denemeler, setDenemeler, kayitliListesi, aktifOgrenci, se
       const { _topluNet, ...dersNetleri } = mevcutNets || {};
       return { turkce: "", mat: "", fen: "", sosyal: "", ingilizce: "", din: "", ...dersNetleri };
     });
+    // Bu denemenin GERÇEKTE hangi tarihte girildiğini (o öğrenciyle hangi
+    // görüşmede ele alındığını) ayrı takip eder — "O Gün Neler Girildi"
+    // özetinin doğru çalışması için önemli. Var olan bir kaydı düzenlerken
+    // orijinal giriş tarihi korunur, ilk kayıtta bugüne varsayılır.
+    const [girisTarihi, setGirisTarihi] = useState(mevcutNets?.girisTarihi || today());
     const toplam = toplamNet(nets);
     return (
       <div style={{ background: CARD, border: `2px solid ${ACCENT}`, borderRadius: 12, padding: 14, marginBottom: 12 }}>
@@ -10200,9 +10232,14 @@ function DenemeTabip({ denemeler, setDenemeler, kayitliListesi, aktifOgrenci, se
           <span style={{ fontSize: 13, fontWeight: 700, color: ACCENT }}>Toplam Net</span>
           <span style={{ fontSize: 22, fontWeight: 900, color: ACCENT }}>{isNaN(toplam) ? "—" : toplam.toFixed(2)}</span>
         </div>
+        <div style={{ marginBottom: 10 }}>
+          <label style={{ fontSize: 10, fontWeight: 700, color: MUTED, display: "block", marginBottom: 3 }}>GİRİŞ TARİHİ (hangi görüşmede ele alındıysa)</label>
+          <input value={girisTarihi} onChange={e=>setGirisTarihi(e.target.value)} placeholder="GG.AA.YYYY"
+            style={{ width: "100%", padding: "7px 10px", border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12, boxSizing: "border-box" }} />
+        </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={onIptal} style={{ flex: 1, padding: "9px", background: CARD, color: MUTED, border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>İptal</button>
-          <button onClick={() => onKaydet(nets)} style={{ flex: 2, padding: "9px", background: ACCENT, color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 800, cursor: "pointer" }}>Kaydet</button>
+          <button onClick={() => onKaydet({ ...nets, girisTarihi })} style={{ flex: 2, padding: "9px", background: ACCENT, color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 800, cursor: "pointer" }}>Kaydet</button>
         </div>
       </div>
     );
@@ -12244,7 +12281,7 @@ function StatBar({ label, value, max, color = ACCENT }) {
   );
 }
 
-function RecordCard({ rec, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz }) {
+function RecordCard({ rec, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz, bireyiTanima, riskListesi, denemeler, konuHaritasiVerisi }) {
   const [open, setOpen] = useState(false);
   const [duzenle, setDuzenle] = useState(false);
   const [editForm, setEditForm] = useState({ summary: rec.summary, topic: rec.topic || "", raw: rec.raw || "" });
@@ -12345,6 +12382,39 @@ function RecordCard({ rec, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz }) {
               <div style={{ marginTop: 8, fontSize: 12, color: MUTED, background: BG, borderRadius: 8, padding: 10, lineHeight: 1.6 }}>{rec.raw}</div>
             </details>
           )}
+          {(() => {
+            // "O Gün Neler Girildi" — bu görüşmeyle AYNI tarihte (rec.date),
+            // aynı öğrenci için başka sekmelerden (BDT, Bireyi Tanıma, Risk,
+            // Deneme, Konu Haritası) girilmiş kayıtları tek bakışta gösterir.
+            // Görüşmeyi "o günün dosyası" gibi kullanmak isteyenler için —
+            // veri hâlâ ayrı listelerde tutulur, sadece tarihe göre bir araya
+            // toplanıp gösterilir.
+            const ayniGun = (item) => item.tarih === rec.date && pdrAyniOgrenci(item.studentName, item.className, rec.studentName, rec.className, item.numara, rec.numara);
+            const gunBdt = (bdtAnaliz||[]).filter(ayniGun);
+            const gunBireyiTanima = (bireyiTanima||[]).filter(ayniGun);
+            const gunRisk = (riskListesi||[]).filter(ayniGun);
+            const ogrDenemeler = pdrSozlukOku(denemeler, rec.studentName, rec.className, rec.numara) || {};
+            const gunDenemeler = Object.entries(ogrDenemeler).filter(([,nets]) => nets && nets.girisTarihi === rec.date);
+            const ogrKonuVerisi = (konuHaritasiVerisi && konuHaritasiVerisi[pdrOgrAnahtar(rec.studentName, rec.className, rec.numara)]) || {};
+            const gunKonuGuncellemeleri = [];
+            Object.entries(ogrKonuVerisi).forEach(([ders, konular]) => {
+              Object.entries(konular || {}).forEach(([konu, deger]) => {
+                if (deger && typeof deger === "object" && deger.tarih === rec.date) gunKonuGuncellemeleri.push({ ders, konu, yuzde: deger.yuzde });
+              });
+            });
+            const toplam = gunBdt.length + gunBireyiTanima.length + gunRisk.length + gunDenemeler.length + gunKonuGuncellemeleri.length;
+            if (toplam === 0) return null;
+            return (
+              <div style={{ background:"#F3EEFB", border:`1px solid ${PURPLE}`, borderRadius:10, padding:"10px 12px", marginBottom:12 }}>
+                <div style={{ fontSize:11, fontWeight:800, color:PURPLE, marginBottom:6 }}>📌 O Gün ({rec.date}) Ayrıca Girilenler</div>
+                {gunBdt.length > 0 && <div style={{ fontSize:11, color:TEXT, marginBottom:4, lineHeight:1.5 }}>🧠 BDT: {gunBdt.map(b=>`"${b.ifade}"`).join(", ")}</div>}
+                {gunBireyiTanima.length > 0 && <div style={{ fontSize:11, color:TEXT, marginBottom:4, lineHeight:1.5 }}>🔍 Bireyi Tanıma: {gunBireyiTanima.map(b=>b.metin).join(", ")}</div>}
+                {gunRisk.length > 0 && <div style={{ fontSize:11, color:TEXT, marginBottom:4, lineHeight:1.5 }}>⚠ Risk: {gunRisk.map(r=>r.riskTuru).join(", ")}</div>}
+                {gunDenemeler.length > 0 && <div style={{ fontSize:11, color:TEXT, marginBottom:4 }}>📊 Deneme Girişi: {gunDenemeler.map(([no])=>`Deneme ${no}`).join(", ")}</div>}
+                {gunKonuGuncellemeleri.length > 0 && <div style={{ fontSize:11, color:TEXT, lineHeight:1.5 }}>📚 Konu Haritası: {gunKonuGuncellemeleri.map(k=>`${k.konu} (%${k.yuzde})`).join(", ")}</div>}
+              </div>
+            );
+          })()}
           {kaydedildi && <div style={{ fontSize: 12, color: ACCENT, fontWeight: 700, marginBottom: 8 }}>✓ Güncellendi</div>}
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
             <button onClick={() => { setDuzenle(true); setOpen(true); }} style={{ background: ACCENT_LIGHT, border: "none", color: ACCENT, borderRadius: 8, padding: "4px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>✏ Düzenle</button>
@@ -13980,6 +14050,7 @@ export default function App() {
             setBdtAnaliz={setBdtAnaliz}
             sinavKaygisi={sinavKaygisi}
             setSinavKaygisi={setSinavKaygisi}
+            konuHaritasiVerisi={konuHaritasiVerisi}
             onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler }))}
             onSinifGuncelle={async (eskiAd, eskiSinif, eskiNumara, yeniAd, yeniSinif) => {
               const ayniMi = (ad, sinif, no) => pdrAyniOgrenci(eskiAd, eskiSinif, ad, sinif, eskiNumara, no);

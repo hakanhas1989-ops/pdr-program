@@ -3233,8 +3233,15 @@ function RaporModal({ rapor, onKapat }) {
               if (!kaygiVerisi) return null;
               const haftalar = Object.entries(kaygiVerisi.haftalar || {}).sort((a,b)=>a[0]-b[0]);
               const kaygiDuzeyleri = Object.entries(kaygiVerisi.kaygiDuzeyleri || {}).sort((a,b)=>a[0]-b[0]);
-              const belirtiGruplari = Object.entries(kaygiVerisi.belirtiler || {}).filter(([,l])=>l && l.length>0);
-              if (haftalar.length===0 && kaygiDuzeyleri.length===0 && belirtiGruplari.length===0) return null;
+              const belirtilerRaw = kaygiVerisi.belirtiler || {};
+              // Belirtiler artık haftaya göre ayrı tutuluyor: {1:{fiziksel:[],...}, 2:{...}}.
+              // Eski (hafta ayrımı olmayan, düz {fiziksel:[],...}) kayıtlarla da
+              // geriye dönük uyumlu — o durumda tek, haftasız bir satır gösterilir.
+              const haftaAnahtarlari = Object.keys(belirtilerRaw).filter(k => belirtilerRaw[k] && typeof belirtilerRaw[k] === "object" && !Array.isArray(belirtilerRaw[k]));
+              const belirtiSatirlari = haftaAnahtarlari.length > 0
+                ? haftaAnahtarlari.sort((a,b)=>a-b).map(h => ({ hafta: h, liste: Object.values(belirtilerRaw[h]).flat().filter(Boolean) })).filter(x => x.liste.length > 0)
+                : (() => { const tum = Object.values(belirtilerRaw).flat().filter(Boolean); return tum.length > 0 ? [{ hafta: null, liste: tum }] : []; })();
+              if (haftalar.length===0 && kaygiDuzeyleri.length===0 && belirtiSatirlari.length===0) return null;
               return (
                 <div style={{ marginTop:10, pageBreakInside:"avoid" }}>
                   <div style={{ ...S.bolumBaslik2 }}>Sınav Kaygısı Takibi</div>
@@ -3259,11 +3266,11 @@ function RaporModal({ rapor, onKapat }) {
                         </div>
                       </div>
                     )}
-                    {belirtiGruplari.length > 0 && (
+                    {belirtiSatirlari.length > 0 && (
                       <div>
                         <div style={{ fontSize:9, fontWeight:700, color:"#888", textTransform:"uppercase", marginBottom:3 }}>Gözlenen Belirtiler</div>
-                        {belirtiGruplari.map(([kat,liste]) => (
-                          <div key={kat} style={{ fontSize:10, color:"#555", marginBottom:2, lineHeight:1.5 }}>{liste.join(", ")}</div>
+                        {belirtiSatirlari.map(({hafta,liste}) => (
+                          <div key={hafta||"tek"} style={{ fontSize:10, color:"#555", marginBottom:2, lineHeight:1.5 }}>{hafta && <strong style={{color:"#333"}}>{hafta}. Hafta: </strong>}{liste.join(", ")}</div>
                         ))}
                       </div>
                     )}

@@ -1043,7 +1043,7 @@ function MudahaleKutuphanesiEkrani({ kayitliListesi, records, aktifOgrenci, setA
         body: JSON.stringify({
           model:"claude-sonnet-4-6", max_tokens:700,
           system:'Sen bir PDR uzmanısın. Görüşme notlarını okuyup, verilen bireysel müdahale programları kütüphanesinden öğrencinin ihtiyacına en uygun oturumu/oturumları seçersin. SADECE JSON formatında cevap verirsin.',
-          messages:[{role:"user", content:`Öğrenci: ${seciliAd}\n${gorusmeler}\n\nBİREYSEL MÜDAHALE PROGRAMLARI OTURUM KÜTÜPHANESİ:\n${havuzMetni}\n\nGörüşme temalarına EN UYGUN en fazla 3 oturum seç. SADECE şu JSON formatında cevap ver:\n[{"baslik": "Oturum Adı (listedeki gibi HARFİ HARFİNE aynı yaz)", "aciklama": "neden uygun olduğu, 1 kısa cümle"}]\nGerçekten uygun bir şey yoksa boş dizi [] döndür. Listede OLMAYAN bir oturum adı ASLA yazma — sadece verilen listeden birebir kopyala.`}]
+          messages:[{role:"user", content:`Öğrenci: ${pdrAnonimKimlik(seciliAd, seciliOgr?.className, seciliOgr?.numara)}\n${gorusmeler}\n\nBİREYSEL MÜDAHALE PROGRAMLARI OTURUM KÜTÜPHANESİ:\n${havuzMetni}\n\nGörüşme temalarına EN UYGUN en fazla 3 oturum seç. SADECE şu JSON formatında cevap ver:\n[{"baslik": "Oturum Adı (listedeki gibi HARFİ HARFİNE aynı yaz)", "aciklama": "neden uygun olduğu, 1 kısa cümle"}]\nGerçekten uygun bir şey yoksa boş dizi [] döndür. Listede OLMAYAN bir oturum adı ASLA yazma — sadece verilen listeden birebir kopyala.`}]
         })
       });
       const data = await res.json();
@@ -1725,7 +1725,7 @@ async function getRiskAnalizi(riskForm, gorusmeler, profil1, kutuphaneOzetleri =
     : "";
   const kutuphaneBaglam = pdrKutuphaneBaglam(kutuphaneOzetleri);
   const kademeMetni = kademeBaglamMetni(kademe);
-  const prompt = `Öğrenci: ${riskForm.studentName} (${riskForm.className})
+  const prompt = `Öğrenci: ${pdrAnonimKimlik(riskForm.studentName, riskForm.className, riskForm.numara)}
 Risk Türü: ${riskForm.riskTuru}
 Öncelik: ${riskForm.oncelik}
 Açıklama: ${riskForm.aciklama}
@@ -1972,7 +1972,7 @@ async function getProfileAnalysis(studentName, className, scores, notes, kutupha
     ? "\n\nKÜTÜPHANE REFERANSLARI:\n" + kutuphaneOzetleri.map((k, i) => `[${i+1}] ${k.baslik}:\n${k.ozet}`).join("\n\n")
     : "";
   const onerilerNot = kutuphaneOzetleri.length > 0 ? ", kütüphane referanslarından yararlan" : "";
-  const prompt = `Öğrenci: ${studentName}, Sınıf: ${className}
+  const prompt = `Öğrenci: ${pdrAnonimKimlik(studentName, className)}
 Rehberlik Profil Puanları (1-5): ${boyutlar}
 ${notes ? `Ek notlar: ${notes}` : ""}${kutuphaneBaglam}
 
@@ -2425,7 +2425,7 @@ BOYUT-TEORİ EŞLEŞTİRMESİ:
 MEB OKUL REHBERLİK ÇERÇEVESİ: Bireysel farkındalık, sosyal-duygusal öğrenme, akademik gelişim, kariyer gelişimi, aile-çevre ilişkileri kazanımları.
 
 Analiz yaparken: Her boyutu ilgili teorik çerçeveden yorumla, hangi teoriden baktığını belirt, MEB kazanımlarına atıfta bulun, pratik ve uygulanabilir öneriler ver. Markdown veya JSON kullanma.`,
-      messages: [{ role: "user", content: `Öğrenci: ${studentName}${className ? `, Sınıf: ${className}` : ""}\nPuan Özeti: ${puanOzet}\n\n${boyutMetni}\n\nBu öğrencinin PDR analizini şu yapıda yaz:\nGENEL DEĞERLENDİRME: (öğrencinin genel profilini teorik perspektiften 2-3 cümle)\nGÜÇLÜ YÖNLER: (hangi teoriye göre güçlü olduğunu belirt)\nGELİŞİM ALANLARI: (hangi teorik çerçeveden müdahale önerilebileceğini belirt)\nÖNERİLER: (teorik temelli 3 somut öneri, kaynağını belirt)\nRİSK NOTU: (varsa teorik dayanaklı risk değerlendirmesi)` }],
+      messages: [{ role: "user", content: `Öğrenci: ${pdrAnonimKimlik(studentName, className)}\nPuan Özeti: ${puanOzet}\n\n${boyutMetni}\n\nBu öğrencinin PDR analizini şu yapıda yaz:\nGENEL DEĞERLENDİRME: (öğrencinin genel profilini teorik perspektiften 2-3 cümle)\nGÜÇLÜ YÖNLER: (hangi teoriye göre güçlü olduğunu belirt)\nGELİŞİM ALANLARI: (hangi teorik çerçeveden müdahale önerilebileceğini belirt)\nÖNERİLER: (teorik temelli 3 somut öneri, kaynağını belirt)\nRİSK NOTU: (varsa teorik dayanaklı risk değerlendirmesi)` }],
     }),
   });
   const data = await res.json();
@@ -2918,6 +2918,22 @@ function pdrOgrAnahtar(name, className, numara) {
   const no = (numara || "").toString().trim();
   if (c && no) return n + " || " + c + " || " + no;
   return c ? n + " || " + c : n;
+}
+// AI'ya (Anthropic'in sunucularına) gönderilen istemlerde öğrencinin tam
+// ad-soyadı yerine kullanılır — "Ali Veli" -> "Ali V. (8-A, No:12)". Soyadı
+// birden fazla kelimeden oluşan öğrencilerde (örn. "Ali Kemal Öztürk") İLK
+// kelimeden SONRAKİ TÜM kelimelerin baş harfi alınır, hiçbiri sessizce
+// kaybolmaz — "Ali Kemal Öztürk" -> "Ali K.Ö.". Tam bir mahremiyet garantisi
+// DEĞİLDİR (görüşme içeriği yine gidiyor, sadece doğrudan ad-soyad eşleşmesi
+// engellenir) ama en azından AI sağlayıcısının kayıtlarında öğrencinin tam
+// kimliği doğrudan geçmez.
+function pdrAnonimKimlik(adSoyad, sinif, numara) {
+  const parcalar = (adSoyad || "").trim().split(/\s+/).filter(Boolean);
+  const ad = parcalar[0] || "";
+  const soyadBaslari = parcalar.slice(1).map(k => k[0] + ".").join("");
+  const kimlik = [ad, soyadBaslari].filter(Boolean).join(" ");
+  const sinifNo = [sinif, numara ? `No:${numara}` : ""].filter(Boolean).join(", ");
+  return sinifNo ? `${kimlik} (${sinifNo})` : kimlik;
 }
 function pdrSozlukOku(sozluk, name, className, numara) {
   if (!sozluk) return undefined;
@@ -5376,7 +5392,7 @@ function MudahalePlanEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, mud
       body: JSON.stringify({
         model:"claude-sonnet-4-6", max_tokens:1500,
         system:"Sen Dr. Ayse Kara'sin — 20 yillik klinik PDR uzmanisin. BDT ve varoluşçu perspektiften somut müdahale plani olusturursun.",
-        messages:[{role:"user", content:`Öğrenci: ${seciliAd}
+        messages:[{role:"user", content:`Öğrenci: ${pdrAnonimKimlik(seciliAd, seciliSinif, kayitliListesi.find(o => o.name === seciliAd)?.numara)}
 ${kademeMetni}
 
 Görüşme Notları:
@@ -6872,7 +6888,7 @@ KURALLAR:
     setTekrarListesi(null);
     try {
       const ozet = konuOzetiOlustur();
-      const prompt = `Öğrenci: ${seciliAd}
+      const prompt = `Öğrenci: ${pdrAnonimKimlik(seciliAd, seciliSinif, seciliNumara)}
 Sınav: ${sinavBaglami.sinavAdi}
 
 Aşağıda, bu öğrencinin şimdiye kadar yüklenen TÜM deneme sonuç belgelerinden derlenmiş, ders ve kazanım bazında bir özet var. Her satır: ders, kazanım, kaç denemede bu kazanımdan soru geldi, kaç tanesinde yanlış yapıldı, en son hangi denemede kaçta kaç alındı.
@@ -7724,7 +7740,7 @@ function OzetKarti({ ogrenci, ogrenciSinif, ogrRec, ogrP1, ogrP2, ogrRisk, denem
         body: JSON.stringify({
           model:"claude-sonnet-4-6", max_tokens:600,
           system:'Sen bir PDR uzmanısın. Görüşme notlarını okuyup, verilen sınıf rehberlik etkinlikleri kütüphanesinden öğrencinin ihtiyacına en uygun etkinlikleri seçersin. SADECE JSON formatında cevap verirsin, başka hiçbir metin yazmazsın.',
-          messages:[{role:"user", content:`Öğrenci: ${ogrenci}\n${gorusmeler}\n\nSINIF REHBERLİK ETKİNLİKLERİ KÜTÜPHANESİ:\n${etkinlikMetni}\n\nYukarıdaki kütüphanedeki HER BİR sınıf düzeyi için, o düzeyden görüşme temalarına EN UYGUN TEK bir etkinlik seç. SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:\n[{"sinif": 6, "etkinlik": "Etkinlik Adı (listedeki gibi HARFİ HARFİNE aynı yaz)", "aciklama": "neden uygun olduğu, 1 kısa cümle"}]\nBir sınıf düzeyinde gerçekten uygun etkinlik yoksa o düzeyi listeye HİÇ ekleme. Hiçbirinde uygun yoksa boş dizi [] döndür. Listede OLMAYAN bir etkinlik adı ASLA yazma — sadece verilen listeden birebir kopyala.`}]
+          messages:[{role:"user", content:`Öğrenci: ${pdrAnonimKimlik(ogrenci, ogrenciSinif)}\n${gorusmeler}\n\nSINIF REHBERLİK ETKİNLİKLERİ KÜTÜPHANESİ:\n${etkinlikMetni}\n\nYukarıdaki kütüphanedeki HER BİR sınıf düzeyi için, o düzeyden görüşme temalarına EN UYGUN TEK bir etkinlik seç. SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:\n[{"sinif": 6, "etkinlik": "Etkinlik Adı (listedeki gibi HARFİ HARFİNE aynı yaz)", "aciklama": "neden uygun olduğu, 1 kısa cümle"}]\nBir sınıf düzeyinde gerçekten uygun etkinlik yoksa o düzeyi listeye HİÇ ekleme. Hiçbirinde uygun yoksa boş dizi [] döndür. Listede OLMAYAN bir etkinlik adı ASLA yazma — sadece verilen listeden birebir kopyala.`}]
         })
       });
       const data = await res.json();
@@ -7809,7 +7825,7 @@ function OzetKarti({ ogrenci, ogrenciSinif, ogrRec, ogrP1, ogrP2, ogrRisk, denem
       body: JSON.stringify({
         model:"claude-sonnet-4-6", max_tokens:1200,
         system:"Sen Dr. Ayse Kara'sin — 20 yillik klinik PDR uzmanisin. Danismana bir sonraki seans icin pratik hazirlik notu yazarsın.",
-        messages:[{role:"user", content:`Öğrenci: ${ogrenci}
+        messages:[{role:"user", content:`Öğrenci: ${pdrAnonimKimlik(ogrenci, ogrenciSinif)}
 ${gorusmeler}
 ${mudahaleBolum}
 ${risk}
@@ -8315,7 +8331,7 @@ function IlerlemeYazisi({ ogrenci, ogrenciSinif, ogrRec, ogrP1, denemeGirilen, i
       body: JSON.stringify({
         model:"claude-sonnet-4-6", max_tokens:2000,
         system:"Sen Dr. Ayse Kara'sin — 20 yillik klinik PDR uzmanisin. BDT, baglanma teorisi ve varoluşçu perspektiften seans süreci değerlendirmesi yazarsın. Gelişmeleri somut ve destekleyici dille aktarırsın.",
-        messages:[{role:"user", content:`Öğrenci: ${ogrenci}
+        messages:[{role:"user", content:`Öğrenci: ${pdrAnonimKimlik(ogrenci, ogrenciSinif)}
 
 SEANS GEÇMİŞİ (kronolojik):
 ${seanslar}
@@ -8713,7 +8729,7 @@ function ProfCevapAlani({ konusmaId, seciliAd, oncekiVeri, profNotlari, setProfN
       body: JSON.stringify({
         model:"claude-sonnet-4-6", max_tokens:3000,
         system: PROF_HAKAN,
-        messages:[{role:"user", content:`Öğrenci: ${seciliAd}
+        messages:[{role:"user", content:`Öğrenci: ${pdrAnonimKimlik(seciliAd)}
 
 Önceki değerlendirmem ve sorularım:
 ${oncekiVeri}

@@ -1072,7 +1072,7 @@ function MudahaleKutuphanesiEkrani({ kayitliListesi, records, aktifOgrenci, setA
 
   return (
     <div style={{ padding: 16, maxWidth: 640 }}>
-      <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 4, color:PURPLE }}>📁 Müdahale Programları Kütüphanesi</div>
+      <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 4, color:PURPLE }}>📁 Müdahale Programları</div>
       <div style={{ fontSize: 12, color: MUTED, marginBottom: 16, lineHeight: 1.5 }}>
         4 kaynak programdan (Akademik Beceriler, Akran Zorbalığı Yapan/Maruz Kalan, Sosyal Duygusal Beceriler) toplam {havuz.length} oturum. Anahtar kelime ara ya da bir öğrenci seçip AI'ın görüşme notlarına göre önermesini iste — her iki yolda da sonuca tıklayınca PDF'in ilgili sayfası açılır.
       </div>
@@ -3032,8 +3032,8 @@ async function raporIndir(elementId, dosyaAdi) {
 
 
 // ── PDF Rapor Verisi ─────────────────────────────────────────────────────────
-function raporVerisiOlustur({ ogrenci, ogrenciSinif, profil1, profil2, gorusmeler, denemeler, mudahalePlan, riskListesi, sinavTuru, testKayitlari, kaynastirma, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler }) {
-  return { ogrenci, ogrenciSinif, profil1, profil2, gorusmeler, denemeler: denemeler || {}, mudahalePlan: mudahalePlan || {}, riskListesi: riskListesi || [], sinavTuru, testKayitlari: testKayitlari || [], kaynastirma: kaynastirma || [], bireyiTanima: bireyiTanima || [], bdtAnaliz: bdtAnaliz || [], sinavKaygisi: sinavKaygisi || {}, ogrenciler: ogrenciler || [], tarih: new Date().toLocaleDateString("tr-TR") };
+function raporVerisiOlustur({ ogrenci, ogrenciSinif, profil1, profil2, gorusmeler, denemeler, mudahalePlan, riskListesi, sinavTuru, testKayitlari, kaynastirma, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler }) {
+  return { ogrenci, ogrenciSinif, profil1, profil2, gorusmeler, denemeler: denemeler || {}, mudahalePlan: mudahalePlan || {}, riskListesi: riskListesi || [], sinavTuru, testKayitlari: testKayitlari || [], kaynastirma: kaynastirma || [], bireyiTanima: bireyiTanima || [], bdtAnaliz: bdtAnaliz || [], sinavKaygisi: sinavKaygisi || {}, ogrenciler: ogrenciler || [], oogDegerlendirmeler: oogDegerlendirmeler || [], tarih: new Date().toLocaleDateString("tr-TR") };
 }
 
 // ── PDF Rapor Bileşeni ────────────────────────────────────────────────────────
@@ -3222,6 +3222,31 @@ function RaporModal({ rapor, onKapat }) {
                         </div>
                       );
                     })}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* ÖÖG (Özel Öğrenme Güçlüğü) Ön-Tarama — bu bir tarama aracıdır,
+                tanı koymaz; sadece doldurulmuşsa gösterilir. */}
+            {(() => {
+              const oogKayit = (rapor.oogDegerlendirmeler||[]).find(o => pdrAyniOgrenci(o.studentName, o.className, ogrenci, ogrenciSinif));
+              if (!oogKayit || !oogKayit.cevaplar || Object.keys(oogKayit.cevaplar).length === 0) return null;
+              const sonuc = oogSonucHesapla(oogKayit.cevaplar);
+              return (
+                <div style={{ marginTop:10, pageBreakInside:"avoid" }}>
+                  <div style={{ ...S.bolumBaslik2 }}>ÖÖG Ön-Tarama (Tanı Değil — Yalnızca Tarama)</div>
+                  <div style={S.bolumIcerik2}>
+                    <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+                      <span style={{ fontSize:16, fontWeight:900, color:sonuc.seviye.color }}>%{sonuc.yuzde}</span>
+                      <span style={{ fontSize:10.5, fontWeight:700, color:sonuc.seviye.color, background:sonuc.seviye.bg, borderRadius:8, padding:"2px 8px" }}>{sonuc.seviye.label}</span>
+                      <span style={{ fontSize:9, color:"#888" }}>({oogKayit.date})</span>
+                    </div>
+                    <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                      {OOG_KATEGORILER.filter(k => sonuc.kategoriPuan[k.key] !== null && sonuc.kategoriPuan[k.key] !== undefined).map(k => (
+                        <span key={k.key} style={{ fontSize:9.5, background:"#f5f5f5", borderRadius:4, padding:"2px 7px" }}>{k.label}: %{sonuc.kategoriPuan[k.key]}</span>
+                      ))}
+                    </div>
                   </div>
                 </div>
               );
@@ -5347,7 +5372,7 @@ ${kademe ? "Planı öğrencinin yaş/gelişim dönemine uygun şekilde oluştur.
         <button onClick={()=>setTab("mudahale_kutuphane")} style={{
           width:"100%", padding:"10px", marginBottom:14, background:PURPLE, color:"#fff",
           border:"none", borderRadius:10, fontSize:13, fontWeight:800, cursor:"pointer"
-        }}>📁 Müdahale Programları Kütüphanesine Git</button>
+        }}>📁 Müdahale Programlarına Git</button>
       )}
 
       {/* Öğrenci seç */}
@@ -13079,7 +13104,7 @@ const SEMA_DALLARI = [
     aciklama: "Referans kütüphanesi, müdahale programları ve süpervizyon desteği.",
     yapraklar: [
       { tab: "kutuphane", label: "📚 Kütüphane" },
-      { tab: "mudahale_kutuphane", label: "📁 Müdahale Kütüphanesi" },
+      { tab: "mudahale_kutuphane", label: "📁 Müdahale Programları" },
       { tab: "prof_danisma", label: "🎓 Prof. Hakan" },
     ] },
   { key: "sistem", label: "⚙️ Sistem", renk: MUTED,
@@ -13659,7 +13684,7 @@ export default function App() {
         const parse = d => { const [g, ay, y] = (d||"").split("."); return new Date(`${y}-${ay}-${g}`); };
         return parse(a.date) - parse(b.date);
       });
-    setRaporVerisi(raporVerisiOlustur({ ogrenci: ogrenciAdi, ogrenciSinif: profil1.className, profil1, profil2, gorusmeler, denemeler: pdrSozlukOku(denemeler, ogrenciAdi, profil1.className, profil1.numara) || {}, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler }));
+    setRaporVerisi(raporVerisiOlustur({ ogrenci: ogrenciAdi, ogrenciSinif: profil1.className, profil1, profil2, gorusmeler, denemeler: pdrSozlukOku(denemeler, ogrenciAdi, profil1.className, profil1.numara) || {}, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler }));
   }
 
   async function handleProf2Analiz() {
@@ -13844,6 +13869,7 @@ export default function App() {
     { key: "yeni", label: "📝 Görüşme Notu" },
     { key: "profil_merkez", label: "📋 Profil" },
     { key: "mudahale", label: "🎯 Müdahale" },
+    { key: "mudahale_kutuphane", label: "📁 Müdahale Programları" },
     { key: "sinif_profili", label: "🏫 Sınıf" },
     { key: "devamsizlik", label: "📅 Devamsızlık" },
     { key: "risk", label: "⚠ Risk" },
@@ -13855,7 +13881,6 @@ export default function App() {
     { key: "gorusme_takvimi", label: "📅 Takvim" },
     { key: "belgeler", label: "📑 Belgeler" },
     { key: "kutuphane", label: "📚 Kütüphane" },
-    { key: "mudahale_kutuphane", label: "📁 Müdahale Kütüphanesi" },
     { key: "kazanimlar", label: "📘 Kazanımlar" },
     { key: "istatistik", label: "İstatistik" },
     { key: "prof_danisma", label: "🎓 Prof. Hakan" },
@@ -14246,7 +14271,7 @@ export default function App() {
             records={records}
             kutuphane={kutuphane}
             sinavTuru={sinavTuru}
-            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler }))}
+            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler }))}
             onDegerlendirmeAc={() => setDegerlendirmeAcik(true)}
           />
         )}
@@ -14411,7 +14436,7 @@ export default function App() {
             sinavKaygisi={sinavKaygisi}
             setSinavKaygisi={setSinavKaygisi}
             konuHaritasiVerisi={konuHaritasiVerisi}
-            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler }))}
+            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler }))}
             onSinifGuncelle={async (eskiAd, eskiSinif, eskiNumara, yeniAd, yeniSinif) => {
               const ayniMi = (ad, sinif, no) => pdrAyniOgrenci(eskiAd, eskiSinif, ad, sinif, eskiNumara, no);
 
@@ -14619,7 +14644,7 @@ export default function App() {
             setAktifOgrenci={setAktifOgrenci}
             profiles={profiles}
             profiles2={profiles2}
-            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler }))}
+            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler }))}
           />
         )}
 

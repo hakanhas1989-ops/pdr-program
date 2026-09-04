@@ -1,4 +1,22 @@
-const CACHE_NAME = "pdr-v9";
+const CACHE_NAME = "pdr-v10"; (FCM) — uygulama kapalıyken/arka plandayken gelen
+// bildirimleri göstermek için Firebase Messaging bu service worker
+// içinde de başlatılıyor. Ana firebaseConfig ile birebir aynı olmalı.
+importScripts("https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js");
+importScripts("https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js");
+firebase.initializeApp({
+  apiKey: "AIzaSyATC969KGtY_xhL-UG1fVI0sRVSY2_2o54",
+  authDomain: "pdr-program.firebaseapp.com",
+  projectId: "pdr-program",
+  storageBucket: "pdr-program.firebasestorage.app",
+  messagingSenderId: "199087746443",
+  appId: "1:199087746443:web:f6163f46d719adce05138e",
+});
+const pdrSwMessaging = firebase.messaging();
+pdrSwMessaging.onBackgroundMessage((payload) => {
+  const baslik = (payload.notification && payload.notification.title) || "PDR Servisi";
+  const govde = (payload.notification && payload.notification.body) || "";
+  self.registration.showNotification(baslik, { body: govde, icon: "./icon.png" });
+});
 
 const CACHE_URLS = [
   "./manifest.json",

@@ -14588,12 +14588,27 @@ export default function App() {
               const kalanOog = oogDegerlendirmeler.filter(o => !silinecekMi(o.studentName, o.className, o.numara));
               setOogDegerlendirmeler(kalanOog); await saveOogDegerlendirmeler(kalanOog);
 
+              // Öğrenci silmede zaten temizlenen ama yıl silmede unutulmuş
+              // diziler: hatırlatmalar, net haritası, bireyi tanıma, BDT analiz.
+              const kalanHatirlatmalar = (hatirlatmalar||[]).filter(h => !silinecekMi(h.studentName, h.className, h.numara));
+              setHatirlatmalar(kalanHatirlatmalar); await saveHatirlatmalar(kalanHatirlatmalar);
+
+              const kalanNetHaritasi = (netHaritasiKayitlari||[]).filter(k => !silinecekMi(k.studentName, k.className, k.numara));
+              setNetHaritasiKayitlari(kalanNetHaritasi); await saveNetHaritasi(kalanNetHaritasi);
+
+              const kalanBireyiTanima = (bireyiTanima||[]).filter(b => !silinecekMi(b.studentName, b.className, b.numara));
+              setBireyiTanima(kalanBireyiTanima); await saveBireyiTanima(kalanBireyiTanima);
+
+              const kalanBdtAnaliz = (bdtAnaliz||[]).filter(b => !silinecekMi(b.studentName, b.className, b.numara));
+              setBdtAnaliz(kalanBdtAnaliz); await saveBdtAnaliz(kalanBdtAnaliz);
+
               // İsimle anahtarlanan sözlükler (deneme, müdahale planı, hazırlık/ilerleme notları,
-              // Prof. Dr. Hakan süpervizyon notları): silinen her öğrencinin hem yeni (isim+sınıf)
-              // hem eski (düz isim) anahtarını temizle
+              // Prof. Dr. Hakan süpervizyon notları): silinen her öğrencinin hem numaralı,
+              // hem yeni (isim+sınıf) hem eski (düz isim) anahtarını temizle
               function pdrSozlukTemizle(sozluk) {
                 const yeni = { ...sozluk };
                 silinecekler.forEach(o => {
+                  delete yeni[pdrOgrAnahtar(o.studentName, o.className, o.numara)];
                   delete yeni[pdrOgrAnahtar(o.studentName, o.className)];
                   delete yeni[o.studentName];
                 });
@@ -14613,6 +14628,15 @@ export default function App() {
 
               const kalanProfNotlari = pdrSozlukTemizle(profNotlari);
               setProfNotlari(kalanProfNotlari); await saveProfNotlari(kalanProfNotlari);
+
+              const kalanTestKayitlari = pdrSozlukTemizle(testKayitlari);
+              setTestKayitlari(kalanTestKayitlari); await saveTestKayitlari(kalanTestKayitlari);
+
+              const kalanKonuHaritasi = pdrSozlukTemizle(konuHaritasiVerisi);
+              setKonuHaritasiVerisi(kalanKonuHaritasi); await saveKonuHaritasi(kalanKonuHaritasi);
+
+              const kalanSinavKaygisi = pdrSozlukTemizle(sinavKaygisi);
+              setSinavKaygisi(kalanSinavKaygisi); await saveSinavKaygisi(kalanSinavKaygisi);
             }}
             onYilSifirla={async (yil) => {
               // Yılı yıllar listesinden ÇIKARMADAN, sadece o yıla ait öğrenci ve ilişkili
@@ -14643,9 +14667,22 @@ export default function App() {
               const kalanOog = oogDegerlendirmeler.filter(o => !silinecekMi(o.studentName, o.className, o.numara));
               setOogDegerlendirmeler(kalanOog); await saveOogDegerlendirmeler(kalanOog);
 
+              const kalanHatirlatmalar2 = (hatirlatmalar||[]).filter(h => !silinecekMi(h.studentName, h.className, h.numara));
+              setHatirlatmalar(kalanHatirlatmalar2); await saveHatirlatmalar(kalanHatirlatmalar2);
+
+              const kalanNetHaritasi2 = (netHaritasiKayitlari||[]).filter(k => !silinecekMi(k.studentName, k.className, k.numara));
+              setNetHaritasiKayitlari(kalanNetHaritasi2); await saveNetHaritasi(kalanNetHaritasi2);
+
+              const kalanBireyiTanima2 = (bireyiTanima||[]).filter(b => !silinecekMi(b.studentName, b.className, b.numara));
+              setBireyiTanima(kalanBireyiTanima2); await saveBireyiTanima(kalanBireyiTanima2);
+
+              const kalanBdtAnaliz2 = (bdtAnaliz||[]).filter(b => !silinecekMi(b.studentName, b.className, b.numara));
+              setBdtAnaliz(kalanBdtAnaliz2); await saveBdtAnaliz(kalanBdtAnaliz2);
+
               function pdrSozlukTemizleSifirla(sozluk) {
                 const yeni = { ...sozluk };
                 silinecekler.forEach(o => {
+                  delete yeni[pdrOgrAnahtar(o.studentName, o.className, o.numara)];
                   delete yeni[pdrOgrAnahtar(o.studentName, o.className)];
                   delete yeni[o.studentName];
                 });
@@ -14665,6 +14702,15 @@ export default function App() {
 
               const kalanProfNotlari2 = pdrSozlukTemizleSifirla(profNotlari);
               setProfNotlari(kalanProfNotlari2); await saveProfNotlari(kalanProfNotlari2);
+
+              const kalanTestKayitlari2 = pdrSozlukTemizleSifirla(testKayitlari);
+              setTestKayitlari(kalanTestKayitlari2); await saveTestKayitlari(kalanTestKayitlari2);
+
+              const kalanKonuHaritasi2 = pdrSozlukTemizleSifirla(konuHaritasiVerisi);
+              setKonuHaritasiVerisi(kalanKonuHaritasi2); await saveKonuHaritasi(kalanKonuHaritasi2);
+
+              const kalanSinavKaygisi2 = pdrSozlukTemizleSifirla(sinavKaygisi);
+              setSinavKaygisi(kalanSinavKaygisi2); await saveSinavKaygisi(kalanSinavKaygisi2);
             }}
           />
         )}
@@ -14802,6 +14848,15 @@ export default function App() {
               const updOog = oogDegerlendirmeler.filter(o => !silinecekMi(o.studentName, o.className, o.numara));
               setOogDegerlendirmeler(updOog); await saveOogDegerlendirmeler(updOog);
 
+              // Bireyi Tanıma notları ve BDT (bilişsel davranışçı terapi) analiz
+              // maddeleri de öğrenciye özel diziler — daha önce silme işleminde
+              // unutulmuştu, artık temizleniyor.
+              const updBireyiTanima = (bireyiTanima||[]).filter(b => !silinecekMi(b.studentName, b.className, b.numara));
+              setBireyiTanima(updBireyiTanima); await saveBireyiTanima(updBireyiTanima);
+
+              const updBdtAnaliz = (bdtAnaliz||[]).filter(b => !silinecekMi(b.studentName, b.className, b.numara));
+              setBdtAnaliz(updBdtAnaliz); await saveBdtAnaliz(updBdtAnaliz);
+
               // İsimle anahtarlanan sözlükler: silinen öğrencinin hem numaralı, hem
               // isim+sınıf, hem eski düz-isim anahtarını temizle
               function pdrSozlukOgrenciTemizle(sozluk) {
@@ -14825,6 +14880,18 @@ export default function App() {
 
               const updProfNotlari = pdrSozlukOgrenciTemizle(profNotlari);
               setProfNotlari(updProfNotlari); await saveProfNotlari(updProfNotlari);
+
+              // Testler, Konu Haritası ve Sınav Kaygısı da aynı sözlük deseniyle
+              // (isim||sınıf||numara anahtarlı) tutuluyor — bunlar da daha önce
+              // silme kapsamına dahil değildi.
+              const updTestKayitlari = pdrSozlukOgrenciTemizle(testKayitlari);
+              setTestKayitlari(updTestKayitlari); await saveTestKayitlari(updTestKayitlari);
+
+              const updKonuHaritasi = pdrSozlukOgrenciTemizle(konuHaritasiVerisi);
+              setKonuHaritasiVerisi(updKonuHaritasi); await saveKonuHaritasi(updKonuHaritasi);
+
+              const updSinavKaygisi = pdrSozlukOgrenciTemizle(sinavKaygisi);
+              setSinavKaygisi(updSinavKaygisi); await saveSinavKaygisi(updSinavKaygisi);
             }}
             onSinifSil={handleSinifSilTumVeri}
             setAktifOgrenci={setAktifOgrenci}

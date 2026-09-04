@@ -73,6 +73,7 @@ setTimeout(function() {
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; overflow-x: hidden; }
@@ -485,6 +486,40 @@ firebase.initializeApp(firebaseConfig);
 const pdrAuth = firebase.auth();
 const pdrDb = firebase.firestore();
 
+// Push bildirimi (FCM) — Hatırlatıcı'nın uygulama kapalıyken de bildirim
+// gönderebilmesi için. Cloudflare Worker günde iki kez (08:00 ve 16:00,
+// Türkiye saati) o gün için hatırlatması olan kullanıcılara bu token'lar
+// üzerinden bildirim gönderiyor. Tarayıcı desteklemiyorsa (bazı eski
+// tarayıcılar/uygulama içi WebView'ler) sessizce atlanır.
+const PDR_VAPID_KEY = "BBzInDWXbMjKBSJOWdp6hBVlEc0pScRN_a593ZQpNVXa2WQHnKP5BVStaOPSdAGZP_WSAfvNQNNvSCfXqOXUo9g";
+async function pdrBildirimTokenKaydet(uid) {
+  try {
+    if (!("Notification" in window) || !firebase.messaging || !(await firebase.messaging.isSupported())) return;
+    // Kullanıcı daha önce "engelle" demişse tekrar tekrar sormuyoruz —
+    // tarayıcı zaten izin istemini bir daha göstermez (permission "denied"
+    // kalır), burada sadece gereksiz işlemi atlıyoruz.
+    if (Notification.permission === "denied") return;
+    const izin = await Notification.requestPermission();
+    if (izin !== "granted") return;
+    const reg = await navigator.serviceWorker.getRegistration("sw.js") || await navigator.serviceWorker.register("sw.js");
+    const messaging = firebase.messaging();
+    const token = await messaging.getToken({ vapidKey: PDR_VAPID_KEY, serviceWorkerRegistration: reg });
+    if (!token) return;
+    // Mevcut token listesine ekle (aynı cihaz tekrar token üretirse tekrar
+    // eklenmesin diye dedup edilir; birden fazla cihaz/tarayıcıdan giriş
+    // yapılabildiği için tek bir token değil, dizi olarak tutuluyor).
+    const mevcutStr = await pdrFirestoreOku(uid, "fcmTokens");
+    let mevcut = [];
+    try { mevcut = mevcutStr ? JSON.parse(mevcutStr) : []; } catch (e) { mevcut = []; }
+    if (!mevcut.includes(token)) {
+      mevcut.push(token);
+      await pdrFirestoreYaz(uid, "fcmTokens", JSON.stringify(mevcut));
+    }
+  } catch (e) {
+    console.log("Bildirim token kaydı atlandı:", e.message);
+  }
+}
+
 let pdrResolveReady;
 window.__pdrAuthReady = new Promise((res) => { pdrResolveReady = res; });
 
@@ -686,6 +721,10 @@ pdrAuth.onAuthStateChanged(async (user) => {
     // planda tekrar denenmeye devam edebilir.
     await pdrZamanAsimliBekle(pdrSyncDown(user.uid), 8000);
     if (pdrFirstReady) { pdrFirstReady = false; pdrResolveReady(user); }
+    // Bildirim izni/token kaydı arka planda, uygulamanın açılışını
+    // beklemeden yapılır — kullanıcı hiç izin vermezse ya da tarayıcı
+    // desteklemezse sessizce atlanır, hiçbir şeyi bloklamaz.
+    pdrBildirimTokenKaydet(user.uid);
   } else {
     if (splashEl) splashEl.className = "hide";
     if (pdrLoginOverlay) pdrLoginOverlay.style.display = "flex";

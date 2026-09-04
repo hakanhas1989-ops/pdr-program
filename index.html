@@ -1163,7 +1163,18 @@ function MudahaleKutuphanesiEkrani({ kayitliListesi, records, aktifOgrenci, setA
 // Devamsızlık nedeni kategorileri — hem manuel girişte hem Excel'de opsiyonel,
 // zorunlu değil. Amaç, "kaç gün" bilgisinin yanına "neden" ipucu ekleyerek
 // önlem tasarlamayı kolaylaştırmak (nedeni bilinmeden önlem üretilemez).
-const DEVAMSIZLIK_NEDENLERI = ["Bilinmiyor", "Sağlık", "Aile", "Motivasyon", "Diğer"];
+// Liste, MEB'in erken uyarı sistemi / devamsızlık-okul terki önleme
+// çalışmalarında (EKİP, RAM çalıştayları) sıkça geçen nedenlere göre
+// genişletildi: akran zorbalığı, sınav/başarısızlık kaygısı, okul korkusu,
+// bağımlılık riski, özel eğitim ihtiyacı, disiplin süreci ve ulaşım —
+// eskisi gibi sadece genel "Aile/Sağlık/Motivasyon" değil, PDR'nin önlem
+// tasarlarken ayırt etmesi gereken asıl nedenler.
+const DEVAMSIZLIK_NEDENLERI = [
+  "Bilinmiyor", "Sağlık", "Aile/Ekonomik", "Motivasyon/İlgisizlik",
+  "Akran Zorbalığı", "Sınav/Başarısızlık Kaygısı", "Okul Korkusu",
+  "Bağımlılık Riski", "Özel Eğitim İhtiyacı", "Disiplin/Uzaklaştırma",
+  "Ulaşım", "Diğer",
+];
 // Devamsızlık gün sayısı ilk kez "Takip Edilmeli" eşiğine (4+ gün) girdiğinde
 // true döner — otomatik hatırlatma oluşturmak için kullanılır. Zaten 4+ olan
 // bir öğrenci tekrar tekrar hatırlatma almasın diye SADECE eşiğin YENİ
@@ -1171,7 +1182,7 @@ const DEVAMSIZLIK_NEDENLERI = ["Bilinmiyor", "Sağlık", "Aile", "Motivasyon", "
 function devamsizlikEsikYeniGecisMi(eskiGun, yeniGun) {
   return (eskiGun === undefined || eskiGun === null || eskiGun < 4) && yeniGun >= 4;
 }
-function DevamsizlikEkrani({ ogrenciler, setOgrenciler, kademe, aktifYil, setTab, setAktifOgrenci, hatirlatmalar, setHatirlatmalar, setRiskForm }) {
+function DevamsizlikEkrani({ ogrenciler, setOgrenciler, kademe, aktifYil, setTab, aktifOgrenci, setAktifOgrenci, hatirlatmalar, setHatirlatmalar, setRiskForm }) {
   const [excelYukleniyor, setExcelYukleniyor] = useState(false);
   const [excelTarihi, setExcelTarihi] = useState(today());
   const [sonuc, setSonuc] = useState(null);
@@ -1186,6 +1197,16 @@ function DevamsizlikEkrani({ ogrenciler, setOgrenciler, kademe, aktifYil, setTab
   const [manuelNeden, setManuelNeden] = useState("Bilinmiyor");
 
   const yilOgrencileri = ogrenciler.filter(o => (!o.yil || o.yil === aktifYil) && pdrKademeUyumlu(o.className, kademe));
+  // Başka bir sekmeden (Sınıf, Öğrenciler, Risk vb.) öğrenci seçiliyken bu
+  // sekmeye geçildiğinde, aynı öğrenci burada da otomatik seçili gelsin diye
+  // — uygulamanın diğer tüm sekmelerinde kullanılan aktifOgrenci deseniyle
+  // tutarlı. Kullanıcı tekrar arama yapmak zorunda kalmasın.
+  useEffect(() => {
+    if (aktifOgrenci?.name) {
+      const bulunan = yilOgrencileri.find(o => pdrAyniOgrenci(o.studentName, o.className, aktifOgrenci.name, aktifOgrenci.className, o.numara, aktifOgrenci.numara));
+      if (bulunan) { setManuelSecili(bulunan); setManuelArama(""); }
+    }
+  }, [aktifOgrenci?.name, aktifOgrenci?.className]);
   // NOT: en güncel kaydı tarihe göre sıralayıp bulmak yerine, dizinin SON
   // elemanı kullanılıyor — çünkü kayıtlar her zaman sona eklenir (append), bu
   // yüzden en son girilen her zaman dizinin son elemanıdır. Aynı tarihte
@@ -14903,6 +14924,7 @@ export default function App() {
             kademe={kademe}
             aktifYil={aktifYil}
             setTab={setTab}
+            aktifOgrenci={aktifOgrenci}
             setAktifOgrenci={setAktifOgrenci}
             hatirlatmalar={hatirlatmalar}
             setHatirlatmalar={setHatirlatmalar}

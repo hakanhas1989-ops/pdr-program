@@ -273,7 +273,7 @@ body {
   window.pdrSplashGizle = function () {
     var s = document.getElementById('splash');
     if (!s) return;
-    var MIN = 3000; // ms — açılış ekranının en az kalma süresi
+    var MIN = 1500; // ms — açılış ekranının en az kalma süresi
     var kalan = MIN - (Date.now() - window.__pdrSplashBaslangic);
     if (kalan > 0) setTimeout(function () { s.className = 'hide'; }, kalan);
     else s.className = 'hide';
@@ -753,16 +753,14 @@ const XLSX = window.XLSX;
 const ACCENT = "#127C56";
 const ACCENT_LIGHT = "#D7EEE1";
 const BG = "#F7F5F0";
-const CARD = "#FBF3E3";
+const CARD = "#F9F7F2";
 const TEXT = "#1C2B24";
 const MUTED = "#6E8579";
 const BORDER = "#B9CFBE";
 const ORANGE = "#E76F51";
 const BLUE = "#457B9D";
-// Açılış ekranındaki beyin görselinin iki ucu — programın her yerinde
-// aynı yeşil→lila geçişini kurmak için referans renkler.
-const SPLASH_YESIL = "#17C780";
-const SPLASH_LILA  = "#9E78ED";
+// PURPLE, açılış ekranındaki beyin görselinin lila ucuyla aynı ton —
+// programın geçişleri o görselle uyumlu kalsın diye (yeşil ucu: #17C780).
 const PURPLE = "#9E78ED";
 const PURPLE_LIGHT = "#E9DFF6";
 

@@ -3340,6 +3340,112 @@ async function saveKaynastirma(items) {
   try { await window.storage.set("pdr-kaynastirma", JSON.stringify(items)); } catch(e) { console.warn(e); }
 }
 
+// Sınıf içi hızlı kaynaştırma işaretleme — şube seçiliyken o sınıfın
+// öğrencileri listelenir, tanı grubu buradan atanır. Kayıt, sınıf düzeyi
+// ekranındaki "Kaynaştırma Öğrencileri" bölümüne otomatik düşer (ikisi de
+// aynı veriyi kullanır, ayrıca bir işlem gerekmez).
+function KaynastirmaSinifPaneli({ sinifOgrencileri, kaynastirma, setKaynastirma, aktifYil, sinif }) {
+  const [acik, setAcik] = useState(false);
+  const [duzenlenenAd, setDuzenlenenAd] = useState(null);
+
+  const kayitBul = (o) => (kaynastirma||[]).find(k =>
+    (!k.yil || k.yil === aktifYil) && pdrAyniOgrenci(k.studentName, k.className, o.studentName, o.className, k.numara, o.numara));
+
+  const isaretliSayi = (sinifOgrencileri||[]).filter(o => kayitBul(o)).length;
+
+  async function taniAta(o, tani) {
+    const mevcut = kayitBul(o);
+    let yeni;
+    if (!tani) {
+      // "Kaynaştırma değil" seçilirse kaydı kaldır
+      yeni = (kaynastirma||[]).filter(k => k.id !== mevcut?.id);
+    } else if (mevcut) {
+      yeni = kaynastirma.map(k => k.id === mevcut.id ? { ...k, tani } : k);
+    } else {
+      yeni = [...(kaynastirma||[]), { id: uid(), yil: aktifYil, studentName: o.studentName,
+        className: o.className, numara: o.numara || "", tani, bep:false, destekOdasi:false, ramTarihi:"", notlar:"" }];
+    }
+    setKaynastirma(yeni); await saveKaynastirma(yeni);
+    setDuzenlenenAd(null);
+  }
+
+  async function bayrakCevir(o, alan) {
+    const mevcut = kayitBul(o); if (!mevcut) return;
+    const yeni = kaynastirma.map(k => k.id === mevcut.id ? { ...k, [alan]: !k[alan] } : k);
+    setKaynastirma(yeni); await saveKaynastirma(yeni);
+  }
+
+  return (
+    <div style={{background:CARD,border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14)",borderRadius:12,padding:14,marginBottom:14}}>
+      <div onClick={()=>setAcik(!acik)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
+        <div>
+          <div style={{fontSize:13,fontWeight:800,color:TEXT}}>🧩 Kaynaştırma İşaretleme — {sinif}</div>
+          <div style={{fontSize:10.5,color:MUTED,marginTop:2}}>
+            {isaretliSayi > 0 ? `${isaretliSayi} öğrenci işaretli` : "Öğrenciye dokunup tanı grubu ata"}
+          </div>
+        </div>
+        <span style={{fontSize:14,color:MUTED}}>{acik ? "▲" : "▼"}</span>
+      </div>
+
+      {acik && (
+        <div style={{marginTop:12}}>
+          <div style={{fontSize:10.5,color:MUTED,lineHeight:1.55,marginBottom:10}}>
+            Buradan atadığın tanı grubu, sınıf düzeyi ekranındaki
+            <b> Kaynaştırma Öğrencileri</b> bölümüne otomatik olarak düşer.
+            Tanı bilgisi RAM raporuna dayanmalıdır.
+          </div>
+          {(sinifOgrencileri||[]).map(o => {
+            const k = kayitBul(o);
+            const renk = k ? (KAYNASTIRMA_RENK[k.tani] || MUTED) : BORDER;
+            const acikMi = duzenlenenAd === o.studentName;
+            return (
+              <div key={pdrOgrAnahtar(o.studentName,o.className,o.numara)}
+                style={{borderBottom:`1px solid ${BORDER}`, paddingBottom:8, marginBottom:8}}>
+                <div onClick={()=>setDuzenlenenAd(acikMi ? null : o.studentName)}
+                  style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer"}}>
+                  <span style={{width:9,height:9,borderRadius:"50%",background:k?renk:"transparent",
+                    border:k?"none":`1.5px solid ${BORDER}`,flexShrink:0}} />
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12.5,fontWeight:k?700:500,color:k?TEXT:MUTED}}>{o.studentName}</div>
+                    {k && <div style={{fontSize:10,color:renk,fontWeight:700}}>{k.tani}</div>}
+                  </div>
+                  {k && (
+                    <div style={{display:"flex",gap:4,flexShrink:0}}>
+                      <span onClick={(e)=>{e.stopPropagation(); bayrakCevir(o,"bep");}}
+                        style={{padding:"1px 7px",borderRadius:8,fontSize:9,fontWeight:700,cursor:"pointer",
+                          background:k.bep?ACCENT_LIGHT:BG, color:k.bep?ACCENT:MUTED,
+                          border:`1px solid ${k.bep?ACCENT:BORDER}`}}>BEP</span>
+                      <span onClick={(e)=>{e.stopPropagation(); bayrakCevir(o,"destekOdasi");}}
+                        style={{padding:"1px 7px",borderRadius:8,fontSize:9,fontWeight:700,cursor:"pointer",
+                          background:k.destekOdasi?PURPLE_LIGHT:BG, color:k.destekOdasi?PURPLE:MUTED,
+                          border:`1px solid ${k.destekOdasi?PURPLE:BORDER}`}}>Destek</span>
+                    </div>
+                  )}
+                </div>
+                {acikMi && (
+                  <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:8}}>
+                    <button onClick={()=>taniAta(o,null)} style={{padding:"3px 9px",borderRadius:10,fontSize:10,fontWeight:600,
+                      border:`1px solid ${BORDER}`,background:CARD,color:MUTED,cursor:"pointer"}}>Kaynaştırma değil</button>
+                    {KAYNASTIRMA_TANILARI.map(t => {
+                      const sec = k?.tani === t;
+                      const tr = KAYNASTIRMA_RENK[t] || MUTED;
+                      return (
+                        <button key={t} onClick={()=>taniAta(o,t)} style={{padding:"3px 9px",borderRadius:10,fontSize:10,
+                          fontWeight:sec?800:500, border:`1px solid ${sec?tr:BORDER}`,
+                          background:sec?tr+"22":CARD, color:sec?tr:MUTED, cursor:"pointer"}}>{t}</button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function KaynastirmaBolumu({ kaynastirma, setKaynastirma, ogrenciler, aktifYil, siniflar, setTab, setAktifOgrenci }) {
   const [acik, setAcik] = useState(false);
   const [formAcik, setFormAcik] = useState(false);
@@ -14005,6 +14111,14 @@ const RISK_TURLERI = ["Davranış","Akademik","Aile","Akran / Zorbalık","Duygus
         <RiskOzetKartlari ogrenciler={st.ogr} kompakt baslik="📊 Geçmiş Dönem Deneme Risk Dağılımı" />
 
         <SinifDenemeGrafigi ogrenciler={st.ogr} denemeler={denemeler} sinavTuru={sinavTuru} vurgulananAd={aktifOgrenci?.name} />
+
+        <KaynastirmaSinifPaneli
+          sinifOgrencileri={st.ogr}
+          kaynastirma={kaynastirma}
+          setKaynastirma={setKaynastirma}
+          aktifYil={aktifYil}
+          sinif={seciliSinif}
+        />
 
         {/* Görüşme Konuları */}
         {st.konuSirali.length > 0 && (

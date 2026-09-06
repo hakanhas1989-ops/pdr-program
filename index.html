@@ -2720,6 +2720,11 @@ function SosyometriEkrani({ sosyometri, setSosyometri, ogrenciler, aktifYil, sin
   // fark yaratan kısım burası.
   async function satirKaydet(ogrAd, ucluListe) {
     const temiz = ucluListe.map(x => (x||"").trim()).filter(Boolean).slice(0,3);
+    const oncekiSecim = secimler[ogrAd] || [];
+    // Boş bir kutuya dokunup çıkmak (odak kaybı) da bu fonksiyonu tetikliyor.
+    // Hiçbir şey yazılmamışsa ve önceden de kayıt yoksa boşuna kayıt
+    // oluşturulmaz — aksi halde sosyometri "veri girilmiş" gibi görünüyordu.
+    if (temiz.length === 0 && oncekiSecim.length === 0) return;
     const yeniSecimler = { ...secimler, [ogrAd]: temiz };
     let yeni;
     if (kayit) yeni = sosyometri.map(s => (s.yil===aktifYil && s.sinif===seciliSinif) ? { ...s, secimler:yeniSecimler, tarih:today() } : s);
@@ -3026,12 +3031,15 @@ function UyumIzlemeEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, uyumI
   const [aiYukleniyor, setAiYukleniyor] = useState(false);
   const [aiMesaj, setAiMesaj] = useState("");
 
+  // Başka bir sekmede seçili olan öğrenci burada da otomatik seçili gelir.
+  // Öğrenci kayıtlı listede bulunamazsa (henüz listeye girmemiş olabilir)
+  // doğrudan aktifOgrenci bilgisiyle devam edilir — eskiden bu durumda
+  // hiçbir öğrenci seçilmiyordu.
   useEffect(() => {
-    if (aktifOgrenci?.name) {
-      const b = (kayitliListesi||[]).find(o => pdrAyniOgrenci(o.studentName, o.className, aktifOgrenci.name, aktifOgrenci.className, o.numara, aktifOgrenci.numara));
-      if (b) setSecili(b);
-    }
-  }, [aktifOgrenci?.name, aktifOgrenci?.className]);
+    if (!aktifOgrenci?.name) return;
+    const b = (kayitliListesi||[]).find(o => pdrAyniOgrenci(o.studentName, o.className, aktifOgrenci.name, aktifOgrenci.className, o.numara, aktifOgrenci.numara));
+    setSecili(b || { studentName: aktifOgrenci.name, className: aktifOgrenci.className || "", numara: aktifOgrenci.numara || "" });
+  }, [aktifOgrenci?.name, aktifOgrenci?.className, aktifOgrenci?.numara, kayitliListesi]);
 
   const sonuclar = (arama.trim().length >= 2)
     ? (kayitliListesi||[]).filter(o => (o.studentName||"").toLocaleLowerCase("tr").includes(arama.toLocaleLowerCase("tr"))).slice(0,8)
@@ -15197,7 +15205,11 @@ export default function App() {
     const guncel = [...(uyumIzleme||[]), kayit];
     setUyumIzleme(guncel);
     await saveUyumIzleme(guncel);
+    // Uyum İzleme sekmesi açıldığında bu öğrenci seçili gelsin diye aktif
+    // öğrenciyi de güncelliyoruz; aksi halde danışman öğrenciyi tekrar arıyordu.
+    setAktifOgrenci({ name: form.studentName, className: form.className, numara: form.numara || "" });
     setOnerilenUyum(null);
+    alert("Uyum İzleme sekmesine gönderildi. Oradan gözden geçirip kaydedebilirsin.");
   }
 
   function handleBdtOneriToggle(index) {
@@ -15692,7 +15704,10 @@ export default function App() {
       ogrenciler: yilinki(ogrenciler),
       grup_calismalari: yilinki(grupCalismalari),
       kriz: yilinki(krizKayitlari),
-      sosyometri: yilinki(sosyometri),
+      // Sosyometri kaydının var olması yetmez; içinde gerçekten en az bir
+      // öğrenci seçimi olmalı. Aksi halde boş kayıt "dolu" görünüyordu.
+      sosyometri: (sosyometri||[]).some(s => (!s.yil || s.yil === aktifYil) &&
+        Object.values(s.secimler || {}).some(v => Array.isArray(v) && v.length > 0)),
     };
 
     const ad = aktifOgrenci?.name, sinif = aktifOgrenci?.className;

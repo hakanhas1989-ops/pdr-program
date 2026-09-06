@@ -2036,7 +2036,14 @@ GUVENLIK UYARISI: Eger notta acikca kendine zarar verme, intihar dusuncesi, umut
 
 Bundan sonra, YENI bir satirda, su formatta "Bireyi Tanima" tespiti ekle (sosyo-demografik/psikososyal bilgiler icin - AILE, SAGLIK, YASAM OLAYLARI, SOSYOEKONOMIK, ILGI/YETENEK/SOSYAL, OKUL GECMISI kategorilerinden):
 ---BIREYI_TANIMA---
-(Notta ACIKCA belirtilen, kalici/onemli sosyo-demografik veya psikososyal bir bilgi varsa - ornek: kardes sayisi, ebeveyn calisma durumu, aile yapisi, gecirilen bir hastalik/ameliyat, dogum oykusu, bir kayip/bosanma/tasinma gibi yasam olayi, ailenin ekonomik durumuna dair bir ipucu, bir ilgi/yetenek, onceki okul deneyimi, ogrencinin yasi (not icinde yil VE ay olarak acikca belirtilmisse, ornegin "13 yas 3 aylik" ya da "13 yasinda, 3 aylik" gibi — sadece yil belirtilmisse yazma, mutlaka ay bilgisi de olmali; bu bilgiyi "saglik" kategorisine "Yaşı: 13 yaş 3 ay" seklinde yaz), devamsizlik/okula gitmeme durumu (notta acikca gun sayisi ya da somut bir devamsizlik durumu belirtilmisse, ornegin "bu donem 5 gun devamsizlik yapti" ya da "sik sik okula gelmiyor" — bu bilgiyi "okul" kategorisine yaz) - HER BIRINI ayri bir satirda 'kategori_key: kisa cumle' formatinda yaz. kategori_key SADECE su degerlerden biri olmali: aile, saglik, olaylar, sosyoekonomik, ilgi, okul. Boyle bir bilgi YOKSA sadece "Yok" yaz. ONEMLI: tahmin yurutme, yorum katma, sadece notta ACIKCA soylenmis somut bilgileri yaz - ozellikle saglik/aile gibi hassas konularda kesinlikle uydurma yapma.)`,
+(Notta ACIKCA belirtilen, kalici/onemli sosyo-demografik veya psikososyal bir bilgi varsa - ornek: kardes sayisi, ebeveyn calisma durumu, aile yapisi, gecirilen bir hastalik/ameliyat, dogum oykusu, bir kayip/bosanma/tasinma gibi yasam olayi, ailenin ekonomik durumuna dair bir ipucu, bir ilgi/yetenek, onceki okul deneyimi, ogrencinin yasi (not icinde yil VE ay olarak acikca belirtilmisse, ornegin "13 yas 3 aylik" ya da "13 yasinda, 3 aylik" gibi — sadece yil belirtilmisse yazma, mutlaka ay bilgisi de olmali; bu bilgiyi "saglik" kategorisine "Yaşı: 13 yaş 3 ay" seklinde yaz), devamsizlik/okula gitmeme durumu (notta acikca gun sayisi ya da somut bir devamsizlik durumu belirtilmisse, ornegin "bu donem 5 gun devamsizlik yapti" ya da "sik sik okula gelmiyor" — bu bilgiyi "okul" kategorisine yaz) - HER BIRINI ayri bir satirda 'kategori_key: kisa cumle' formatinda yaz. kategori_key SADECE su degerlerden biri olmali: aile, saglik, olaylar, sosyoekonomik, ilgi, okul. Boyle bir bilgi YOKSA sadece "Yok" yaz. ONEMLI: tahmin yurutme, yorum katma, sadece notta ACIKCA soylenmis somut bilgileri yaz - ozellikle saglik/aile gibi hassas konularda kesinlikle uydurma yapma.)
+
+Son olarak, YENI bir satirda, su formatta bir "Uyum Izleme" tespiti ekle:
+---UYUM_IZLEME---
+(Okula uyum izleme gostergeleri asagidadir. Notta SOMUT DAYANAGI OLAN maddelerin kodlarini yaz.
+${UYUM_GOSTERGELERI.map(g => g.key + " (" + g.ad + "):\n" + g.maddeler.map((m,i)=>"  " + g.key + "-" + i + ": " + m).join("\n")).join("\n")}
+HER BIRINI ayri satirda 'kod | nottaki kisa dayanak' formatinda yaz. Ornek: duygusal-1 | "surekli agliyor" dedi
+Somut dayanagi olmayan maddeyi ASLA isaretleme, tahmin yurutme. Hicbiri uymuyorsa sadece "Yok" yaz.)`,
       messages: [{ role: "user", content: rawText }],
     }),
   });
@@ -2890,6 +2897,384 @@ function SosyometriEkrani({ sosyometri, setSosyometri, ogrenciler, aktifYil, sin
                   </div>
                 );
               })}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Uyum İzleme (Oryantasyon sonrası ilk ay taraması) ───────────────────────
+// AMAÇ: Oryantasyon çerçevesindeki "İlk Ay Uyum İzleme Sistemi" — öğrencinin
+// okula uyumunu altı gösterge üzerinden erken fark etmek. Bu bir TANI ARACI
+// DEĞİLDİR; amaç, desteğe ihtiyacı olan öğrenciyi erken görüp uygun sürece
+// (bireysel görüşme, veli/öğretmen konsültasyonu, grup çalışması, yönlendirme)
+// yönlendirmektir. Belgede her gösterge için birkaç örnek gözlem vardı;
+// buradaki liste, sahada karşılaşılan somut belirtilerle genişletildi ki
+// danışman "bunu görmüştüm ama nasıl ifade edeceğimi bilemedim" durumunda
+// kalmasın.
+const UYUM_GOSTERGELERI = [
+  { key: "devam", ad: "Okula devam ve isteklilik", renk: "#C0392B", maddeler: [
+      "Tekrarlayan okula gelmek istememe",
+      "Devamsızlıkta belirgin artış",
+      "Sabah okula gitmeme konusunda ısrarlı direnç",
+      "Aileden ayrılmada belirgin güçlük (ayrılık kaygısı)",
+      "Ders saatinde okuldan ayrılma isteği / revire sık gitme",
+      "Geç kalmaların sıklaşması",
+  ]},
+  { key: "duygusal", ad: "Duygusal uyum", renk: "#E67E22", maddeler: [
+      "Yoğun veya süregen kaygı",
+      "Sık ağlama, gözyaşına hâkim olamama",
+      "Belirgin içe çekilme, sessizleşme",
+      "Aşırı huzursuzluk, yerinde duramama",
+      "Karamsar/umutsuz ifadeler",
+      "Ani öfke patlamaları veya tahammülsüzlük",
+      "Kendini sürekli yetersiz görme, aşırı özeleştiri",
+  ]},
+  { key: "sosyal", ad: "Sosyal uyum", renk: "#8E44AD", maddeler: [
+      "Teneffüslerde sürekli yalnız kalma",
+      "Akranlarla sürekli çatışma",
+      "Dışlanma belirtileri (oyuna/gruba alınmama)",
+      "Zorbalığa maruz kalma işaretleri",
+      "Zorbalık uygulayan konumda olma",
+      "Grup çalışmalarına katılmaktan kaçınma",
+      "Sınıfta hiçbir arkadaşının olmaması",
+  ]},
+  { key: "akademik", ad: "Akademik / işlevsel uyum", renk: "#2980B9", maddeler: [
+      "Ders düzenine uyumda belirgin güçlük",
+      "Sorumlulukları sürdürememe (ödev, materyal)",
+      "Belirgin performans düşüşü",
+      "Derste dikkatini sürdürememe",
+      "Sınav/başarı kaygısının işlevselliği bozması",
+      "Okuma-yazma veya temel becerilerde beklenenin altında olma",
+  ]},
+  { key: "davranis", ad: "Davranış değişikliği", renk: "#16A085", maddeler: [
+      "Önceki işlevselliğe göre belirgin ve süregen değişiklik",
+      "Uyku veya iştah düzeninde değişiklik aktarımı",
+      "Görünüm/öz bakımda belirgin değişiklik",
+      "Kurallara karşı yeni ortaya çıkan direnç",
+      "Riskli veya kendine zarar verici davranış işaretleri",
+      "Teknoloji/ekran kullanımının belirgin artışı",
+  ]},
+  { key: "destek", ad: "Yardım ve destek ihtiyacı", renk: "#127C56", maddeler: [
+      "Öğrencinin doğrudan destek talebi",
+      "Velinin destek talebi",
+      "Öğretmenin yönlendirme talebi",
+      "Ailede yeni bir zorlayıcı yaşam olayı aktarımı",
+      "Öğrencinin bir sırrını/yükünü paylaşma girişimi",
+  ]},
+];
+
+const UYUM_SONUC = ["İzlemeye devam", "Bireysel görüşme planlandı", "Veli/öğretmen konsültasyonu", "Grup çalışmasına yönlendirildi", "RAM/uzman yönlendirmesi", "Destek gerekmiyor"];
+
+async function loadUyumIzleme() {
+  try { const r = await window.storage.get("pdr-uyum-izleme"); return r ? JSON.parse(r.value) : []; } catch { return []; }
+}
+async function saveUyumIzleme(items) {
+  try { await window.storage.set("pdr-uyum-izleme", JSON.stringify(items)); } catch(e) { console.warn(e); }
+}
+
+// Görüşme notlarını tarayıp hangi göstergelerin işaret edildiğini bulur.
+// SADECE notta somut dayanağı olanı işaretler; tahmin yürütmesi istenmez.
+async function uyumIzlemeAiTara(ogrAd, notlar) {
+  const liste = UYUM_GOSTERGELERI.map(g =>
+    `${g.key}: ${g.ad}\n` + g.maddeler.map((m,i)=>`  ${g.key}-${i}: ${m}`).join("\n")
+  ).join("\n\n");
+  const prompt = `Ogrenci: ${ogrAd}
+
+GORUSME NOTLARI:
+${notlar}
+
+Asagida okula uyum izleme gostergeleri ve her birinin altinda madde kodlari var:
+
+${liste}
+
+GOREV: Gorusme notlarinda SOMUT DAYANAGI OLAN maddeleri belirle.
+KURALLAR:
+- Sadece notta acikca gecen ya da dogrudan ima edilen maddeleri isaretle.
+- Tahmin yurutme, ihtimal uzerinden isaretleme yapma. Emin degilsen isaretleme.
+- Her isaretledigin madde icin notta hangi ifadeye dayandigini kisaca yaz.
+- Hicbir madde uymuyorsa bos dizi dondur.
+
+SADECE su formatta JSON dondur, baska hicbir sey yazma:
+{"bulgular":[{"kod":"duygusal-0","dayanak":"nottaki kisa ifade"}]}`;
+
+  const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-6", max_tokens: 1200,
+      system: "Sen deneyimli bir okul psikolojik danismanisin. Gorusme notlarini uyum izleme gostergeleriyle eslestirirsin. Asla veri olmayan bir maddeyi isaretlemezsin. SADECE JSON dondurursun.",
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+  const data = await res.json();
+  const text = data.content?.[0]?.text || "{}";
+  try {
+    const temiz = text.replace(/```json|```/g, "").trim();
+    return JSON.parse(temiz).bulgular || [];
+  } catch (e) { return []; }
+}
+
+function UyumIzlemeEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, uyumIzleme, setUyumIzleme, records, aktifYil, setRiskForm, setTab }) {
+  const [arama, setArama] = useState("");
+  const [secili, setSecili] = useState(null);
+  const [isaretli, setIsaretli] = useState([]);
+  const [dayanaklar, setDayanaklar] = useState({});
+  const [sonuc, setSonuc] = useState(UYUM_SONUC[0]);
+  const [not, setNot] = useState("");
+  const [aiYukleniyor, setAiYukleniyor] = useState(false);
+  const [aiMesaj, setAiMesaj] = useState("");
+
+  useEffect(() => {
+    if (aktifOgrenci?.name) {
+      const b = (kayitliListesi||[]).find(o => pdrAyniOgrenci(o.studentName, o.className, aktifOgrenci.name, aktifOgrenci.className, o.numara, aktifOgrenci.numara));
+      if (b) setSecili(b);
+    }
+  }, [aktifOgrenci?.name, aktifOgrenci?.className]);
+
+  const sonuclar = (arama.trim().length >= 2)
+    ? (kayitliListesi||[]).filter(o => (o.studentName||"").toLocaleLowerCase("tr").includes(arama.toLocaleLowerCase("tr"))).slice(0,8)
+    : [];
+
+  const ogrTumu = secili
+    ? (uyumIzleme||[]).filter(k => pdrAyniOgrenci(k.studentName, k.className, secili.studentName, secili.className, k.numara, secili.numara))
+        .sort((a,b) => pdrTarihMs(b.tarih) - pdrTarihMs(a.tarih))
+    : [];
+  // Görüşme özetinden gelen, henüz onaylanmamış öneriler ayrı gösterilir.
+  const bekleyenler = ogrTumu.filter(k => k.beklemede);
+  const ogrKayitlari = ogrTumu.filter(k => !k.beklemede);
+
+  const ogrGorusmeler = secili
+    ? (records||[]).filter(r => pdrAyniOgrenci(r.studentName, r.className, secili.studentName, secili.className, r.numara, secili.numara))
+        .sort((a,b) => pdrTarihMs(a.date) - pdrTarihMs(b.date))
+    : [];
+
+  function cevir(kod) {
+    setIsaretli(s => s.includes(kod) ? s.filter(x=>x!==kod) : [...s, kod]);
+  }
+
+  async function aiTara() {
+    if (ogrGorusmeler.length === 0) { setAiMesaj("Bu öğrenci için görüşme notu yok."); return; }
+    setAiYukleniyor(true); setAiMesaj("");
+    try {
+      const notlar = ogrGorusmeler.map(r => `(${r.date}) ${r.summary || r.rawText || ""}`).join("\n\n");
+      const bulgular = await uyumIzlemeAiTara(secili.studentName, notlar);
+      if (bulgular.length === 0) { setAiMesaj("Görüşme notlarında bu göstergelere dair somut bir işaret bulunamadı."); }
+      else {
+        const kodlar = bulgular.map(b => b.kod);
+        setIsaretli(s => [...new Set([...s, ...kodlar])]);
+        const d = { ...dayanaklar };
+        bulgular.forEach(b => { d[b.kod] = b.dayanak; });
+        setDayanaklar(d);
+        setAiMesaj(`${bulgular.length} madde işaretlendi. Kaydetmeden önce gözden geçir — AI önerisi, senin kararın.`);
+      }
+    } catch (e) { setAiMesaj("Tarama başarısız: " + e.message); }
+    setAiYukleniyor(false);
+  }
+
+  async function kaydet() {
+    if (!secili) return;
+    const yeni = [...(uyumIzleme||[]), {
+      id: uid(), yil: aktifYil, tarih: today(),
+      studentName: secili.studentName, className: secili.className, numara: secili.numara || "",
+      isaretli, dayanaklar, sonuc, not,
+    }];
+    setUyumIzleme(yeni); await saveUyumIzleme(yeni);
+    setIsaretli([]); setDayanaklar({}); setNot(""); setSonuc(UYUM_SONUC[0]); setAiMesaj("Kaydedildi.");
+  }
+
+  async function sil(id) {
+    if (!confirm("Bu izleme kaydı silinsin mi?")) return;
+    const yeni = uyumIzleme.filter(k => k.id !== id);
+    setUyumIzleme(yeni); await saveUyumIzleme(yeni);
+  }
+
+  // Bekleyen öneriyi forma taşır; danışman düzenleyip kaydeder.
+  function oneriyiFormaAl(k) {
+    setIsaretli(k.isaretli || []);
+    setDayanaklar(k.dayanaklar || {});
+    setAiMesaj("Öneri forma alındı. Gözden geçirip aşağıdan kaydet.");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+  async function oneriyiSil(id) {
+    const yeni = uyumIzleme.filter(k => k.id !== id);
+    setUyumIzleme(yeni); await saveUyumIzleme(yeni);
+  }
+
+  function riskAc() {
+    const adlar = isaretli.map(k => {
+      const [gk, i] = k.split("-");
+      const g = UYUM_GOSTERGELERI.find(x=>x.key===gk);
+      return g ? g.maddeler[parseInt(i,10)] : k;
+    });
+    setRiskForm({ studentName: secili.studentName, className: secili.className, numara: secili.numara || "",
+      riskTuru: "", oncelik: "Orta", tarih: today(),
+      aciklama: `Uyum izlemesi (${today()}): ` + adlar.join("; ") });
+    setTab("risk");
+  }
+
+  const kutu = { background:CARD, border:`1px solid ${BORDER}`, boxShadow:"0 4px 12px rgba(20,40,32,0.14)", borderRadius:14, padding:14, marginBottom:12 };
+
+  return (
+    <div>
+      <div style={{ fontSize:18, fontWeight:900, marginBottom:4, color:ACCENT }}>🔍 Uyum İzleme</div>
+      <div style={{ fontSize:12, color:MUTED, lineHeight:1.55, marginBottom:12 }}>
+        Oryantasyon sonrası ilk ay uyum taraması. Altı gösterge üzerinden öğrenciyi izler.
+        Tanı koymaz — erken fark etme ve uygun desteğe yönlendirme amacı taşır.
+      </div>
+
+      <div style={kutu}>
+        <input value={arama} onChange={e=>setArama(e.target.value)} placeholder="Öğrenci ara... (en az 2 karakter)"
+          style={{ width:"100%", padding:"9px 11px", borderRadius:9, border:`1px solid ${BORDER}`, fontSize:13, boxSizing:"border-box", background:CARD, color:TEXT }} />
+        {sonuclar.map(o => (
+          <div key={o.studentName+o.className} onClick={()=>{ setSecili(o); setArama(""); setAktifOgrenci({ name:o.studentName, className:o.className, numara:o.numara }); }}
+            style={{ padding:"8px 4px", borderBottom:`1px solid ${BORDER}`, cursor:"pointer", fontSize:13 }}>
+            <b>{o.studentName}</b> <span style={{ color:MUTED, fontSize:11 }}>{o.className}</span>
+          </div>
+        ))}
+        {secili && (
+          <div style={{ marginTop:8, fontSize:13, fontWeight:800, color:ACCENT }}>
+            Seçili: {secili.studentName} · {secili.className}
+          </div>
+        )}
+      </div>
+
+      {!secili ? (
+        <div style={{ ...kutu, textAlign:"center", color:MUTED, fontSize:12.5, borderStyle:"dashed" }}>
+          Başlamak için bir öğrenci seç.
+        </div>
+      ) : (
+        <>
+          {bekleyenler.length > 0 && (
+            <div style={{ ...kutu, background:"#EAF4FB", border:"1px solid #A9CCE3" }}>
+              <div style={{ fontSize:12, fontWeight:800, color:"#1F618D", marginBottom:8 }}>
+                ⏳ Onay bekleyen {bekleyenler.length} öneri
+              </div>
+              <div style={{ fontSize:10.5, color:"#1F618D", marginBottom:9, lineHeight:1.5 }}>
+                Görüşme notunu AI ile özetlerken fark edilen göstergeler. Ek ücret üretmez —
+                aynı çağrıdan geldiler. Gözden geçirip kaydet ya da yoksay.
+              </div>
+              {bekleyenler.map(k => (
+                <div key={k.id} style={{ borderTop:"1px solid #A9CCE3", paddingTop:8, marginTop:8 }}>
+                  <div style={{ fontSize:11, fontWeight:800, color:"#1F618D", marginBottom:4 }}>{k.tarih}</div>
+                  {(k.isaretli||[]).map(kod => {
+                    const [gk,i] = kod.split("-");
+                    const g = UYUM_GOSTERGELERI.find(x=>x.key===gk);
+                    if (!g) return null;
+                    return (
+                      <div key={kod} style={{ fontSize:11.5, lineHeight:1.5, marginBottom:3 }}>
+                        <span style={{ color:g.renk, fontWeight:700 }}>{g.ad}:</span> {g.maddeler[parseInt(i,10)]}
+                        {k.dayanaklar?.[kod] && <div style={{ fontSize:10, color:MUTED, fontStyle:"italic" }}>Nottan: "{k.dayanaklar[kod]}"</div>}
+                      </div>
+                    );
+                  })}
+                  <div style={{ display:"flex", gap:6, marginTop:7 }}>
+                    <button onClick={()=>oneriyiFormaAl(k)} style={{ flex:1, padding:"6px", borderRadius:8, border:"none", background:"#1F618D", color:"#fff", fontSize:11, fontWeight:700, cursor:"pointer" }}>Forma Al</button>
+                    <button onClick={()=>oneriyiSil(k.id)} style={{ padding:"6px 12px", borderRadius:8, border:`1px solid ${BORDER}`, background:CARD, color:MUTED, fontSize:11, fontWeight:700, cursor:"pointer" }}>Yoksay</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={kutu}>
+            <div style={{ fontSize:12, fontWeight:800, color:TEXT, marginBottom:6 }}>🤖 Görüşme notlarından tara</div>
+            <div style={{ fontSize:11, color:MUTED, lineHeight:1.5, marginBottom:8 }}>
+              Geçmişe dönük toplu tarama: bu öğrencinin {ogrGorusmeler.length} görüşme notunu birlikte
+              tarar. Yeni görüşmelerde buna gerek yok — not özetlenirken zaten otomatik geliyor.
+              Bu buton ayrı bir AI çağrısıdır, ücret üretir.
+            </div>
+            <button onClick={aiTara} disabled={aiYukleniyor} style={{
+              width:"100%", padding:"9px", borderRadius:10, border:"none",
+              background: aiYukleniyor ? BORDER : PURPLE, color:"#fff", fontSize:12.5, fontWeight:800, cursor:"pointer"
+            }}>{aiYukleniyor ? "Taranıyor..." : "Görüşme Notlarını Tara"}</button>
+            {aiMesaj && <div style={{ fontSize:11, color:MUTED, marginTop:7, lineHeight:1.5 }}>{aiMesaj}</div>}
+          </div>
+
+          {UYUM_GOSTERGELERI.map(g => {
+            const secim = g.maddeler.map((_,i)=>`${g.key}-${i}`).filter(k=>isaretli.includes(k)).length;
+            return (
+              <div key={g.key} style={{ ...kutu, borderLeft:`4px solid ${g.renk}` }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                  <span style={{ fontSize:13, fontWeight:800, color:TEXT }}>{g.ad}</span>
+                  {secim > 0 && <span style={{ background:g.renk, color:"#fff", borderRadius:10, padding:"2px 9px", fontSize:10, fontWeight:800 }}>{secim}</span>}
+                </div>
+                {g.maddeler.map((m,i) => {
+                  const kod = `${g.key}-${i}`;
+                  const sec = isaretli.includes(kod);
+                  return (
+                    <div key={kod} onClick={()=>cevir(kod)} style={{
+                      display:"flex", alignItems:"flex-start", gap:8, padding:"6px 0", cursor:"pointer",
+                      borderBottom:`1px solid ${BORDER}`
+                    }}>
+                      <span style={{
+                        width:16, height:16, borderRadius:5, flexShrink:0, marginTop:1,
+                        border:`1.5px solid ${sec ? g.renk : BORDER}`, background: sec ? g.renk : "transparent",
+                        color:"#fff", fontSize:11, fontWeight:900, textAlign:"center", lineHeight:"14px"
+                      }}>{sec ? "✓" : ""}</span>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:12, color: sec ? TEXT : MUTED, fontWeight: sec ? 700 : 400, lineHeight:1.45 }}>{m}</div>
+                        {sec && dayanaklar[kod] && (
+                          <div style={{ fontSize:10, color:g.renk, marginTop:2, fontStyle:"italic" }}>Nottan: "{dayanaklar[kod]}"</div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+
+          <div style={kutu}>
+            <label style={{ fontSize:11, fontWeight:700, color:MUTED, display:"block", marginBottom:4 }}>Sonuç / Karar</label>
+            <select value={sonuc} onChange={e=>setSonuc(e.target.value)}
+              style={{ width:"100%", padding:"9px 11px", borderRadius:9, border:`1px solid ${BORDER}`, fontSize:13, boxSizing:"border-box", background:CARD, color:TEXT }}>
+              {UYUM_SONUC.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <label style={{ fontSize:11, fontWeight:700, color:MUTED, display:"block", marginBottom:4, marginTop:10 }}>Not (isteğe bağlı)</label>
+            <textarea value={not} onChange={e=>setNot(e.target.value)} rows={3}
+              style={{ width:"100%", padding:"9px 11px", borderRadius:9, border:`1px solid ${BORDER}`, fontSize:13, boxSizing:"border-box", resize:"vertical", background:CARD, color:TEXT }} />
+            <div style={{ display:"flex", gap:8, marginTop:12 }}>
+              <button onClick={kaydet} style={{ flex:1, padding:"11px", borderRadius:11, border:"none", background:ACCENT, color:"#fff", fontSize:13.5, fontWeight:800, cursor:"pointer" }}>
+                İzlemeyi Kaydet
+              </button>
+              {isaretli.length > 0 && (
+                <button onClick={riskAc} style={{ padding:"11px 14px", borderRadius:11, border:"1px solid #C0392B", background:CARD, color:"#C0392B", fontSize:12, fontWeight:800, cursor:"pointer" }}>
+                  Risk Kaydı Aç
+                </button>
+              )}
+            </div>
+          </div>
+
+          {ogrKayitlari.length > 0 && (
+            <div style={kutu}>
+              <div style={{ fontSize:12, fontWeight:800, color:TEXT, marginBottom:9 }}>📋 Önceki İzlemeler ({ogrKayitlari.length})</div>
+              {ogrKayitlari.map(k => (
+                <div key={k.id} style={{ borderBottom:`1px solid ${BORDER}`, paddingBottom:9, marginBottom:9 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                    <span style={{ fontSize:12, fontWeight:800, color:TEXT }}>{k.tarih}</span>
+                    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                      <span style={{ background:ACCENT_LIGHT, color:ACCENT, borderRadius:10, padding:"2px 9px", fontSize:10, fontWeight:700 }}>{k.sonuc}</span>
+                      <button onClick={()=>sil(k.id)} style={{ padding:"2px 7px", borderRadius:7, border:"1px solid #F5B7B1", background:CARD, fontSize:10, cursor:"pointer" }}>🗑️</button>
+                    </div>
+                  </div>
+                  <div style={{ fontSize:11, color:MUTED, marginTop:4 }}>
+                    {(k.isaretli||[]).length} gösterge işaretli
+                  </div>
+                  {(k.isaretli||[]).length > 0 && (
+                    <div style={{ display:"flex", gap:4, flexWrap:"wrap", marginTop:5 }}>
+                      {(k.isaretli||[]).map(kod => {
+                        const [gk,i] = kod.split("-");
+                        const g = UYUM_GOSTERGELERI.find(x=>x.key===gk);
+                        if (!g) return null;
+                        return <span key={kod} style={{ background:g.renk+"22", color:g.renk, borderRadius:9, padding:"2px 7px", fontSize:9.5, fontWeight:700 }}>{g.maddeler[parseInt(i,10)]}</span>;
+                      })}
+                    </div>
+                  )}
+                  {k.not && <div style={{ fontSize:11, color:MUTED, marginTop:5, whiteSpace:"pre-wrap" }}>{k.not}</div>}
+                </div>
+              ))}
             </div>
           )}
         </>
@@ -14560,6 +14945,7 @@ export default function App() {
   const [aiLoading, setAiLoading] = useState(false);
   const [onerilenHatirlatma, setOnerilenHatirlatma] = useState(null); // {metin} | null
   const [onerilenBireyiTanima, setOnerilenBireyiTanima] = useState(null); // [{kategori,metin,secili}] | null
+  const [onerilenUyum, setOnerilenUyum] = useState(null); // [{kod,dayanak}] | null — Uyum İzleme önerisi
   const [onerilenBdt, setOnerilenBdt] = useState(null); // [{kategori,ifade,secili}] | null
   const [profAiLoading, setProfAiLoading] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -14624,6 +15010,7 @@ export default function App() {
   const [grupCalismalari, setGrupCalismalari] = useState([]);
   const [krizKayitlari, setKrizKayitlari] = useState([]);
   const [sosyometri, setSosyometri] = useState([]);
+  const [uyumIzleme, setUyumIzleme] = useState([]);
   const [hatirlatmalar, setHatirlatmalar] = useState([]);
   // Yıl Sonu Kapsam Takibi'nde hangi sınıfın hiç görüşülmemiş öğrencileri
   // açık — tıklanan sınıf tekrar tıklanırsa kapanır (null'a döner).
@@ -14662,6 +15049,7 @@ export default function App() {
     loadGrupCalismalari().then(setGrupCalismalari);
     loadKrizKayitlari().then(setKrizKayitlari);
     loadSosyometri().then(setSosyometri);
+    loadUyumIzleme().then(setUyumIzleme);
     loadHatirlatmalar().then(setHatirlatmalar);
     loadNetHaritasi().then(setNetHaritasiKayitlari);
     loadKonuHaritasi().then(setKonuHaritasiVerisi);
@@ -14707,7 +15095,9 @@ export default function App() {
     const kalan2 = bdtParcalari[1] || "";
     const btParcalari = kalan2.split(/---BIREYI_TANIMA---/i);
     const bdtBlok = (btParcalari[0] || "").trim();
-    const bireyiTanimaBlok = (btParcalari[1] || "").trim();
+    const uyParcalari = (btParcalari[1] || "").split(/---UYUM_IZLEME---/i);
+    const bireyiTanimaBlok = (uyParcalari[0] || "").trim();
+    const uyumBlok = (uyParcalari[1] || "").trim();
     setForm(f => ({ ...f, summary }));
     setOnerilenHatirlatma(pdrHatirlatmaBlokParcala(hatirlatmaBlok));
     // Bilişsel çarpıtma önerisi — güvenlik uyarısı varsa ayrı ve belirgin şekilde göster.
@@ -14743,6 +15133,22 @@ export default function App() {
     } else {
       setOnerilenBireyiTanima(null);
     }
+    // Uyum izleme önerisi — görüşme özetiyle AYNI AI çağrısından gelir, bu
+    // yüzden ek maliyet üretmez. Kaydedilmez, Uyum İzleme sekmesinde
+    // "onay bekliyor" olarak durur; danışman oradan gözden geçirip onaylar.
+    if (uyumBlok && !/^yok/i.test(uyumBlok)) {
+      const gecerliKodlar = UYUM_GOSTERGELERI.flatMap(g => g.maddeler.map((_,i)=>`${g.key}-${i}`));
+      const bulgular = uyumBlok.split("\n").map(satir => {
+        const m = satir.match(/^\s*([a-z]+-\d+)\s*\|\s*(.+)$/i);
+        if (!m) return null;
+        const kod = m[1].trim().toLowerCase();
+        if (!gecerliKodlar.includes(kod)) return null;
+        return { kod, dayanak: m[2].trim().replace(/^"|"$/g, "") };
+      }).filter(Boolean);
+      setOnerilenUyum(bulgular.length > 0 ? bulgular : null);
+    } else {
+      setOnerilenUyum(null);
+    }
     setAiLoading(false);
   }
 
@@ -14774,6 +15180,24 @@ export default function App() {
     setBireyiTanima(guncel);
     await saveBireyiTanima(guncel);
     setOnerilenBireyiTanima(null);
+  }
+
+  // Görüşme özetinden çıkan uyum bulgularını Uyum İzleme sekmesine
+  // "onay bekliyor" olarak düşürür. Kesin kayıt değildir; danışman o sekmede
+  // gözden geçirip onaylayınca izleme kaydına dönüşür.
+  async function handleUyumOnayaGonder() {
+    if (!onerilenUyum || !form.studentName.trim()) return;
+    const kayit = {
+      id: uid(), yil: aktifYil, tarih: form.tarih || today(),
+      studentName: form.studentName, className: form.className, numara: form.numara || "",
+      isaretli: onerilenUyum.map(o => o.kod),
+      dayanaklar: Object.fromEntries(onerilenUyum.map(o => [o.kod, o.dayanak])),
+      sonuc: "İzlemeye devam", not: "", beklemede: true,
+    };
+    const guncel = [...(uyumIzleme||[]), kayit];
+    setUyumIzleme(guncel);
+    await saveUyumIzleme(guncel);
+    setOnerilenUyum(null);
   }
 
   function handleBdtOneriToggle(index) {
@@ -15242,6 +15666,7 @@ export default function App() {
     { key: "grup_calismalari", label: "👪 Grup Çalışmaları" },
     { key: "kriz", label: "🚨 Kriz Müdahale" },
     { key: "sosyometri", label: "🤝 Sosyometri" },
+    { key: "uyum_izleme", label: "🔍 Uyum İzleme" },
     { key: "istatistik", label: "İstatistik" },
     { key: "prof_danisma", label: "🎓 Prof. Hakan" },
     { key: "ayarlar", label: "⚙️ Ayarlar" },
@@ -15301,10 +15726,11 @@ export default function App() {
       testler: sozlukVar(testKayitlari),
       hatirlatici: varMi(hatirlatmalar),
       belgeler: varMi(sevkler),
+      uyum_izleme: varMi(uyumIzleme),
     };
   }, [ogrenciler, records, profiles, profiles2, mudahalePlan, riskListesi, denemeler,
       netHaritasiKayitlari, konuHaritasiVerisi, testKayitlari, hatirlatmalar, sevkler,
-      grupCalismalari, krizKayitlari, sosyometri, aktifYil,
+      grupCalismalari, krizKayitlari, sosyometri, uyumIzleme, aktifYil,
       aktifOgrenci?.name, aktifOgrenci?.className, aktifOgrenci?.numara]);
 
   const TABS = TABS_TUMU.filter(t =>
@@ -15518,6 +15944,34 @@ export default function App() {
                   <div style={{ display:"flex", gap:8 }}>
                     <button onClick={handleBireyiTanimaOnayla} disabled={!form.studentName.trim()} style={{ flex:1, padding:"7px", background:"#8B5A00", color:"#fff", border:"none", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer" }}>✓ Seçilenleri Ekle</button>
                     <button onClick={()=>setOnerilenBireyiTanima(null)} style={{ padding:"7px 14px", background:"none", border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", color:MUTED, borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer" }}>Yoksay</button>
+                  </div>
+                </div>
+              )}
+              {/* AI'ın fark ettiği uyum göstergeleri — Uyum İzleme sekmesine onaya gönderilir */}
+              {onerilenUyum && (
+                <div style={{ background:"#EAF4FB", border:"1px solid #A9CCE3", borderRadius:10, padding:"10px 12px", marginBottom:10 }}>
+                  <div style={{ fontSize:11, fontWeight:700, color:"#1F618D", marginBottom:8 }}>
+                    🔍 AI, uyum izleme için {onerilenUyum.length} gösterge fark etti:
+                  </div>
+                  <div style={{ display:"flex", flexDirection:"column", gap:5, marginBottom:10 }}>
+                    {onerilenUyum.map((o,i) => {
+                      const [gk, mi] = o.kod.split("-");
+                      const g = UYUM_GOSTERGELERI.find(x=>x.key===gk);
+                      if (!g) return null;
+                      return (
+                        <div key={i} style={{ fontSize:11.5, lineHeight:1.5 }}>
+                          <span style={{ color:g.renk, fontWeight:700 }}>{g.ad}:</span> {g.maddeler[parseInt(mi,10)]}
+                          <div style={{ fontSize:10, color:MUTED, fontStyle:"italic" }}>Nottan: "{o.dayanak}"</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{ display:"flex", gap:8 }}>
+                    <button onClick={handleUyumOnayaGonder} disabled={!form.studentName.trim()} style={{ flex:1, padding:"7px", background:"#1F618D", color:"#fff", border:"none", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer" }}>→ Uyum İzleme'ye Gönder</button>
+                    <button onClick={()=>setOnerilenUyum(null)} style={{ padding:"7px 14px", background:"none", border:`1px solid ${BORDER}`, color:MUTED, borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer" }}>Yoksay</button>
+                  </div>
+                  <div style={{ fontSize:10, color:"#1F618D", marginTop:7, lineHeight:1.5 }}>
+                    Kesin kayıt olmaz — Uyum İzleme sekmesinde onayını bekler.
                   </div>
                 </div>
               )}
@@ -15768,6 +16222,9 @@ export default function App() {
               const kalanSosyo = (sosyometri||[]).filter(s => s.yil !== yil);
               setSosyometri(kalanSosyo); await saveSosyometri(kalanSosyo);
 
+              const kalanUyum = (uyumIzleme||[]).filter(u => u.yil !== yil);
+              setUyumIzleme(kalanUyum); await saveUyumIzleme(kalanUyum);
+
               // Öğrenci silmede zaten temizlenen ama yıl silmede unutulmuş
               // diziler: hatırlatmalar, net haritası, bireyi tanıma, BDT analiz.
               const kalanHatirlatmalar = (hatirlatmalar||[]).filter(h => !silinecekMi(h.studentName, h.className, h.numara));
@@ -15857,6 +16314,9 @@ export default function App() {
 
               const kalanSosyo = (sosyometri||[]).filter(s => s.yil !== yil);
               setSosyometri(kalanSosyo); await saveSosyometri(kalanSosyo);
+
+              const kalanUyum = (uyumIzleme||[]).filter(u => u.yil !== yil);
+              setUyumIzleme(kalanUyum); await saveUyumIzleme(kalanUyum);
 
               const kalanHatirlatmalar2 = (hatirlatmalar||[]).filter(h => !silinecekMi(h.studentName, h.className, h.numara));
               setHatirlatmalar(kalanHatirlatmalar2); await saveHatirlatmalar(kalanHatirlatmalar2);
@@ -16528,6 +16988,20 @@ export default function App() {
             setRiskForm={setRiskForm}
             setTab={setTab}
             siniflar={[...new Set([...(sinifListesi||[]), ...(ogrenciler||[]).map(o=>(o.className||"").trim())].filter(Boolean))].sort((a,b)=>a.localeCompare(b,"tr"))}
+          />
+        )}
+
+        {tab === "uyum_izleme" && (
+          <UyumIzlemeEkrani
+            kayitliListesi={kayitliListesi}
+            aktifOgrenci={aktifOgrenci}
+            setAktifOgrenci={setAktifOgrenci}
+            uyumIzleme={uyumIzleme}
+            setUyumIzleme={setUyumIzleme}
+            records={records}
+            aktifYil={aktifYil}
+            setRiskForm={setRiskForm}
+            setTab={setTab}
           />
         )}
 

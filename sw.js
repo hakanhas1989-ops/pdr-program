@@ -1,4 +1,6 @@
-const CACHE_NAME = "pdr-v10"; (FCM) — uygulama kapalıyken/arka plandayken gelen
+const CACHE_NAME = "pdr-v10";
+
+// Push bildirimi (FCM) — uygulama kapalıyken/arka plandayken gelen
 // bildirimleri göstermek için Firebase Messaging bu service worker
 // içinde de başlatılıyor. Ana firebaseConfig ile birebir aynı olmalı.
 importScripts("https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js");

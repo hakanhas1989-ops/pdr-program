@@ -798,6 +798,7 @@ const MUDAHALE_PDF_MAP = {
   "zorbalik-yapan": "https://raw.githubusercontent.com/hakanhas1989-ops/pdr-program/main/mudahale-zorbalik-yapan.pdf",
   "zorbalik-maruz-kalan": "https://raw.githubusercontent.com/hakanhas1989-ops/pdr-program/main/mudahale-zorbalik-maruz-kalan.pdf",
   "sosyal-duygusal": "https://raw.githubusercontent.com/hakanhas1989-ops/pdr-program/main/mudahale-sosyal-duygusal.pdf",
+  "psikolojik-saglamlik": "https://raw.githubusercontent.com/hakanhas1989-ops/pdr-program/main/mudahale-psikolojik-saglamlik.pdf",
 };
 // Kütüphane ekranındaki program filtre butonlarında kullanılan kısa adlar —
 // tam adlar (MUDAHALE_PROGRAMLARI[].ad) çok uzun olduğu için buton üzerinde
@@ -807,25 +808,46 @@ const MUDAHALE_PROGRAM_KISA_ADLAR = {
   "zorbalik-yapan": "Zorbalık Yapan",
   "zorbalik-maruz-kalan": "Zorbalığa Maruz Kalan",
   "sosyal-duygusal": "Sosyal Duygusal",
+  "psikolojik-saglamlik": "Psikolojik Sağlamlık",
 };
 const MUDAHALE_PROGRAMLARI = [
+  {
+    key: "psikolojik-saglamlik",
+    ad: "Psikolojik Sağlamlık Psikoeğitim Programı — Ortaokul (PSPP-O)",
+    hedefKitle: "Zorlayıcı yaşam olayları karşısında psikolojik sağlamlığı desteklenmesi gereken öğrenciler",
+    oturumlar: [
+      { modul: "Kendini Tanıma ve Değerli Hissetme", baslik: "Program Tanıtımı ve Güçlü Yönlerin Keşfi", sayfa: 15, ozet: "Programın tanıtılması, grupla tanışma, güçlü ve geliştirilebilir yönlerin farkındalığının sağlanması." },
+      { modul: "Kendini Tanıma ve Değerli Hissetme", baslik: "Sahip Olduklarını Takdir Etme (Devam Oturumu)", sayfa: 20, ozet: "Bireyin sahip olduğu özelliklerin farkındalığını sağlayarak, kendini takdir etmesinin desteklenmesi." },
+      { modul: "Duygu Tanıma ve Sahiplenme", baslik: "Duyguların Farkındalığı ve Kabulü", sayfa: 25, ozet: "Olumlu ve olumsuz duyguların farkındalığının kazandırılması, bu duyguların kabul edilip düzenlenebilmesi." },
+      { modul: "Duygu Tanıma ve Sahiplenme", baslik: "Duygu-Beden İlişkisi ve İfade (Devam Oturumu)", sayfa: 34, ozet: "Duyguların bedenle ilişkisinin tanımlanması ve duyguları ifade etmenin öneminin kavratılması." },
+      { modul: "Düşünceleri Temiz Tutma", baslik: "Düşünce-Duygu-Davranış Bağı ve Bilişsel Çarpıtmalar", sayfa: 39, ozet: "Zorlayıcı yaşam olayları karşısında duygu, düşünce ve davranış ilişkisinin fark edilmesi; işlevsel olmayan düşünce örüntülerinin tanınması." },
+      { modul: "Düşünceleri Temiz Tutma", baslik: "Akılcı Olmayan Düşünceler ve Benlik İnançları", sayfa: 48, ozet: "Akılcı olmayan düşüncelerin duygu ve davranışlar üzerindeki sonuçlarının tartışılması, benliğe yönelik olumsuz inançların fark edilmesi." },
+      { modul: "Düşünceleri Temiz Tutma", baslik: "Bilişsel Yeniden Çerçeveleme", sayfa: 55, ozet: "Olaylara bakış açısına odaklanarak meydan okuyucu durumlarda olumlu düşüncelerin belirlenmesi." },
+      { modul: "Zorlayıcı Yaşam Olaylarını Tanıma", baslik: "Zorlayıcı Olayları ve Stresi Tanıma", sayfa: 60, ozet: "Zorlayıcı yaşam olaylarının tanımlanması, oluşturdukları stres durumlarının bilinmesi, koruyucu güçlerin keşfedilmesi." },
+      { modul: "Zorlayıcı Yaşam Olaylarını Tanıma", baslik: "Stres Kaynakları ve Koruyucu Faktörler (Devam Oturumu)", sayfa: 69, ozet: "Yaşamdaki stres kaynaklarının iyi oluş üzerindeki etkisinin değerlendirilmesi, psikolojik sağlamlığı artıran faktörlerin fark edilmesi." },
+      { modul: "Amaç Yönelimli Olma", baslik: "Hedef Belirleme ve Aktif Rol Alma", sayfa: 80, ozet: "Kişinin kendine uygun hedefler için sahip olduğu kaynakları ve güçlükleri keşfetmesi, buna uygun çalışmaları seçmesi." },
+      { modul: "Güvenli Sosyal Bağlar Oluşturma", baslik: "Aidiyet Duygusunun Fark Edilmesi", sayfa: 87, ozet: "Bireyin toplum içinde ait olduğu yapıların (sınıf, okul, aile, sosyal çevre) fark edilmesinin sağlanması." },
+      { modul: "Güvenli Sosyal Bağlar Oluşturma", baslik: "Toplumsal Sorumluluk ve Hak Savunuculuğu (Devam Oturumu)", sayfa: 94, ozet: "Ait olunan gruplarda toplumsal sorumluluk alınması ve hak savunuculuğu gerektiren durumlarda harekete geçilmesi." },
+      { modul: "Kapanış", baslik: "Değerlendirme ve Günlük Yaşama Aktarım", sayfa: 104, ozet: "Programda öğrenilenlerin gözden geçirilmesi ve günlük yaşama nasıl aktarılacağının fark ettirilmesi." },
+    ]
+  },
   {
     key: "akademik-beceriler",
     ad: "Akademik Becerileri Geliştirme Müdahale Programı",
     hedefKitle: "Okuldan erken ayrılma riski, akademik motivasyon düşüklüğü",
     oturumlar: [
-      { baslik: "Başlangıç", sayfa: 30, ozet: "Gruba/sürece katılım, tanışma ve müdahale çalışmasına hazırlık." },
-      { baslik: "Akademik Benlik Kavramı ve Zayıf Özgüven", sayfa: 36, ozet: "Akademik benlik kavramını tanıma ve olayları algılama biçiminin bu kavramı nasıl etkilediğini fark etme." },
-      { baslik: "Kendini Engelleme", sayfa: 44, ozet: "Kendini engelleme davranışlarını tanıma ve bunlarla başa çıkma." },
-      { baslik: "İletişim ve Çatışma Çözme Becerileri", sayfa: 55, ozet: "Etkili iletişim ve çatışma çözme becerilerinin geliştirilmesi." },
-      { baslik: "Öfke Yönetimi", sayfa: 71, ozet: "Öfke duygusunu tanıma ve yönetme becerileri." },
-      { baslik: "Öfke Yönetimi (Devam Oturumu)", sayfa: 82, ozet: "Öfke yönetimi becerilerinin pekiştirilmesi." },
-      { baslik: "İç ve Dış Göçler", sayfa: 88, ozet: "Göç deneyiminin okula uyum ve akademik yaşama etkisiyle baş etme." },
-      { baslik: "Yardım Arama Davranışı", sayfa: 97, ozet: "İhtiyaç duyduğunda yardım isteyebilme becerisinin geliştirilmesi." },
-      { baslik: "Okulla Bağ Kurma", sayfa: 107, ozet: "Okula aidiyet ve bağlılık duygusunun güçlendirilmesi." },
-      { baslik: "Akademik Motivasyon", sayfa: 116, ozet: "Akademik motivasyonun artırılmasına yönelik çalışma." },
-      { baslik: "Özdüzenlemeli Öğrenme", sayfa: 128, ozet: "Özdüzenlemeli öğrenme becerilerinin kazandırılması." },
-      { baslik: "Sonlandırma", sayfa: 142, ozet: "Programın değerlendirilmesi ve sonlandırılması." },
+      { baslik: "Başlangıç", sayfa: 31, ozet: "Gruba/sürece katılım, tanışma ve müdahale çalışmasına hazırlık." },
+      { baslik: "Akademik Benlik Kavramı ve Zayıf Özgüven", sayfa: 37, ozet: "Akademik benlik kavramını tanıma ve olayları algılama biçiminin bu kavramı nasıl etkilediğini fark etme." },
+      { baslik: "Kendini Engelleme", sayfa: 45, ozet: "Kendini engelleme davranışlarını tanıma ve bunlarla başa çıkma." },
+      { baslik: "İletişim ve Çatışma Çözme Becerileri", sayfa: 56, ozet: "Etkili iletişim ve çatışma çözme becerilerinin geliştirilmesi." },
+      { baslik: "Öfke Yönetimi", sayfa: 72, ozet: "Öfke duygusunu tanıma ve yönetme becerileri." },
+      { baslik: "Öfke Yönetimi (Devam Oturumu)", sayfa: 83, ozet: "Öfke yönetimi becerilerinin pekiştirilmesi." },
+      { baslik: "İç ve Dış Göçler", sayfa: 89, ozet: "Göç deneyiminin okula uyum ve akademik yaşama etkisiyle baş etme." },
+      { baslik: "Yardım Arama Davranışı", sayfa: 98, ozet: "İhtiyaç duyduğunda yardım isteyebilme becerisinin geliştirilmesi." },
+      { baslik: "Okulla Bağ Kurma", sayfa: 108, ozet: "Okula aidiyet ve bağlılık duygusunun güçlendirilmesi." },
+      { baslik: "Akademik Motivasyon", sayfa: 117, ozet: "Akademik motivasyonun artırılmasına yönelik çalışma." },
+      { baslik: "Özdüzenlemeli Öğrenme", sayfa: 129, ozet: "Özdüzenlemeli öğrenme becerilerinin kazandırılması." },
+      { baslik: "Sonlandırma", sayfa: 143, ozet: "Programın değerlendirilmesi ve sonlandırılması." },
     ]
   },
   {
@@ -833,16 +855,16 @@ const MUDAHALE_PROGRAMLARI = [
     ad: "Akran Zorbalığı Yapan Öğrencilere Yönelik Arkadaşlık İlişkileri Geliştirme Programı",
     hedefKitle: "Akran zorbalığı yapan öğrenciler",
     oturumlar: [
-      { baslik: "Tanışma ve Bireysel Farklılıklarımız", sayfa: 8, ozet: "Sürece tanışma ve bireysel farklılıkların fark edilmesi." },
-      { baslik: "Haklarımız ve Sorumluluklarımız", sayfa: 14, ozet: "Kişisel hak ve sorumlulukların ele alınması." },
-      { baslik: "Akran Zorbalığı", sayfa: 20, ozet: "Akran zorbalığının ne olduğunun ve etkilerinin ele alınması." },
-      { baslik: "Düşüncelerim, Duygularım ve Davranışlarım", sayfa: 26, ozet: "Düşünce-duygu-davranış ilişkisinin fark edilmesi." },
-      { baslik: "Nasıl İletişim Kuruyorum", sayfa: 34, ozet: "Kendi iletişim biçiminin fark edilmesi." },
-      { baslik: "Üç Rolde İletişim", sayfa: 40, ozet: "Farklı iletişim rollerinin (zorba/mağdur/izleyici) ele alınması." },
-      { baslik: "Öfkeni Anlat ve Yönet", sayfa: 50, ozet: "Öfke duygusunu ifade etme ve yönetme becerileri." },
-      { baslik: "Çatışma Çözüyorum", sayfa: 56, ozet: "Yapıcı çatışma çözme becerilerinin geliştirilmesi." },
-      { baslik: "Güçlü Yanlarım", sayfa: 66, ozet: "Öğrencinin güçlü yönlerinin fark ettirilmesi." },
-      { baslik: "Sonlandırma", sayfa: 70, ozet: "Programın değerlendirilmesi ve sonlandırılması." },
+      { baslik: "Tanışma ve Bireysel Farklılıklarımız", sayfa: 10, ozet: "Sürece tanışma ve bireysel farklılıkların fark edilmesi." },
+      { baslik: "Haklarımız ve Sorumluluklarımız", sayfa: 16, ozet: "Kişisel hak ve sorumlulukların ele alınması." },
+      { baslik: "Akran Zorbalığı", sayfa: 22, ozet: "Akran zorbalığının ne olduğunun ve etkilerinin ele alınması." },
+      { baslik: "Düşüncelerim, Duygularım ve Davranışlarım", sayfa: 28, ozet: "Düşünce-duygu-davranış ilişkisinin fark edilmesi." },
+      { baslik: "Nasıl İletişim Kuruyorum", sayfa: 36, ozet: "Kendi iletişim biçiminin fark edilmesi." },
+      { baslik: "Üç Rolde İletişim", sayfa: 42, ozet: "Farklı iletişim rollerinin (zorba/mağdur/izleyici) ele alınması." },
+      { baslik: "Öfkeni Anlat ve Yönet", sayfa: 52, ozet: "Öfke duygusunu ifade etme ve yönetme becerileri." },
+      { baslik: "Çatışma Çözüyorum", sayfa: 58, ozet: "Yapıcı çatışma çözme becerilerinin geliştirilmesi." },
+      { baslik: "Güçlü Yanlarım", sayfa: 68, ozet: "Öğrencinin güçlü yönlerinin fark ettirilmesi." },
+      { baslik: "Sonlandırma", sayfa: 72, ozet: "Programın değerlendirilmesi ve sonlandırılması." },
     ]
   },
   {
@@ -850,16 +872,16 @@ const MUDAHALE_PROGRAMLARI = [
     ad: "Akran Zorbalığına Maruz Kalan Öğrencilere Yönelik Arkadaşlık İlişkileri Geliştirme Programı",
     hedefKitle: "Akran zorbalığına maruz kalan öğrenciler",
     oturumlar: [
-      { baslik: "Tanışma, Programın Amacı, Grup Kuralları", sayfa: 8, ozet: "Sürece tanışma, programın amacının açıklanması ve grup kurallarının belirlenmesi." },
-      { baslik: "Kişisel Haklarım, Sorumluluklarım ve Farklılıklarımız", sayfa: 14, ozet: "Kişisel hak, sorumluluk ve bireysel farklılıkların ele alınması." },
-      { baslik: "Akran Zorbalığını Tanıyorum", sayfa: 28, ozet: "Akran zorbalığının tanınması ve fark edilmesi." },
-      { baslik: "Düşüncelerim, Duygularım ve Davranışlarım", sayfa: 38, ozet: "Düşünce-duygu-davranış ilişkisinin fark edilmesi." },
-      { baslik: "İncinmelerim, Başa Çıkma Stratejileri ve Özsaygı", sayfa: 48, ozet: "Yaşanan incinmelerle başa çıkma stratejileri ve özsaygının güçlendirilmesi." },
-      { baslik: "Nasıl İletişim Kuruyorum? Güvenli Davranmaya Doğru", sayfa: 54, ozet: "Güvenli iletişim ve davranış biçimlerine yönelme." },
-      { baslik: "Güvenli Davranıyorum: Dur Diyebilme, Mizah, Hızlı Tepki", sayfa: 64, ozet: "Dur diyebilme, mizah kullanma ve hızlı tepki verebilme becerileri." },
-      { baslik: "Baş Etme Stratejileri: Görmezden Gelme, Kaçınma, Yardım İsteme", sayfa: 74, ozet: "Farklı baş etme stratejilerinin tanınması." },
-      { baslik: "Problem Çözme: Baş Etme Stratejilerini Seçiyorum", sayfa: 80, ozet: "Duruma uygun baş etme stratejisini seçebilme." },
-      { baslik: "Sonlandırma", sayfa: 94, ozet: "Programın değerlendirilmesi ve sonlandırılması." },
+      { baslik: "Tanışma, Programın Amacı, Grup Kuralları", sayfa: 10, ozet: "Sürece tanışma, programın amacının açıklanması ve grup kurallarının belirlenmesi." },
+      { baslik: "Kişisel Haklarım, Sorumluluklarım ve Farklılıklarımız", sayfa: 16, ozet: "Kişisel hak, sorumluluk ve bireysel farklılıkların ele alınması." },
+      { baslik: "Akran Zorbalığını Tanıyorum", sayfa: 30, ozet: "Akran zorbalığının tanınması ve fark edilmesi." },
+      { baslik: "Düşüncelerim, Duygularım ve Davranışlarım", sayfa: 40, ozet: "Düşünce-duygu-davranış ilişkisinin fark edilmesi." },
+      { baslik: "İncinmelerim, Başa Çıkma Stratejileri ve Özsaygı", sayfa: 50, ozet: "Yaşanan incinmelerle başa çıkma stratejileri ve özsaygının güçlendirilmesi." },
+      { baslik: "Nasıl İletişim Kuruyorum? Güvenli Davranmaya Doğru", sayfa: 56, ozet: "Güvenli iletişim ve davranış biçimlerine yönelme." },
+      { baslik: "Güvenli Davranıyorum: Dur Diyebilme, Mizah, Hızlı Tepki", sayfa: 66, ozet: "Dur diyebilme, mizah kullanma ve hızlı tepki verebilme becerileri." },
+      { baslik: "Baş Etme Stratejileri: Görmezden Gelme, Kaçınma, Yardım İsteme", sayfa: 76, ozet: "Farklı baş etme stratejilerinin tanınması." },
+      { baslik: "Problem Çözme: Baş Etme Stratejilerini Seçiyorum", sayfa: 82, ozet: "Duruma uygun baş etme stratejisini seçebilme." },
+      { baslik: "Sonlandırma", sayfa: 96, ozet: "Programın değerlendirilmesi ve sonlandırılması." },
     ]
   },
   {
@@ -1040,7 +1062,7 @@ function MudahaleKutuphanesiEkrani({ kayitliListesi, records, aktifOgrenci, setA
     <div style={{ padding: 16, maxWidth: 640 }}>
       <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 4, color:PURPLE }}>📁 Müdahale Programları</div>
       <div style={{ fontSize: 12, color: MUTED, marginBottom: 16, lineHeight: 1.5 }}>
-        4 kaynak programdan (Akademik Beceriler, Akran Zorbalığı Yapan/Maruz Kalan, Sosyal Duygusal Beceriler) toplam {havuz.length} oturum. Anahtar kelime ara ya da bir öğrenci seçip AI'ın görüşme notlarına göre önermesini iste — her iki yolda da sonuca tıklayınca PDF'in ilgili sayfası açılır.
+        5 kaynak programdan (Akademik Beceriler, Akran Zorbalığı Yapan/Maruz Kalan, Sosyal Duygusal Beceriler, Psikolojik Sağlamlık) toplam {havuz.length} oturum. Anahtar kelime ara ya da bir öğrenci seçip AI'ın görüşme notlarına göre önermesini iste — her iki yolda da sonuca tıklayınca PDF'in ilgili sayfası açılır.
       </div>
 
       {/* AI ile Ara */}

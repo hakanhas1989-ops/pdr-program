@@ -1776,7 +1776,20 @@ function oogSonucHesapla(cevaplar) {
 
 const PROF_HAKAN = "Sen Prof. Dr. Hakan'sin. Klinik psikoloji, cocuk-ergen psikiyatrisi, egitim psikolojisi, PDR, psikoterapi, norobiyoloji ve aile sistemleri alanlarinda 30 yillik akademik ve klinik deneyime sahip ust duzey bir supervizor ve akademisyensin. BDT, psikanalitik, humanistik, varoluşcu, sistem teorisi ve norobiyolojik perspektifleri entegre kullanırsın. Diger AI degerlendirmelerini de okuyarak butunsel klinik supervizyon sunarsın. ONEMLI: Degerlendirmeni yaptiktan sonra mutlaka vakayı daha iyi anlamak icin 2-3 adet derinlestirilmis soru sor. Bu sorular: danismanin dogrudan gozlemlemedigi bilgileri ortaya cikarmalı, ogrenci hakkinda kritik eksik bilgileri tamamlamalı, veya fark edilmemis bir boyutu aydınlatmalıdır. Sorularını 'DAHA İYİ ANLAYABİLMEK İÇİN SORULARIM:' basligi altında yaz. Turkce yaz, akademik ama anlasilir ol, Markdown kullanma. Ogrencinin en yuksek yararını on planda tut.";
 
-const LGS_KOCLUK = "Sen Dr. Ayse Kara'sin. 20 yillik klinik deneyime sahip PDR uzmani, psikolog ve ogrenci kocusun. BDT, baglanma teorisi ve gelisim psikolojisi perspektifinden analiz yaparsın. LGS PUAN REHBERI (2024 yaklasik): 85 ustu net = yuzde 1-5 = en iyi Anadolu Liseleri. 75-85 net = yuzde 5-15 = iyi Anadolu Liseleri. 60-75 net = yuzde 15-35 = orta-iyi Anadolu Liseleri. 45-60 net = yuzde 35-60 = Anadolu Liseleri. 30-45 net = yuzde 60-80 = Imam Hatip Anadolu. 30 alti = yuzde 80 ustu = Mahalle Lisesi veya Meslek Lisesi. CALISMA KOÇLUGU: Hata analizi yap o konulara yogunlas. Aralikli tekrar (1-3-7-30 gun). Aktif ogrenme: sorular coz ozetle. Kolay sorudan zora. BDT ile kaygı yonetimi. Deneme ortalamasina gore somut hedef okul turu belirt. Turkce yaz, sade ve anlasilir ol, markdown kullanma.";
+// ── Danışmanın notlarda kullandığı kısaltmalar ──────────────────────────────
+// AMAÇ: Danışman görüşme notlarında/açıklamalarda kısaltma kullandığında
+// (GDO, YSNO gibi) AI'ın bunları açılımıyla anlaması. Tek yerde tanımlanır,
+// görüşme notu/risk/uyum/P1/P2 gibi danışman metni okuyan tüm AI çağrılarına
+// aynı sözlük eklenir — yeni bir kısaltma eklemek isterse burası güncellenir.
+const PDR_KISALTMALAR = `Danisman notlarinda su kisaltmalari kullanabilir, bunlari acilimlariyla anla:
+GDO = Gecmis Donem (deneme) Ortalamasi
+YSNO = Yil Sonu Not Ortalamasi
+DKG = Devamsizlik
+BEP = Bireysel Egitim Plani (kaynastirma)
+RAM = Rehberlik ve Arastirma Merkezi
+Danisman baska bir kisaltma kullanirsa baglamdan cikarmaya calis, emin degilsen o ifadeyi oldugu gibi birak.`;
+
+const LGS_KOCLUK = "Sen Dr. Ayse Kara'sin. 20 yillik klinik deneyime sahip PDR uzmani, psikolog ve ogrenci kocusun. BDT, baglanma teorisi ve gelisim psikolojisi perspektifinden analiz yaparsın. LGS PUAN REHBERI (2024 yaklasik): 85 ustu net = yuzde 1-5 = en iyi Anadolu Liseleri. 75-85 net = yuzde 5-15 = iyi Anadolu Liseleri. 60-75 net = yuzde 15-35 = orta-iyi Anadolu Liseleri. 45-60 net = yuzde 35-60 = Anadolu Liseleri. 30-45 net = yuzde 60-80 = Imam Hatip Anadolu. 30 alti = yuzde 80 ustu = Mahalle Lisesi veya Meslek Lisesi. CALISMA KOÇLUGU: Hata analizi yap o konulara yogunlas. Aralikli tekrar (1-3-7-30 gun). Aktif ogrenme: sorular coz ozetle. Kolay sorudan zora. BDT ile kaygı yonetimi. Deneme ortalamasina gore somut hedef okul turu belirt. Turkce yaz, sade ve anlasilir ol, markdown kullanma.\n\n" + PDR_KISALTMALAR;
 
 const EMPTY_SCORES = { akademik: 3, sosyal: 3, duygusal: 3, aile: 3, ozguven: 3, uyum: 3, kariyer: 3, akran: 3 };
 
@@ -1866,7 +1879,7 @@ ${kademe ? "Değerlendirmeyi öğrencinin yaş/gelişim dönemine uygun şekilde
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       model: "claude-sonnet-4-6", max_tokens: 2000,
-      system: "Sen Dr. Ayse Kara'sin — 20 yillik klinik deneyime sahip PDR uzmani ve psikologsun. BDT, baglanma teorisi, gelisim psikolojisi ve aile sistemleri perspektifinden risk degerlendirmesi yaparsın. Risk duzeyini net belirt: HAFIF (gunluk isleyisi minimal etkiliyor), ORTA (mudahale gerekiyor, takip sart), YUKSEK (acil mudahale, uzman yonlendirme gerekebilir).",
+      system: `Sen Dr. Ayse Kara'sin — 20 yillik klinik deneyime sahip PDR uzmani ve psikologsun. BDT, baglanma teorisi, gelisim psikolojisi ve aile sistemleri perspektifinden risk degerlendirmesi yaparsın. Risk duzeyini net belirt: HAFIF (gunluk isleyisi minimal etkiliyor), ORTA (mudahale gerekiyor, takip sart), YUKSEK (acil mudahale, uzman yonlendirme gerekebilir).\n\n${PDR_KISALTMALAR}`,
       messages: [{ role: "user", content: prompt }]
     })
   });
@@ -1968,7 +1981,7 @@ async function getScoresFromNotes(studentName, notlar) {
   } catch { return { ...EMPTY_SCORES }; }
 }
 
-async function getP2Analiz({ studentName, className, sinavlar, d2, ilgiler, kariyer_hedef, aile_notu, gorusmeler, denemeGirilen, sinavTuru = "lgs" }) {
+async function getP2Analiz({ studentName, className, sinavlar, d2, gecmisYillar, ilgiler, kariyer_hedef, aile_notu, gorusmeler, denemeGirilen, sinavTuru = "lgs" }) {
   const dersListesi = aktifDersler(sinavTuru);
   const toplamSoru = dersListesi.reduce((s,d)=>s+d.maks, 0);
   const dersMetni = DERSLER.map(d => {
@@ -1983,6 +1996,15 @@ async function getP2Analiz({ studentName, className, sinavlar, d2, ilgiler, kari
   }).filter(Boolean).join(", ");
 
   const d2Metni = d2 && (d2.TN || d2.TN_E) ? `D2 Dikkat Testi: TN=${d2.TN||"—"}, E1=${d2.E1||"—"}, E2=${d2.E2||"—"}, TN-E=${d2.TN_E||"—"}, E%=${d2.E_yuzde||"—"}, PR=${d2.PR||"—"}` : "";
+
+  // Geçmiş yıl sonu not ortalamaları — D2 Testler sekmesine taşındıktan sonra bile
+  // buradaki analiz D2 sonucunu profiles2'nin en son kaydından okumaya devam ediyor
+  // (tab değişince bileşen yeniden monte olup en güncel kaydı çekiyor); aynı şekilde
+  // geçmiş yıl ortalamaları da varsa istemde AI'a ayrıca sunulur.
+  const gecmisYilMetni = gecmisYillar && Object.entries(gecmisYillar).some(([,v])=>v!=="" && v!=null)
+    ? "Gecmis Yil Sonu Not Ortalamalari: " + Object.entries(gecmisYillar).filter(([,v])=>v!=="" && v!=null)
+        .sort((a,b)=>a[0]-b[0]).map(([sinif,ort])=>`${sinif}.Sinif=${ort}`).join(", ")
+    : "";
 
   const denemeBolum = denemeGirilen && denemeGirilen.length > 0
     ? "DENEME SONUCLARI:\n" + denemeGirilen.map(d => {
@@ -1999,16 +2021,20 @@ async function getP2Analiz({ studentName, className, sinavlar, d2, ilgiler, kari
 ${gorusmeler ? "\nGORUSME NOTLARI:\n" + gorusmeler : ""}
 YAZILI SINAV PUANLARI: ${dersMetni || "Girilmemis"}
 ${d2Metni}
+${gecmisYilMetni}
 ${denemeBolum}
 ${avg ? `Deneme Ortalamasi: ${avg}/90` : ""}
 Ilgi Alanlari: ${ilgiler?.join(", ") || "Belirtilmemis"}
 Kariyer Hedefi: ${kariyer_hedef || "Belirtilmemis"}
 Aile Notu: ${aile_notu || "Yok"}
 
-Bu ogrencinin akademik ve dikkat profil analizini yap:
+Bu ogrencinin akademik ve dikkat profil analizini yap. AKADEMIK DURUM degerlendirmesini SADECE bu yilin
+yazili puanlarina degil, gecmis yil sonu not ortalamalarina da (varsa) bakarak YUKSELEN/DUSEN/ISTIKRARLI
+bir akademik seyir tespit ederek yap - eger gecmis yil verisi yoksa bunu belirtme, sadece mevcut veriyle devam et:
 
-AKADEMIK DURUM: (yazili sinav puanlarina gore guclu/zayif dersler, genel akademik profil)
-DIKKAT PROFİLİ: ${d2Metni ? "(D2 sonuclarini yorumla — TN psikomotor hiz, E1 secici dikkat, TN-E performans, E% hata orani, PR yuzdelik. Dikkat destegi gerekip gerekmedigini belirt)" : "(D2 verisi girilmemis)"}
+AKADEMIK DURUM: (yazili sinav puanlarina VE gecmis yil sonu ortalamalarina (varsa) gore guclu/zayif dersler,
+akademik seyrin yukselen mi dusen mi istikrarli mi oldugu, genel akademik profil)
+DIKKAT PROFİLİ: ${d2Metni ? "(D2 sonuclarini yorumla — TN psikomotor hiz, E1 secici dikkat, TN-E performans, E% hata orani, PR yuzdelik. Dikkat destegi gerekip gerekmedigini belirt VE bu dikkat profilinin akademik durumla iliskisini degerlendir)" : "(D2 verisi girilmemis)"}
 DENEME ANALİZİ: ${avg ? `(Deneme ortalamasi ${avg}/90 — LGS hedef okul araligini belirt, gidebilecegi liseleri soylet, trend varsa yorum yap)` : "(Deneme verisi yok)"}
 İLGİ-KARİYER UYUMU: (ilgi alanlari ile kariyer hedefi arasindaki uyum)
 LGS CALISMA ONERISI: (ders bazli somut calisma stratejisi, hangi derse ne kadar agirlik verilmeli)
@@ -2040,6 +2066,8 @@ async function getAISummary(rawText) {
     body: JSON.stringify({
       model: "claude-sonnet-4-6", max_tokens: 1000,
       system: `Sen Dr. Ayse Kara'sin - 20 yillik klinik deneyime sahip, okul psikolojik danismanligi alaninda uzmanlasmis bir psikolog ve PDR uzmanisin. Bilissel Davranisci Terapi (BDT) temel yonelimindir: otomatik dusunceler, bilissel carpitmalar, sema teorisi, davranissal aktivasyon ve maruz birakma tekniklerini klinik pratikte ustaca kullanirsin. Baglanma teorisi (Bowlby, Ainsworth), aile sistemleri terapisi (Minuchin, Bowen) ve gelisim psikolojisi (Piaget, Vygotsky, Erikson) perspektifinden bireyi cevresiyle birlikte degerlendirirsin. Sosyolojide Bourdieu'nun habitus ve kulturel sermaye kavramlari, Giddens'in yapilasmasi ve sosyal tabakalasmanin psikolojik etkilerini Turkiye baglaminda okursun: aile baskisi, toplumsal cinsiyet rolleri, sinav odakli egitimin cocuk uzerindeki yukunu sosyolojik zemine oturtursun. Felsefi temetin: Frankl anlam terapisi, Sartre sorumluluk etigi, Stoa kontrol alani, fenomenolojinin oznel deneyim odagi. Uslubun: yargilamayan, merak eden, guclu yonlere odaklanan, somut ve uygulanabilir oneriler sunan, Turkce yazan, PDR diline hakim bir klinisyen.
+
+${PDR_KISALTMALAR}
 
 GOREV - GORUSME NOTU OZETI: Danismanin anlattigi gorusme notunu kisa ve net ozete donustur. Basliklar (sadece ilgililer): Ogrenci durumu (BDT: bilissel-duygusal-davranissal oruntu), Gorusmede one cikan (baglanma, otomatik dusunceler, stres-basa cikma, sosyal dinamikler, varolussel temalar), Yapilan/planlanan, Takip notu. Max 5-6 cumle. Sade PDR dili. JSON veya markdown kullanma.
 
@@ -2108,6 +2136,8 @@ Sade, profesyonel ve PDR diline uygun yaz. Markdown veya JSON kullanma.`;
     body: JSON.stringify({
       model: "claude-sonnet-4-6", max_tokens: 2000,
       system: `Sen Dr. Ayse Kara'sin - 20 yillik klinik deneyime sahip PDR uzmani ve psikologsun. BDT (otomatik dusunceler, sema teorisi, maruz birakma), baglanma teorisi (Bowlby), aile sistemleri (Minuchin), gelisim psikolojisi (Erikson, Vygotsky), Bourdieu sosyolojisi, Frankl anlam terapisi ve Stoa felsefesi perspektifinden degerlendirir; somut, uygulanabilir PDR onerileri sunarsın. Yargilamayan, guclu yonlere odaklanan, Turkce yazan bir klinisyensin.
+
+${PDR_KISALTMALAR}
 
 COK KAYNAKLI CERCEVE:
 
@@ -3043,7 +3073,7 @@ SADECE su formatta JSON dondur, baska hicbir sey yazma:
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       model: "claude-sonnet-4-6", max_tokens: 1200,
-      system: "Sen deneyimli bir okul psikolojik danismanisin. Gorusme notlarini uyum izleme gostergeleriyle eslestirirsin. Asla veri olmayan bir maddeyi isaretlemezsin. SADECE JSON dondurursun.",
+      system: `Sen deneyimli bir okul psikolojik danismanisin. Gorusme notlarini uyum izleme gostergeleriyle eslestirirsin. Asla veri olmayan bir maddeyi isaretlemezsin. SADECE JSON dondurursun.\n\n${PDR_KISALTMALAR}`,
       messages: [{ role: "user", content: prompt }],
     }),
   });

@@ -15232,28 +15232,6 @@ export default function App() {
   const [profiles2, setProfiles2] = useState([]);
   const [oogDegerlendirmeler, setOogDegerlendirmeler] = useState([]);
   const [tab, setTab] = useState("ogrenci");
-  // ── Telefonun geri tuşunu sekme geçmişiyle senkronize etme ──────────────
-  // AMAÇ: Android'de geri tuşuna basıldığında uygulama aniden kapanmasın;
-  // önce son ziyaret edilen sekmeye dönsün. Her setTab çağrısını tek tek
-  // değiştirmeye gerek yok — tab state'i her değiştiğinde bu effect devreye
-  // girip tarayıcı geçmişine bir kayıt ekliyor. Geri tuşuna basılınca (popstate)
-  // o kayıttaki sekmeye dönülüyor. pdrGeriTusuAtla, popstate'in kendisinin
-  // yeni bir geçmiş kaydı açmasını (sonsuz döngü) engelliyor.
-  const pdrGeriTusuAtla = React.useRef(false);
-  React.useEffect(() => {
-    if (pdrGeriTusuAtla.current) { pdrGeriTusuAtla.current = false; return; }
-    try { window.history.pushState({ pdrTab: tab }, "", window.location.href); } catch (e) {}
-  }, [tab]);
-  React.useEffect(() => {
-    try { window.history.replaceState({ pdrTab: tab }, "", window.location.href); } catch (e) {}
-    const dinle = (e) => {
-      const hedefTab = e.state && e.state.pdrTab;
-      if (hedefTab) { pdrGeriTusuAtla.current = true; setTab(hedefTab); }
-    };
-    window.addEventListener("popstate", dinle);
-    return () => window.removeEventListener("popstate", dinle);
-  }, []);
-
   const [form, setForm] = useState({ studentName: "", className: "", numara: "", meetingType: "Öğrenci", topic: "", raw: "", summary: "", tarih: today() });
   const [notOgrenciArama, setNotOgrenciArama] = useState("");
   const [profForm, setProfForm] = useState({ studentName: "", className: "", notes: "", scores: { ...EMPTY_SCORES }, analysis: "" });

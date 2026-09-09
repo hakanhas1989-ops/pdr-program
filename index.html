@@ -3381,6 +3381,121 @@ const KAYNASTIRMA_KISALT = {
 // toplamı, tablonun en altında tanı bazında genel toplam yer alır.
 // Veri kaynağı öğrencinin kendi kaydıdır (o.kaynastirma) — sınıf içindeki
 // "Tanı Düzenle" ile yapılan her değişiklik buraya anında yansır.
+// ── Öncelik Skoru ────────────────────────────────────────────────────────────
+// AMAÇ: Okulda zaten ayrı ayrı tutulan verileri (risk, uyum izleme, sosyometri,
+// devamsızlık) TEK bir listede birleştirip "en çok dikkat gerektiren öğrenciler
+// kimler?" sorusuna hızlı bir cevap vermek. Bu bir AI çıkarımı DEĞİLDİR — sadece
+// zaten var olan, danışmanın kendi girdiği işaretlerin şeffaf bir toplamıdır.
+// Her öğrencinin puanı yanında NEREDEN geldiği de gösterilir; kara kutu değildir.
+// Ağırlıklar sabit ve görünür (aşağıda), istenirse kolayca değiştirilebilir.
+function pdrOncelikSkoruHesapla(ogrenciler, riskListesi, sosyometri, aktifYil, uyumIzleme) {
+  const yilOgr = (ogrenciler||[]).filter(o => !o.yil || o.yil === aktifYil);
+  const sonuclar = [];
+
+  yilOgr.forEach(o => {
+    let puan = 0; const nedenler = [];
+
+    // 1) Aktif (kapatılmamış) risk kayıtları
+    const aktifRiskler = (riskListesi||[]).filter(r =>
+      !r.kapandi && pdrAyniOgrenci(r.studentName, r.className, o.studentName, o.className, r.numara, o.numara));
+    const oncelikPuan = { "Yüksek": 3, "Orta": 2, "Düşük": 1 };
+    aktifRiskler.forEach(r => {
+      const p = oncelikPuan[r.oncelik] || 1;
+      puan += p;
+    });
+    if (aktifRiskler.length > 0) {
+      const enYuksek = aktifRiskler.reduce((a,b) => (oncelikPuan[b.oncelik]||1) > (oncelikPuan[a.oncelik]||1) ? b : a);
+      nedenler.push({ etiket: `${enYuksek.oncelik} risk (${aktifRiskler.length} aktif)`, renk: "#C0392B" });
+    }
+
+    // 2) Devamsızlık (en son kayıtlı toplam gün)
+    const gecmis = o.devamsizlikGecmisi || [];
+    const devGun = gecmis[gecmis.length-1]?.gun || 0;
+    if (devGun >= 10) { puan += 2; nedenler.push({ etiket: `Devamsızlık ${devGun}g`, renk: "#B07D1A" }); }
+    else if (devGun >= 7) { puan += 1; nedenler.push({ etiket: `Devamsızlık ${devGun}g`, renk: "#B07D1A" }); }
+
+    // 3) Uyum izleme — sadece ONAYLANMIŞ (beklemede olmayan) en son kayıt.
+    // Bu veri sadece kişisel programda var; rehber-pusula'dan çağrılırken
+    // uyumIzleme parametresi verilmez, bu bölüm otomatik olarak devre dışı kalır.
+    if (uyumIzleme) {
+      const ogrUyum = uyumIzleme.filter(u => !u.beklemede &&
+        pdrAyniOgrenci(u.studentName, u.className, o.studentName, o.className, u.numara, o.numara))
+        .sort((a,b) => pdrTarihMs(b.tarih) - pdrTarihMs(a.tarih))[0];
+      if (ogrUyum && (ogrUyum.isaretli||[]).length > 0) {
+        const eklenen = Math.min(3, ogrUyum.isaretli.length * 0.5);
+        puan += eklenen;
+        nedenler.push({ etiket: `Uyum: ${ogrUyum.isaretli.length} gösterge`, renk: "#1F618D" });
+      }
+    }
+
+    // 4) Sosyometri — sınıfının en son kaydında hiç seçilmemiş mi?
+    const sinifKaydi = (sosyometri||[]).filter(s => (!s.yil || s.yil===aktifYil) && s.sinif === o.className)
+      .sort((a,b) => pdrTarihMs(b.tarih) - pdrTarihMs(a.tarih))[0];
+    if (sinifKaydi) {
+      const secimler = sinifKaydi.secimler || {};
+      const digerleri = Object.keys(secimler).filter(k => k !== o.studentName);
+      const katilim = digerleri.length;
+      const sinifOgrSayisi = yilOgr.filter(x => x.className === o.className).length;
+      const yeterliKatilim = katilim >= Math.max(5, sinifOgrSayisi * 0.6);
+      if (yeterliKatilim) {
+        const kacKisiSecti = Object.values(secimler).filter(v => Array.isArray(v) && v.includes(o.studentName)).length;
+        if (kacKisiSecti === 0) { puan += 2; nedenler.push({ etiket: "Sosyometri: hiç seçilmedi", renk: "#8E44AD" }); }
+      }
+    }
+
+    if (puan > 0) sonuclar.push({ studentName: o.studentName, className: o.className, numara: o.numara, puan, nedenler });
+  });
+
+  return sonuclar.sort((a,b) => b.puan - a.puan);
+}
+
+function OncelikListesi({ ogrenciler, riskListesi, sosyometri, aktifYil, uyumIzleme, setTab, setAktifOgrenci }) {
+  const [acik, setAcik] = useState(false);
+  const liste = pdrOncelikSkoruHesapla(ogrenciler, riskListesi, sosyometri, aktifYil, uyumIzleme);
+  if (liste.length === 0) return null;
+  const gosterilecek = liste.slice(0, 15);
+
+  return (
+    <div style={{background:CARD,border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14)",borderRadius:12,padding:14,marginBottom:14}}>
+      <div onClick={()=>setAcik(!acik)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
+        <div>
+          <div style={{fontSize:13,fontWeight:800,color:TEXT}}>🎯 Öncelik Listesi</div>
+          <div style={{fontSize:10.5,color:MUTED,marginTop:2}}>
+            {liste.length} öğrenci — risk, devamsızlık{uyumIzleme?", uyum izleme":""} ve sosyometri birlikte değerlendirildi
+          </div>
+        </div>
+        <span style={{fontSize:14,color:MUTED}}>{acik ? "▲" : "▼"}</span>
+      </div>
+
+      {acik && (
+        <div style={{marginTop:12}}>
+          <div style={{fontSize:10,color:MUTED,marginBottom:10,lineHeight:1.55}}>
+            Bu bir AI değerlendirmesi değildir — zaten girdiğin risk, devamsızlık{uyumIzleme?", uyum izleme":""}
+            {" "}ve sosyometri kayıtlarının şeffaf bir toplamıdır. Puanın nereden geldiği her satırda yazıyor.
+            En fazla ilk 15 öğrenci gösterilir.
+          </div>
+          {gosterilecek.map((s,i) => (
+            <div key={s.studentName+s.className} onClick={()=>{ setAktifOgrenci({name:s.studentName,className:s.className,numara:s.numara}); setTab("yeni"); }}
+              style={{display:"flex",alignItems:"flex-start",gap:10,padding:"8px 0",borderBottom: i<gosterilecek.length-1?`1px solid ${BORDER}`:"none",cursor:"pointer"}}>
+              <div style={{width:26,height:26,borderRadius:"50%",background:"#FDECEA",color:"#C0392B",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900,flexShrink:0}}>
+                {s.puan.toFixed(1)}
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:12.5,fontWeight:700,color:TEXT}}>{s.studentName} <span style={{color:MUTED,fontWeight:500,fontSize:11}}>· {s.className}</span></div>
+                <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:3}}>
+                  {s.nedenler.map((n,j) => (
+                    <span key={j} style={{background:n.renk+"18",color:n.renk,borderRadius:8,padding:"1px 7px",fontSize:9,fontWeight:700}}>{n.etiket}</span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function KaynastirmaTablosu({ ogrenciler, aktifYil, setTab, setAktifOgrenci }) {
   const [acik, setAcik] = useState(false);
   const yilOgr = (ogrenciler||[]).filter(o => !o.yil || o.yil === aktifYil);
@@ -14054,7 +14169,7 @@ function SinifDenemeGrafigi({ ogrenciler, denemeler, sinavTuru, vurgulananAd }) 
 // "RISK_TURLERI is not defined" hatası veriyordu.
 const RISK_TURLERI = ["Davranış","Akademik","Aile","Akran / Zorbalık","Duygusal","Devamsızlık","Öz Zarar","Sağlık","Madde Kullanımı","Teknoloji / Ekran Bağımlılığı","Ekonomik Güçlük","Yas / Kayıp","Travma","Özel Öğrenme Güçlüğü","Göç / Uyum Süreci","Adli Süreç / Danışmanlık Tedbiri","Toplumsal Cinsiyet Temelli Şiddet","İhmal / İstismar","Diğer"];
 
-function SinifProfili({ ogrenciler, setOgrenciler, records, riskListesi, aktifYil, sinifListesi, setSinifListesi, denemeler, sinavTuru, onSinifSilTumVeri, kademe, setTab, setAktifOgrenci, aktifOgrenci, profiles, profiles2, onRaporAc }) {
+function SinifProfili({ ogrenciler, setOgrenciler, records, riskListesi, aktifYil, sinifListesi, setSinifListesi, denemeler, sinavTuru, onSinifSilTumVeri, kademe, setTab, setAktifOgrenci, aktifOgrenci, profiles, profiles2, onRaporAc, sosyometri, uyumIzleme }) {
   const [seciliSinif, setSeciliSinif] = useState(null);
   const [cinsiyetDuzenleAcik, setCinsiyetDuzenleAcik] = useState(false);
   const [seciliSinifDuzeyi, setSeciliSinifDuzeyi] = useState(null);
@@ -14579,6 +14694,7 @@ function SinifProfili({ ogrenciler, setOgrenciler, records, riskListesi, aktifYi
           🏫 {aktifYil} — Sınıf Düzeyi Seç
         </div>
         <RiskOzetKartlari ogrenciler={yilOgrencileri} baslik="📊 Tüm Okul — Geçmiş Dönem Deneme Risk Dağılımı" />
+        <OncelikListesi ogrenciler={ogrenciler} riskListesi={riskListesi} sosyometri={sosyometri} aktifYil={aktifYil} uyumIzleme={uyumIzleme} setTab={setTab} setAktifOgrenci={setAktifOgrenci} />
         <KaynastirmaTablosu ogrenciler={ogrenciler} aktifYil={aktifYil} setTab={setTab} setAktifOgrenci={setAktifOgrenci} />
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
           {sinifDuzeyleri.map(duzey => {
@@ -15908,7 +16024,7 @@ export default function App() {
   // zaten görmezden gelip normal şekilde gösteriyor).
   async function handleRiskManuelKaydet() {
     if (!riskForm.studentName.trim() || !riskForm.riskTuru) return;
-    const item = { id: uid(), tarih: today(), ...riskForm, aiAnaliz: "", kapandi: false, teknolojiBagimliligi: false, teknolojiGerekce: "" };
+    const item = { id: uid(), tarih: today(), ...riskForm, aiAnaliz: "", kapandi: false, teknolojiBagimliligi: false, teknolojiGerekce: "", kaynak: "Manuel" };
     const updated = [item, ...riskListesi];
     setRiskListesi(updated); await saveRiskListesi(updated);
     setRiskForm({ studentName: "", className: "", numara: "", riskTuru: "", aciklama: "", oncelik: "Orta", tarih: today() });
@@ -15964,7 +16080,9 @@ export default function App() {
       if (gerekceMatch) teknolojiGerekce = gerekceMatch[1].split("\n")[0].trim();
     }
 
-    const item = { id: uid(), tarih: today(), ...riskForm, riskTuru: aiRiskTuru, oncelik: aiOncelik, aiAnaliz, kapandi: false, teknolojiBagimliligi, teknolojiGerekce };
+    // kaynak: "AI" — ilerde bu risk tespitinin isabetli olup olmadığını geriye
+    // dönük değerlendirebilmek için (bkz. sonucDegerlendirmesi altyapısı).
+    const item = { id: uid(), tarih: today(), ...riskForm, riskTuru: aiRiskTuru, oncelik: aiOncelik, aiAnaliz, kapandi: false, teknolojiBagimliligi, teknolojiGerekce, kaynak: "AI" };
     const updated = [item, ...riskListesi];
     setRiskListesi(updated); await saveRiskListesi(updated);
     setRiskForm({ studentName: "", className: "", numara: "", riskTuru: "", aciklama: "", oncelik: "Orta", tarih: today() });
@@ -15972,6 +16090,21 @@ export default function App() {
   }
   async function handleRiskKapat(id) {
     const updated = riskListesi.map(r => r.id === id ? { ...r, kapandi: true, kapanmaTarih: today() } : r);
+    setRiskListesi(updated); await saveRiskListesi(updated);
+  }
+  // ── Geriye dönük değerlendirme altyapısı ──────────────────────────────────
+  // AMAÇ: AI'ın önerdiği risk tespitlerinin gerçekten isabetli olup olmadığını
+  // zamanla ölçebilmek için gereken TEK şey: her kaydın "kaynak"ı (AI/Manuel,
+  // yukarıda eklendi) ve danışmanın kendi gözlemine göre verdiği bir "sonuç"
+  // etiketi. Bu fonksiyon sadece etiketi kaydeder — herhangi bir analiz veya
+  // rapor ÜRETMEZ; birkaç ay veri biriktikten sonra "AI'ın Yüksek dediği
+  // vakaların yüzde kaçı gerçekten Doğru Tespit çıktı?" gibi bir özet ekranı
+  // bu veriyle kurulabilir. Kapatma anında zorunlu değildir, risk açıkken de
+  // sonradan da işaretlenebilir.
+  async function handleRiskSonucEtiketle(id, sonuc) {
+    const updated = riskListesi.map(r => r.id === id
+      ? { ...r, sonucDegerlendirmesi: r.sonucDegerlendirmesi === sonuc ? null : sonuc, sonucTarihi: today() }
+      : r);
     setRiskListesi(updated); await saveRiskListesi(updated);
   }
   async function handleRiskSil(id) {
@@ -17270,6 +17403,8 @@ export default function App() {
             aktifOgrenci={aktifOgrenci}
             profiles={profiles}
             profiles2={profiles2}
+            sosyometri={sosyometri}
+            uyumIzleme={uyumIzleme}
             onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler, hazirlikNotlari, ilerlemeNotlari, sevkler }))}
           />
         )}
@@ -17512,6 +17647,26 @@ export default function App() {
                                   <span style={{ fontSize: 11.5, color: durum.yapildi ? "#fff" : "rgba(255,255,255,0.75)", textDecoration: durum.yapildi ? "line-through" : "none", flex: 1 }}>{adim.label}</span>
                                   {durum.yapildi && durum.tarih && <span style={{ fontSize: 9.5, color: "rgba(255,255,255,0.65)" }}>{durum.tarih}</span>}
                                 </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        {/* Geriye dönük değerlendirme — bu tespit isabetli miydi?
+                            Zorunlu değil, istediğin an işaretleyip değiştirebilirsin. */}
+                        <div style={{ background: "rgba(0,0,0,0.18)", borderRadius: 10, padding: "8px 10px", marginBottom: 8 }}>
+                          <div style={{ fontSize: 10, fontWeight: 800, color: "rgba(255,255,255,0.8)", marginBottom: 5, letterSpacing: 0.3 }}>
+                            BU TESPİT İSABETLİ MİYDİ?{r.kaynak && <span style={{fontWeight:600, opacity:0.75}}> · {r.kaynak === "AI" ? "🤖 AI önerisi" : "✍️ Manuel giriş"}</span>}
+                          </div>
+                          <div style={{ display:"flex", gap:5 }}>
+                            {[["dogru","✓ Doğru Tespit"],["kismen","± Kısmen Doğru"],["yanlis","✗ Yanlış Alarm"]].map(([key,label]) => {
+                              const secili = r.sonucDegerlendirmesi === key;
+                              return (
+                                <button key={key} onClick={() => handleRiskSonucEtiketle(r.id, key)} style={{
+                                  flex:1, padding:"5px 4px", borderRadius:8, fontSize:9.5, fontWeight:700, cursor:"pointer",
+                                  border: secili ? "1px solid #fff" : "1px solid rgba(255,255,255,0.35)",
+                                  background: secili ? "rgba(255,255,255,0.9)" : "transparent",
+                                  color: secili ? "#1a1a1a" : "rgba(255,255,255,0.8)",
+                                }}>{label}</button>
                               );
                             })}
                           </div>

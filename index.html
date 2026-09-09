@@ -15626,6 +15626,18 @@ export default function App() {
   const [profiles2, setProfiles2] = useState([]);
   const [oogDegerlendirmeler, setOogDegerlendirmeler] = useState([]);
   const [tab, setTab] = useState("ogrenci");
+  // Sekme çubuğunu tıklanan sekme etrafında ortalamak için kullanılıyor —
+  // kullanıcı artık elle kaydırmak zorunda kalmadan, seçtiği sekme her zaman
+  // görünür ve kendinden önceki/sonraki sekmelerin arasında konumlanıyor.
+  const pdrSekmeCubugu = React.useRef(null);
+  React.useEffect(() => {
+    const kap = pdrSekmeCubugu.current;
+    if (!kap) return;
+    const buton = kap.querySelector(`[data-pdr-sekme-key="${tab}"]`);
+    if (!buton) return;
+    const hedef = buton.offsetLeft - (kap.clientWidth / 2) + (buton.offsetWidth / 2);
+    kap.scrollTo({ left: Math.max(0, hedef), behavior: "smooth" });
+  }, [tab]);
   const [form, setForm] = useState({ studentName: "", className: "", numara: "", meetingType: "Öğrenci", topic: "", raw: "", summary: "", tarih: today() });
   const [notOgrenciArama, setNotOgrenciArama] = useState("");
   const [profForm, setProfForm] = useState({ studentName: "", className: "", notes: "", scores: { ...EMPTY_SCORES }, analysis: "" });
@@ -16557,12 +16569,12 @@ export default function App() {
       })()}
 
       {/* Tabs */}
-      <div style={{ display: "flex", background: CARD, borderBottom: `1px solid ${BORDER}`, overflowX: "auto", boxShadow: "0 4px 10px rgba(20,40,32,0.14)", position: "sticky", top: 0, zIndex: 8 }}>
+      <div ref={pdrSekmeCubugu} style={{ display: "flex", background: CARD, borderBottom: `1px solid ${BORDER}`, overflowX: "auto", boxShadow: "0 4px 10px rgba(20,40,32,0.14)", position: "sticky", top: 0, zIndex: 8 }}>
         {TABS.map(t => {
           // undefined ise bu sekme veri girişi sekmesi değil — hiç işaret koyma.
           const dolu = pdrSekmeDolulugu[t.key];
           return (
-            <button key={t.key} onClick={() => setTab(t.key)} title={dolu === undefined ? undefined : (aktifOgrenci?.name ? `${aktifOgrenci.name}: ${dolu ? "kayıt var" : "henüz kayıt yok"}` : (dolu ? "Bu yıl için kayıt var" : "Bu yıl için henüz kayıt yok"))} style={{
+            <button key={t.key} data-pdr-sekme-key={t.key} onClick={() => setTab(t.key)} title={dolu === undefined ? undefined : (aktifOgrenci?.name ? `${aktifOgrenci.name}: ${dolu ? "kayıt var" : "henüz kayıt yok"}` : (dolu ? "Bu yıl için kayıt var" : "Bu yıl için henüz kayıt yok"))} style={{
               flexShrink: 0, padding: "11px 10px", border: "none", background: "none",
               fontWeight: tab === t.key ? 700 : 500,
               color: tab === t.key ? ACCENT : MUTED,

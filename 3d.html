@@ -281,6 +281,7 @@ const PDR_DALLARI = [
   const interactables = []; // { mesh, kind:"branch"|"leaf", ad, sub, tab, focusPos }
   const persistentLabels = []; // { el, obj3d, kind }
   const branchTips = [];
+  const branchHitMeshes = []; // dallar için geniş, görünmez dokunma alanları
 
   function makeLabel(text, kind) {
     const el = document.createElement("div");
@@ -330,7 +331,17 @@ const PDR_DALLARI = [
     nodeGroup.add(nodeMesh);
     addGlow(nodeGroup, dal.renk, nodeSize * 5.5);
 
-    interactables.push({ mesh: nodeMesh, kind: "branch", ad: dal.ad, sub: dal.aciklama, focusPos: tipPos.clone() });
+    // Görünmez ama geniş bir dokunma alanı — yaprak yakınına dokunulsa bile
+    // dal öncelikli algılansın diye (yaprakların çoğu dal küresinin hemen
+    // yanında duruyor, gerçek yüzeye pikselden pikselе dokunmak zor oluyordu).
+    const hitMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(nodeSize * 1.7, 12, 12),
+      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 })
+    );
+    nodeGroup.add(hitMesh);
+    branchHitMeshes.push(hitMesh);
+
+    interactables.push({ mesh: nodeMesh, hitMesh, kind: "branch", ad: dal.ad, sub: dal.aciklama, focusPos: tipPos.clone() });
     persistentLabels.push({ el: makeLabel(dal.ad, "branch"), obj3d: nodeGroup, offsetY: nodeSize + 0.55, color: dal.renk });
     branchTips.push({ pos: tipPos, dir, dal });
 
@@ -443,15 +454,23 @@ const PDR_DALLARI = [
   function handleTap(x, y) {
     const ndc = new THREE.Vector2((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
     raycaster.setFromCamera(ndc, camera);
-    const meshes = interactables.map(o => o.mesh);
-    const hits = raycaster.intersectObjects(meshes, false);
-    if (hits.length === 0) return;
-    const hitMesh = hits[0].object;
-    const found = interactables.find(o => o.mesh === hitMesh);
+
+    // 1) Önce dalların GENİŞ (görünmez) dokunma alanlarına bak — bir dala
+    // yaklaşık dokunmak bile, tam yanındaki küçük bir yaprağa denk gelip
+    // yanlışlıkla programa yönlendirmemeli. Dallar her zaman öncelikli.
+    const branchHits = raycaster.intersectObjects(branchHitMeshes, false);
+    let found = null;
+    if (branchHits.length > 0) {
+      found = interactables.find(o => o.hitMesh === branchHits[0].object);
+    } else {
+      const leafMeshes = interactables.filter(o => o.kind === "leaf").map(o => o.mesh);
+      const leafHits = raycaster.intersectObjects(leafMeshes, false);
+      if (leafHits.length > 0) found = interactables.find(o => o.mesh === leafHits[0].object);
+    }
     if (!found) return;
 
-    hitMesh.scale.set(1.6, 1.6, 1.6);
-    setTimeout(() => hitMesh.scale.set(1, 1, 1), 260);
+    found.mesh.scale.set(1.6, 1.6, 1.6);
+    setTimeout(() => found.mesh.scale.set(1, 1, 1), 260);
 
     if (found.kind === "leaf") {
       // Yaprak = programın gerçek bir sekmesi. Doğrudan oraya git.

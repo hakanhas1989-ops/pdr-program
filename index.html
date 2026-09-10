@@ -442,8 +442,15 @@ async function pdrBildirimTokenKaydet(uid) {
     const mevcutStr = await pdrFirestoreOku(uid, "fcmTokens");
     let mevcut = [];
     try { mevcut = mevcutStr ? JSON.parse(mevcutStr) : []; } catch (e) { mevcut = []; }
-    if (!mevcut.includes(token)) {
-      mevcut.push(token);
+    // Kayıtlar hem eski biçimde (düz metin token) hem yeni biçimde
+    // ({token, tarih} nesnesi) gelebilir — ikisini de "token değeri" bazında
+    // karşılaştırıyoruz. Firebase token'ı zamanla DEĞİŞTİRDİĞİNDE eskisi
+    // otomatik silinmiyordu, bu da aynı cihaza iki bildirim gitmesine (çift
+    // bildirim) yol açıyordu. Artık her yeni kayıt tarih taşıyor ve "Bildirim
+    // Durumu" panelinden elle temizlenebiliyor.
+    const tokenDeger = (x) => (typeof x === "string" ? x : x?.token);
+    if (!mevcut.some(x => tokenDeger(x) === token)) {
+      mevcut.push({ token, tarih: today() });
       await pdrFirestoreYaz(uid, "fcmTokens", JSON.stringify(mevcut));
     }
   } catch (e) {
@@ -7619,12 +7626,24 @@ function BildirimDurumu() {
         const s = await pdrFirestoreOku(uid, "fcmTokens");
         try { kayitli = s ? JSON.parse(s) : []; } catch (e) { kayitli = []; }
       }
-      setDurum({ yukleniyor: false, izin, adet: kayitli ? kayitli.length : 0, uid });
+      setDurum({ yukleniyor: false, izin, adet: kayitli ? kayitli.length : 0, liste: kayitli || [], uid });
     } catch (e) {
       setDurum({ yukleniyor: false, hata: e.message });
     }
   }
   useEffect(() => { kontrolEt(); }, []);
+
+  // Çift bildirim genelde şuradan kaynaklanır: Firebase token'ı zamanla
+  // değiştirir, eskisi otomatik silinmez, aynı cihaza iki push gider.
+  // Bu, danışmanın "hangisi eski, hangisi güncel" ayrımını elle yapıp
+  // fazlalıkları silebilmesi için.
+  async function cihazSil(index) {
+    const uid = durum.uid;
+    if (!uid) return;
+    const yeni = (durum.liste || []).filter((_, i) => i !== index);
+    await pdrFirestoreYaz(uid, "fcmTokens", JSON.stringify(yeni));
+    kontrolEt();
+  }
 
   async function yenidenKaydet() {
     setMesaj("Kaydediliyor...");
@@ -7640,7 +7659,8 @@ function BildirimDurumu() {
       if (!token) { setMesaj("Bildirim kimliği alınamadı. İnternet bağlantını kontrol edip tekrar dene."); return; }
       const mevcutStr = await pdrFirestoreOku(uid, "fcmTokens");
       let mevcut = []; try { mevcut = mevcutStr ? JSON.parse(mevcutStr) : []; } catch (e) { mevcut = []; }
-      if (!mevcut.includes(token)) mevcut.push(token);
+      const tokenDeger = (x) => (typeof x === "string" ? x : x?.token);
+      if (!mevcut.some(x => tokenDeger(x) === token)) mevcut.push({ token, tarih: today() });
       await pdrFirestoreYaz(uid, "fcmTokens", JSON.stringify(mevcut));
       setMesaj("Bu cihaz bildirim için kaydedildi.");
       kontrolEt();
@@ -7667,6 +7687,23 @@ function BildirimDurumu() {
       </div>
       <div>Tarayıcı izni: <b>{durum.izin === "granted" ? "verildi" : durum.izin === "denied" ? "engellendi" : "henüz sorulmadı"}</b></div>
       <div>Kayıtlı cihaz: <b>{durum.adet || 0}</b></div>
+      {durum.adet > 1 && (
+        <div style={{ marginTop: 6, background: "rgba(255,255,255,0.6)", borderRadius: 8, padding: "6px 8px" }}>
+          <div style={{ fontSize: 10, fontWeight: 700, marginBottom: 4 }}>
+            1'den fazla cihaz kayıtlı — eskisi/tekrar edeni sil, aksi halde her bildirim birden fazla gelir:
+          </div>
+          {(durum.liste || []).map((x, i) => {
+            const tarih = typeof x === "object" ? x.tarih : null;
+            const tokenStr = typeof x === "string" ? x : x.token;
+            return (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "3px 0", fontSize: 10.5 }}>
+                <span>Cihaz {i + 1} {tarih ? `· ${tarih}` : "· tarih bilinmiyor (eski kayıt)"} <span style={{ opacity: 0.6 }}>· …{(tokenStr || "").slice(-6)}</span></span>
+                <button onClick={() => cihazSil(i)} style={{ padding: "2px 8px", borderRadius: 6, border: "1px solid #C0392B", background: "#fff", color: "#C0392B", fontSize: 9.5, fontWeight: 700, cursor: "pointer" }}>Sil</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
       {!hepsiTamam && (
         <div style={{ marginTop: 6 }}>
           Hatırlatmalar her gün 08:00 ve 16:00'da kontrol edilir; bildirim gelmesi için bu cihazın kayıtlı olması gerekir.
@@ -16402,27 +16439,31 @@ export default function App() {
   // Konu Haritası artık hem LGS (ortaokul) hem TYT/AYT (lise) konu/soru
   // verisiyle dolu — sadece ilkokulda gizlenir.
   const ILKOKULDA_GIZLENECEK_SEKMELER = ["net_haritasi", "deneme", "konu_haritasi"];
-  const TABS_TUMU = [
+  // Sekme kalabalığını azaltmak için birbirine yakın işlevdeki sekmeler tek bir
+// üst sekmenin altında gruplandı. Her grubun "key"i, o grubun İLK üyesinin
+// GERÇEK sekme anahtarıdır — yani tab state'i, doluluk göstergesi, ilkokul
+// gizleme listesi gibi hiçbir mevcut mekanizmaya dokunmadan aynen çalışmaya
+// devam eder. "testler" bilerek "deneme/net_haritasi/konu_haritasi" grubuna
+// katılmadı — ILKOKULDA_GIZLENECEK_SEKMELER sadece o üçünü gizliyor, Testler
+// ilkokulda da görünür kalmalı.
+const TABS_TUMU = [
     { key: "ogrenciler", label: "👥 Öğrenciler" },
     { key: "yeni", label: "📝 Görüşme Notu" },
     { key: "profil_merkez", label: "📋 Profil" },
-    { key: "mudahale", label: "🎯 Müdahale" },
-    { key: "mudahale_kutuphane", label: "📁 Müdahale Programları" },
+    { key: "mudahale", label: "🎯 Müdahale", grup: ["mudahale","mudahale_kutuphane"],
+      grupEtiketler: { mudahale: "🎯 Müdahale Planı", mudahale_kutuphane: "📁 Müdahale Programları" } },
     { key: "sinif_profili", label: "🏫 Sınıf" },
     { key: "devamsizlik", label: "📅 Devamsızlık" },
     { key: "risk", label: "⚠ Risk" },
-    { key: "deneme", label: "📊 Deneme" },
-    { key: "net_haritasi", label: "🎯 Net Haritası" },
-    { key: "konu_haritasi", label: "📚 Konu Haritası" },
+    { key: "deneme", label: "📊 Akademik", grup: ["deneme","net_haritasi","konu_haritasi"],
+      grupEtiketler: { deneme: "📊 Deneme", net_haritasi: "🎯 Net Haritası", konu_haritasi: "📚 Konu Haritası" } },
     { key: "testler", label: "🧪 Testler" },
-    { key: "hatirlatici", label: "🔔 Hatırlatıcı" },
-    { key: "gorusme_takvimi", label: "📅 Takvim" },
-    { key: "belgeler", label: "📑 Belgeler" },
-    { key: "kutuphane", label: "📚 Kütüphane" },
-    { key: "kazanimlar", label: "📘 Kazanımlar" },
-    { key: "grup_calismalari", label: "👪 Grup Çalışmaları" },
-    { key: "kriz", label: "🚨 Kriz Müdahale" },
-    { key: "sosyometri", label: "🤝 Sosyometri" },
+    { key: "hatirlatici", label: "📅 Zaman", grup: ["hatirlatici","gorusme_takvimi"],
+      grupEtiketler: { hatirlatici: "🔔 Hatırlatıcı", gorusme_takvimi: "📅 Takvim" } },
+    { key: "belgeler", label: "📑 Kayıtlar", grup: ["belgeler","kutuphane","kazanimlar"],
+      grupEtiketler: { belgeler: "📑 Belgeler", kutuphane: "📚 Kütüphane", kazanimlar: "📘 Kazanımlar" } },
+    { key: "grup_calismalari", label: "🏫 Okul Çapı", grup: ["grup_calismalari","kriz","sosyometri"],
+      grupEtiketler: { grup_calismalari: "👪 Grup Çalışmaları", kriz: "🚨 Kriz Müdahale", sosyometri: "🤝 Sosyometri" } },
     { key: "uyum_izleme", label: "🔍 Uyum İzleme" },
     { key: "istatistik", label: "İstatistik" },
     { key: "prof_danisma", label: "🎓 Prof. Hakan" },
@@ -16571,14 +16612,21 @@ export default function App() {
       {/* Tabs */}
       <div ref={pdrSekmeCubugu} style={{ display: "flex", background: CARD, borderBottom: `1px solid ${BORDER}`, overflowX: "auto", boxShadow: "0 4px 10px rgba(20,40,32,0.14)", position: "sticky", top: 0, zIndex: 8 }}>
         {TABS.map(t => {
-          const dolu = pdrSekmeDolulugu[t.key];
+          // Gruplanmış bir üst sekme, üyelerinden HERHANGİ BİRİ dolu ya da
+          // aktifse öyle görünür — tek bir üyeye değil tüm gruba bakar.
+          const grupUyeleri = t.grup || [t.key];
+          const grupAktifMi = grupUyeleri.includes(tab);
+          const dolu = t.grup
+            ? (grupUyeleri.some(k => pdrSekmeDolulugu[k] === true) ? true
+               : grupUyeleri.some(k => pdrSekmeDolulugu[k] === false) ? false : undefined)
+            : pdrSekmeDolulugu[t.key];
           return (
             <button key={t.key} data-pdr-sekme-key={t.key} onClick={() => setTab(t.key)} title={dolu === undefined ? undefined : (aktifOgrenci?.name ? `${aktifOgrenci.name}: ${dolu ? "kayıt var" : "henüz kayıt yok"}` : (dolu ? "Bu yıl için kayıt var" : "Bu yıl için henüz kayıt yok"))} style={{
               flexShrink: 0, padding: "11px 10px", border: "none", background: "none",
-              fontWeight: tab === t.key ? 700 : 500,
-              color: tab === t.key ? ACCENT : MUTED,
+              fontWeight: grupAktifMi ? 700 : 500,
+              color: grupAktifMi ? ACCENT : MUTED,
               fontSize: 11, cursor: "pointer",
-              borderBottom: tab === t.key ? `3px solid ${ACCENT}` : "3px solid transparent",
+              borderBottom: grupAktifMi ? `3px solid ${ACCENT}` : "3px solid transparent",
               display: "flex", alignItems: "center", gap: 5,
             }}>
               {dolu !== undefined && (
@@ -16594,6 +16642,27 @@ export default function App() {
           );
         })}
       </div>
+
+      {/* Grup içi geçiş şeridi — aktif sekme gruplanmış üst sekmelerden birine
+          aitse (bkz. TABS_TUMU'daki "grup" alanı), o grubun kardeşleri arasında
+          ana sekme çubuğuna dönmeden geçiş yapılabilsin diye çıkar. */}
+      {(() => {
+        const aktifGrup = TABS_TUMU.find(t => t.grup && t.grup.includes(tab));
+        if (!aktifGrup) return null;
+        return (
+          <div style={{ display: "flex", gap: 6, padding: "8px 12px", background: "#F3F0FF",
+            borderBottom: `1px solid ${BORDER}`, overflowX: "auto", position: "sticky", top: 0, zIndex: 7 }}>
+            {aktifGrup.grup.map(k => (
+              <button key={k} onClick={() => setTab(k)} style={{
+                flexShrink: 0, padding: "6px 12px", borderRadius: 20, border: "none", cursor: "pointer",
+                fontSize: 11.5, fontWeight: tab === k ? 800 : 600,
+                background: tab === k ? PURPLE : "#fff",
+                color: tab === k ? "#fff" : PURPLE,
+              }}>{aktifGrup.grupEtiketler?.[k] || k}</button>
+            ))}
+          </div>
+        );
+      })()}
 
       <div style={{ padding: "16px 16px 80px", minHeight: "calc(100vh - 200px)",
         background: "linear-gradient(160deg, rgba(23,199,128,0.16) 0%, rgba(158,120,237,0.10) 52%, rgba(158,120,237,0.30) 100%)" }}>

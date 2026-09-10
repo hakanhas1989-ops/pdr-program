@@ -3456,6 +3456,219 @@ function pdrOncelikSkoruHesapla(ogrenciler, riskListesi, sosyometri, aktifYil, u
   return sonuclar.sort((a,b) => b.puan - a.puan);
 }
 
+// ── İşçi Raporu ──────────────────────────────────────────────────────────────
+// AMAÇ: Programı üç açıdan "kontrol edip" danışmana rapor veren, hiçbir şeyi
+// gizlice yazmayan bir özet ekranı — tüm hesaplamalar şeffaf, hiçbiri AI
+// çıkarımı değil, zaten girilmiş verinin taranmasıdır.
+//   A) Günlük Özet: bugün/geciken hatırlatmalar + öncelik listesinin başı
+//   B) Veri Bekçisi: eksik/uzun süredir dokunulmamış kayıtları işaretler (salt okunur)
+//   C) Otomatik Takip: açık risk kayıtları için hatırlatma ÖNERİR — kesin
+//      kayıt danışman onaylayınca oluşur, sessizce yazılmaz.
+function pdrGunFarki(tarihStr) {
+  const ms = pdrTarihMs(tarihStr);
+  if (!ms) return null;
+  return Math.floor((Date.now() - ms) / 86400000);
+}
+
+function pdrGunlukOzetHesapla(hatirlatmalar, ogrenciler, riskListesi, sosyometri, aktifYil, uyumIzleme) {
+  const bugun = today();
+  const acikHat = (hatirlatmalar || []).filter(h => !h.tamamlandi);
+  const gecikenler = acikHat.filter(h => pdrTarihMs(h.tarih) < pdrTarihMs(bugun))
+    .sort((a, b) => pdrTarihMs(a.tarih) - pdrTarihMs(b.tarih));
+  const bugunkuler = acikHat.filter(h => h.tarih === bugun);
+  const oncelikliler = pdrOncelikSkoruHesapla(ogrenciler, riskListesi, sosyometri, aktifYil, uyumIzleme).slice(0, 5);
+  return { gecikenler, bugunkuler, oncelikliler };
+}
+
+function pdrVeriBekcisiTara(riskListesi, uyumIzleme, ogrenciler, sosyometri, aktifYil) {
+  const bulgular = [];
+
+  // 1) Açık risk kaydı, 21+ gündür hiç sonuç değerlendirmesi almamış
+  (riskListesi || []).forEach(r => {
+    if (r.kapandi) return;
+    const gun = pdrGunFarki(r.tarih);
+    if (gun !== null && gun >= 21 && !r.sonucDegerlendirmesi) {
+      bulgular.push({ tur: "risk_degerlendirilmemis", ad: r.studentName, sinif: r.className, numara: r.numara,
+        mesaj: `${r.studentName} — risk kaydı ${gun} gündür açık, hiç "isabetli miydi" değerlendirmesi yapılmamış.` });
+    }
+  });
+
+  // 2) Uyum izleme önerisi 7+ gündür onay bekliyor
+  (uyumIzleme || []).forEach(u => {
+    if (!u.beklemede) return;
+    const gun = pdrGunFarki(u.tarih);
+    if (gun !== null && gun >= 7) {
+      bulgular.push({ tur: "uyum_bekliyor", ad: u.studentName, sinif: u.className, numara: u.numara,
+        mesaj: `${u.studentName} — AI'ın uyum izleme önerisi ${gun} gündür onay bekliyor.` });
+    }
+  });
+
+  // 3) Sınıfı boş/eksik olan öğrenci kayıtları
+  const yilOgr = (ogrenciler || []).filter(o => !o.yil || o.yil === aktifYil);
+  yilOgr.forEach(o => {
+    if (!o.className || !o.className.trim()) {
+      bulgular.push({ tur: "sinif_eksik", ad: o.studentName, sinif: "—", numara: o.numara,
+        mesaj: `${o.studentName} — kayıtlı sınıfı yok, sınıf bazlı özetlerde görünmüyor.` });
+    }
+  });
+
+  // 4) 60+ gündür güncellenmemiş ya da hiç veri girilmemiş sınıflar (sosyometri)
+  const sinifDuzeyleri = [...new Set(yilOgr.map(o => o.className).filter(Boolean))];
+  sinifDuzeyleri.forEach(sinif => {
+    const kayit = (sosyometri || []).filter(s => (!s.yil || s.yil === aktifYil) && s.sinif === sinif)
+      .sort((a, b) => pdrTarihMs(b.tarih) - pdrTarihMs(a.tarih))[0];
+    if (!kayit) return; // hiç girilmemiş sınıfları göz ardı et — henüz sıraya gelmemiş olabilir
+    const gun = pdrGunFarki(kayit.tarih);
+    if (gun !== null && gun >= 60) {
+      bulgular.push({ tur: "sosyometri_eski", ad: sinif, sinif, numara: "",
+        mesaj: `${sinif} — sosyometri son ${gun} gün önce yapılmış, güncelleme zamanı gelmiş olabilir.` });
+    }
+  });
+
+  return bulgular;
+}
+
+function pdrOtomatikTakipOner(riskListesi, hatirlatmalar) {
+  const oneriler = [];
+  (riskListesi || []).forEach(r => {
+    if (r.kapandi) return;
+    const gun = pdrGunFarki(r.tarih);
+    if (gun === null || gun < 14) return;
+    const baglıHatirlatmaVarMi = (hatirlatmalar || []).some(h =>
+      !h.tamamlandi && pdrAyniOgrenci(h.studentName, h.className, r.studentName, r.className, h.numara, r.numara));
+    if (!baglıHatirlatmaVarMi) {
+      oneriler.push({ risk: r, gun,
+        mesaj: `${r.studentName} — ${r.oncelik} risk kaydı ${gun} gündür açık, hiçbir hatırlatma bağlı değil.` });
+    }
+  });
+  return oneriler;
+}
+
+function IsciRaporuEkrani({ hatirlatmalar, setHatirlatmalar, ogrenciler, riskListesi, sosyometri, aktifYil, uyumIzleme, setTab, setAktifOgrenci }) {
+  const [acikBolum, setAcikBolum] = useState("ozet");
+  const ozet = pdrGunlukOzetHesapla(hatirlatmalar, ogrenciler, riskListesi, sosyometri, aktifYil, uyumIzleme);
+  const bekci = pdrVeriBekcisiTara(riskListesi, uyumIzleme, ogrenciler, sosyometri, aktifYil);
+  const takip = pdrOtomatikTakipOner(riskListesi, hatirlatmalar);
+
+  async function hatirlatmaOlustur(oneri) {
+    const r = oneri.risk;
+    const yeni = {
+      id: uid(), studentName: r.studentName, className: r.className, numara: r.numara,
+      metin: `Risk takibi: ${r.riskTuru || "genel"} — ${oneri.gun} gündür açık, kontrol et.`,
+      tarih: today(), tur: "genel", ramTarihi: "", kaynak: "otomatik_isci", olusturmaTarihi: today(), tamamlandi: false,
+    };
+    const guncel = [yeni, ...(hatirlatmalar || [])];
+    setHatirlatmalar(guncel);
+    await saveHatirlatmalar(guncel);
+  }
+
+  const kutu = { background: CARD, border: `1px solid ${BORDER}`, boxShadow: "0 4px 12px rgba(20,40,32,0.14)", borderRadius: 12, padding: 14, marginBottom: 14 };
+  const baslikStil = (acik) => ({ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", marginBottom: acik ? 10 : 0 });
+
+  const gidilecekOgrenci = (ad, sinif, numara) => { setAktifOgrenci({ name: ad, className: sinif, numara }); setTab("yeni"); };
+
+  return (
+    <div>
+      <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 4, color: ACCENT }}>🤖 İşçi Raporu</div>
+      <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.55, marginBottom: 14 }}>
+        Programı üç açıdan tarar: günlük özet, eksik/unutulmuş kayıtlar ve açık risklerin takibi.
+        Hiçbir şeyi senden habersiz yazmaz — öneriler onayına sunulur.
+      </div>
+
+      {/* A) Günlük Özet */}
+      <div style={kutu}>
+        <div onClick={() => setAcikBolum(acikBolum === "ozet" ? null : "ozet")} style={baslikStil(acikBolum === "ozet")}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: TEXT }}>☀️ Günlük Özet</div>
+          <span style={{ fontSize: 14, color: MUTED }}>{acikBolum === "ozet" ? "▲" : "▼"}</span>
+        </div>
+        {acikBolum === "ozet" && (
+          <div>
+            {ozet.gecikenler.length === 0 && ozet.bugunkuler.length === 0 && ozet.oncelikliler.length === 0 && (
+              <div style={{ fontSize: 12, color: MUTED, textAlign: "center", padding: "10px 0" }}>Bugün için öne çıkan bir şey yok.</div>
+            )}
+            {ozet.gecikenler.length > 0 && (
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#C0392B", marginBottom: 5 }}>⏰ Geciken ({ozet.gecikenler.length})</div>
+                {ozet.gecikenler.slice(0, 5).map(h => (
+                  <div key={h.id} onClick={() => gidilecekOgrenci(h.studentName, h.className, h.numara)}
+                    style={{ fontSize: 12, padding: "5px 0", borderBottom: `1px solid ${BORDER}`, cursor: "pointer" }}>
+                    <b>{h.studentName}</b> — {h.metin}
+                  </div>
+                ))}
+              </div>
+            )}
+            {ozet.bugunkuler.length > 0 && (
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: PURPLE, marginBottom: 5 }}>🔔 Bugün ({ozet.bugunkuler.length})</div>
+                {ozet.bugunkuler.map(h => (
+                  <div key={h.id} onClick={() => gidilecekOgrenci(h.studentName, h.className, h.numara)}
+                    style={{ fontSize: 12, padding: "5px 0", borderBottom: `1px solid ${BORDER}`, cursor: "pointer" }}>
+                    <b>{h.studentName}</b> — {h.metin}
+                  </div>
+                ))}
+              </div>
+            )}
+            {ozet.oncelikliler.length > 0 && (
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#C0392B", marginBottom: 5 }}>🎯 En Öncelikli Öğrenciler</div>
+                {ozet.oncelikliler.map(s => (
+                  <div key={s.studentName + s.className} onClick={() => gidilecekOgrenci(s.studentName, s.className, s.numara)}
+                    style={{ fontSize: 12, padding: "5px 0", borderBottom: `1px solid ${BORDER}`, cursor: "pointer" }}>
+                    <b>{s.studentName}</b> <span style={{ color: MUTED }}>· {s.className}</span> — puan {s.puan.toFixed(1)}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* B) Veri Bekçisi */}
+      <div style={kutu}>
+        <div onClick={() => setAcikBolum(acikBolum === "bekci" ? null : "bekci")} style={baslikStil(acikBolum === "bekci")}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: TEXT }}>🛡️ Veri Bekçisi {bekci.length > 0 && <span style={{ background: "#FEF5E7", color: "#B07D1A", borderRadius: 10, padding: "1px 8px", fontSize: 10, fontWeight: 800, marginLeft: 4 }}>{bekci.length}</span>}</div>
+          <span style={{ fontSize: 14, color: MUTED }}>{acikBolum === "bekci" ? "▲" : "▼"}</span>
+        </div>
+        {acikBolum === "bekci" && (
+          <div>
+            {bekci.length === 0 ? (
+              <div style={{ fontSize: 12, color: MUTED, textAlign: "center", padding: "10px 0" }}>Bir şey bulunamadı — kayıtlar güncel görünüyor.</div>
+            ) : bekci.map((b, i) => (
+              <div key={i} onClick={() => b.numara !== "" && gidilecekOgrenci(b.ad, b.sinif, b.numara)}
+                style={{ fontSize: 12, padding: "6px 0", borderBottom: `1px solid ${BORDER}`, cursor: b.numara !== "" ? "pointer" : "default", color: TEXT }}>
+                {b.mesaj}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* C) Otomatik Takip */}
+      <div style={kutu}>
+        <div onClick={() => setAcikBolum(acikBolum === "takip" ? null : "takip")} style={baslikStil(acikBolum === "takip")}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: TEXT }}>🔁 Otomatik Takip {takip.length > 0 && <span style={{ background: "#FDECEA", color: "#C0392B", borderRadius: 10, padding: "1px 8px", fontSize: 10, fontWeight: 800, marginLeft: 4 }}>{takip.length}</span>}</div>
+          <span style={{ fontSize: 14, color: MUTED }}>{acikBolum === "takip" ? "▲" : "▼"}</span>
+        </div>
+        {acikBolum === "takip" && (
+          <div>
+            <div style={{ fontSize: 10.5, color: MUTED, marginBottom: 8, lineHeight: 1.5 }}>
+              14 gündür açık ve hiçbir hatırlatması olmayan risk kayıtları. Onaylarsan Hatırlatıcı'ya eklenir.
+            </div>
+            {takip.length === 0 ? (
+              <div style={{ fontSize: 12, color: MUTED, textAlign: "center", padding: "10px 0" }}>Şu an öneri yok.</div>
+            ) : takip.map((o, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "7px 0", borderBottom: `1px solid ${BORDER}` }}>
+                <span style={{ fontSize: 12, color: TEXT, flex: 1 }}>{o.mesaj}</span>
+                <button onClick={() => hatirlatmaOlustur(o)} style={{ padding: "5px 10px", borderRadius: 8, border: "none", background: ACCENT, color: "#fff", fontSize: 10.5, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>+ Ekle</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function OncelikListesi({ ogrenciler, riskListesi, sosyometri, aktifYil, uyumIzleme, setTab, setAktifOgrenci }) {
   const [acik, setAcik] = useState(false);
   const liste = pdrOncelikSkoruHesapla(ogrenciler, riskListesi, sosyometri, aktifYil, uyumIzleme);
@@ -16489,6 +16702,7 @@ const TABS_TUMU = [
     { key: "grup_calismalari", label: "🏫 Okul Çapı", grup: ["grup_calismalari","kriz","sosyometri"],
       grupEtiketler: { grup_calismalari: "👪 Grup Çalışmaları", kriz: "🚨 Kriz Müdahale", sosyometri: "🤝 Sosyometri" } },
     { key: "uyum_izleme", label: "🔍 Uyum İzleme" },
+    { key: "isci_raporu", label: "🤖 İşçi Raporu" },
     { key: "istatistik", label: "İstatistik" },
     { key: "prof_danisma", label: "🎓 Prof. Hakan" },
     { key: "ayarlar", label: "⚙️ Ayarlar" },
@@ -17917,6 +18131,20 @@ function pdrBaslangicSekmesi() {
             aktifYil={aktifYil}
             setRiskForm={setRiskForm}
             setTab={setTab}
+          />
+        )}
+
+        {tab === "isci_raporu" && (
+          <IsciRaporuEkrani
+            hatirlatmalar={hatirlatmalar}
+            setHatirlatmalar={setHatirlatmalar}
+            ogrenciler={ogrenciler}
+            riskListesi={riskListesi}
+            sosyometri={sosyometri}
+            aktifYil={aktifYil}
+            uyumIzleme={uyumIzleme}
+            setTab={setTab}
+            setAktifOgrenci={setAktifOgrenci}
           />
         )}
 

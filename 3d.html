@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>PDR Programı — 3 Boyutlu Mimari</title>
+<style>
+  html, body { margin: 0; padding: 0; overflow: hidden; background: #060a09; height: 100%; font-family: 'Segoe UI', system-ui, sans-serif; }
+  #canvas-wrap { position: fixed; inset: 0; }
+  canvas { display: block; touch-action: none; cursor: grab; }
+  canvas:active { cursor: grabbing; }
+
+  #hud-top {
+    position: fixed; top: 0; left: 0; right: 0; padding: 18px 20px 14px;
+    background: linear-gradient(180deg, rgba(6,10,9,0.92) 0%, rgba(6,10,9,0.55) 70%, transparent 100%);
+    pointer-events: none; z-index: 10;
+  }
+  #hud-top h1 { margin: 0; font-size: 17px; font-weight: 800; color: #eafaf1; letter-spacing: 0.2px; }
+  #hud-top p { margin: 4px 0 0; font-size: 11.5px; color: #8fb8a6; line-height: 1.5; max-width: 520px; }
+
+  #legend {
+    position: fixed; top: 84px; left: 16px; z-index: 10;
+    display: flex; flex-direction: column; gap: 6px;
+    pointer-events: none;
+  }
+  .legend-item { display: flex; align-items: center; gap: 7px; font-size: 10.5px; color: #cfe9de; text-shadow: 0 1px 3px rgba(0,0,0,0.6); }
+  .legend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 8px currentColor; }
+
+  #info-panel {
+    position: fixed; left: 16px; right: 16px; bottom: 18px; z-index: 10;
+    background: rgba(10, 20, 17, 0.82); backdrop-filter: blur(6px);
+    border: 1px solid rgba(160, 220, 190, 0.18); border-radius: 14px;
+    padding: 12px 16px; min-height: 20px;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    opacity: 0; transform: translateY(8px); pointer-events: none;
+  }
+  #info-panel.show { opacity: 1; transform: translateY(0); }
+  #info-title { font-size: 14px; font-weight: 800; margin: 0 0 2px; }
+  #info-sub { font-size: 11px; color: #9fc2b3; margin: 0; line-height: 1.5; }
+
+  #hint {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    font-size: 10.5px; color: #6f9686; z-index: 9; pointer-events: none;
+    opacity: 1; transition: opacity 0.6s ease;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  }
+  #hint.fade { opacity: 0; }
+
+  #loading {
+    position: fixed; inset: 0; z-index: 20; background: #060a09;
+    display: flex; align-items: center; justify-content: center;
+    color: #7fd9ae; font-size: 12px; letter-spacing: 0.5px;
+    transition: opacity 0.4s ease;
+  }
+  #loading.hide { opacity: 0; pointer-events: none; }
+
+  #top-actions { position: fixed; top: 16px; right: 16px; z-index: 11; display: flex; gap: 8px; }
+  .pill-btn {
+    background: rgba(10, 22, 18, 0.7); border: 1px solid rgba(160, 220, 190, 0.3);
+    color: #d8f5e6; font-size: 11.5px; font-weight: 700; border-radius: 20px;
+    padding: 8px 14px; cursor: pointer; backdrop-filter: blur(4px);
+  }
+  #geri-btn { position: fixed; top: 16px; left: 16px; z-index: 11; display: none; }
+  #geri-btn.show { display: block; }
+</style>
+</head>
+<body>
+
+<div id="loading">Model kuruluyor…</div>
+
+<div id="canvas-wrap"></div>
+
+<button id="geri-btn" class="pill-btn">◀ Tümünü Gör</button>
+<div id="top-actions">
+  <a href="index.html" class="pill-btn" style="text-decoration:none; display:inline-block;">✕ Programa Dön</a>
+</div>
+
+<div id="hud-top">
+  <h1>🧠 PDR Programı — 3B Mimari Haritası</h1>
+  <p>Merkezde program çekirdeği, her dal bir işlev grubu, her uç nokta bir sekme. Parmakla/fare ile döndür, uzaklaştır/yaklaştır. Bir noktaya dokun.</p>
+</div>
+
+<div id="legend"></div>
+
+<div id="hint">↻ Döndürmek için sürükle · yakınlaştırmak için kaydır/sıkıştır</div>
+
+<div id="info-panel">
+  <p id="info-title"></p>
+  <p id="info-sub"></p>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// Bu veri, PDR Programı'nın kendi içindeki "Şema" sekmesinin (SEMA_DALLARI)
+// birebir aynısıdır — uydurma bir örnek değil, programın gerçek mimarisi.
+// Her yaprağın "tab" alanı, index.html'deki gerçek sekme anahtarıyla eşleşir —
+// bir yaprağa dokunulduğunda o sekmeye doğrudan gidilebilmesi için.
+const PDR_DALLARI = [
+  {
+    key: "ogrenci", ad: "Öğrenci Merkezi", renk: 0x2ecc87,
+    aciklama: "Tüm kayıtların çekirdeği — diğer tüm sekmeler buradaki öğrenciye bağlanır.",
+    yapraklar: [
+      { ad: "Öğrenciler", tab: "ogrenciler" },
+      { ad: "Profil", tab: "profil_merkez" },
+      { ad: "Sınıf", tab: "sinif_profili" },
+      { ad: "Devamsızlık", tab: "devamsizlik" },
+    ]
+  },
+  {
+    key: "gorusme", ad: "Görüşme & Takip", renk: 0x5aa4de,
+    aciklama: "Görüşme notları, hatırlatmalar, müdahale planı ve bunlardan üretilen belgeler.",
+    yapraklar: [
+      { ad: "Görüşme Notu", tab: "yeni" },
+      { ad: "Hatırlatıcı", tab: "hatirlatici" },
+      { ad: "Takvim", tab: "gorusme_takvimi" },
+      { ad: "Müdahale", tab: "mudahale" },
+      { ad: "Belgeler", tab: "belgeler" },
+    ]
+  },
+  {
+    key: "akademik", ad: "Akademik Takip", renk: 0xb18cf0,
+    aciklama: "Sınav sonuçları ve yıllık rehberlik kazanımları planı.",
+    yapraklar: [
+      { ad: "Net Haritası", tab: "net_haritasi" },
+      { ad: "Konu Haritası", tab: "konu_haritasi" },
+      { ad: "Deneme", tab: "deneme" },
+      { ad: "Kazanımlar", tab: "kazanimlar" },
+    ]
+  },
+  {
+    key: "degerlendirme", ad: "Değerlendirme", renk: 0xe0554f,
+    aciklama: "Testler, risk kayıtları ve okula uyum izleme.",
+    yapraklar: [
+      { ad: "Testler", tab: "testler" },
+      { ad: "Risk", tab: "risk" },
+      { ad: "Uyum İzleme", tab: "uyum_izleme" },
+    ]
+  },
+  {
+    key: "kaynak", ad: "Kaynak & Destek", renk: 0x2fae74,
+    aciklama: "Referans kütüphanesi, müdahale programları ve süpervizyon desteği.",
+    yapraklar: [
+      { ad: "Kütüphane", tab: "kutuphane" },
+      { ad: "Müdahale Programları", tab: "mudahale_kutuphane" },
+      { ad: "Prof. Hakan", tab: "prof_danisma" },
+    ]
+  },
+  {
+    key: "okul_capi", ad: "Okul Çapı Etkinlikler", renk: 0xd4972e,
+    aciklama: "Öğrenciye özel değil, sınıf/okul düzeyinde yürütülen çalışmalar.",
+    yapraklar: [
+      { ad: "Grup Çalışmaları", tab: "grup_calismalari" },
+      { ad: "Kriz Müdahale", tab: "kriz" },
+      { ad: "Sosyometri", tab: "sosyometri" },
+    ]
+  },
+  {
+    key: "sistem", ad: "Sistem", renk: 0x8a9a92,
+    aciklama: "Genel görünüm ve veri/ayar yönetimi.",
+    yapraklar: [
+      { ad: "İstatistik", tab: "istatistik" },
+      { ad: "Ayarlar", tab: "ayarlar" },
+    ]
+  },
+];
+
+</script>
+<script>
+(function () {
+  "use strict";
+
+  // ── Temel kurulum ──────────────────────────────────────────────────────
+  const wrap = document.getElementById("canvas-wrap");
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x060a09, 0.028);
+
+  const camera = new THREE.PerspectiveCamera(52, window.innerWidth / window.innerHeight, 0.1, 200);
+  let camDist = 20;
+  let camPolar = 1.02;   // dikey açı (radyan)
+  let camAzim = 2.35;    // yatay açı (radyan)
+  // Kamera artık her zaman (0,0,0)'a değil, "odak"a bakıyor. Bir dala
+  // dokunulduğunda odak o dalın ucuna kayıyor (yumuşak geçişle) ve mesafe
+  // azalıyor — "yaklaşma" hissi böyle veriliyor. "Tümünü Gör" ile odak
+  // tekrar merkeze, mesafe tekrar geniş görünüme dönüyor.
+  const focusCur = new THREE.Vector3(0, 0, 0);
+  const focusTarget = new THREE.Vector3(0, 0, 0);
+  let camDistTarget = camDist;
+  let odaklanmisDal = null; // hangi dal şu an odakta (null = genel görünüm)
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  wrap.appendChild(renderer.domElement);
+
+  // ── Işıklar ─────────────────────────────────────────────────────────────
+  scene.add(new THREE.AmbientLight(0x2a3f38, 1.4));
+  const keyLight = new THREE.PointLight(0x9fffd4, 2.2, 60);
+  keyLight.position.set(8, 10, 8);
+  scene.add(keyLight);
+  const fillLight = new THREE.PointLight(0x4488ff, 0.9, 60);
+  fillLight.position.set(-10, -6, -8);
+  scene.add(fillLight);
+
+  // ── Yıldız alanı (derinlik hissi) ─────────────────────────────────────
+  (function buildStars() {
+    const count = 900;
+    const pos = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      const r = 40 + Math.random() * 60;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      pos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+      pos[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+      pos[i * 3 + 2] = r * Math.cos(phi);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    const mat = new THREE.PointsMaterial({ color: 0x9fd9c2, size: 0.09, transparent: true, opacity: 0.55, sizeAttenuation: true });
+    scene.add(new THREE.Points(geo, mat));
+  })();
+
+  // ── Yumuşak parlama dokusu (glow sprite'ları için) ─────────────────────
+  function glowTexture() {
+    const c = document.createElement("canvas");
+    c.width = c.height = 128;
+    const ctx = c.getContext("2d");
+    const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+    g.addColorStop(0, "rgba(255,255,255,0.9)");
+    g.addColorStop(0.4, "rgba(255,255,255,0.25)");
+    g.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 128, 128);
+    return new THREE.CanvasTexture(c);
+  }
+  const GLOW_TEX = glowTexture();
+
+  function addGlow(parent, color, scale) {
+    const mat = new THREE.SpriteMaterial({ map: GLOW_TEX, color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+    const spr = new THREE.Sprite(mat);
+    spr.scale.set(scale, scale, 1);
+    parent.add(spr);
+    return spr;
+  }
+
+  // ── Dünya grubu — sürükleyerek döndürülen her şey burada ──────────────
+  const world = new THREE.Group();
+  scene.add(world);
+
+  // ── Fibonacci küre dağılımı — dalları eşit aralıklı yerleştirmek için ─
+  function fibonacciSphere(n) {
+    const pts = [];
+    const golden = Math.PI * (3 - Math.sqrt(5));
+    for (let i = 0; i < n; i++) {
+      const y = 1 - (i / (n - 1)) * 2;            // tam küre üzerine eşit yayılım
+      const radius = Math.sqrt(Math.max(0, 1 - y * y));
+      const theta = golden * i;
+      pts.push(new THREE.Vector3(Math.cos(theta) * radius, y, Math.sin(theta) * radius));
+    }
+    return pts;
+  }
+
+  // ── Merkez düğüm ────────────────────────────────────────────────────────
+  const centerGroup = new THREE.Group();
+  world.add(centerGroup);
+  const centerGeo = new THREE.IcosahedronGeometry(1.15, 1);
+  const centerMat = new THREE.MeshStandardMaterial({
+    color: 0x0f3d2e, emissive: 0x1fa971, emissiveIntensity: 0.9,
+    metalness: 0.35, roughness: 0.3, flatShading: true,
+  });
+  const centerMesh = new THREE.Mesh(centerGeo, centerMat);
+  centerGroup.add(centerMesh);
+  const centerWire = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(1.22, 1),
+    new THREE.MeshBasicMaterial({ color: 0x8ff5c8, wireframe: true, transparent: true, opacity: 0.35 })
+  );
+  centerGroup.add(centerWire);
+  addGlow(centerGroup, 0x35ffb0, 5.2);
+
+  // ── Dalları ve yaprakları inşa et ────────────────────────────────────
+  const BRANCH_LEN = 6.3;
+  const dirs = fibonacciSphere(PDR_DALLARI.length);
+  const interactables = []; // { mesh, kind:"branch"|"leaf", ad, sub, tab, focusPos }
+  const persistentLabels = []; // { el, obj3d, kind }
+  const branchTips = [];
+
+  function makeLabel(text, kind) {
+    const el = document.createElement("div");
+    el.textContent = text;
+    el.style.position = "fixed";
+    el.style.transform = "translate(-50%, -100%)";
+    el.style.pointerEvents = "none";
+    el.style.whiteSpace = "nowrap";
+    el.style.textShadow = "0 1px 4px rgba(0,0,0,0.85), 0 0 12px rgba(0,0,0,0.6)";
+    el.style.zIndex = "8";
+    if (kind === "center") {
+      el.style.fontSize = "13px"; el.style.fontWeight = "800"; el.style.color = "#eafff4";
+    } else if (kind === "branch") {
+      el.style.fontSize = "11.5px"; el.style.fontWeight = "700";
+    } else {
+      el.style.fontSize = "9.5px"; el.style.fontWeight = "500"; el.style.color = "#d8ece4"; el.style.opacity = "0.85";
+    }
+    document.body.appendChild(el);
+    return el;
+  }
+
+  persistentLabels.push({ el: makeLabel("PDR Programı", "center"), obj3d: centerGroup, offsetY: 1.7 });
+
+  PDR_DALLARI.forEach((dal, i) => {
+    const dir = dirs[i];
+    const tipPos = dir.clone().multiplyScalar(BRANCH_LEN);
+    const midPos = dir.clone().multiplyScalar(BRANCH_LEN * 0.5).add(
+      new THREE.Vector3((Math.random() - 0.5) * 1.4, (Math.random() - 0.5) * 1.4, (Math.random() - 0.5) * 1.4)
+    );
+
+    // Organik eğrilik için tüp geometrisi
+    const curve = new THREE.QuadraticBezierCurve3(new THREE.Vector3(0, 0, 0), midPos, tipPos);
+    const tubeGeo = new THREE.TubeGeometry(curve, 24, 0.075, 6, false);
+    const tubeMat = new THREE.MeshStandardMaterial({ color: dal.renk, emissive: dal.renk, emissiveIntensity: 0.5, metalness: 0.2, roughness: 0.5 });
+    const tube = new THREE.Mesh(tubeGeo, tubeMat);
+    world.add(tube);
+
+    // Dal ucu düğümü
+    const nodeGroup = new THREE.Group();
+    nodeGroup.position.copy(tipPos);
+    world.add(nodeGroup);
+    const nodeSize = 0.34 + dal.yapraklar.length * 0.025;
+    const nodeMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(nodeSize, 20, 20),
+      new THREE.MeshStandardMaterial({ color: dal.renk, emissive: dal.renk, emissiveIntensity: 0.7, metalness: 0.25, roughness: 0.4 })
+    );
+    nodeGroup.add(nodeMesh);
+    addGlow(nodeGroup, dal.renk, nodeSize * 5.5);
+
+    interactables.push({ mesh: nodeMesh, kind: "branch", ad: dal.ad, sub: dal.aciklama, focusPos: tipPos.clone() });
+    persistentLabels.push({ el: makeLabel(dal.ad, "branch"), obj3d: nodeGroup, offsetY: nodeSize + 0.55, color: dal.renk });
+    branchTips.push({ pos: tipPos, dir, dal });
+
+    // Yapraklar — dal ucunun etrafında küçük bir halka
+    const leafRingR = 0.95 + dal.yapraklar.length * 0.06;
+    // dala dik iki eksen bul
+    const up = Math.abs(dir.y) < 0.95 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
+    const axisA = new THREE.Vector3().crossVectors(dir, up).normalize();
+    const axisB = new THREE.Vector3().crossVectors(dir, axisA).normalize();
+
+    dal.yapraklar.forEach((yaprak, j) => {
+      const ang = (j / dal.yapraklar.length) * Math.PI * 2;
+      const leafLocalOffset = axisA.clone().multiplyScalar(Math.cos(ang) * leafRingR)
+        .add(axisB.clone().multiplyScalar(Math.sin(ang) * leafRingR))
+        .add(dir.clone().multiplyScalar(0.55));
+      const leafPos = tipPos.clone().add(leafLocalOffset);
+
+      const leafLine = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([tipPos, leafPos]),
+        new THREE.LineBasicMaterial({ color: dal.renk, transparent: true, opacity: 0.45 })
+      );
+      world.add(leafLine);
+
+      const leafMesh = new THREE.Mesh(
+        new THREE.SphereGeometry(0.155, 14, 14),
+        new THREE.MeshStandardMaterial({ color: dal.renk, emissive: dal.renk, emissiveIntensity: 0.55, metalness: 0.1, roughness: 0.6 })
+      );
+      leafMesh.position.copy(leafPos);
+      world.add(leafMesh);
+
+      interactables.push({ mesh: leafMesh, kind: "leaf", ad: yaprak.ad, sub: dal.ad, tab: yaprak.tab, focusPos: leafPos.clone() });
+      persistentLabels.push({ el: makeLabel(yaprak.ad, "leaf"), obj3d: leafMesh, offsetY: 0.32, color: dal.renk, alwaysDim: true });
+    });
+  });
+
+  // ── Kenar çizgisi (legend) doldur ─────────────────────────────────────
+  (function buildLegend() {
+    const box = document.getElementById("legend");
+    PDR_DALLARI.forEach(dal => {
+      const row = document.createElement("div");
+      row.className = "legend-item";
+      const hex = "#" + dal.renk.toString(16).padStart(6, "0");
+      row.style.color = hex;
+      row.innerHTML = `<span class="legend-dot" style="background:${hex}"></span><span style="color:#dff2e9">${dal.ad}</span>`;
+      box.appendChild(row);
+    });
+  })();
+
+  // ── Elle sürükle-döndür + tekerlek/pinch yakınlaştır ──────────────────
+  let dragging = false, lastX = 0, lastY = 0, downX = 0, downY = 0, downTime = 0;
+  let idleTimer = null, autoRotate = true;
+
+  function setIdleTimer() {
+    autoRotate = false;
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => { autoRotate = true; }, 3200);
+  }
+
+  function onPointerDown(x, y) {
+    dragging = true; lastX = downX = x; lastY = downY = y; downTime = performance.now();
+    document.getElementById("hint").classList.add("fade");
+  }
+  function onPointerMove(x, y) {
+    if (!dragging) return;
+    const dx = x - lastX, dy = y - lastY;
+    camAzim -= dx * 0.006;
+    camPolar = Math.min(2.55, Math.max(0.5, camPolar - dy * 0.006));
+    lastX = x; lastY = y;
+    setIdleTimer();
+  }
+  function onPointerUp(x, y) {
+    dragging = false;
+    const dist = Math.hypot(x - downX, y - downY);
+    const elapsed = performance.now() - downTime;
+    if (dist < 6 && elapsed < 500) handleTap(x, y);
+  }
+
+  const canvas = renderer.domElement;
+  canvas.addEventListener("mousedown", e => onPointerDown(e.clientX, e.clientY));
+  window.addEventListener("mousemove", e => onPointerMove(e.clientX, e.clientY));
+  window.addEventListener("mouseup", e => onPointerUp(e.clientX, e.clientY));
+  canvas.addEventListener("touchstart", e => { const t = e.touches[0]; onPointerDown(t.clientX, t.clientY); }, { passive: true });
+  canvas.addEventListener("touchmove", e => {
+    if (e.touches.length === 1) { const t = e.touches[0]; onPointerMove(t.clientX, t.clientY); }
+    else if (e.touches.length === 2) {
+      const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+      if (window.__pdrPinchStart) {
+        camDist = camDistTarget = Math.min(34, Math.max(2.5, camDist - (d - window.__pdrPinchStart) * 0.03));
+      }
+      window.__pdrPinchStart = d;
+      setIdleTimer();
+    }
+  }, { passive: true });
+  canvas.addEventListener("touchend", e => {
+    window.__pdrPinchStart = null;
+    if (e.changedTouches.length) { const t = e.changedTouches[0]; onPointerUp(t.clientX, t.clientY); }
+  }, { passive: true });
+  canvas.addEventListener("wheel", e => {
+    e.preventDefault();
+    camDist = camDistTarget = Math.min(34, Math.max(2.5, camDist + e.deltaY * 0.012));
+    setIdleTimer();
+  }, { passive: false });
+
+  // ── Tıklama/dokunma ile yaprak/dal inceleme ────────────────────────────
+  const raycaster = new THREE.Raycaster();
+  const infoPanel = document.getElementById("info-panel");
+  const infoTitle = document.getElementById("info-title");
+  const infoSub = document.getElementById("info-sub");
+
+  function handleTap(x, y) {
+    const ndc = new THREE.Vector2((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
+    raycaster.setFromCamera(ndc, camera);
+    const meshes = interactables.map(o => o.mesh);
+    const hits = raycaster.intersectObjects(meshes, false);
+    if (hits.length === 0) return;
+    const hitMesh = hits[0].object;
+    const found = interactables.find(o => o.mesh === hitMesh);
+    if (!found) return;
+
+    hitMesh.scale.set(1.6, 1.6, 1.6);
+    setTimeout(() => hitMesh.scale.set(1, 1, 1), 260);
+
+    if (found.kind === "leaf") {
+      // Yaprak = programın gerçek bir sekmesi. Doğrudan oraya git.
+      infoTitle.textContent = "Açılıyor…";
+      infoSub.textContent = found.ad;
+      infoPanel.classList.add("show");
+      setTimeout(() => {
+        window.location.href = "index.html#tab=" + found.tab;
+      }, 220);
+      return;
+    }
+
+    // Dal = odaklan, yapraklarını göster. Aynı dala tekrar dokunursa geri çık.
+    if (odaklanmisDal === found) {
+      odaklanmisDal = null;
+      focusTarget.set(0, 0, 0);
+      camDistTarget = 20;
+      geriBtn.classList.remove("show");
+      infoPanel.classList.remove("show");
+    } else {
+      odaklanmisDal = found;
+      focusTarget.copy(found.focusPos);
+      camDistTarget = 4.6;
+      geriBtn.classList.add("show");
+      infoTitle.textContent = found.ad;
+      infoSub.textContent = found.sub + " — bir sekmeye dokun, oraya git";
+      infoPanel.classList.add("show");
+    }
+  }
+
+  const geriBtn = document.getElementById("geri-btn");
+  geriBtn.addEventListener("click", () => {
+    odaklanmisDal = null;
+    focusTarget.set(0, 0, 0);
+    camDistTarget = 20;
+    geriBtn.classList.remove("show");
+    infoPanel.classList.remove("show");
+  });
+
+  // ── Yeniden boyutlandırma ───────────────────────────────────────────────
+  window.addEventListener("resize", () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  // ── Etiketleri ekrana izdüşürme ────────────────────────────────────────
+  const projVec = new THREE.Vector3();
+  function updateLabels() {
+    const w = window.innerWidth, h = window.innerHeight;
+    persistentLabels.forEach(L => {
+      L.obj3d.getWorldPosition(projVec);
+      projVec.y += (L.offsetY || 0);
+      const p = projVec.clone().project(camera);
+      const behind = p.z > 1;
+      const sx = (p.x * 0.5 + 0.5) * w;
+      const sy = (-p.y * 0.5 + 0.5) * h;
+      if (behind || sx < -50 || sx > w + 50 || sy < -50 || sy > h + 50) {
+        L.el.style.display = "none";
+      } else {
+        L.el.style.display = "block";
+        L.el.style.left = sx + "px";
+        L.el.style.top = sy + "px";
+        if (L.color !== undefined) {
+          const hex = "#" + L.color.toString(16).padStart(6, "0");
+          L.el.style.color = hex;
+        }
+        if (L.alwaysDim) {
+          const depth = -1 * (new THREE.Vector3().copy(projVec).applyMatrix4(camera.matrixWorldInverse).z);
+          L.el.style.opacity = depth > 14 ? "0.35" : "0.85";
+        }
+      }
+    });
+  }
+
+  // ── Ana döngü ─────────────────────────────────────────────────────────
+  let t = 0;
+  function animate() {
+    requestAnimationFrame(animate);
+    t += 0.016;
+
+    if (autoRotate && !dragging) camAzim += 0.0016;
+
+    // Odak noktasını ve mesafeyi yumuşakça hedefe doğru kaydır.
+    focusCur.lerp(focusTarget, 0.06);
+    camDist += (camDistTarget - camDist) * 0.06;
+
+    const offset = new THREE.Vector3(
+      camDist * Math.sin(camPolar) * Math.sin(camAzim),
+      camDist * Math.cos(camPolar),
+      camDist * Math.sin(camPolar) * Math.cos(camAzim)
+    );
+    camera.position.copy(focusCur).add(offset);
+    camera.lookAt(focusCur);
+
+    centerGroup.rotation.y += 0.0025;
+    centerGroup.rotation.x += 0.0011;
+    const pulse = 1 + Math.sin(t * 1.4) * 0.045;
+    centerMesh.scale.set(pulse, pulse, pulse);
+    centerWire.rotation.y -= 0.0016;
+
+    updateLabels();
+    renderer.render(scene, camera);
+  }
+
+  animate();
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    document.getElementById("loading").classList.add("hide");
+  }));
+})();
+
+</script>
+</body>
+</html>

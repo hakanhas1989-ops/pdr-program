@@ -11062,6 +11062,39 @@ function ExcelTopluYukle({ ogrenciler, setOgrenciler, denemeler, setDenemeler, a
   const dersler = aktifDersler(sinavTuru);
   const [yukleniyor, setYukleniyor] = useState(false);
   const [sonuc, setSonuc] = useState(null);
+  const [onarimSonuc, setOnarimSonuc] = useState(null);
+  const [onariliyor, setOnariliyor] = useState(false);
+
+  // ── Onarım: yukarıdaki hatanın DÜZELTİLMESİNDEN ÖNCE yüklenmiş GDO
+  // verilerini kurtarır. "Ad || Sınıf || Numara" biçimindeki her anahtarı
+  // geri çözüp kayıtlı bir öğrenciyle (büyük/küçük harf farkını görmezden
+  // gelerek) eşleştirir; anahtar kayıtlı öğrencininkiyle birebir aynı
+  // değilse veriyi DOĞRU anahtara taşır. Zaten doğru olanlara dokunmaz.
+  async function handleOnar() {
+    setOnariliyor(true);
+    const yeni = { ...denemeler };
+    let tasinan = 0, bulunamayan = 0;
+    Object.entries(denemeler || {}).forEach(([eskiKey, val]) => {
+      if (!val || !val["7sinif"]) return;
+      const parcalar = eskiKey.split(" || ");
+      const [hamAd, hamSinif, hamNo] = parcalar;
+      const kayitli = ogrenciler.find(o => pdrAyniOgrenci(o.studentName, o.className, hamAd, hamSinif, o.numara, hamNo));
+      if (!kayitli) { bulunamayan++; return; }
+      const dogruKey = pdrOgrAnahtar(kayitli.studentName, kayitli.className, kayitli.numara);
+      if (dogruKey === eskiKey) return; // zaten doğru
+      if (yeni[dogruKey]?.["7sinif"]) return; // doğru yerde zaten veri varsa üzerine yazma
+      yeni[dogruKey] = { ...(yeni[dogruKey] || {}), "7sinif": val["7sinif"] };
+      if (yeni[eskiKey]) {
+        const { "7sinif": _atilan, ...kalan } = yeni[eskiKey];
+        if (Object.keys(kalan).length > 0) yeni[eskiKey] = kalan; else delete yeni[eskiKey];
+      }
+      tasinan++;
+    });
+    setDenemeler(yeni);
+    await saveDenemeler(yeni);
+    setOnarimSonuc({ tasinan, bulunamayan });
+    setOnariliyor(false);
+  }
 
   async function handleDosya(e) {
     const file = e.target.files[0];
@@ -11179,9 +11212,22 @@ function ExcelTopluYukle({ ogrenciler, setOgrenciler, denemeler, setDenemeler, a
           }
 
           // 7.sınıf denemelerini "7s_" prefix ile kaydet
+          // ÖNEMLİ DÜZELTME: öğrenci zaten kayıtlıysa (mevcut varsa), anahtar
+          // Excel'deki ham yazımla değil, kayıtlı öğrencinin KENDİ isim/sınıf/
+          // numarasıyla kurulmalı. pdrAyniOgrenci büyük/küçük harf farkını
+          // görmezden gelerek eşleştiriyor (doğru), ama pdrOgrAnahtar TAM
+          // METİN eşleşmesi arıyor — "Ahmet Işık" (Excel) ile "AHMET IŞIK"
+          // (kayıtlı) FARKLI anahtar üretiyordu. Sonuç: veri "birine" yazılıyor,
+          // programın geri kalanı (öğrenci kartı, GDO rozeti, grafikler) hep
+          // kayıtlı ismin anahtarını aradığı için hiçbir zaman bulamıyordu —
+          // 46 öğrencide sadece Excel'deki yazımın kayıtlıyla TESADÜFEN birebir
+          // aynı olduğu 2 öğrencide çalışıyordu.
           if (Object.keys(deneme7).length > 0) {
-            const denemeKey = pdrOgrAnahtar(adSoyad, sube, no);
-            const ogrDen = yeniDenemeler[denemeKey] || yeniDenemeler[pdrOgrAnahtar(adSoyad, sube)] || yeniDenemeler[adSoyad] || {};
+            const yazimAdi = mevcut ? mevcut.studentName : adSoyad;
+            const yazimSube = mevcut ? mevcut.className : sube;
+            const yazimNo = mevcut ? mevcut.numara : no;
+            const denemeKey = pdrOgrAnahtar(yazimAdi, yazimSube, yazimNo);
+            const ogrDen = yeniDenemeler[denemeKey] || yeniDenemeler[pdrOgrAnahtar(yazimAdi, yazimSube)] || yeniDenemeler[yazimAdi] || {};
             ogrDen["7sinif"] = { denemeler: deneme7, ortalama: ort.toFixed(1), risk: risk7 };
             yeniDenemeler[denemeKey] = ogrDen;
           }
@@ -11228,6 +11274,24 @@ function ExcelTopluYukle({ ogrenciler, setOgrenciler, denemeler, setDenemeler, a
       }}>
         {yukleniyor ? "⏳ Yükleniyor..." : "📂 Excel Dosyası Seç (.xlsx)"}
       </label>
+
+      {/* Onarım aracı — daha önce yüklenmiş ama isim yazım farkı yüzünden
+          hiçbir karta yansımamış GDO verilerini düzeltir. */}
+      <button onClick={handleOnar} disabled={onariliyor} style={{
+        width: "100%", padding: "10px", marginTop: 8,
+        background: "none", border: "1px dashed #E67E22", color: "#B7590B",
+        borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: "pointer", opacity: onariliyor ? 0.6 : 1
+      }}>
+        {onariliyor ? "⏳ Taranıyor..." : "🔧 Daha Önce Yüklenip Kartlara Yansımayan GDO Verilerini Onar"}
+      </button>
+      {onarimSonuc && (
+        <div style={{marginTop:8, background:"#FDF6E3", borderRadius:8, padding:10, fontSize:11.5, color:"#8A5A00", lineHeight:1.6}}>
+          {onarimSonuc.tasinan > 0
+            ? <>✓ <b>{onarimSonuc.tasinan}</b> öğrencinin GDO verisi doğru öğrenci kaydına taşındı — artık kartlarda görünmeli.</>
+            : <>Taşınacak bir şey bulunamadı — GDO verileri zaten doğru yerdeydi.</>}
+          {onarimSonuc.bulunamayan > 0 && <><br/>{onarimSonuc.bulunamayan} kayıt, hiçbir öğrenciyle eşleştirilemedi (muhtemelen o öğrenci artık sistemde yok).</>}
+        </div>
+      )}
 
       {sonuc && !sonuc.hata && (
         <div style={{marginTop:12}}>

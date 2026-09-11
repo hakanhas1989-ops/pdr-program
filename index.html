@@ -16482,6 +16482,74 @@ export default function App() {
     loadSinavKaygisi().then(setSinavKaygisi);
   }, []);
 
+  // ── Canlı Senkronizasyon ─────────────────────────────────────────────────
+  // AMAÇ: Bir cihazda yapılan değişikliğin, uygulamayı kapatıp yeniden açmaya
+  // gerek kalmadan diğer cihazlarda da ANINDA görünmesi. Firestore'un "canlı
+  // dinleme" (onSnapshot) özelliği kullanılıyor — bu, normal okuma/yazma
+  // kotasından sayılır, ayrı bir ücretlendirmesi YOK.
+  //
+  // Nasıl çalışır: kullanıcının tüm verilerinin bulunduğu koleksiyon tek bir
+  // dinleyiciyle izleniyor. Herhangi bir belge (örn. "pdr-ogrenciler")
+  // değiştiğinde — bu cihazda ya da başka bir cihazda — o veriye karşılık
+  // gelen load fonksiyonu tekrar çağrılıp state güncelleniyor. Zaten var olan
+  // load* fonksiyonları yeniden kullanılıyor (parçalanmış/büyük veriyi doğru
+  // birleştirme mantığı zaten onlarda var, tekrar yazmaya gerek yok).
+  useEffect(() => {
+    const uid = pdrAuth.currentUser?.uid;
+    if (!uid) return;
+
+    const anahtarUygulama = {
+      "pdr-records": () => loadRecords().then(setRecords),
+      "pdr-profiles": () => loadProfiles().then(setProfiles),
+      "pdr-profiles-meta": () => loadProfiles().then(setProfiles),
+      "pdr-profiles2": () => loadProfiles2().then(setProfiles2),
+      "pdr-oog": () => loadOogDegerlendirmeler().then(setOogDegerlendirmeler),
+      "pdr-kutuphane": () => loadKutuphane().then(setKutuphane),
+      "pdr-risk": () => loadRiskListesi().then(setRiskListesi),
+      "pdr-denemeler": () => loadDenemeler().then(setDenemeler),
+      "pdr-ogrenciler": () => loadOgrenciler().then(setOgrenciler),
+      "pdr-yillar": () => loadYillar().then(setYillar),
+      "pdr-sinif-listesi": () => loadSinifListesi().then(v => { if (v) setSinifListesi(v); }),
+      "pdr-sinav-turu": () => loadSinavTuru().then(v => { if (v) setSinavTuruState(v); }),
+      "pdr-kademe": () => loadKademe().then(v => { if (v) setKademeState(v); }),
+      "pdr-aktif-yil": () => loadAktifYil().then(setAktifYil),
+      "pdr-mudahale": () => loadMudahalePlan().then(setMudahalePlan),
+      "pdr-test-kayitlari": () => loadTestKayitlari().then(setTestKayitlari),
+      "pdr-hazirlik": () => loadHazirlikNotlari().then(setHazirlikNotlari),
+      "pdr-prof-notlar": () => loadProfNotlari().then(setProfNotlari),
+      "pdr-ilerleme": () => loadIlerlemeNotlari().then(setIlerlemeNotlari),
+      "pdr-sevkler": () => loadSevkler().then(setSevkler),
+      "pdr-grup-calismalari": () => loadGrupCalismalari().then(setGrupCalismalari),
+      "pdr-kriz-kayitlari": () => loadKrizKayitlari().then(setKrizKayitlari),
+      "pdr-sosyometri": () => loadSosyometri().then(setSosyometri),
+      "pdr-uyum-izleme": () => loadUyumIzleme().then(setUyumIzleme),
+      "pdr-hatirlatmalar": () => loadHatirlatmalar().then(setHatirlatmalar),
+      "pdr-net-haritasi": () => loadNetHaritasi().then(setNetHaritasiKayitlari),
+      "pdr-konu-haritasi": () => loadKonuHaritasi().then(setKonuHaritasiVerisi),
+      "pdr-bireyi-tanima": () => loadBireyiTanima().then(setBireyiTanima),
+      "pdr-bdt-analiz": () => loadBdtAnaliz().then(setBdtAnaliz),
+      "pdr-sinav-kaygisi": () => loadSinavKaygisi().then(setSinavKaygisi),
+      // "pdr-rehber-gorundu" bilerek dahil edilmedi — bu sadece "ilk açılışta
+      // rehber gösterildi mi" bayrağı, cihazlar arası senkron olması gerekmiyor.
+    };
+
+    let ilkAnlikGoruntu = true;
+    const aboneligiIptalEt = pdrDb.collection("users").doc(uid).collection("data")
+      .onSnapshot(snapshot => {
+        // İlk anlık görüntü, useEffect'in üstündeki tek seferlik yüklemeyle
+        // zaten aynı veriyi taşır — tekrar işlemeye gerek yok, sadece BUNDAN
+        // SONRAKİ değişiklikler (başka cihazdan ya da bu cihazdan) ilgimizi
+        // çekiyor.
+        if (ilkAnlikGoruntu) { ilkAnlikGoruntu = false; return; }
+        snapshot.docChanges().forEach(degisiklik => {
+          const uygula = anahtarUygulama[degisiklik.doc.id];
+          if (uygula) uygula();
+        });
+      }, hata => console.warn("[canlı senkron] dinleme hatası:", hata.message));
+
+    return () => aboneligiIptalEt();
+  }, []);
+
   // aktifOgrenci değişince formu güncelle
   useEffect(() => {
     if (aktifOgrenci?.name) {

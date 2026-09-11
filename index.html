@@ -3491,7 +3491,7 @@ function pdrGunlukOzetHesapla(hatirlatmalar, ogrenciler, riskListesi, sosyometri
   return { gecikenler, bugunkuler, oncelikliler };
 }
 
-function pdrVeriBekcisiTara(riskListesi, uyumIzleme, ogrenciler, sosyometri, aktifYil) {
+function pdrVeriBekcisiTara(riskListesi, uyumIzleme, ogrenciler, sosyometri, aktifYil, krizKayitlari) {
   const bulgular = [];
 
   // 1) Açık risk kaydı, 21+ gündür hiç sonuç değerlendirmesi almamış
@@ -3536,7 +3536,77 @@ function pdrVeriBekcisiTara(riskListesi, uyumIzleme, ogrenciler, sosyometri, akt
     }
   });
 
+  // 5) İzlem tarihi geçmiş ama hâlâ "Açık" kalan kriz kayıtları — izlem
+  // tarihi girilince otomatik hatırlatma oluşuyor, ama o hatırlatma
+  // "tamamlandı" işaretlenip kriz kaydının kendisi kapatılmayı unutulmuş
+  // olabilir.
+  (krizKayitlari || []).forEach(k => {
+    if (k.durum !== "Açık" || !k.izlemTarihi) return;
+    const gun = pdrGunFarki(k.izlemTarihi);
+    if (gun !== null && gun > 0) {
+      bulgular.push({ tur: "kriz_gecikti", ad: k.etkilenen || "Kriz kaydı", sinif: "", numara: "",
+        mesaj: `${k.etkilenen || "Bir kriz kaydı"} — izlem tarihi ${gun} gün önceydi, kayıt hâlâ "Açık" durumda.` });
+    }
+  });
+
   return bulgular;
+}
+
+// ── Akademik Uyarılar — deneme verisine dayalı iki ayrı kontrol ────────────
+// A) Veri kalitesi: hiçbir kayıtlı öğrenciyle eşleşmeyen "yetim" deneme
+//    kayıtları (isim yazım farkı gibi nedenlerle oluşabilir — bkz. Deneme
+//    sekmesindeki "🔧 Onar" aracı, aynı sorunu çözer).
+// B) Performans düşüşü: bir öğrencinin en son deneme neti, bir önceki
+//    denemesine ya da GDO'suna göre belirgin şekilde (8+ net VE en az %20)
+//    düşmüşse işaretlenir — küçük dalgalanmalar gürültü olur, o yüzden hem
+//    mutlak hem yüzdesel eşik birlikte aranıyor.
+function pdrAkademikUyarilariTara(ogrenciler, denemeler, sinavTuru) {
+  const dersler = aktifDersler(sinavTuru);
+  const dususler = [];
+  const yetimler = [];
+
+  (ogrenciler || []).forEach(o => {
+    const d = pdrSozlukOku(denemeler, o.studentName, o.className, o.numara);
+    if (!d) return;
+    const girisler = Object.entries(d).filter(([k]) => k !== "7sinif")
+      .map(([no, nets]) => {
+        const toplam = nets?._topluNet !== undefined && nets._topluNet !== ""
+          ? parseFloat(nets._topluNet) || 0
+          : dersler.reduce((s,x)=>s+(parseFloat(nets?.[x.key])||0), 0);
+        return { no: parseInt(no,10), toplam };
+      })
+      .filter(p => !isNaN(p.no))
+      .sort((a,b) => a.no - b.no);
+    if (girisler.length === 0) return;
+    const son = girisler[girisler.length - 1];
+    const onceki = girisler.length >= 2 ? girisler[girisler.length - 2] : null;
+    const gdo = parseFloat(d["7sinif"]?.ortalama);
+
+    let kaynak = null, miktar = 0;
+    if (onceki && onceki.toplam > 0) {
+      const fark = onceki.toplam - son.toplam;
+      if (fark >= 8 && fark / onceki.toplam >= 0.20) { kaynak = `önceki denemesine (D${onceki.no})`; miktar = fark; }
+    }
+    if (!kaynak && !isNaN(gdo) && gdo > 0) {
+      const fark = gdo - son.toplam;
+      if (fark >= 8 && fark / gdo >= 0.20) { kaynak = "geçmiş dönem ortalamasına (GDO)"; miktar = fark; }
+    }
+    if (kaynak) {
+      dususler.push({ ad: o.studentName, sinif: o.className, numara: o.numara,
+        mesaj: `${o.studentName} — son deneme neti (D${son.no}), ${kaynak} göre ${miktar.toFixed(1)} net düşük.` });
+    }
+  });
+
+  // Hiçbir kayıtlı öğrenciyle eşleşmeyen deneme kayıtları — Onar aracının
+  // düzelttiği türden bir sorunun hâlâ var olup olmadığını gösterir.
+  Object.entries(denemeler || {}).forEach(([key, val]) => {
+    if (!val || Object.keys(val).length === 0) return;
+    const [hamAd, hamSinif, hamNo] = key.split(" || ");
+    const eslesen = (ogrenciler || []).find(o => pdrAyniOgrenci(o.studentName, o.className, hamAd, hamSinif, o.numara, hamNo));
+    if (!eslesen) yetimler.push({ ad: hamAd, sinif: hamSinif || "—" });
+  });
+
+  return { dususler, yetimler };
 }
 
 function pdrOtomatikTakipOner(riskListesi, hatirlatmalar) {
@@ -3555,11 +3625,12 @@ function pdrOtomatikTakipOner(riskListesi, hatirlatmalar) {
   return oneriler;
 }
 
-function IsciRaporuEkrani({ hatirlatmalar, setHatirlatmalar, ogrenciler, riskListesi, sosyometri, aktifYil, uyumIzleme, setTab, setAktifOgrenci }) {
+function IsciRaporuEkrani({ hatirlatmalar, setHatirlatmalar, ogrenciler, riskListesi, sosyometri, aktifYil, uyumIzleme, krizKayitlari, denemeler, sinavTuru, setTab, setAktifOgrenci }) {
   const [acikBolum, setAcikBolum] = useState("ozet");
   const ozet = pdrGunlukOzetHesapla(hatirlatmalar, ogrenciler, riskListesi, sosyometri, aktifYil, uyumIzleme);
-  const bekci = pdrVeriBekcisiTara(riskListesi, uyumIzleme, ogrenciler, sosyometri, aktifYil);
+  const bekci = pdrVeriBekcisiTara(riskListesi, uyumIzleme, ogrenciler, sosyometri, aktifYil, krizKayitlari);
   const takip = pdrOtomatikTakipOner(riskListesi, hatirlatmalar);
+  const akademik = pdrAkademikUyarilariTara(ogrenciler, denemeler, sinavTuru);
 
   async function hatirlatmaOlustur(oneri) {
     const r = oneri.risk;
@@ -3673,6 +3744,50 @@ function IsciRaporuEkrani({ hatirlatmalar, setHatirlatmalar, ogrenciler, riskLis
                 <button onClick={() => hatirlatmaOlustur(o)} style={{ padding: "5px 10px", borderRadius: 8, border: "none", background: ACCENT, color: "#fff", fontSize: 10.5, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>+ Ekle</button>
               </div>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* D) Akademik Uyarılar — deneme verisine dayalı iki kontrol: veri
+          kalitesi (yetim kayıtlar) ve performans düşüşü tespiti. */}
+      <div style={kutu}>
+        <div onClick={() => setAcikBolum(acikBolum === "akademik" ? null : "akademik")} style={baslikStil(acikBolum === "akademik")}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: TEXT }}>📉 Akademik Uyarılar {(akademik.dususler.length + akademik.yetimler.length) > 0 && <span style={{ background: "#FEF5E7", color: "#B07D1A", borderRadius: 10, padding: "1px 8px", fontSize: 10, fontWeight: 800, marginLeft: 4 }}>{akademik.dususler.length + akademik.yetimler.length}</span>}</div>
+          <span style={{ fontSize: 14, color: MUTED }}>{acikBolum === "akademik" ? "▲" : "▼"}</span>
+        </div>
+        {acikBolum === "akademik" && (
+          <div>
+            {akademik.dususler.length === 0 && akademik.yetimler.length === 0 ? (
+              <div style={{ fontSize: 12, color: MUTED, textAlign: "center", padding: "10px 0" }}>Deneme verisinde dikkat çeken bir şey yok.</div>
+            ) : (
+              <>
+                {akademik.dususler.length > 0 && (
+                  <div style={{ marginBottom: akademik.yetimler.length > 0 ? 10 : 0 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#C0392B", marginBottom: 5 }}>📉 Belirgin Net Düşüşü ({akademik.dususler.length})</div>
+                    {akademik.dususler.map((d, i) => (
+                      <div key={i} onClick={() => { setAktifOgrenci({ name: d.ad, className: d.sinif, numara: d.numara }); setTab("yeni"); }}
+                        style={{ fontSize: 12, padding: "6px 0", borderBottom: `1px solid ${BORDER}`, cursor: "pointer", color: TEXT }}>
+                        {d.mesaj}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {akademik.yetimler.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#B07D1A", marginBottom: 5 }}>⚠️ Eşleşmeyen Deneme Kaydı ({akademik.yetimler.length})</div>
+                    <div style={{ fontSize: 10.5, color: MUTED, marginBottom: 6, lineHeight: 1.5 }}>
+                      Bu kayıtlar hiçbir kayıtlı öğrenciyle eşleşmiyor — isim/sınıf yazım farkı olabilir.
+                      Deneme sekmesindeki "🔧 Onar" aracı bunları düzeltebilir.
+                    </div>
+                    {akademik.yetimler.map((y, i) => (
+                      <div key={i} style={{ fontSize: 12, padding: "5px 0", borderBottom: `1px solid ${BORDER}`, color: TEXT }}>
+                        {y.ad} <span style={{ color: MUTED }}>· {y.sinif}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
       </div>
@@ -18677,6 +18792,9 @@ function pdrBaslangicSekmesi() {
             sosyometri={sosyometri}
             aktifYil={aktifYil}
             uyumIzleme={uyumIzleme}
+            krizKayitlari={krizKayitlari}
+            denemeler={denemeler}
+            sinavTuru={sinavTuru}
             setTab={setTab}
             setAktifOgrenci={setAktifOgrenci}
           />

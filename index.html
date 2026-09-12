@@ -14806,12 +14806,188 @@ function SunumGrafigi({ ogrenciler, denemeler, sinavTuru, gorunenAdlar }) {
   );
 }
 
-function SinifSunumuEkrani({ ogrenciler, denemeler, sinavTuru, kademe }) {
+// ── SUNUM: Net Analizi ──────────────────────────────────────────────────────
+// Ders bazlı net karşılaştırması — Net Haritası'ndan (AI ile PDF/görselden
+// çıkarılan deneme sonuç belgeleri) beslenir. Her öğrencinin EN SON kaydı
+// kullanılır. Amaç: öğrencilerin birbirinin güçlü olduğu dersleri görüp
+// motive olması — bu yüzden her derste en yüksek neti "🏆" ile öne çıkarıyor.
+function NetAnaliziGorunumu({ ogrenciler, netHaritasiKayitlari, gorunenAdlar, sunumModu }) {
+  const sonKayitlar = ogrenciler
+    .map((o, i) => {
+      const kayitlar = (netHaritasiKayitlari || []).filter(k => k.studentName === o.studentName)
+        .sort((a, b) => pdrTarihMs(b.tarih) - pdrTarihMs(a.tarih));
+      if (kayitlar.length === 0) return null;
+      return { ad: o.studentName, kayit: kayitlar[0], renk: SINIF_GRAFIK_RENKLERI[i % SINIF_GRAFIK_RENKLERI.length] };
+    })
+    .filter(Boolean)
+    .filter(s => gorunenAdlar.includes(s.ad));
+
+  if (sonKayitlar.length === 0) {
+    return (
+      <div style={{ textAlign: "center", padding: "60px 20px", color: MUTED, fontSize: 15 }}>
+        Seçili öğrenciler için Net Haritası'na henüz deneme sonucu yüklenmemiş.
+      </div>
+    );
+  }
+
+  const dersSirasi = [];
+  sonKayitlar.forEach(s => (s.kayit.dersler || []).forEach(d => { if (!dersSirasi.includes(d.ders)) dersSirasi.push(d.ders); }));
+
+  const genislik = 1000;
+  const satirYuksekligi = 46 + sonKayitlar.length * 30;
+  const yukseklik = 60 + dersSirasi.length * satirYuksekligi;
+  const solPad = 130, sagPad = 60;
+  const barAlani = genislik - solPad - sagPad;
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${genislik} ${yukseklik}`} style={{ width: "100%", height: "auto", display: "block" }}>
+        {dersSirasi.map((ders, di) => {
+          const yBaslangic = 40 + di * satirYuksekligi;
+          const degerler = sonKayitlar.map(s => {
+            const kayit = (s.kayit.dersler || []).find(d => d.ders === ders);
+            return { ad: s.ad, renk: s.renk, net: kayit ? parseFloat(kayit.net) || 0 : 0, soru: kayit?.soru || null };
+          });
+          const maksNet = Math.max(...degerler.map(d => d.soru || d.net || 1), 1);
+          const enYuksek = degerler.reduce((a, b) => (b.net > a.net ? b : a), degerler[0]);
+          return (
+            <g key={ders}>
+              <text x={0} y={yBaslangic - 12} fontSize={sunumModu ? 20 : 16} fontWeight={900} fill={TEXT}>{ders}</text>
+              {enYuksek.net > 0 && (
+                <text x={genislik} y={yBaslangic - 12} fontSize={sunumModu ? 15 : 12} fontWeight={800} fill="#B7590B" textAnchor="end">
+                  🏆 {enYuksek.ad} — {enYuksek.net.toFixed(1)} net
+                </text>
+              )}
+              {degerler.map((d, i) => {
+                const y = yBaslangic + i * 30;
+                const genislikOran = Math.max(0, Math.min(1, d.net / maksNet));
+                const enYuksekMi = d.ad === enYuksek.ad && d.net > 0;
+                return (
+                  <g key={d.ad}>
+                    <text x={0} y={y + 15} fontSize={sunumModu ? 15 : 12} fontWeight={enYuksekMi ? 800 : 500} fill={enYuksekMi ? d.renk : MUTED}>{d.ad}</text>
+                    <rect x={solPad} y={y + 3} width={barAlani} height={16} rx={8} fill="#EDEEEC" />
+                    <rect x={solPad} y={y + 3} width={barAlani * genislikOran} height={16} rx={8} fill={d.renk} opacity={enYuksekMi ? 1 : 0.55} />
+                    <text x={solPad + barAlani + 10} y={y + 15} fontSize={sunumModu ? 14 : 11.5} fontWeight={700} fill={TEXT}>{d.net.toFixed(1)}{d.soru ? `/${d.soru}` : ""}</text>
+                  </g>
+                );
+              })}
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+// ── SUNUM: Konu Tamamlama ────────────────────────────────────────────────────
+// Konu Haritası'ndan (öğrenci bazlı, ders→konu→ustalık yüzdesi) beslenir.
+// Her ders için ortalama ustalık yüzdesi ilerleme çubuğu olarak gösterilir.
+// KENDİ EKLEDİĞİM FİKİR: sadece "en yüksek ortalama" değil, son 30 günde
+// EN ÇOK konu ilerleten öğrenci de ayrıca ödüllendiriliyor — böylece zaten
+// güçlü olan değil, o hafta ÇABALAYAN öğrenci de görünür oluyor. Bu, sadece
+// yeteneği değil çabayı da ödüllendiren, daha sağlıklı bir motivasyon sağlar.
+function KonuTamamlamaGorunumu({ ogrenciler, konuHaritasiVerisi, gorunenAdlar, kademe, sunumModu }) {
+  const liseMi = kademe === "lise";
+  const konuKaynagi = liseMi ? TYT_KONU_HARITASI : LGS_KONU_HARITASI;
+  const dersListesi = liseMi ? TYT_KONU_HARITASI_DERSLER : LGS_KONU_HARITASI_DERSLER;
+  const otuzGunOnceMs = Date.now() - 30 * 86400000;
+
+  const ogrVerileri = ogrenciler
+    .map((o, i) => {
+      const anahtar = pdrOgrAnahtar(o.studentName, o.className, o.numara);
+      const veri = konuHaritasiVerisi?.[anahtar];
+      if (!veri) return null;
+      let sonHafta = 0;
+      const dersOrtalamalari = {};
+      dersListesi.forEach(ders => {
+        const dersAnahtari = liseMi ? `TYT-${ders}` : ders;
+        const konular = konuKaynagi[ders] || [];
+        const dersVerisi = veri[dersAnahtari] || {};
+        let toplam = 0;
+        konular.forEach(k => {
+          const yuzde = konuDegeriAl(dersVerisi, k.konu);
+          toplam += yuzde;
+          const tarihMs = pdrTarihMs(konuTarihiAl(dersVerisi, k.konu));
+          if (yuzde > 0 && tarihMs >= otuzGunOnceMs) sonHafta++;
+        });
+        dersOrtalamalari[ders] = konular.length > 0 ? toplam / konular.length : 0;
+      });
+      return { ad: o.studentName, renk: SINIF_GRAFIK_RENKLERI[i % SINIF_GRAFIK_RENKLERI.length], dersOrtalamalari, sonHafta };
+    })
+    .filter(Boolean)
+    .filter(s => gorunenAdlar.includes(s.ad));
+
+  if (ogrVerileri.length === 0) {
+    return (
+      <div style={{ textAlign: "center", padding: "60px 20px", color: MUTED, fontSize: 15 }}>
+        Seçili öğrenciler için Konu Haritası'na henüz işaretleme yapılmamış.
+      </div>
+    );
+  }
+
+  const enCokIlerleyen = ogrVerileri.reduce((a, b) => (b.sonHafta > a.sonHafta ? b : a), ogrVerileri[0]);
+
+  const genislik = 1000;
+  const satirYuksekligi = 46 + ogrVerileri.length * 26;
+  const yukseklik = 60 + dersListesi.length * satirYuksekligi;
+  const solPad = 130, sagPad = 60;
+  const barAlani = genislik - solPad - sagPad;
+
+  return (
+    <div>
+      {enCokIlerleyen.sonHafta > 0 && (
+        <div style={{
+          background: "linear-gradient(135deg, #FFF4E5 0%, #FDE8CC 100%)", border: "1px solid #F0C179",
+          borderRadius: 14, padding: sunumModu ? 18 : 12, marginBottom: 16, textAlign: "center"
+        }}>
+          <div style={{ fontSize: sunumModu ? 22 : 16, fontWeight: 900, color: "#8A5A00" }}>
+            🚀 Son 30 Günde En Çok İlerleyen: {enCokIlerleyen.ad}
+          </div>
+          <div style={{ fontSize: sunumModu ? 14 : 11, color: "#8A5A00", opacity: 0.85, marginTop: 4 }}>
+            {enCokIlerleyen.sonHafta} konuda ilerleme kaydetti — emek en az yetenek kadar değerli!
+          </div>
+        </div>
+      )}
+      <svg viewBox={`0 0 ${genislik} ${yukseklik}`} style={{ width: "100%", height: "auto", display: "block" }}>
+        {dersListesi.map((ders, di) => {
+          const yBaslangic = 40 + di * satirYuksekligi;
+          const degerler = ogrVerileri.map(s => ({ ad: s.ad, renk: s.renk, yuzde: s.dersOrtalamalari[ders] || 0 }));
+          const enYuksek = degerler.reduce((a, b) => (b.yuzde > a.yuzde ? b : a), degerler[0]);
+          return (
+            <g key={ders}>
+              <text x={0} y={yBaslangic - 12} fontSize={sunumModu ? 20 : 16} fontWeight={900} fill={TEXT}>{ders}</text>
+              {enYuksek.yuzde > 0 && (
+                <text x={genislik} y={yBaslangic - 12} fontSize={sunumModu ? 15 : 12} fontWeight={800} fill="#127C56" textAnchor="end">
+                  🏆 {enYuksek.ad} — %{enYuksek.yuzde.toFixed(0)}
+                </text>
+              )}
+              {degerler.map((d, i) => {
+                const y = yBaslangic + i * 26;
+                const enYuksekMi = d.ad === enYuksek.ad && d.yuzde > 0;
+                return (
+                  <g key={d.ad}>
+                    <text x={0} y={y + 13} fontSize={sunumModu ? 14 : 11.5} fontWeight={enYuksekMi ? 800 : 500} fill={enYuksekMi ? d.renk : MUTED}>{d.ad}</text>
+                    <rect x={solPad} y={y + 2} width={barAlani} height={14} rx={7} fill="#EDEEEC" />
+                    <rect x={solPad} y={y + 2} width={barAlani * (d.yuzde / 100)} height={14} rx={7} fill={d.renk} opacity={enYuksekMi ? 1 : 0.55} />
+                    <text x={solPad + barAlani + 10} y={y + 13} fontSize={sunumModu ? 13 : 11} fontWeight={700} fill={TEXT}>%{d.yuzde.toFixed(0)}</text>
+                  </g>
+                );
+              })}
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+function SinifSunumuEkrani({ ogrenciler, denemeler, sinavTuru, kademe, netHaritasiKayitlari, konuHaritasiVerisi }) {
   const [seciliDuzey, setSeciliDuzey] = useState(null);
   const [seciliSube, setSeciliSube] = useState(null);
   const [mod, setMod] = useState("tumSinif"); // "tumSinif" | "secili"
   const [seciliOgrenciler, setSeciliOgrenciler] = useState([]);
   const [sunumModu, setSunumModu] = useState(false);
+  const [gorunumSekmesi, setGorunumSekmesi] = useState("trend"); // "trend" | "net" | "konu"
 
   // SADECE isim + sınıf + yıl bilgisiyle çalışır — kademeye uygun tüm öğrenciler.
   const tumOgr = (ogrenciler||[]).filter(o => pdrKademeUyumlu(o.className, kademe));
@@ -14874,18 +15050,24 @@ function SinifSunumuEkrani({ ogrenciler, denemeler, sinavTuru, kademe }) {
     setSeciliOgrenciler(cur => cur.includes(ad) ? cur.filter(x=>x!==ad) : [...cur, ad]);
   }
 
+  const gorunumBasligi = { trend: "Deneme Net Trendi", net: "Ders Bazlı Net Analizi", konu: "Konu Tamamlama Durumu" }[gorunumSekmesi];
+
   const icerik = (
     <div>
       <div style={{fontSize: sunumModu?32:20, fontWeight:900, color:TEXT, textAlign:"center", marginBottom: sunumModu?18:12}}>
-        {seciliSube} — Deneme Net Trendi
+        {seciliSube} — {gorunumBasligi}
       </div>
       <div style={{background:CARD,border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14)",borderRadius:16,padding: sunumModu?20:14}}>
-        <SunumGrafigi ogrenciler={subeOgrencileri} denemeler={denemeler} sinavTuru={sinavTuru} gorunenAdlar={gorunenAdlar} />
+        {gorunumSekmesi === "trend" && <SunumGrafigi ogrenciler={subeOgrencileri} denemeler={denemeler} sinavTuru={sinavTuru} gorunenAdlar={gorunenAdlar} />}
+        {gorunumSekmesi === "net" && <NetAnaliziGorunumu ogrenciler={subeOgrencileri} netHaritasiKayitlari={netHaritasiKayitlari} gorunenAdlar={gorunenAdlar} sunumModu={sunumModu} />}
+        {gorunumSekmesi === "konu" && <KonuTamamlamaGorunumu ogrenciler={subeOgrencileri} konuHaritasiVerisi={konuHaritasiVerisi} gorunenAdlar={gorunenAdlar} kademe={kademe} sunumModu={sunumModu} />}
       </div>
       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:14,justifyContent:"center"}}>
-        <span style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:10,background:BG,fontSize: sunumModu?13:10.5,color:MUTED,fontWeight:700}}>
-          <span style={{width:16,height:0,borderTop:"3px dashed #5E7A6D",display:"inline-block"}} /> Sınıf Ortalaması
-        </span>
+        {gorunumSekmesi === "trend" && (
+          <span style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:10,background:BG,fontSize: sunumModu?13:10.5,color:MUTED,fontWeight:700}}>
+            <span style={{width:16,height:0,borderTop:"3px dashed #5E7A6D",display:"inline-block"}} /> Sınıf Ortalaması
+          </span>
+        )}
         {subeOgrencileri.map((o,i) => {
           const renk = SINIF_GRAFIK_RENKLERI[i % SINIF_GRAFIK_RENKLERI.length];
           const gorunuyor = gorunenAdlar.includes(o.studentName);
@@ -14928,6 +15110,16 @@ function SinifSunumuEkrani({ ogrenciler, denemeler, sinavTuru, kademe }) {
           background:ACCENT, color:"#fff", border:"none", borderRadius:8,
           padding:"8px 14px", fontSize:12, fontWeight:800, cursor:"pointer", whiteSpace:"nowrap"
         }}>🖥️ Tam Ekran Sunum</button>
+      </div>
+
+      <div style={{display:"flex",gap:6,marginBottom:10}}>
+        {[["trend","📊 Deneme Trendi"],["net","🎯 Net Analizi"],["konu","📚 Konu Tamamlama"]].map(([key,etiket]) => (
+          <button key={key} onClick={()=>setGorunumSekmesi(key)} style={{
+            flex:1, padding:"8px 4px", borderRadius:10, border:`1px solid ${gorunumSekmesi===key?PURPLE:BORDER}`,
+            background:gorunumSekmesi===key?"#F3EEFB":CARD, color:gorunumSekmesi===key?PURPLE:MUTED,
+            fontWeight:800, fontSize:11, cursor:"pointer"
+          }}>{etiket}</button>
+        ))}
       </div>
 
       <div style={{display:"flex",gap:6,marginBottom:14}}>
@@ -17768,6 +17960,8 @@ function pdrBaslangicSekmesi() {
             denemeler={denemeler}
             sinavTuru={sinavTuru}
             kademe={kademe}
+            netHaritasiKayitlari={netHaritasiKayitlari}
+            konuHaritasiVerisi={konuHaritasiVerisi}
           />
         )}
 

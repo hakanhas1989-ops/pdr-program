@@ -15060,6 +15060,82 @@ function SunumGrafigi({ ogrenciler, denemeler, sinavTuru, gorunenAdlar }) {
 // kullanılır. Amaç: öğrencilerin birbirinin güçlü olduğu dersleri görüp
 // motive olması — bu yüzden her derste en yüksek neti "🏆" ile öne çıkarıyor.
 function NetAnaliziGorunumu({ ogrenciler, netHaritasiKayitlari, gorunenAdlar, sunumModu }) {
+  // Tek öğrenci seçiliyse (Öğrenci Seç modu), sınıf karşılaştırması yerine o
+  // öğrenciye özel Deneme Değerlendirme Raporu'nu gösteriyoruz — Net Haritası
+  // sekmesindeki aynı hesaplamayı (ogrenciDegerlendirmeRaporuHesapla,
+  // kazanimTrendVerisi) kullanıyor, veri tekrar edilmiyor. Grup bar grafiği
+  // tek öğrencide zaten anlamsız kalıyordu, veli/öğrenciyle paylaşmak için
+  // asıl faydalı görünüm bu.
+  if (gorunenAdlar.length === 1) {
+    const tekAd = gorunenAdlar[0];
+    const ogrKayitlar = (netHaritasiKayitlari||[]).filter(k => k.studentName === tekAd).sort((a,b)=>pdrTarihMs(b.tarih)-pdrTarihMs(a.tarih));
+    const rapor = ogrenciDegerlendirmeRaporuHesapla(ogrKayitlar);
+    const kazanimTrendleri = kazanimTrendVerisi(ogrKayitlar);
+    if (!rapor) {
+      return (
+        <div style={{ textAlign: "center", padding: "60px 20px", color: MUTED, fontSize: 15 }}>
+          {tekAd} için Net Haritası'na henüz deneme sonucu yüklenmemiş.
+        </div>
+      );
+    }
+    return (
+      <div>
+        <div style={{ fontSize: sunumModu?18:14, fontWeight:900, marginBottom:14, textAlign:"center" }}>{tekAd} — {rapor.denemeSayisi} Deneme</div>
+        <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:16 }}>
+          {rapor.dersDurumu.map(d => {
+            const renkKodu = d.renk==="yesil" ? "#1A8C5B" : d.renk==="sari" ? "#D4A017" : "#C0392B";
+            const yonIkon = d.yon==="yukari" ? "↗" : d.yon==="asagi" ? "↘" : d.yon==="sabit" ? "→" : "";
+            return (
+              <div key={d.ders} style={{ display:"flex", alignItems:"center", gap:10, background:"#fff", border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius:10, padding: sunumModu?"12px 16px":"8px 12px" }}>
+                <span style={{ width:14, height:14, borderRadius:"50%", background:renkKodu, flexShrink:0 }}></span>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize: sunumModu?16:13, fontWeight:700 }}>{d.ders}</div>
+                  <div style={{ fontSize: sunumModu?13:11, color:MUTED }}>Net: {d.net}/{d.soru}{d.bos>0 ? ` · Boş: ${d.bos}` : ""}</div>
+                </div>
+                {yonIkon && <span style={{ fontSize: sunumModu?20:16, fontWeight:900, color:renkKodu }}>{yonIkon}</span>}
+              </div>
+            );
+          })}
+        </div>
+        {rapor.bosOrani >= 15 && (
+          <div style={{ background:"#FFF4E5", border:"1px solid #F0C179", borderRadius:10, padding:10, fontSize: sunumModu?13:12, color:"#8A5A00", marginBottom:14 }}>
+            ⏱️ Sorulan soruların <b>%{rapor.bosOrani}'i boş bırakılmış</b>.
+          </div>
+        )}
+        {rapor.hataToplamSayi > 0 && (
+          <div style={{ marginBottom:16 }}>
+            <div style={{ fontSize: sunumModu?14:12, fontWeight:700, marginBottom:6 }}>Yanlışların nedeni:</div>
+            {Object.entries(rapor.hataToplam).sort((a,b)=>b[1]-a[1]).map(([tur,sayi]) => (
+              <div key={tur} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+                <div style={{ fontSize: sunumModu?12:11, width:160, flexShrink:0 }}>{tur}</div>
+                <div style={{ flex:1, background:"#EDEEEC", borderRadius:6, height:10, overflow:"hidden" }}>
+                  <div style={{ width:`${Math.round((sayi/rapor.hataToplamSayi)*100)}%`, height:"100%", background:PURPLE }}></div>
+                </div>
+                <div style={{ fontSize:11, fontWeight:700, width:36, textAlign:"right" }}>%{Math.round((sayi/rapor.hataToplamSayi)*100)}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        {kazanimTrendleri.length > 0 && (
+          <div>
+            <div style={{ fontSize: sunumModu?14:12, fontWeight:700, marginBottom:8 }}>📉 En çok tekrar eden zayıf konularda gidişat:</div>
+            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+              {kazanimTrendleri.map((kt,i) => (
+                <div key={i} style={{ display:"flex", alignItems:"center", gap:10, background:"#fff", border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius:10, padding:"6px 10px" }}>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:MUTED }}>{kt.ders}</div>
+                    <div style={{ fontSize:11.5, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{kt.kazanim}</div>
+                  </div>
+                  <div dangerouslySetInnerHTML={{ __html: kazanimSparklineSVG(kt.dizi) }} />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   const sonKayitlar = ogrenciler
     .map((o, i) => {
       const kayitlar = (netHaritasiKayitlari || []).filter(k => k.studentName === o.studentName)

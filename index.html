@@ -11730,6 +11730,13 @@ function OgrenciYonetim({
   const [formAcik, setFormAcik] = useState(false);
   const [aktifSekme, setAktifSekme] = useState("ozet"); // ozet | gorusme | deneme | profil
   const [sinifFiltre, setSinifFiltre] = useState("Tümü");
+  // Bir öğrenciye tıklayıp profiline girmeden hemen önceki sayfa kaydırma
+  // konumunu (scroll) burada saklıyoruz. Filtre/liste kendisi zaten değişmiyor
+  // (sinifFiltre ayrı bir state, dokunulmuyor) — ama profil ekranı kapanıp
+  // liste tekrar göründüğünde tarayıcı sayfayı otomatik en üste sıfırlıyordu,
+  // bu yüzden filtre doğru kalsa bile kullanıcı öğrenciyi görmek için tekrar
+  // aşağı kaydırmak zorunda kalıyordu. "Geri" butonunda bu konum geri yükleniyor.
+  const listeScrollKonumuRef = useRef(0);
   const [sinifSilAcik, setSinifSilAcik] = useState(false);
   const [sinifSiliniyor, setSinifSiliniyor] = useState(false);
   const [gorunumModu, setGorunumModu] = useState("liste"); // liste | aylik
@@ -12151,7 +12158,7 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
                             .slice()
                             .sort((a,b) => (a.date||"").localeCompare(b.date||""))
                             .map(k => (
-                            <div key={k.id} onClick={() => { setSeciliOgrenci(k.studentName); if(setAktifOgrenci) setAktifOgrenci({ name:k.studentName, className:k.className||"" }); }}
+                            <div key={k.id} onClick={() => { listeScrollKonumuRef.current = window.scrollY; setSeciliOgrenci(k.studentName); if(setAktifOgrenci) setAktifOgrenci({ name:k.studentName, className:k.className||"" }); }}
                               style={{ background:BG, border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius:10, padding:"9px 12px", display:"flex", alignItems:"center", gap:8, cursor:"pointer" }}>
                               <span style={{ fontSize:11, color:MUTED, minWidth:44 }}>{k.date}</span>
                               <span style={{ flex:1, fontSize:13, fontWeight:700, color:TEXT }}>{k.studentName}</span>
@@ -12273,7 +12280,7 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
                 <div key={pdrOgrAnahtar(o.studentName, o.className, o.numara)} style={{ background:CARD, border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius:12, padding:"10px 14px", display:"flex", flexDirection:"column", gap:6 }}>
                   <div style={{ display:"flex", alignItems:"center", gap:8 }}>
                     {/* Tıklanabilir alan: avatar + isim/sınıf/no */}
-                    <div onClick={() => { setSeciliOgrenci(o.studentName); if(setAktifOgrenci) setAktifOgrenci({ name: o.studentName, className: o.className || "" }); }}
+                    <div onClick={() => { listeScrollKonumuRef.current = window.scrollY; setSeciliOgrenci(o.studentName); if(setAktifOgrenci) setAktifOgrenci({ name: o.studentName, className: o.className || "" }); }}
                       style={{ display:"flex", alignItems:"center", gap:10, flex:1, cursor:"pointer", minWidth:0 }}>
                       <div style={{ width:34, height:34, borderRadius:"50%", background:ACCENT_LIGHT, color:ACCENT, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:800, fontSize:14, flexShrink:0 }}>
                         {o.studentName.charAt(0).toUpperCase()}
@@ -12319,7 +12326,13 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
         <div>
           {/* Geri + Başlık */}
           <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:14, flexWrap:"wrap", rowGap:8 }}>
-            <button onClick={() => { setSeciliOgrenci(null); setAktifSekme("ozet"); }} style={{
+            <button onClick={() => {
+              setSeciliOgrenci(null); setAktifSekme("ozet");
+              // Liste tekrar render olduktan sonra (bir sonraki frame'de) eski
+              // kaydırma konumuna dön — hemen çağrılırsa liste DOM'a henüz
+              // yeniden gelmemiş olabilir, requestAnimationFrame bunu garantiler.
+              requestAnimationFrame(() => window.scrollTo(0, listeScrollKonumuRef.current));
+            }} style={{
               background:BG, border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius:8, padding:"6px 12px", fontSize:12, fontWeight:700, color:MUTED, cursor:"pointer"
             }}>← Geri</button>
             <button onClick={() => handleOgrenciSil(seciliOgrenci, seciliOgrenciSinif, seciliOgrenciNumara)} style={{
@@ -17993,13 +18006,20 @@ function pdrBaslangicSekmesi() {
     });
 
     // Okul/sınıf düzeyi — öğrenci seçili olsa da değişmez
+    // Grup Çalışmaları/Kriz için AYRI, daha SIKI bir kontrol: yılı OLMAYAN
+    // eski kayıtları (multi-yıl desteğinden önce girilmiş, "yil" alanı hiç
+    // olmayan kayıtlar) "bu yıl doldu" saymıyoruz — yukarıdaki genel
+    // yilinki() bunları her zaman dolu sayardı (hangi yıl aktif olursa
+    // olsun), yeni bir döneme geçilince veri girilmemiş olsa bile Okul Çapı
+    // yanlışlıkla dolu görünebilirdi. Sadece göstergeyi etkiler.
+    const suYilKesin = (arr) => (arr||[]).some(x => x.yil === aktifYil);
     const okulDuzeyi = {
       ogrenciler: yilinki(ogrenciler),
-      grup_calismalari: yilinki(grupCalismalari),
-      kriz: yilinki(krizKayitlari),
+      grup_calismalari: suYilKesin(grupCalismalari),
+      kriz: suYilKesin(krizKayitlari),
       // Sosyometri kaydının var olması yetmez; içinde gerçekten en az bir
       // öğrenci seçimi olmalı. Aksi halde boş kayıt "dolu" görünüyordu.
-      sosyometri: (sosyometri||[]).some(s => (!s.yil || s.yil === aktifYil) &&
+      sosyometri: (sosyometri||[]).some(s => s.yil === aktifYil &&
         Object.values(s.secimler || {}).some(v => Array.isArray(v) && v.length > 0)),
     };
 

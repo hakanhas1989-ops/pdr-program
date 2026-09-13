@@ -11682,7 +11682,18 @@ function OgrenciYonetim({
   // olan öğrenci detay ekranı eski kademedeki bir öğrenciyi göstermeye devam
   // edebiliyordu (yanlış/eski veriyle) — artık kademe değişince otomatik
   // olarak listeye dönülür, "Geri" butonuna basmaya gerek kalmaz.
-  useEffect(() => { setSeciliOgrenci(null); }, [kademe]);
+  // ÖNEMLİ DÜZELTME: kademe uygulama açılışında Firestore'dan ASENKRON
+  // yükleniyor (başlangıç değeri "", biraz sonra gerçek değer geliyor) — bu
+  // İLK yükleme de bir "değişim" sayılıp seçili öğrenciyi sıfırlıyordu, bu
+  // yüzden aktifOgrenci localStorage'dan doğru restore olsa bile birkaç
+  // yüz milisaniye sonra listeye geri düşülüyordu (özellikle uygulamayı
+  // kapatıp tekrar açınca / "geri" ile çıkıp girince fark ediliyordu). İlk
+  // yüklemeyi bir ref ile atlayıp sadece SONRAKİ gerçek değişimlerde sıfırlıyoruz.
+  const kademeIlkYuklemeRef = useRef(true);
+  useEffect(() => {
+    if (kademeIlkYuklemeRef.current) { kademeIlkYuklemeRef.current = false; return; }
+    setSeciliOgrenci(null);
+  }, [kademe]);
   const [excelPanelAcik, setExcelPanelAcik] = useState(false);
   const [sinifGuncelleAcik, setSinifGuncelleAcik] = useState(false);
   const [yeniSinifDegeri, setYeniSinifDegeri] = useState("");

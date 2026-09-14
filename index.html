@@ -2062,7 +2062,7 @@ async function getP2Analiz({ studentName, className, sinavlar, d2, gecmisYillar,
     ? (denemeGirilen.reduce((s,d)=>s+d.toplam,0)/denemeGirilen.length).toFixed(1)
     : null;
 
-  const prompt = `Ogrenci: ${studentName}${className ? `, Sinif: ${className}` : ""}
+  const prompt = `Ogrenci: ${pdrAnonimKimlik(studentName, className)}
 ${gorusmeler ? "\nGORUSME NOTLARI:\n" + gorusmeler : ""}
 YAZILI SINAV PUANLARI: ${dersMetni || "Girilmemis"}
 ${d2Metni}
@@ -3176,7 +3176,7 @@ function UyumIzlemeEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, uyumI
     setAiYukleniyor(true); setAiMesaj("");
     try {
       const notlar = ogrGorusmeler.map(r => `(${r.date}) ${r.summary || r.rawText || ""}`).join("\n\n");
-      const bulgular = await uyumIzlemeAiTara(secili.studentName, notlar);
+      const bulgular = await uyumIzlemeAiTara(pdrAnonimKimlik(secili.studentName, secili.className, secili.numara), notlar);
       if (bulgular.length === 0) { setAiMesaj("Görüşme notlarında bu göstergelere dair somut bir işaret bulunamadı."); }
       else {
         const kodlar = bulgular.map(b => b.kod);
@@ -10115,12 +10115,20 @@ function VeliMektubu({ kayitliListesi, aktifOgrenci, records }) {
       bildirim:"Öğrenci hakkında acil durum/risk bildirimi mektubu",
       tesekkur:"Veli iş birliği için teşekkür mektubu"
     };
+    // AI'a gerçek ad yerine kısaltılmış/anonim kimlik gönderiliyor (diğer tüm
+    // AI çağrılarıyla tutarlı olsun diye) — mektup metninde geçen kısaltılmış
+    // adı, danışmana gösterilen son metinde gerçek adla geri değiştiriyoruz.
+    // Bu geri değişim %100 garantili değil (AI ismi tam olarak nasıl
+    // kullanacağına göre değişir) — mektup zaten göndermeden önce gözden
+    // geçirilecek bir taslak, ama çoğu durumda otomatik doğru gelecektir.
+    const anonimKimlik = pdrAnonimKimlik(seciliAd, seciliSinif);
+    const kisaAnonim = anonimKimlik.split(" (")[0];
     const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({
         model:"claude-sonnet-4-6", max_tokens:1500,
         system:"Sen okul PDR danismanisın. MEB resmi yazı formatında, sade ve profesyonel veli mektupları yazarsın.",
-        messages:[{role:"user", content:`Öğrenci: ${seciliAd}
+        messages:[{role:"user", content:`Öğrenci: ${anonimKimlik}
 Mektup Tipi: ${tipler[mektupTipi]}
 Görüşme Özeti:
 ${ozet||"Henüz görüşme yok."}
@@ -10129,7 +10137,9 @@ MEB resmi yazı formatında veli mektubu yaz. T.C. başlığı, tarih, konu, say
       })
     });
     const data = await res.json();
-    setMektup(data.content?.[0]?.text || "");
+    let metin = data.content?.[0]?.text || "";
+    if (kisaAnonim) metin = metin.split(kisaAnonim).join(seciliAd);
+    setMektup(metin);
     setAiLoading(false);
   }
 
@@ -14138,7 +14148,7 @@ function ProfilMerkez({
     ].filter(Boolean).join("\n\n");
 
     setScoresLoading(true);
-    const aiSkorlar = await getScoresFromNotes(seciliAd, notlar);
+    const aiSkorlar = await getScoresFromNotes(pdrAnonimKimlik(seciliAd, seciliSinif, seciliNumara), notlar);
 
     // Ağırlıklı ortalama: görüşme notu varsa %60 AI, %40 değerlendirme; yoksa %100 AI
     let finalSkorlar = aiSkorlar;
@@ -17799,7 +17809,7 @@ export default function App() {
       no:parseInt(no), nets, toplam: aktifDenemeDersleri.reduce((s,d)=>s+(parseFloat(nets[d.key])||0),0)
     }));
     setDenemeAiLoading(true);
-    const analiz = await getDenemeAnalizi(studentName, gorusmeler, girilen, kutuphane, sinavTuru);
+    const analiz = await getDenemeAnalizi(pdrAnonimKimlik(studentName, className, numara), gorusmeler, girilen, kutuphane, sinavTuru);
     setDenemeAnaliz(prev => pdrSozlukYaz(prev, studentName, className, analiz, numara));
     setDenemeAiLoading(false);
   }

@@ -11714,6 +11714,7 @@ function OgrenciYonetim({
   riskListesi, setRiskListesi,
   kayitliListesi, mudahalePlan, aktifYil, onYilEkrani,
   hazirlikNotlari, setHazirlikNotlari,
+  uyumIzleme, setUyumIzleme,
   ilerlemeNotlari, setIlerlemeNotlari,
   onRaporAc, setAktifOgrenci, aktifOgrenci, setTab, onSinifGuncelle, onOgrenciSil, onSinifSil, sinifListesi, sinavTuru, sevkler, testKayitlari, kademe,
   bireyiTanima, setBireyiTanima, bdtAnaliz, setBdtAnaliz, sinavKaygisi, setSinavKaygisi, konuHaritasiVerisi
@@ -12663,7 +12664,7 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
                       return (
                         <div key={r.id} style={{marginBottom:14,position:"relative"}}>
                           <div style={{position:"absolute",left:-16,top:4,width:10,height:10,borderRadius:"50%",background:isVeli?ORANGE:ACCENT,border:"2px solid #fff",boxShadow:"0 0 0 2px "+(isVeli?ORANGE:ACCENT)}}/>
-                          <RecordCard rec={r} onDelete={handleGorusmeSil} onUpdate={handleGorusmeGuncelle} bdtAnaliz={bdtAnaliz} setBdtAnaliz={setBdtAnaliz} bireyiTanima={bireyiTanima} riskListesi={riskListesi} denemeler={denemeler} konuHaritasiVerisi={konuHaritasiVerisi} />
+                          <RecordCard rec={r} onDelete={handleGorusmeSil} onUpdate={handleGorusmeGuncelle} bdtAnaliz={bdtAnaliz} setBdtAnaliz={setBdtAnaliz} bireyiTanima={bireyiTanima} setBireyiTanima={setBireyiTanima} uyumIzleme={uyumIzleme} setUyumIzleme={setUyumIzleme} aktifYil={aktifYil} riskListesi={riskListesi} denemeler={denemeler} konuHaritasiVerisi={konuHaritasiVerisi} />
                         </div>
                       );
                     })}
@@ -16516,20 +16517,26 @@ function StatBar({ label, value, max, color = ACCENT }) {
   );
 }
 
-function RecordCard({ rec, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz, bireyiTanima, riskListesi, denemeler, konuHaritasiVerisi }) {
+function RecordCard({ rec, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz, bireyiTanima, setBireyiTanima, uyumIzleme, setUyumIzleme, aktifYil, riskListesi, denemeler, konuHaritasiVerisi }) {
   const [open, setOpen] = useState(false);
   const [duzenle, setDuzenle] = useState(false);
   const [editForm, setEditForm] = useState({ summary: rec.summary, topic: rec.topic || "", raw: rec.raw || "" });
   const [aiLoading, setAiLoading] = useState(false);
   const [kaydedildi, setKaydedildi] = useState(false);
   const [onerilenBdt, setOnerilenBdt] = useState(null);
+  const [onerilenBireyiTanima, setOnerilenBireyiTanima] = useState(null);
+  const [onerilenUyumDuzenle, setOnerilenUyumDuzenle] = useState(null);
   const isVeli = rec.meetingType === "Veli";
 
   // AI ile Özeti Güncelle — daha önce (ilk görüşme notu eklenirken) AI
-  // Özetle hiç kullanılmamış olsa bile, burada BDT çarpıtma çıkarımı da
-  // yapılır — tek fark, ilk eklemede App seviyesindeki onay kutusuna,
-  // burada bu kartın kendi onay kutusuna düşmesi. Kaydetme mantığı (onayla
-  // → bdtAnaliz listesine ekle) birebir aynı.
+  // Özetle hiç kullanılmamış olsa bile, burada BDT çarpıtma, Bireyi Tanıma
+  // ve Uyum İzleme çıkarımı da yapılır — App seviyesindeki handleSummarize
+  // ile BİREBİR AYNI ayrıştırma mantığı. ÖNEMLİ DÜZELTME: bu fonksiyon daha
+  // önce SADECE BDT'yi ayrıştırıyordu, Bireyi Tanıma ve Uyum İzleme
+  // bloklarını AI cevabından çıkarıp hiçbir yere göstermeden sessizce
+  // atıyordu — yani "düzenle" modunda AI'ın bulduğu bu iki tür bilgi asla
+  // öneri olarak görünmüyordu (yeni görüşme eklerken görünüyordu). Şimdi
+  // ikisi de burada da aynı şekilde öneri olarak çıkıyor.
   async function handleAiRewrite() {
     if (!editForm.raw.trim()) return;
     setAiLoading(true);
@@ -16538,7 +16545,12 @@ function RecordCard({ rec, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz, bireyiTa
     const summary = parcalar[0].trim();
     const kalan = parcalar[1] || "";
     const bdtParcalari = kalan.split(/---BDT_CARPITMA---/i);
-    const bdtBlok = (bdtParcalari[1] || "").split(/---BIREYI_TANIMA---/i)[0].trim();
+    const kalan2 = bdtParcalari[1] || "";
+    const btParcalari = kalan2.split(/---BIREYI_TANIMA---/i);
+    const bdtBlok = (btParcalari[0] || "").trim();
+    const uyParcalari = (btParcalari[1] || "").split(/---UYUM_IZLEME---/i);
+    const bireyiTanimaBlok = (uyParcalari[0] || "").trim();
+    const uyumBlok = (uyParcalari[1] || "").split(/---GECMIS_YIL_ORT---/i)[0].trim();
     setEditForm(f => ({ ...f, summary }));
     if (bdtBlok && !/^yok/i.test(bdtBlok)) {
       const gecerliBdtKategoriler = BDT_CARPITMA_KATEGORILERI.map(k => k.key);
@@ -16557,6 +16569,33 @@ function RecordCard({ rec, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz, bireyiTa
       setOnerilenBdt(oneriler.length > 0 ? oneriler : null);
     } else {
       setOnerilenBdt(null);
+    }
+    if (bireyiTanimaBlok && !/^yok/i.test(bireyiTanimaBlok)) {
+      const gecerliKategoriler = ["aile","saglik","olaylar","sosyoekonomik","ilgi","okul"];
+      const oneriler = bireyiTanimaBlok.split("\n").map(satir => {
+        const m = satir.match(/^([a-zçğıöşü]+)\s*:\s*(.+)$/i);
+        if (!m) return null;
+        const kategori = m[1].trim().toLocaleLowerCase("tr");
+        const metin = m[2].trim();
+        if (!gecerliKategoriler.includes(kategori) || !metin || /^yok$/i.test(metin)) return null;
+        return { kategori, metin, secili: true };
+      }).filter(Boolean);
+      setOnerilenBireyiTanima(oneriler.length > 0 ? oneriler : null);
+    } else {
+      setOnerilenBireyiTanima(null);
+    }
+    if (uyumBlok && !/^yok/i.test(uyumBlok)) {
+      const gecerliKodlar = UYUM_GOSTERGELERI.flatMap(g => g.maddeler.map((_,i)=>`${g.key}-${i}`));
+      const oneriler = uyumBlok.split("\n").map(satir => {
+        const m = satir.match(/^\s*([a-z]+-\d+)\s*\|\s*(.+)$/i);
+        if (!m) return null;
+        const kod = m[1].trim().toLowerCase();
+        if (!gecerliKodlar.includes(kod)) return null;
+        return { kod, dayanak: m[2].trim().replace(/^"|"$/g, "") };
+      }).filter(Boolean);
+      setOnerilenUyumDuzenle(oneriler.length > 0 ? oneriler : null);
+    } else {
+      setOnerilenUyumDuzenle(null);
     }
     setAiLoading(false);
   }
@@ -16577,6 +16616,43 @@ function RecordCard({ rec, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz, bireyiTa
     setBdtAnaliz(guncel);
     await saveBdtAnaliz(guncel);
     setOnerilenBdt(null);
+  }
+
+  function handleBireyiTanimaDuzenleToggle(index) {
+    setOnerilenBireyiTanima(prev => prev.map((o,i) => i===index ? { ...o, secili: !o.secili } : o));
+  }
+
+  async function handleBireyiTanimaDuzenleOnayla() {
+    if (!onerilenBireyiTanima) return;
+    const secilenler = onerilenBireyiTanima.filter(o => o.secili);
+    if (secilenler.length === 0) { setOnerilenBireyiTanima(null); return; }
+    const yeniMaddeler = secilenler.map(o => ({
+      id: uid(), studentName: rec.studentName, className: rec.className, numara: rec.numara,
+      kategori: o.kategori, metin: o.metin, tarih: rec.date || today()
+    }));
+    const guncel = [...yeniMaddeler, ...(bireyiTanima||[])];
+    setBireyiTanima(guncel);
+    await saveBireyiTanima(guncel);
+    setOnerilenBireyiTanima(null);
+  }
+
+  // Uyum izleme önerisini de (yeni görüşme akışındaki handleUyumOnayaGonder
+  // ile aynı mantıkla) "onay bekliyor" olarak Uyum İzleme sekmesine
+  // düşürür — kesin kayıt değildir, danışman o sekmede onaylar.
+  async function handleUyumDuzenleOnayaGonder() {
+    if (!onerilenUyumDuzenle) return;
+    const kayit = {
+      id: uid(), yil: aktifYil, tarih: rec.date || today(),
+      studentName: rec.studentName, className: rec.className, numara: rec.numara || "",
+      isaretli: onerilenUyumDuzenle.map(o => o.kod),
+      dayanaklar: Object.fromEntries(onerilenUyumDuzenle.map(o => [o.kod, o.dayanak])),
+      sonuc: "İzlemeye devam", not: "", beklemede: true,
+    };
+    const guncel = [...(uyumIzleme||[]), kayit];
+    setUyumIzleme(guncel);
+    await saveUyumIzleme(guncel);
+    setOnerilenUyumDuzenle(null);
+    alert("Uyum İzleme sekmesine gönderildi. Oradan gözden geçirip kaydedebilirsin.");
   }
 
   function handleSave() {
@@ -16697,6 +16773,42 @@ function RecordCard({ rec, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz, bireyiTa
               <div style={{ display:"flex", gap:8 }}>
                 <button onClick={handleBdtOnayla} style={{ flex:1, padding:"7px", background:"#8E5B3C", color:"#fff", border:"none", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer" }}>✓ Seçilenleri Ekle</button>
                 <button onClick={()=>setOnerilenBdt(null)} style={{ padding:"7px 14px", background:"none", border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", color:MUTED, borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer" }}>Yoksay</button>
+              </div>
+            </div>
+          )}
+
+          {/* AI'ın görüşme notundan çıkardığı Bireyi Tanıma bilgileri */}
+          {onerilenBireyiTanima && (
+            <div style={{ background:"#EAF3EF", border:"1px solid #94C9AD", borderRadius:10, padding:"10px 12px", marginBottom:10 }}>
+              <div style={{ fontSize:11, fontWeight:700, color:ACCENT, marginBottom:8 }}>🔍 AI, {onerilenBireyiTanima.length} Bireyi Tanıma bilgisi fark etti — eklemek istediklerini seç:</div>
+              <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:10 }}>
+                {onerilenBireyiTanima.map((o,i) => (
+                  <label key={i} style={{ display:"flex", alignItems:"flex-start", gap:8, fontSize:12, cursor:"pointer" }}>
+                    <input type="checkbox" checked={o.secili} onChange={()=>handleBireyiTanimaDuzenleToggle(i)} style={{ marginTop:2 }} />
+                    <span><span style={{ color:ACCENT, fontWeight:700, textTransform:"capitalize" }}>{o.kategori}:</span> {o.metin}</span>
+                  </label>
+                ))}
+              </div>
+              <div style={{ display:"flex", gap:8 }}>
+                <button onClick={handleBireyiTanimaDuzenleOnayla} style={{ flex:1, padding:"7px", background:ACCENT, color:"#fff", border:"none", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer" }}>✓ Seçilenleri Ekle</button>
+                <button onClick={()=>setOnerilenBireyiTanima(null)} style={{ padding:"7px 14px", background:"none", border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", color:MUTED, borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer" }}>Yoksay</button>
+              </div>
+            </div>
+          )}
+
+          {/* AI'ın görüşme notundan çıkardığı Uyum İzleme göstergeleri — kesin
+              kayıt değil, "onay bekliyor" olarak Uyum İzleme sekmesine gider. */}
+          {onerilenUyumDuzenle && (
+            <div style={{ background:"#EEF2FF", border:"1px solid #A9BEEB", borderRadius:10, padding:"10px 12px", marginBottom:10 }}>
+              <div style={{ fontSize:11, fontWeight:700, color:BLUE, marginBottom:8 }}>🔎 AI, uyum izleme için {onerilenUyumDuzenle.length} gösterge fark etti — Uyum İzleme sekmesine gönderilsin mi?</div>
+              <div style={{ display:"flex", flexDirection:"column", gap:4, marginBottom:10 }}>
+                {onerilenUyumDuzenle.map((o,i) => (
+                  <div key={i} style={{ fontSize:11.5, color:TEXT }}>• {o.dayanak}</div>
+                ))}
+              </div>
+              <div style={{ display:"flex", gap:8 }}>
+                <button onClick={handleUyumDuzenleOnayaGonder} style={{ flex:1, padding:"7px", background:BLUE, color:"#fff", border:"none", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer" }}>✓ Uyum İzleme'ye Gönder</button>
+                <button onClick={()=>setOnerilenUyumDuzenle(null)} style={{ padding:"7px 14px", background:"none", border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", color:MUTED, borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer" }}>Yoksay</button>
               </div>
             </div>
           )}
@@ -19147,6 +19259,8 @@ function pdrBaslangicSekmesi() {
             onYilEkrani={() => setYilEkrani(true)}
             hazirlikNotlari={hazirlikNotlari}
             setHazirlikNotlari={setHazirlikNotlari}
+            uyumIzleme={uyumIzleme}
+            setUyumIzleme={setUyumIzleme}
             ilerlemeNotlari={ilerlemeNotlari}
             setIlerlemeNotlari={setIlerlemeNotlari}
             bireyiTanima={bireyiTanima}

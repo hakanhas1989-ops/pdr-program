@@ -5167,14 +5167,14 @@ function raporCizgiGrafik(noktalar, { genislik = 460, yukseklik = 130, renk = "#
   );
 }
 
-function raporVerisiOlustur({ ogrenci, ogrenciSinif, profil1, profil2, gorusmeler, denemeler, mudahalePlan, riskListesi, sinavTuru, testKayitlari, kaynastirma, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler, hazirlikNotlari, ilerlemeNotlari, sevkler }) {
-  return { ogrenci, ogrenciSinif, profil1, profil2, gorusmeler, denemeler: denemeler || {}, mudahalePlan: mudahalePlan || {}, riskListesi: riskListesi || [], sinavTuru, testKayitlari: testKayitlari || [], kaynastirma: kaynastirma || [], bireyiTanima: bireyiTanima || [], bdtAnaliz: bdtAnaliz || [], sinavKaygisi: sinavKaygisi || {}, ogrenciler: ogrenciler || [], oogDegerlendirmeler: oogDegerlendirmeler || [], hazirlikNotlari: hazirlikNotlari || {}, ilerlemeNotlari: ilerlemeNotlari || {}, sevkler: sevkler || [], tarih: new Date().toLocaleDateString("tr-TR") };
+function raporVerisiOlustur({ ogrenci, ogrenciSinif, profil1, profil2, gorusmeler, denemeler, mudahalePlan, riskListesi, sinavTuru, testKayitlari, kaynastirma, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler, hazirlikNotlari, ilerlemeNotlari, sevkler, mudahaleOnerileri, uyumIzleme }) {
+  return { ogrenci, ogrenciSinif, profil1, profil2, gorusmeler, denemeler: denemeler || {}, mudahalePlan: mudahalePlan || {}, riskListesi: riskListesi || [], sinavTuru, testKayitlari: testKayitlari || [], kaynastirma: kaynastirma || [], bireyiTanima: bireyiTanima || [], bdtAnaliz: bdtAnaliz || [], sinavKaygisi: sinavKaygisi || {}, ogrenciler: ogrenciler || [], oogDegerlendirmeler: oogDegerlendirmeler || [], hazirlikNotlari: hazirlikNotlari || {}, ilerlemeNotlari: ilerlemeNotlari || {}, sevkler: sevkler || [], mudahaleOnerileri: mudahaleOnerileri || {}, uyumIzleme: uyumIzleme || [], tarih: new Date().toLocaleDateString("tr-TR") };
 }
 
 // ── PDF Rapor Bileşeni ────────────────────────────────────────────────────────
 function RaporModal({ rapor, onKapat }) {
   if (!rapor) return null;
-  const { ogrenci, ogrenciSinif, profil1, profil2, gorusmeler, denemeler: raporDenemeler, mudahalePlan: raporMudahale, riskListesi: raporRisk, tarih, sinavTuru, testKayitlari: raporTestler, kaynastirma: raporKaynastirma } = rapor;
+  const { ogrenci, ogrenciSinif, profil1, profil2, gorusmeler, denemeler: raporDenemeler, mudahalePlan: raporMudahale, riskListesi: raporRisk, tarih, sinavTuru, testKayitlari: raporTestler, kaynastirma: raporKaynastirma, mudahaleOnerileri: raporMudahaleOnerileri, uyumIzleme: raporUyumIzleme } = rapor;
   const dersler = aktifDersler(sinavTuru);
 
   const dersOrtalama = () => {
@@ -5849,6 +5849,45 @@ function RaporModal({ rapor, onKapat }) {
                         ))}
                       </div>
                     )}
+
+                    {/* Önerilen Müdahale Programı Oturumları — Müdahale Kütüphanesi'nde
+                        AI'a "Görüşme Notlarına Göre Öner" dedirtilip kaydedilmiş öneriler.
+                        Küçük punto, sadece başlık + program adı; tam açıklama için PDF'e
+                        değil uygulamanın kendisine bakılmalı (yer kaplamasın diye). */}
+                    {(() => {
+                      const oneriler = pdrSozlukOku(raporMudahaleOnerileri, ogrenci, ogrenciSinif) || [];
+                      if (oneriler.length === 0) return null;
+                      return (
+                        <div style={{ marginBottom:10 }}>
+                          <div style={{ fontSize:9, fontWeight:700, color:"#8E5B3C", textTransform:"uppercase", marginBottom:4 }}>Önerilen Müdahale Programı Oturumları</div>
+                          {oneriler.map((o,i) => (
+                            <div key={i} style={{ fontSize:9, color:"#333", marginBottom:2 }}>
+                              • <b>{o.baslik}</b> <span style={{ color:"#888" }}>({o.programAdi})</span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+
+                    {/* Uyum İzleme — sadece danışmanın onayladığı (beklemede olmayan)
+                        kayıtlar, en yeniden en eskiye, en fazla 3 tanesi. Küçük punto. */}
+                    {(() => {
+                      const kayitlar = (raporUyumIzleme || [])
+                        .filter(u => !u.beklemede && pdrAyniOgrenci(u.studentName, u.className, ogrenci, ogrenciSinif))
+                        .sort((a,b) => pdrTarihMs(b.tarih) - pdrTarihMs(a.tarih))
+                        .slice(0,3);
+                      if (kayitlar.length === 0) return null;
+                      return (
+                        <div style={{ marginBottom:10 }}>
+                          <div style={{ fontSize:9, fontWeight:700, color:"#3B4FD8", textTransform:"uppercase", marginBottom:4 }}>Uyum İzleme</div>
+                          {kayitlar.map(u => (
+                            <div key={u.id} style={{ fontSize:9, color:"#333", marginBottom:2 }}>
+                              • {u.tarih} — {(u.isaretli||[]).length} gösterge {u.sonuc ? <span style={{ color:"#888" }}>({u.sonuc})</span> : null}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
 
                     {/* Seans planı alanı */}
                     <div style={{ border:"1px solid #ddd", borderRadius:6, padding:10 }}>
@@ -19119,7 +19158,7 @@ function pdrBaslangicSekmesi() {
             records={records}
             kutuphane={kutuphane}
             sinavTuru={sinavTuru}
-            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler, hazirlikNotlari, ilerlemeNotlari, sevkler }))}
+            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler, hazirlikNotlari, ilerlemeNotlari, sevkler, mudahaleOnerileri, uyumIzleme }))}
             onDegerlendirmeAc={() => setDegerlendirmeAcik(true)}
           />
         )}
@@ -19360,7 +19399,7 @@ function pdrBaslangicSekmesi() {
             sinavKaygisi={sinavKaygisi}
             setSinavKaygisi={setSinavKaygisi}
             konuHaritasiVerisi={konuHaritasiVerisi}
-            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler, hazirlikNotlari, ilerlemeNotlari, sevkler }))}
+            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler, hazirlikNotlari, ilerlemeNotlari, sevkler, mudahaleOnerileri, uyumIzleme }))}
             onSinifGuncelle={async (eskiAd, eskiSinif, eskiNumara, yeniAd, yeniSinif) => {
               const ayniMi = (ad, sinif, no) => pdrAyniOgrenci(eskiAd, eskiSinif, ad, sinif, eskiNumara, no);
 
@@ -19658,7 +19697,7 @@ function pdrBaslangicSekmesi() {
             profiles2={profiles2}
             sosyometri={sosyometri}
             uyumIzleme={uyumIzleme}
-            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler, hazirlikNotlari, ilerlemeNotlari, sevkler }))}
+            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler, hazirlikNotlari, ilerlemeNotlari, sevkler, mudahaleOnerileri, uyumIzleme }))}
           />
         )}
 

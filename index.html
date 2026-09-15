@@ -1033,7 +1033,7 @@ function ogrenciEtkinlikHavuzu(ogrenciSinif, kademeTahmin) {
 // Rehberlik Etkinlikleri ile aynı iki yol: ücretsiz kelime arama ve AI'ın
 // görüşme notlarına göre önerisi. AI'ın önerisi, gerçek oturum kütüphanesiyle
 // (başlık eşleşmesi) doğrulanır — uydurma bir oturum asla gösterilmez.
-function MudahaleKutuphanesiEkrani({ kayitliListesi, records, aktifOgrenci, setAktifOgrenci }) {
+function MudahaleKutuphanesiEkrani({ kayitliListesi, records, aktifOgrenci, setAktifOgrenci, mudahaleOnerileri, setMudahaleOnerileri }) {
   const [seciliAd, setSeciliAd] = useState(aktifOgrenci?.name || "");
   const [ogrenciArama, setOgrenciArama] = useState("");
   const [aramaMetni, setAramaMetni] = useState("");
@@ -1051,6 +1051,17 @@ function MudahaleKutuphanesiEkrani({ kayitliListesi, records, aktifOgrenci, setA
   const havuzTumu = mudahaleOturumHavuzu();
   const havuz = seciliProgram ? havuzTumu.filter(o => o.programKey === seciliProgram) : havuzTumu;
   const seciliOgr = kayitliListesi.find(o => o.name === seciliAd);
+
+  // Öğrenci değiştiğinde, daha önce bu öğrenci için kaydedilmiş bir AI
+  // önerisi varsa (mudahaleOnerileri sözlüğünden) onu geri getirir — böylece
+  // sekmeden çıkıp tekrar girmek ya da uygulamayı kapatıp açmak öneriyi
+  // silmez, AI'ı gereksiz yere (ek maliyetle) tekrar çağırmaya gerek kalmaz.
+  useEffect(() => {
+    if (!seciliAd) { setAiOnerileri(null); return; }
+    const anahtar = pdrOgrAnahtar(seciliAd, seciliOgr?.className, seciliOgr?.numara);
+    const kayitli = mudahaleOnerileri?.[anahtar];
+    setAiOnerileri(kayitli !== undefined ? kayitli : null);
+  }, [seciliAd, seciliOgr?.className, seciliOgr?.numara]);
 
   const aramaMetniNorm = aramaMetni.trim().toLocaleLowerCase("tr");
   const filtrelenmis = aramaMetniNorm.length < 2 ? havuz : havuz.filter(o =>
@@ -1091,6 +1102,12 @@ function MudahaleKutuphanesiEkrani({ kayitliListesi, records, aktifOgrenci, setA
         return kayit ? { ...kayit, aciklama: oneri.aciklama || "" } : null;
       }).filter(Boolean);
       setAiOnerileri(eslesenler);
+      // Kalıcı sakla — öğrenci anahtarına göre, tekrar sekmeye girince ya da
+      // uygulamayı yeniden açınca kaybolmasın.
+      const anahtar = pdrOgrAnahtar(seciliAd, seciliOgr?.className, seciliOgr?.numara);
+      const guncel = { ...(mudahaleOnerileri||{}), [anahtar]: eslesenler };
+      setMudahaleOnerileri(guncel);
+      await saveMudahaleOnerileri(guncel);
     } catch (e) {
       alert("AI önerisi alınamadı: " + e.message);
     }
@@ -4141,6 +4158,18 @@ async function loadProfNotlari() {
 }
 async function saveProfNotlari(data) {
   try { await window.storage.set("pdr-prof-notlar", JSON.stringify(data)); } catch(e) { console.warn(e); }
+}
+
+// Müdahale Kütüphanesi'nin "Görüşme Notlarına Göre Öner" AI sonuçlarını
+// öğrenci bazında kalıcı saklar — daha önce sadece React state'inde
+// tutuluyordu, sekmeden çıkıp girince ya da uygulamayı kapatıp açınca
+// kayboluyordu ve tekrar görmek için AI'ı yeniden (ek maliyetle) çağırmak
+// gerekiyordu. Anahtar: pdrOgrAnahtar(ad, sınıf, numara).
+async function loadMudahaleOnerileri() {
+  try { const r = await window.storage.get("pdr-mudahale-onerileri"); return r ? JSON.parse(r.value) : {}; } catch { return {}; }
+}
+async function saveMudahaleOnerileri(data) {
+  try { await window.storage.set("pdr-mudahale-onerileri", JSON.stringify(data)); } catch(e) { console.warn(e); }
 }
 
 
@@ -17559,6 +17588,7 @@ export default function App() {
   const [testKayitlari, setTestKayitlari] = useState({});
   const [hazirlikNotlari, setHazirlikNotlari] = useState({});
   const [profNotlari, setProfNotlari] = useState({});
+  const [mudahaleOnerileri, setMudahaleOnerileri] = useState({});
   const [ilerlemeNotlari, setIlerlemeNotlari] = useState({});
   const [sevkler, setSevkler] = useState([]);
   const [grupCalismalari, setGrupCalismalari] = useState([]);
@@ -17597,6 +17627,7 @@ export default function App() {
     loadTestKayitlari().then(setTestKayitlari);
     loadHazirlikNotlari().then(setHazirlikNotlari);
     loadProfNotlari().then(setProfNotlari);
+    loadMudahaleOnerileri().then(setMudahaleOnerileri);
     loadIlerlemeNotlari().then(setIlerlemeNotlari);
     loadSevkler().then(setSevkler);
     loadGrupCalismalari().then(setGrupCalismalari);
@@ -17646,6 +17677,7 @@ export default function App() {
       "pdr-test-kayitlari": () => loadTestKayitlari().then(setTestKayitlari),
       "pdr-hazirlik": () => loadHazirlikNotlari().then(setHazirlikNotlari),
       "pdr-prof-notlar": () => loadProfNotlari().then(setProfNotlari),
+      "pdr-mudahale-onerileri": () => loadMudahaleOnerileri().then(setMudahaleOnerileri),
       "pdr-ilerleme": () => loadIlerlemeNotlari().then(setIlerlemeNotlari),
       "pdr-sevkler": () => loadSevkler().then(setSevkler),
       "pdr-grup-calismalari": () => loadGrupCalismalari().then(setGrupCalismalari),
@@ -19881,7 +19913,7 @@ function pdrBaslangicSekmesi() {
 
         {/* ── MÜDAHALE PROGRAMLARI KÜTÜPHANESİ ────────────────────────── */}
         {tab === "mudahale_kutuphane" && (
-          <MudahaleKutuphanesiEkrani kayitliListesi={kayitliListesi} records={records} aktifOgrenci={aktifOgrenci} setAktifOgrenci={setAktifOgrenci} />
+          <MudahaleKutuphanesiEkrani kayitliListesi={kayitliListesi} records={records} aktifOgrenci={aktifOgrenci} setAktifOgrenci={setAktifOgrenci} mudahaleOnerileri={mudahaleOnerileri} setMudahaleOnerileri={setMudahaleOnerileri} />
         )}
 
         {/* ── KAZANIMLAR ───────────────────────────────────────────── */}

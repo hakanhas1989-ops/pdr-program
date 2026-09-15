@@ -3671,8 +3671,13 @@ function IsciRaporuEkrani({ hatirlatmalar, setHatirlatmalar, ogrenciler, riskLis
 
   async function hatirlatmaOlustur(oneri) {
     const r = oneri.risk;
+    // r.className/r.numara risk kaydının OLUŞTURULDUĞU andaki bilgi olabilir —
+    // öğrenci o tarihten bu yana sınıf değiştirmiş olabilir. Hatırlatmayı
+    // her zaman öğrencinin GÜNCEL sınıf/numarasıyla oluşturuyoruz (aksi halde
+    // Hatırlatıcı'da doğru öğrenciyle eşleşmeyip "kayboluyormuş" gibi görünebilir).
+    const guncelOgr = ogrenciler.find(o => o.studentName === r.studentName);
     const yeni = {
-      id: uid(), studentName: r.studentName, className: r.className, numara: r.numara,
+      id: uid(), studentName: r.studentName, className: guncelOgr?.className || r.className, numara: guncelOgr?.numara || r.numara,
       metin: `Risk takibi: ${r.riskTuru || "genel"} — ${oneri.gun} gündür açık, kontrol et.`,
       tarih: today(), tur: "genel", ramTarihi: "", kaynak: "otomatik_isci", olusturmaTarihi: today(), tamamlandi: false,
     };

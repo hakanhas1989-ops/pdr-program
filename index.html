@@ -3738,7 +3738,12 @@ function IsciRaporuEkrani({ hatirlatmalar, setHatirlatmalar, ogrenciler, riskLis
                 {ozet.oncelikliler.map(s => (
                   <div key={s.studentName + s.className} onClick={() => gidilecekOgrenci(s.studentName, s.className, s.numara)}
                     style={{ fontSize: 12, padding: "5px 0", borderBottom: `1px solid ${BORDER}`, cursor: "pointer" }}>
-                    <b>{s.studentName}</b> <span style={{ color: MUTED }}>· {s.className}</span> — puan {s.puan.toFixed(1)}
+                    <div><b>{s.studentName}</b> <span style={{ color: MUTED }}>· {s.className}</span> — puan {s.puan.toFixed(1)}</div>
+                    {s.nedenler?.length > 0 && (
+                      <div style={{ fontSize: 9.5, color: MUTED, marginTop: 2 }}>
+                        {s.nedenler.map(n => n.etiket).join(" · ")}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

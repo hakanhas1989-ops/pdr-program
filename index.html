@@ -3524,7 +3524,7 @@ function pdrGunlukOzetHesapla(hatirlatmalar, ogrenciler, riskListesi, sosyometri
   const gecikenler = acikHat.filter(h => pdrTarihMs(h.tarih) < pdrTarihMs(bugun))
     .sort((a, b) => pdrTarihMs(a.tarih) - pdrTarihMs(b.tarih));
   const bugunkuler = acikHat.filter(h => h.tarih === bugun);
-  const oncelikliler = pdrOncelikSkoruHesapla(ogrenciler, riskListesi, sosyometri, aktifYil, uyumIzleme).slice(0, 5);
+  const oncelikliler = pdrOncelikSkoruHesapla(ogrenciler, riskListesi, sosyometri, aktifYil, uyumIzleme).slice(0, 10);
   return { gecikenler, bugunkuler, oncelikliler };
 }
 
@@ -14824,7 +14824,7 @@ function ProfilMerkez({
                   <div style={{fontSize:12,fontWeight:700,color:MUTED,textTransform:"uppercase",letterSpacing:0.5,marginBottom:10}}>Görüşme Geçmişi ({ogrRec.length})</div>
                   {ogrRec.slice(0,3).map(r=>(
                     <div key={r.id} style={{marginBottom:8,padding:8,background:BG,borderRadius:6,borderLeft:`3px solid ${ACCENT}`}}>
-                      <div style={{fontSize:10,color:MUTED,marginBottom:3}}>{r.date} · {r.topic||"Genel"}</div>
+                      <div style={{fontSize:10,color:MUTED,marginBottom:3}}>{r.date}{r.saat ? ` · ${r.saat}` : ""} · {r.topic||"Genel"}</div>
                       <div style={{fontSize:12,color:TEXT,lineHeight:1.6}}>{r.summary}</div>
                     </div>
                   ))}
@@ -14966,7 +14966,7 @@ function GorusmeTakvimiEkrani({ records, aktifYil }) {
                             {hafta.kayitlar.map(r => (
                               <div key={r.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"6px 0", borderBottom:`1px solid ${BORDER}`, fontSize:12 }}>
                                 <span>{r.studentName}{r.className?` — ${r.className}`:""}</span>
-                                <span style={{ color:MUTED, fontSize:11 }}>{r.date}</span>
+                                <span style={{ color:MUTED, fontSize:11 }}>{r.date}{r.saat ? ` · ${r.saat}` : ""}</span>
                               </div>
                             ))}
                           </div>
@@ -15546,18 +15546,188 @@ function KonuTamamlamaGorunumu({ ogrenciler, konuHaritasiVerisi, gorunenAdlar, k
   );
 }
 
-function SinifSunumuEkrani({ ogrenciler, denemeler, sinavTuru, kademe, netHaritasiKayitlari, konuHaritasiVerisi }) {
+// ── Kurum Raporu ─────────────────────────────────────────────────────────────
+// İDARE/ÖĞRETMENLER için — Sınıf Sunumu'nun öğrenciye/veliye canlı gösterilen
+// ekranından TAMAMEN AYRI bir rapor. Öğrenci ismi hiç geçmez; sadece sınıf
+// bazlı toplu istatistikler: deneme deneme sınıf ortalaması karşılaştırması
+// (grafik), okul geneli kaynaştırma öğrenci sayısı, sınıf bazlı görüşme
+// kapsamı (kaç öğrenciyle en az bir görüşme yapılmış).
+function KurumRaporuModal({ ogrenciler, denemeler, records, sinavTuru, kademe, aktifYil, onKapat }) {
+  const dersler = aktifDersler(sinavTuru);
+  const yilOgr = (ogrenciler||[]).filter(o => !o.yil || o.yil === aktifYil);
+  const siniflar = [...new Set(yilOgr.map(o => o.className).filter(Boolean))].sort();
+
+  // Deneme deneme, sınıf bazlı ortalama net — "7sinif" (geçmiş dönem) hariç,
+  // sadece BU yıl tek tek girilen denemeler (D1, D2...).
+  const denemeSinifVerisi = useMemo(() => {
+    const veri = {}; // { [denemeNo]: { [className]: {toplam, sayi} } }
+    yilOgr.forEach(o => {
+      const sozluk = pdrSozlukOku(denemeler, o.studentName, o.className, o.numara);
+      if (!sozluk) return;
+      Object.entries(sozluk).forEach(([no, nets]) => {
+        if (no === "7sinif") return;
+        const net = pdrToplamNetHesapla(nets, dersler);
+        if (!veri[no]) veri[no] = {};
+        if (!veri[no][o.className]) veri[no][o.className] = { toplam: 0, sayi: 0 };
+        veri[no][o.className].toplam += net;
+        veri[no][o.className].sayi += 1;
+      });
+    });
+    return veri;
+  }, [yilOgr, denemeler, dersler]);
+  const denemeNolar = Object.keys(denemeSinifVerisi).sort((a,b) => Number(a) - Number(b));
+
+  // Kaynaştırma — okul geneli toplam sayı (KaynastirmaTablosu'ndaki AYNI mantık).
+  const kaynastirmaliSayi = yilOgr.filter(o => (o.kaynastirma||[]).length > 0).length;
+
+  // Sınıf bazlı görüşme kapsamı — o sınıftan en az bir görüşme kaydı olan
+  // FARKLI öğrenci sayısı / sınıftaki toplam öğrenci sayısı.
+  const gorusmeKapsami = useMemo(() => {
+    return siniflar.map(sinif => {
+      const sinifOgr = yilOgr.filter(o => o.className === sinif);
+      const gorusulenler = new Set();
+      (records||[]).forEach(r => {
+        if (r.className !== sinif) return;
+        const eslesen = sinifOgr.find(o => pdrAyniOgrenci(o.studentName, o.className, r.studentName, r.className, o.numara, r.numara));
+        if (eslesen) gorusulenler.add(eslesen.studentName + "||" + (eslesen.numara||""));
+      });
+      return { sinif, toplam: sinifOgr.length, gorusulen: gorusulenler.size };
+    });
+  }, [siniflar, yilOgr, records]);
+
+  const RENK_PALETI = ["#127C56","#3B4FD8","#C0392B","#B07D1A","#9E78ED","#0E9B9B","#D24E9C","#6B7280","#2E7A6B","#C0392B"];
+  const grafikGenislik = 680, grafikYukseklik = 260, solBosluk = 40, altBosluk = 26, ustBosluk = 14, sagBosluk = 10;
+  const maxNet = Math.max(1, ...denemeNolar.flatMap(no => Object.values(denemeSinifVerisi[no]).map(s => s.toplam / s.sayi)));
+  const xAdim = denemeNolar.length > 1 ? (grafikGenislik - solBosluk - sagBosluk) / (denemeNolar.length - 1) : 0;
+  const xPos = i => solBosluk + i * xAdim;
+  const yPos = v => grafikYukseklik - altBosluk - (v / maxNet) * (grafikYukseklik - altBosluk - ustBosluk);
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 100, background: "#fff", display: "flex", flexDirection: "column", fontFamily: "Arial, sans-serif" }}>
+      <div style={{ background: "linear-gradient(135deg, #0E6E4C 0%, #2E5B6E 55%, #5B3F9E 100%)", color: "#fff", padding: "10px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
+        <span style={{ fontWeight: 800, fontSize: 15 }}>📊 Kurum Raporu — {kademe==="lise"?"TYT/AYT":"LGS"} Deneme Karşılaştırması</span>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => raporIndir("pdr-kurum-rapor-icerik", "Kurum_Raporu")} style={{ background: "#fff", color: "#127C56", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>🖨 İndir</button>
+          <button onClick={onKapat} style={{ background: "rgba(255,255,255,0.2)", color: "#fff", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>✕ Kapat</button>
+        </div>
+      </div>
+
+      <div id="pdr-kurum-rapor-icerik" style={{ flex: 1, overflowY: "auto", padding: "14px 18px", background: "linear-gradient(160deg, #F2FAF6 0%, #FAFAFB 50%, #F5F1FC 100%)" }}>
+        <div style={{ borderBottom: "2px solid #127C56", paddingBottom: 8, marginBottom: 14 }}>
+          <div style={{ fontSize: 10, color: "#127C56", fontWeight: 700, letterSpacing: 1, textTransform: "uppercase" }}>PDR Servisi — Kurum Geneli Rapor</div>
+          <div style={{ fontSize: 17, fontWeight: 900, color: "#1a1a1a", margin: "2px 0" }}>{kademe==="lise"?"9-12. Sınıflar":"5-8. Sınıflar"} — {aktifYil}</div>
+          <div style={{ fontSize: 11, color: "#888" }}>{new Date().toLocaleDateString("tr-TR")} tarihinde oluşturuldu · {siniflar.length} sınıf, {yilOgr.length} öğrenci</div>
+        </div>
+
+        {/* Deneme bazlı sınıf karşılaştırma grafiği */}
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: "#127C56", textTransform: "uppercase", marginBottom: 8 }}>Deneme Bazlı Sınıf Ortalamaları</div>
+          {denemeNolar.length === 0 ? (
+            <div style={{ fontSize: 12, color: "#888" }}>Bu yıl için henüz hiç sınıfta deneme sonucu girilmemiş.</div>
+          ) : (
+            <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 10 }}>
+              <svg viewBox={`0 0 ${grafikGenislik} ${grafikYukseklik}`} style={{ width: "100%", height: "auto" }}>
+                {/* Y ekseni referans çizgileri */}
+                {[0, 0.25, 0.5, 0.75, 1].map(o => (
+                  <g key={o}>
+                    <line x1={solBosluk} x2={grafikGenislik-sagBosluk} y1={yPos(maxNet*o)} y2={yPos(maxNet*o)} stroke="#eee" strokeWidth="1" />
+                    <text x={solBosluk-6} y={yPos(maxNet*o)+3} fontSize="8" fill="#888" textAnchor="end">{(maxNet*o).toFixed(0)}</text>
+                  </g>
+                ))}
+                {/* X ekseni etiketleri */}
+                {denemeNolar.map((no,i) => (
+                  <text key={no} x={xPos(i)} y={grafikYukseklik-8} fontSize="8" fill="#888" textAnchor="middle">D{no}</text>
+                ))}
+                {/* Her sınıf için çizgi */}
+                {siniflar.map((sinif, si) => {
+                  const renk = RENK_PALETI[si % RENK_PALETI.length];
+                  const noktalar = denemeNolar.map((no,i) => {
+                    const s = denemeSinifVerisi[no]?.[sinif];
+                    return s ? { x: xPos(i), y: yPos(s.toplam/s.sayi) } : null;
+                  }).filter(Boolean);
+                  if (noktalar.length === 0) return null;
+                  const yol = noktalar.map((p,i) => (i===0?"M":"L") + p.x.toFixed(1) + "," + p.y.toFixed(1)).join(" ");
+                  return (
+                    <g key={sinif}>
+                      <path d={yol} fill="none" stroke={renk} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      {noktalar.map((p,i) => <circle key={i} cx={p.x} cy={p.y} r="2.5" fill={renk} />)}
+                    </g>
+                  );
+                })}
+              </svg>
+              {/* Lejant */}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 8, justifyContent: "center" }}>
+                {siniflar.map((sinif, si) => (
+                  <div key={sinif} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <span style={{ width: 10, height: 10, borderRadius: "50%", background: RENK_PALETI[si % RENK_PALETI.length], display: "inline-block" }}></span>
+                    <span style={{ fontSize: 9, color: "#333" }}>{sinif}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Kaynaştırma + Görüşme Kapsamı — yan yana iki kart */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 10 }}>
+          <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12, textAlign: "center" }}>
+            <div style={{ fontSize: 24, fontWeight: 900, color: "#127C56" }}>{kaynastirmaliSayi}</div>
+            <div style={{ fontSize: 10, color: "#888", textTransform: "uppercase", letterSpacing: 0.5 }}>Kaynaştırma Öğrenci Sayısı (Okul Geneli)</div>
+          </div>
+          <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12, textAlign: "center" }}>
+            <div style={{ fontSize: 24, fontWeight: 900, color: "#3B4FD8" }}>{yilOgr.length}</div>
+            <div style={{ fontSize: 10, color: "#888", textTransform: "uppercase", letterSpacing: 0.5 }}>Toplam Öğrenci ({siniflar.length} Sınıf)</div>
+          </div>
+        </div>
+
+        {/* Sınıf bazlı görüşme kapsamı tablosu */}
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 800, color: "#127C56", textTransform: "uppercase", marginBottom: 8 }}>Sınıf Bazlı Görüşme Kapsamı</div>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+            <thead>
+              <tr style={{ background: "#F2FAF6" }}>
+                <th style={{ textAlign: "left", padding: "5px 8px", borderBottom: "1px solid #ddd" }}>Sınıf</th>
+                <th style={{ textAlign: "center", padding: "5px 8px", borderBottom: "1px solid #ddd" }}>Toplam Öğrenci</th>
+                <th style={{ textAlign: "center", padding: "5px 8px", borderBottom: "1px solid #ddd" }}>Görüşülen</th>
+                <th style={{ textAlign: "center", padding: "5px 8px", borderBottom: "1px solid #ddd" }}>Oran</th>
+              </tr>
+            </thead>
+            <tbody>
+              {gorusmeKapsami.map(g => (
+                <tr key={g.sinif}>
+                  <td style={{ padding: "5px 8px", borderBottom: "1px solid #eee", fontWeight: 700 }}>{g.sinif}</td>
+                  <td style={{ padding: "5px 8px", borderBottom: "1px solid #eee", textAlign: "center" }}>{g.toplam}</td>
+                  <td style={{ padding: "5px 8px", borderBottom: "1px solid #eee", textAlign: "center" }}>{g.gorusulen}</td>
+                  <td style={{ padding: "5px 8px", borderBottom: "1px solid #eee", textAlign: "center", color: g.toplam>0 && g.gorusulen/g.toplam < 0.5 ? "#C0392B" : "#127C56", fontWeight: 700 }}>
+                    {g.toplam > 0 ? `%${Math.round((g.gorusulen/g.toplam)*100)}` : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SinifSunumuEkrani({ ogrenciler, denemeler, sinavTuru, kademe, netHaritasiKayitlari, konuHaritasiVerisi, records, aktifYil }) {
   const [seciliDuzey, setSeciliDuzey] = useState(null);
   const [seciliSube, setSeciliSube] = useState(null);
   const [mod, setMod] = useState("tumSinif"); // "tumSinif" | "secili"
   const [seciliOgrenciler, setSeciliOgrenciler] = useState([]);
   const [sunumModu, setSunumModu] = useState(false);
   const [gorunumSekmesi, setGorunumSekmesi] = useState("trend"); // "trend" | "net" | "konu"
+  const [kurumRaporuAcik, setKurumRaporuAcik] = useState(false);
 
   // SADECE isim + sınıf + yıl bilgisiyle çalışır — kademeye uygun tüm öğrenciler.
   const tumOgr = (ogrenciler||[]).filter(o => pdrKademeUyumlu(o.className, kademe));
   const duzeyler = [...new Set(tumOgr.map(o => (o.className||"").match(/^\d+/)?.[0]).filter(Boolean))]
     .sort((a,b)=>Number(a)-Number(b));
+
+  if (kurumRaporuAcik) {
+    return <KurumRaporuModal ogrenciler={tumOgr} denemeler={denemeler} records={records} sinavTuru={sinavTuru} kademe={kademe} aktifYil={aktifYil} onKapat={()=>setKurumRaporuAcik(false)} />;
+  }
 
   if (!seciliDuzey) {
     return (
@@ -15569,6 +15739,16 @@ function SinifSunumuEkrani({ ogrenciler, denemeler, sinavTuru, kademe, netHarita
           Bu ekran sınıfa/veliye/idareye açıkça gösterilebilir — isim ve deneme netleri dışında
           hiçbir bilgiye (risk, kaynaştırma, görüşme, devamsızlık) erişimi yoktur.
         </div>
+        {/* Kurum Raporu — İDARE/ÖĞRETMENLER için, öğrenciye/veliye canlı
+            gösterilecek "Sınıf Sunumu" ekranından FARKLI ve ayrı bir rapor:
+            burada sınıf bazlı (öğrenci ismi geçmeyen) istatistikler var —
+            kaynaştırma sayısı ve görüşme kapsamı gibi. Yukarıdaki gizlilik
+            notu bu düğmeye uygulanmaz, çünkü idareye/öğretmene gösterilecek,
+            sınıfa canlı yansıtılacak bir ekran değil. */}
+        <button onClick={()=>setKurumRaporuAcik(true)} style={{
+          width:"100%", padding:"12px 14px", background:"#fff", border:`2px dashed ${PURPLE}`, borderRadius:12,
+          color:PURPLE, fontWeight:700, fontSize:12.5, cursor:"pointer", marginBottom:16, textAlign:"left"
+        }}>📊 Kurum Raporu — İdare/Öğretmenler İçin (sınıf bazlı deneme karşılaştırması, kaynaştırma, görüşme kapsamı)</button>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
           {duzeyler.map(duzey => (
             <div key={duzey} onClick={()=>setSeciliDuzey(duzey)} style={{
@@ -16801,7 +16981,7 @@ function RecordCard({ rec, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz, bireyiTa
         }}>{rec.studentName.charAt(0).toUpperCase()}</div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: TEXT }}>{rec.studentName}</div>
-          <div style={{ fontSize: 12, color: MUTED }}>{rec.date} · {rec.className}</div>
+          <div style={{ fontSize: 12, color: MUTED }}>{rec.date}{rec.saat ? ` · ${rec.saat}` : ""} · {rec.className}</div>
         </div>
         <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
           <Badge label={rec.meetingType || "Öğrenci"} type={rec.meetingType} />
@@ -18006,7 +18186,10 @@ export default function App() {
     // adını kullandığı için burada temiz şekilde eşleniyor, form'daki "tarih"
     // kalıntı olarak kayda karışmasın diye ayrıştırılıyor.
     const { tarih: formTarihi, ...formGeri } = form;
-    const rec = { id: uid(), date: formTarihi || today(), ...formGeri, summary: form.summary.trim() || form.raw.trim() };
+    // Saat otomatik ekleniyor — kullanıcı elle girmiyor, kaydedildiği andaki
+    // cihaz saati (HH:MM) alınıyor. Sadece bilgi amaçlı, hiçbir hesaplamada
+    // kullanılmıyor (tarih bazlı sıralama/eşleştirmeler hep "date" üzerinden).
+    const rec = { id: uid(), date: formTarihi || today(), saat: new Date().toLocaleTimeString("tr-TR", { hour:"2-digit", minute:"2-digit" }), ...formGeri, summary: form.summary.trim() || form.raw.trim() };
     const updated = [rec, ...records];
     setRecords(updated); await saveRecords(updated);
     // Öğrenci bilgisini SİLMİYORUZ — aynı öğrenciye art arda birden fazla
@@ -19006,6 +19189,8 @@ function pdrBaslangicSekmesi() {
             kademe={kademe}
             netHaritasiKayitlari={netHaritasiKayitlari}
             konuHaritasiVerisi={konuHaritasiVerisi}
+            records={records}
+            aktifYil={aktifYil}
           />
         )}
 

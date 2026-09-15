@@ -12730,7 +12730,7 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
                       return (
                         <div key={r.id} style={{marginBottom:14,position:"relative"}}>
                           <div style={{position:"absolute",left:-16,top:4,width:10,height:10,borderRadius:"50%",background:isVeli?ORANGE:ACCENT,border:"2px solid #fff",boxShadow:"0 0 0 2px "+(isVeli?ORANGE:ACCENT)}}/>
-                          <RecordCard rec={r} onDelete={handleGorusmeSil} onUpdate={handleGorusmeGuncelle} bdtAnaliz={bdtAnaliz} setBdtAnaliz={setBdtAnaliz} bireyiTanima={bireyiTanima} setBireyiTanima={setBireyiTanima} uyumIzleme={uyumIzleme} setUyumIzleme={setUyumIzleme} aktifYil={aktifYil} riskListesi={riskListesi} denemeler={denemeler} konuHaritasiVerisi={konuHaritasiVerisi} />
+                          <RecordCard rec={r} onDelete={handleGorusmeSil} onUpdate={handleGorusmeGuncelle} bdtAnaliz={bdtAnaliz} setBdtAnaliz={setBdtAnaliz} bireyiTanima={bireyiTanima} setBireyiTanima={setBireyiTanima} uyumIzleme={uyumIzleme} setUyumIzleme={setUyumIzleme} aktifYil={aktifYil} kayitliListesi={kayitliListesi} riskListesi={riskListesi} denemeler={denemeler} konuHaritasiVerisi={konuHaritasiVerisi} />
                         </div>
                       );
                     })}
@@ -16583,7 +16583,7 @@ function StatBar({ label, value, max, color = ACCENT }) {
   );
 }
 
-function RecordCard({ rec, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz, bireyiTanima, setBireyiTanima, uyumIzleme, setUyumIzleme, aktifYil, riskListesi, denemeler, konuHaritasiVerisi }) {
+function RecordCard({ rec, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz, bireyiTanima, setBireyiTanima, uyumIzleme, setUyumIzleme, aktifYil, kayitliListesi, riskListesi, denemeler, konuHaritasiVerisi }) {
   const [open, setOpen] = useState(false);
   const [duzenle, setDuzenle] = useState(false);
   const [editForm, setEditForm] = useState({ summary: rec.summary, topic: rec.topic || "", raw: rec.raw || "" });
@@ -16593,6 +16593,17 @@ function RecordCard({ rec, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz, bireyiTa
   const [onerilenBireyiTanima, setOnerilenBireyiTanima] = useState(null);
   const [onerilenUyumDuzenle, setOnerilenUyumDuzenle] = useState(null);
   const isVeli = rec.meetingType === "Veli";
+  // Görüşme notu, öğrenci başka bir sınıfa geçmeden ÖNCE yazılmış olabilir —
+  // rec.className/rec.numara o zamanki (eski) bilgiyi taşıyabilir. Bireyi
+  // Tanıma/BDT/Uyum İzleme sekmeleri ise öğrencinin GÜNCEL sınıf/numarasına
+  // göre eşleştiriyor (pdrAyniOgrenci sınıf uyuşmazsa eşleştirmiyor) — bu
+  // yüzden burada onaylanan yeni kayıtları rec'teki eski bilgiyle değil,
+  // kayitliListesi'nden taze okunan GÜNCEL sınıf/numara ile kaydediyoruz;
+  // aksi halde kayıt "kayboluyormuş" gibi görünüyordu (aslında kaydediliyor
+  // ama eski sınıf etiketiyle, güncel görünüme hiç düşmüyordu).
+  const guncelOgr = kayitliListesi?.find(o => o.name === rec.studentName);
+  const guncelSinif = guncelOgr?.className || rec.className;
+  const guncelNumara = guncelOgr?.numara || rec.numara;
 
   // AI ile Özeti Güncelle — daha önce (ilk görüşme notu eklenirken) AI
   // Özetle hiç kullanılmamış olsa bile, burada BDT çarpıtma, Bireyi Tanıma
@@ -16675,7 +16686,7 @@ function RecordCard({ rec, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz, bireyiTa
     const secilenler = onerilenBdt.filter(o => o.secili);
     if (secilenler.length === 0) { setOnerilenBdt(null); return; }
     const yeniMaddeler = secilenler.map(o => ({
-      id: uid(), studentName: rec.studentName, className: rec.className, numara: rec.numara,
+      id: uid(), studentName: rec.studentName, className: guncelSinif, numara: guncelNumara,
       kategori: o.kategori, ifade: o.ifade, tarih: today()
     }));
     const guncel = [...yeniMaddeler, ...(bdtAnaliz||[])];
@@ -16693,7 +16704,7 @@ function RecordCard({ rec, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz, bireyiTa
     const secilenler = onerilenBireyiTanima.filter(o => o.secili);
     if (secilenler.length === 0) { setOnerilenBireyiTanima(null); return; }
     const yeniMaddeler = secilenler.map(o => ({
-      id: uid(), studentName: rec.studentName, className: rec.className, numara: rec.numara,
+      id: uid(), studentName: rec.studentName, className: guncelSinif, numara: guncelNumara,
       kategori: o.kategori, metin: o.metin, tarih: rec.date || today()
     }));
     const guncel = [...yeniMaddeler, ...(bireyiTanima||[])];
@@ -16709,7 +16720,7 @@ function RecordCard({ rec, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz, bireyiTa
     if (!onerilenUyumDuzenle) return;
     const kayit = {
       id: uid(), yil: aktifYil, tarih: rec.date || today(),
-      studentName: rec.studentName, className: rec.className, numara: rec.numara || "",
+      studentName: rec.studentName, className: guncelSinif, numara: guncelNumara || "",
       isaretli: onerilenUyumDuzenle.map(o => o.kod),
       dayanaklar: Object.fromEntries(onerilenUyumDuzenle.map(o => [o.kod, o.dayanak])),
       sonuc: "İzlemeye devam", not: "", beklemede: true,

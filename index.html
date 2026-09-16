@@ -2152,7 +2152,7 @@ GUVENLIK UYARISI: Eger notta acikca kendine zarar verme, intihar dusuncesi, umut
 
 Bundan sonra, YENI bir satirda, su formatta "Bireyi Tanima" tespiti ekle (sosyo-demografik/psikososyal bilgiler icin - AILE, SAGLIK, YASAM OLAYLARI, SOSYOEKONOMIK, ILGI/YETENEK/SOSYAL, OKUL GECMISI kategorilerinden):
 ---BIREYI_TANIMA---
-(Notta ACIKCA belirtilen, kalici/onemli sosyo-demografik veya psikososyal bir bilgi varsa - ornek: kardes sayisi, ebeveyn calisma durumu, aile yapisi, gecirilen bir hastalik/ameliyat, dogum oykusu, bir kayip/bosanma/tasinma gibi yasam olayi, ailenin ekonomik durumuna dair bir ipucu, bir ilgi/yetenek, onceki okul deneyimi, ogrencinin yasi (not icinde yil VE ay olarak acikca belirtilmisse, ornegin "13 yas 3 aylik" ya da "13 yasinda, 3 aylik" gibi — sadece yil belirtilmisse yazma, mutlaka ay bilgisi de olmali; bu bilgiyi "saglik" kategorisine "Yaşı: 13 yaş 3 ay" seklinde yaz), devamsizlik/okula gitmeme durumu (notta acikca gun sayisi ya da somut bir devamsizlik durumu belirtilmisse, ornegin "bu donem 5 gun devamsizlik yapti" ya da "sik sik okula gelmiyor" — bu bilgiyi "okul" kategorisine yaz) - HER BIRINI ayri bir satirda 'kategori_key: kisa cumle' formatinda yaz. kategori_key SADECE su degerlerden biri olmali: aile, saglik, olaylar, sosyoekonomik, ilgi, okul. Boyle bir bilgi YOKSA sadece "Yok" yaz. ONEMLI: tahmin yurutme, yorum katma, sadece notta ACIKCA soylenmis somut bilgileri yaz - ozellikle saglik/aile gibi hassas konularda kesinlikle uydurma yapma.)
+(Notta ACIKCA belirtilen, kalici/onemli sosyo-demografik veya psikososyal bir bilgi varsa - ornek: kardes sayisi, ebeveyn calisma durumu, aile yapisi, gecirilen bir hastalik/ameliyat, dogum oykusu, bir kayip/bosanma/tasinma gibi yasam olayi, ailenin ekonomik durumuna dair bir ipucu, bir ilgi/yetenek, onceki okul deneyimi, ogrencinin yasi (not icinde yil VE ay olarak acikca belirtilmisse, ornegin "13 yas 3 aylik" ya da "13 yasinda, 3 aylik" gibi — sadece yil belirtilmisse yazma, mutlaka ay bilgisi de olmali; bu bilgiyi "saglik" kategorisine "Yaşı: 13 yaş 3 ay" seklinde yaz), devamsizlik/okula gitmeme durumu (notta acikca gun sayisi ya da somut bir devamsizlik durumu belirtilmisse, ornegin "bu donem 5 gun devamsizlik yapti" ya da "sik sik okula gelmiyor" — bu bilgiyi "okul" kategorisine yaz), AILE ICI BEKLENTI/KARAR DINAMIGI (notta ebeveyn ile ogrenci arasinda bir beklenti farki, ortak/celiskili bir karar surdurdugu, ogrencinin "annem/babam istiyor" gibi disaridan gelen bir motivasyon/baski kaynagi belirttigi ACIKCA goruluyorsa - ornek: "lise tercihinde annenin beklentisiyle kendi istegi ortustugu soylense de ilk tepkisi 'annem istiyor' oldu" - bunu "aile" kategorisine, gozlemi ozetleyen kisa bir cumleyle yaz, tahmin/yorum katmadan sadece notta ne anlatildiysa) - HER BIRINI ayri bir satirda 'kategori_key: kisa cumle' formatinda yaz. kategori_key SADECE su degerlerden biri olmali: aile, saglik, olaylar, sosyoekonomik, ilgi, okul. Boyle bir bilgi YOKSA sadece "Yok" yaz. ONEMLI: tahmin yurutme, yorum katma, sadece notta ACIKCA soylenmis somut bilgileri yaz - ozellikle saglik/aile gibi hassas konularda kesinlikle uydurma yapma.)
 
 Bundan sonra, YENI bir satirda, su formatta bir "Uyum Izleme" tespiti ekle:
 ---UYUM_IZLEME---
@@ -15788,7 +15788,27 @@ function SinifSunumuEkrani({ ogrenciler, denemeler, sinavTuru, kademe, netHarita
     );
   }
 
-  const subeOgrencileri = tumOgr.filter(o => o.className === seciliSube).sort((a,b)=>(a.studentName||"").localeCompare(b.studentName||"","tr"));
+  // Deneme ortalamasına göre en yüksekten en düşüğe sıralanıyor — hem
+  // grafikteki çizgi renkleri hem alttaki isim etiketleri AYNI diziden (index
+  // sırasına göre) renk aldığı için, sadece bu dizinin sırasını değiştirmek
+  // ikisini de otomatik senkron tutuyor. Hiç deneme verisi olmayan öğrenciler
+  // en sona düşer (ortalaması -1 kabul edilir), alfabetik sıralama bozulmaz
+  // (aynı ortalamaya sahip olanlar kendi aralarında isme göre sıralanır).
+  const dersler = aktifDersler(sinavTuru);
+  function ogrenciDenemeOrtalamasi(o) {
+    const d = pdrSozlukOku(denemeler, o.studentName, o.className, o.numara) || {};
+    const netler = Object.entries(d)
+      .filter(([k]) => k !== "7sinif")
+      .map(([, nets]) => nets?._topluNet !== undefined && nets._topluNet !== ""
+        ? parseFloat(nets._topluNet) || 0
+        : dersler.reduce((s,x)=>s+(parseFloat(nets?.[x.key])||0), 0));
+    return netler.length > 0 ? netler.reduce((a,b)=>a+b,0)/netler.length : -1;
+  }
+  const ortalamaHaritasi = new Map(tumOgr.filter(o => o.className === seciliSube).map(o => [o, ogrenciDenemeOrtalamasi(o)]));
+  const subeOgrencileri = tumOgr.filter(o => o.className === seciliSube).sort((a,b) => {
+    const fark = ortalamaHaritasi.get(b) - ortalamaHaritasi.get(a);
+    return fark !== 0 ? fark : (a.studentName||"").localeCompare(b.studentName||"","tr");
+  });
   const gorunenAdlar = mod === "tumSinif" ? subeOgrencileri.map(o=>o.studentName) : seciliOgrenciler;
 
   function ogrenciToggle(ad) {

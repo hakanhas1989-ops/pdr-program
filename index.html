@@ -15794,6 +15794,12 @@ function SinifSunumuEkrani({ ogrenciler, denemeler, sinavTuru, kademe, netHarita
   // ikisini de otomatik senkron tutuyor. Hiç deneme verisi olmayan öğrenciler
   // en sona düşer (ortalaması -1 kabul edilir), alfabetik sıralama bozulmaz
   // (aynı ortalamaya sahip olanlar kendi aralarında isme göre sıralanır).
+  // ÖNEMLİ DÜZELTME: ilk sürüm "7sinif" (geçmiş dönem/GDO) verisini tamamen
+  // dışlıyordu — ama grafikte G1-G9 noktaları da BU anahtarın altındaki
+  // "denemeler" alt nesnesinden geliyor (SunumGrafigi'nin kendi mantığıyla
+  // birebir aynı şekilde okunuyor). Sadece bu yılın D1,D2... verisi olan
+  // sınıflarda sorun yoktu ama çoğunlukla geçmiş dönem verisi girilmiş
+  // sınıflarda herkes "veri yok" (-1) sayılıp alfabetik sıraya düşüyordu.
   const dersler = aktifDersler(sinavTuru);
   function ogrenciDenemeOrtalamasi(o) {
     const d = pdrSozlukOku(denemeler, o.studentName, o.className, o.numara) || {};
@@ -15802,6 +15808,14 @@ function SinifSunumuEkrani({ ogrenciler, denemeler, sinavTuru, kademe, netHarita
       .map(([, nets]) => nets?._topluNet !== undefined && nets._topluNet !== ""
         ? parseFloat(nets._topluNet) || 0
         : dersler.reduce((s,x)=>s+(parseFloat(nets?.[x.key])||0), 0));
+    const yedi = d["7sinif"];
+    if (yedi) {
+      const gecmisNetler = Object.values(yedi.denemeler || {})
+        .map(v => parseFloat(v?.toplam_net) || 0)
+        .filter(v => v > 0);
+      if (gecmisNetler.length > 0) netler.push(...gecmisNetler);
+      else { const gdoHam = parseFloat(yedi.ortalama); if (!isNaN(gdoHam)) netler.push(gdoHam); }
+    }
     return netler.length > 0 ? netler.reduce((a,b)=>a+b,0)/netler.length : -1;
   }
   const ortalamaHaritasi = new Map(tumOgr.filter(o => o.className === seciliSube).map(o => [o, ogrenciDenemeOrtalamasi(o)]));

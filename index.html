@@ -15330,7 +15330,11 @@ function SunumGrafigi({ ogrenciler, denemeler, sinavTuru, gorunenAdlar }) {
           <g key={s.ad}>
             <path d={d} fill="none" stroke={s.renk} strokeWidth="4.4" strokeLinejoin="round" strokeLinecap="round" />
             {s.noktalar.map(p => (
-              <circle key={p.no} cx={nx(p.no)} cy={ny(p.toplam)} r="6" fill="#fff" stroke={s.renk} strokeWidth="3.2" />
+              <g key={p.no}>
+                <circle cx={nx(p.no)} cy={ny(p.toplam)} r="6" fill="#fff" stroke={s.renk} strokeWidth="3.2" />
+                <text x={nx(p.no)} y={ny(p.toplam) - 12} fontSize="13" fontWeight="800" fill={s.renk} textAnchor="middle"
+                  stroke="#fff" strokeWidth="3" paintOrder="stroke">{p.toplam}</text>
+              </g>
             ))}
           </g>
         );
@@ -15621,8 +15625,20 @@ function KurumRaporuModal({ ogrenciler, denemeler, records, sinavTuru, kademe, a
   }, [yilOgr, denemeler, dersler]);
   const denemeNolar = Object.keys(denemeSinifVerisi).sort((a,b) => Number(a) - Number(b));
 
-  // Kaynaştırma — okul geneli toplam sayı (KaynastirmaTablosu'ndaki AYNI mantık).
+  // Kaynaştırma — okul geneli toplam sayı (KaynastirmaTablosu'ndaki AYNI
+  // mantık), ayrıca her öğrencinin tanı(lar)ına göre kırılım. Bir öğrencinin
+  // birden fazla tanısı olabiliyor, her biri kendi sayacına ekleniyor.
   const kaynastirmaliSayi = yilOgr.filter(o => (o.kaynastirma||[]).length > 0).length;
+  const kaynastirmaTaniDagilimi = useMemo(() => {
+    const sayac = {};
+    yilOgr.forEach(o => {
+      (o.kaynastirma||[]).forEach(tani => {
+        const anahtar = (tani||"").trim() || "Belirtilmemiş";
+        sayac[anahtar] = (sayac[anahtar]||0) + 1;
+      });
+    });
+    return Object.entries(sayac).map(([tani, sayi]) => ({ tani, sayi })).sort((a,b) => b.sayi - a.sayi);
+  }, [yilOgr]);
 
   // Sınıf bazlı görüşme kapsamı — o sınıftan en az bir görüşme kaydı olan
   // FARKLI öğrenci sayısı / sınıftaki toplam öğrenci sayısı.
@@ -15723,6 +15739,29 @@ function KurumRaporuModal({ ogrenciler, denemeler, records, sinavTuru, kademe, a
             <div style={{ fontSize: 10, color: "#888", textTransform: "uppercase", letterSpacing: 0.5 }}>Toplam Öğrenci ({siniflar.length} Sınıf)</div>
           </div>
         </div>
+
+        {/* Kaynaştırma — tanı bazlı kırılım */}
+        {kaynastirmaTaniDagilimi.length > 0 && (
+          <div style={{ marginBottom: 18 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "#127C56", textTransform: "uppercase", marginBottom: 8 }}>Kaynaştırma — Tanı Dağılımı</div>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+              <thead>
+                <tr style={{ background: "#F2FAF6" }}>
+                  <th style={{ textAlign: "left", padding: "5px 8px", borderBottom: "1px solid #ddd" }}>Tanı</th>
+                  <th style={{ textAlign: "center", padding: "5px 8px", borderBottom: "1px solid #ddd" }}>Öğrenci Sayısı</th>
+                </tr>
+              </thead>
+              <tbody>
+                {kaynastirmaTaniDagilimi.map(t => (
+                  <tr key={t.tani}>
+                    <td style={{ padding: "5px 8px", borderBottom: "1px solid #eee" }}>{t.tani}</td>
+                    <td style={{ padding: "5px 8px", borderBottom: "1px solid #eee", textAlign: "center", fontWeight: 700 }}>{t.sayi}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {/* Sınıf bazlı görüşme kapsamı tablosu */}
         <div>
@@ -17667,11 +17706,13 @@ const SEMA_DALLARI = [
       { tab: "grup_calismalari", label: "👪 Grup Çalışmaları" },
       { tab: "kriz", label: "🚨 Kriz Müdahale" },
       { tab: "sosyometri", label: "🤝 Sosyometri" },
+      { tab: "sinif_sunumu", label: "📽️ Sınıf Sunumu" },
     ] },
   { key: "sistem", label: "⚙️ Sistem", renk: MUTED,
     aciklama: "Genel görünüm ve veri/ayar yönetimi — tüm sekmelerin verisini özetler ya da yapılandırır.",
     yapraklar: [
       { tab: "istatistik", label: "📊 İstatistik" },
+      { tab: "isci_raporu", label: "🤖 İşçi Raporu" },
       { tab: "ayarlar", label: "⚙️ Ayarlar" },
     ] },
 ];

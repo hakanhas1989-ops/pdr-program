@@ -11840,12 +11840,15 @@ function OgrenciYonetim({
   profiles2, setProfiles2,
   denemeler, setDenemeler,
   riskListesi, setRiskListesi,
-  kayitliListesi, mudahalePlan, aktifYil, onYilEkrani,
+  kayitliListesi, mudahalePlan, setMudahalePlan, aktifYil, onYilEkrani,
   hazirlikNotlari, setHazirlikNotlari,
   uyumIzleme, setUyumIzleme,
   ilerlemeNotlari, setIlerlemeNotlari,
-  onRaporAc, setAktifOgrenci, aktifOgrenci, setTab, onSinifGuncelle, onOgrenciSil, onSinifSil, sinifListesi, sinavTuru, sevkler, testKayitlari, kademe,
-  bireyiTanima, setBireyiTanima, bdtAnaliz, setBdtAnaliz, sinavKaygisi, setSinavKaygisi, konuHaritasiVerisi
+  onRaporAc, setAktifOgrenci, aktifOgrenci, setTab, onSinifGuncelle, onOgrenciSil, onSinifSil, sinifListesi, sinavTuru, sevkler, setSevkler, testKayitlari, setTestKayitlari, kademe,
+  bireyiTanima, setBireyiTanima, bdtAnaliz, setBdtAnaliz, sinavKaygisi, setSinavKaygisi, konuHaritasiVerisi, setKonuHaritasiVerisi,
+  sosyometri, setSosyometri,
+  hatirlatmalar, setHatirlatmalar, mudahaleOnerileri, setMudahaleOnerileri,
+  netHaritasiKayitlari, setNetHaritasiKayitlari, oogDegerlendirmeler, setOogDegerlendirmeler, profNotlari, setProfNotlari
 }) {
   const dersler = aktifDersler(sinavTuru);
 
@@ -18631,17 +18634,28 @@ export default function App() {
   // BİLE görüşülmemiş olanları bulur — takipListesi'nden farkı, o sadece
   // "daha önce görüşülmüş ama üzerinden vakit geçmiş" olanları kapsıyordu.
   // Amaç: yıl sonuna kadar hiç konuşulmamış öğrenciyi kimse atlamasın.
+  // ÖNEMLİ DÜZELTME: eskiden burada görüşme kaydının "Ad || Sınıf || Numara"
+  // metnini BİREBİR AYNI olması gerekiyordu (basit Set eşleşmesi) — sınıf
+  // değiştiren bir öğrencinin eski notundaki sınıf farklıysa, ya da numara
+  // notta boş/farklı girildiyse, gerçekten görüşülmüş olsa bile "hiç
+  // görüşülmemiş" görünüyordu. Artık uygulamanın her yerinde kullanılan
+  // pdrAyniOgrenci (sınıf+numara öncelikli, gerekirse sadece isimle) esnek
+  // eşleştirmesi kullanılıyor.
   const kapsamYilOgrencileri = ogrenciler.filter(o => (!o.yil || o.yil === aktifYil) && pdrKademeUyumlu(o.className, kademe));
-  const kapsamGorusulenAnahtarlar = new Set(records.map(r => pdrOgrAnahtar(r.studentName, r.className, r.numara)));
+  const kapsamGorusulenSet = new Set(
+    kapsamYilOgrencileri
+      .filter(o => records.some(r => pdrAyniOgrenci(r.studentName, r.className, o.studentName, o.className, r.numara, o.numara)))
+      .map(o => pdrOgrAnahtar(o.studentName, o.className, o.numara))
+  );
   const kapsamHicGorusulmemis = kapsamYilOgrencileri
-    .filter(o => !kapsamGorusulenAnahtarlar.has(pdrOgrAnahtar(o.studentName, o.className, o.numara)))
+    .filter(o => !kapsamGorusulenSet.has(pdrOgrAnahtar(o.studentName, o.className, o.numara)))
     .sort((a,b) => (a.className||"").localeCompare(b.className||"","tr") || a.studentName.localeCompare(b.studentName,"tr"));
   const kapsamSinifOzeti = {};
   kapsamYilOgrencileri.forEach(o => {
     const sinif = o.className || "Belirtilmemiş";
     if (!kapsamSinifOzeti[sinif]) kapsamSinifOzeti[sinif] = { toplam: 0, gorusulen: 0 };
     kapsamSinifOzeti[sinif].toplam++;
-    if (kapsamGorusulenAnahtarlar.has(pdrOgrAnahtar(o.studentName, o.className, o.numara))) kapsamSinifOzeti[sinif].gorusulen++;
+    if (kapsamGorusulenSet.has(pdrOgrAnahtar(o.studentName, o.className, o.numara))) kapsamSinifOzeti[sinif].gorusulen++;
   });
   const kapsamSinifListesi = Object.entries(kapsamSinifOzeti).map(([sinif, v]) => ({ sinif, ...v })).sort((a,b)=>a.sinif.localeCompare(b.sinif,"tr"));
 
@@ -19612,12 +19626,15 @@ function pdrBaslangicSekmesi() {
             setRiskListesi={setRiskListesi}
             kayitliListesi={kayitliListesi}
             mudahalePlan={mudahalePlan}
+            setMudahalePlan={setMudahalePlan}
             aktifYil={aktifYil}
             aktifOgrenci={aktifOgrenci}
             sinifListesi={sinifListesi}
             sinavTuru={sinavTuru}
             sevkler={sevkler}
+            setSevkler={setSevkler}
             testKayitlari={testKayitlari}
+            setTestKayitlari={setTestKayitlari}
             kademe={kademe}
             onYilEkrani={() => setYilEkrani(true)}
             hazirlikNotlari={hazirlikNotlari}
@@ -19633,6 +19650,19 @@ function pdrBaslangicSekmesi() {
             sinavKaygisi={sinavKaygisi}
             setSinavKaygisi={setSinavKaygisi}
             konuHaritasiVerisi={konuHaritasiVerisi}
+            setKonuHaritasiVerisi={setKonuHaritasiVerisi}
+            sosyometri={sosyometri}
+            setSosyometri={setSosyometri}
+            hatirlatmalar={hatirlatmalar}
+            setHatirlatmalar={setHatirlatmalar}
+            mudahaleOnerileri={mudahaleOnerileri}
+            setMudahaleOnerileri={setMudahaleOnerileri}
+            netHaritasiKayitlari={netHaritasiKayitlari}
+            setNetHaritasiKayitlari={setNetHaritasiKayitlari}
+            oogDegerlendirmeler={oogDegerlendirmeler}
+            setOogDegerlendirmeler={setOogDegerlendirmeler}
+            profNotlari={profNotlari}
+            setProfNotlari={setProfNotlari}
             onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler, hazirlikNotlari, ilerlemeNotlari, sevkler, mudahaleOnerileri, uyumIzleme }))}
             onSinifGuncelle={async (eskiAd, eskiSinif, eskiNumara, yeniAd, yeniSinif) => {
               const ayniMi = (ad, sinif, no) => pdrAyniOgrenci(eskiAd, eskiSinif, ad, sinif, eskiNumara, no);
@@ -19721,6 +19751,9 @@ function pdrBaslangicSekmesi() {
 
               const yeniSinavKaygisi = pdrSozlukTasi(sinavKaygisi);
               setSinavKaygisi(yeniSinavKaygisi); await saveSinavKaygisi(yeniSinavKaygisi);
+
+              const yeniKonuHaritasi = pdrSozlukTasi(konuHaritasiVerisi);
+              setKonuHaritasiVerisi(yeniKonuHaritasi); await saveKonuHaritasi(yeniKonuHaritasi);
 
               // Sosyometri özel yapı: secimler hem anahtar (kimin seçimleri)
               // hem de değer dizisi (kimleri seçti) olarak öğrenci adı

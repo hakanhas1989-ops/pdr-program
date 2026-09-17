@@ -15600,10 +15600,88 @@ function KonuTamamlamaGorunumu({ ogrenciler, konuHaritasiVerisi, gorunenAdlar, k
 // bazlı toplu istatistikler: deneme deneme sınıf ortalaması karşılaştırması
 // (grafik), okul geneli kaynaştırma öğrenci sayısı, sınıf bazlı görüşme
 // kapsamı (kaç öğrenciyle en az bir görüşme yapılmış).
-function KurumRaporuModal({ ogrenciler, denemeler, records, sinavTuru, kademe, aktifYil, onKapat }) {
+function KurumRaporuModal({ ogrenciler, denemeler, records, sinavTuru, kademe, aktifYil, riskListesi, sosyometri, onKapat }) {
   const dersler = aktifDersler(sinavTuru);
   const yilOgr = (ogrenciler||[]).filter(o => !o.yil || o.yil === aktifYil);
   const siniflar = [...new Set(yilOgr.map(o => o.className).filter(Boolean))].sort();
+
+  // Devamsızlık özeti — her öğrencinin devamsizlikGecmisi dizisindeki EN SON
+  // kaydı (kümülatif gün sayısı), sınıf bazlı ortalanır.
+  const devamsizlikOzeti = useMemo(() => {
+    const veri = {};
+    yilOgr.forEach(o => {
+      const gecmis = o.devamsizlikGecmisi || [];
+      if (gecmis.length === 0) return;
+      const gun = parseFloat(gecmis[gecmis.length - 1]?.gun) || 0;
+      if (!veri[o.className]) veri[o.className] = { toplamGun: 0, sayi: 0 };
+      veri[o.className].toplamGun += gun;
+      veri[o.className].sayi += 1;
+    });
+    return Object.entries(veri).map(([sinif, v]) => ({ sinif, ortalama: v.sayi > 0 ? v.toplamGun / v.sayi : 0, sayi: v.sayi })).sort((a,b)=>a.sinif.localeCompare(b.sinif,"tr"));
+  }, [yilOgr]);
+
+  // Risk seviyesi dağılımı — sadece AÇIK (kapandi:false) ve bu yılki
+  // öğrencilerden birine ait risk kayıtları, öncelik (oncelik) bazında.
+  const riskSeviyeDagilimi = useMemo(() => {
+    const sayac = { "Yüksek": 0, "Orta": 0, "Düşük": 0 };
+    (riskListesi||[]).forEach(r => {
+      if (r.kapandi) return;
+      const aitMi = yilOgr.some(o => pdrAyniOgrenci(o.studentName, o.className, r.studentName, r.className, o.numara, r.numara));
+      if (!aitMi) return;
+      const seviye = r.oncelik || "Orta";
+      sayac[seviye] = (sayac[seviye]||0) + 1;
+    });
+    return sayac;
+  }, [riskListesi, yilOgr]);
+  const riskToplam = riskSeviyeDagilimi["Yüksek"] + riskSeviyeDagilimi["Orta"] + riskSeviyeDagilimi["Düşük"];
+
+  // Görüşme konu dağılımı — records'daki "topic" alanı bazında, en çoktan aza.
+  const konuDagilimi = useMemo(() => {
+    const sayac = {};
+    (records||[]).forEach(r => {
+      const konu = (r.topic||"").trim() || "Belirtilmemiş";
+      sayac[konu] = (sayac[konu]||0) + 1;
+    });
+    return Object.entries(sayac).map(([konu, sayi]) => ({ konu, sayi })).sort((a,b)=>b.sayi-a.sayi);
+  }, [records]);
+
+  // Sosyometri özeti — her sınıfın EN SON anketinde (varsa) hiç seçilmeyen
+  // öğrenci sayısı.
+  const sosyometriOzeti = useMemo(() => {
+    return siniflar.map(sinif => {
+      const turlar = (sosyometri||[]).filter(k => k.sinif === sinif).sort((a,b) => pdrTarihMs(b.tarih) - pdrTarihMs(a.tarih));
+      if (turlar.length === 0) return null;
+      const sonTur = turlar[0];
+      const secimler = sonTur.secimler || {};
+      const katilimcilar = Object.keys(secimler);
+      if (katilimcilar.length === 0) return null;
+      const secilenSet = new Set();
+      Object.values(secimler).forEach(liste => (liste||[]).forEach(ad => secilenSet.add(ad)));
+      const hicSecilmeyen = katilimcilar.filter(ad => !secilenSet.has(ad));
+      return { sinif, katilimci: katilimcilar.length, hicSecilmeyen: hicSecilmeyen.length, tarih: sonTur.tarih };
+    }).filter(Boolean);
+  }, [siniflar, sosyometri]);
+
+  // Aylık görüşme yoğunluğu — records'daki "date" (GG.AA.YYYY) alanından
+  // ay/yıl çıkarılıp gruplanır.
+  const AYLAR = ["","Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
+  const aylikYogunluk = useMemo(() => {
+    const sayac = {};
+    (records||[]).forEach(r => {
+      const parcalar = (r.date||"").split(".");
+      if (parcalar.length !== 3) return;
+      const ay = parseInt(parcalar[1], 10);
+      const yil = parcalar[2];
+      if (!ay || !yil) return;
+      const anahtar = `${yil}-${String(ay).padStart(2,"0")}`;
+      sayac[anahtar] = (sayac[anahtar]||0) + 1;
+    });
+    return Object.entries(sayac).map(([anahtar, sayi]) => {
+      const [yil, ay] = anahtar.split("-");
+      return { anahtar, etiket: `${AYLAR[parseInt(ay,10)]} ${yil}`, sayi };
+    }).sort((a,b)=>a.anahtar.localeCompare(b.anahtar));
+  }, [records]);
+  const aylikMax = Math.max(1, ...aylikYogunluk.map(a=>a.sayi));
 
   // Deneme deneme, sınıf bazlı ortalama net — "7sinif" (geçmiş dönem) hariç,
   // sadece BU yıl tek tek girilen denemeler (D1, D2...).
@@ -15789,12 +15867,124 @@ function KurumRaporuModal({ ogrenciler, denemeler, records, sinavTuru, kademe, a
             </tbody>
           </table>
         </div>
+
+        {/* Risk seviyesi dağılımı — sadece açık risk kayıtları */}
+        {riskToplam > 0 && (
+          <div style={{ marginTop: 18 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "#127C56", textTransform: "uppercase", marginBottom: 8 }}>Aktif Risk Seviyesi Dağılımı ({riskToplam})</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+              <div style={{ background: "#FDECEA", borderRadius: 8, padding: 10, textAlign: "center" }}>
+                <div style={{ fontSize: 20, fontWeight: 900, color: "#C0392B" }}>{riskSeviyeDagilimi["Yüksek"]}</div>
+                <div style={{ fontSize: 9.5, color: "#C0392B" }}>Yüksek Öncelik</div>
+              </div>
+              <div style={{ background: "#FFF8E7", borderRadius: 8, padding: 10, textAlign: "center" }}>
+                <div style={{ fontSize: 20, fontWeight: 900, color: "#B07D1A" }}>{riskSeviyeDagilimi["Orta"]}</div>
+                <div style={{ fontSize: 9.5, color: "#B07D1A" }}>Orta Öncelik</div>
+              </div>
+              <div style={{ background: "#E6F5EE", borderRadius: 8, padding: 10, textAlign: "center" }}>
+                <div style={{ fontSize: 20, fontWeight: 900, color: "#127C56" }}>{riskSeviyeDagilimi["Düşük"]}</div>
+                <div style={{ fontSize: 9.5, color: "#127C56" }}>Düşük Öncelik</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Devamsızlık özeti — sınıf bazlı ortalama */}
+        {devamsizlikOzeti.length > 0 && (
+          <div style={{ marginTop: 18 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "#127C56", textTransform: "uppercase", marginBottom: 8 }}>Devamsızlık Özeti — Sınıf Bazlı Ortalama Gün</div>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+              <thead>
+                <tr style={{ background: "#F2FAF6" }}>
+                  <th style={{ textAlign: "left", padding: "5px 8px", borderBottom: "1px solid #ddd" }}>Sınıf</th>
+                  <th style={{ textAlign: "center", padding: "5px 8px", borderBottom: "1px solid #ddd" }}>Kaydı Olan Öğrenci</th>
+                  <th style={{ textAlign: "center", padding: "5px 8px", borderBottom: "1px solid #ddd" }}>Ortalama Gün</th>
+                </tr>
+              </thead>
+              <tbody>
+                {devamsizlikOzeti.map(d => (
+                  <tr key={d.sinif}>
+                    <td style={{ padding: "5px 8px", borderBottom: "1px solid #eee", fontWeight: 700 }}>{d.sinif}</td>
+                    <td style={{ padding: "5px 8px", borderBottom: "1px solid #eee", textAlign: "center" }}>{d.sayi}</td>
+                    <td style={{ padding: "5px 8px", borderBottom: "1px solid #eee", textAlign: "center", fontWeight: 700, color: d.ortalama >= 10 ? "#C0392B" : d.ortalama >= 5 ? "#B07D1A" : "#127C56" }}>{d.ortalama.toFixed(1)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Görüşme konu dağılımı */}
+        {konuDagilimi.length > 0 && (
+          <div style={{ marginTop: 18 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "#127C56", textTransform: "uppercase", marginBottom: 8 }}>Görüşme Konu Dağılımı</div>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+              <thead>
+                <tr style={{ background: "#F2FAF6" }}>
+                  <th style={{ textAlign: "left", padding: "5px 8px", borderBottom: "1px solid #ddd" }}>Konu</th>
+                  <th style={{ textAlign: "center", padding: "5px 8px", borderBottom: "1px solid #ddd" }}>Görüşme Sayısı</th>
+                </tr>
+              </thead>
+              <tbody>
+                {konuDagilimi.map(k => (
+                  <tr key={k.konu}>
+                    <td style={{ padding: "5px 8px", borderBottom: "1px solid #eee" }}>{k.konu}</td>
+                    <td style={{ padding: "5px 8px", borderBottom: "1px solid #eee", textAlign: "center", fontWeight: 700 }}>{k.sayi}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Sosyometri özeti — her sınıfın en son anketinde hiç seçilmeyen öğrenci sayısı */}
+        {sosyometriOzeti.length > 0 && (
+          <div style={{ marginTop: 18 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "#127C56", textTransform: "uppercase", marginBottom: 8 }}>Sosyometri Özeti — Hiç Seçilmeyen Öğrenci</div>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+              <thead>
+                <tr style={{ background: "#F2FAF6" }}>
+                  <th style={{ textAlign: "left", padding: "5px 8px", borderBottom: "1px solid #ddd" }}>Sınıf</th>
+                  <th style={{ textAlign: "center", padding: "5px 8px", borderBottom: "1px solid #ddd" }}>Son Anket</th>
+                  <th style={{ textAlign: "center", padding: "5px 8px", borderBottom: "1px solid #ddd" }}>Katılımcı</th>
+                  <th style={{ textAlign: "center", padding: "5px 8px", borderBottom: "1px solid #ddd" }}>Hiç Seçilmeyen</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sosyometriOzeti.map(s => (
+                  <tr key={s.sinif}>
+                    <td style={{ padding: "5px 8px", borderBottom: "1px solid #eee", fontWeight: 700 }}>{s.sinif}</td>
+                    <td style={{ padding: "5px 8px", borderBottom: "1px solid #eee", textAlign: "center" }}>{s.tarih}</td>
+                    <td style={{ padding: "5px 8px", borderBottom: "1px solid #eee", textAlign: "center" }}>{s.katilimci}</td>
+                    <td style={{ padding: "5px 8px", borderBottom: "1px solid #eee", textAlign: "center", fontWeight: 700, color: s.hicSecilmeyen > 0 ? "#C0392B" : "#127C56" }}>{s.hicSecilmeyen}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Aylık görüşme yoğunluğu — basit çubuk grafik */}
+        {aylikYogunluk.length > 0 && (
+          <div style={{ marginTop: 18 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "#127C56", textTransform: "uppercase", marginBottom: 8 }}>Aylık Görüşme Yoğunluğu</div>
+            <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 90, border: "1px solid #ddd", borderRadius: 8, padding: "8px 10px 4px" }}>
+              {aylikYogunluk.map(a => (
+                <div key={a.anahtar} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", height: "100%" }}>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: "#127C56", marginBottom: 2 }}>{a.sayi}</div>
+                  <div style={{ width: "70%", height: `${Math.max(4, (a.sayi/aylikMax)*60)}px`, background: "#127C56", borderRadius: "3px 3px 0 0" }} />
+                  <div style={{ fontSize: 7.5, color: "#888", marginTop: 3, textAlign: "center" }}>{a.etiket}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function SinifSunumuEkrani({ ogrenciler, denemeler, sinavTuru, kademe, netHaritasiKayitlari, konuHaritasiVerisi, records, aktifYil }) {
+function SinifSunumuEkrani({ ogrenciler, denemeler, sinavTuru, kademe, netHaritasiKayitlari, konuHaritasiVerisi, records, aktifYil, riskListesi, sosyometri }) {
   const [seciliDuzey, setSeciliDuzey] = useState(null);
   const [seciliSube, setSeciliSube] = useState(null);
   const [mod, setMod] = useState("tumSinif"); // "tumSinif" | "secili"
@@ -15809,7 +15999,7 @@ function SinifSunumuEkrani({ ogrenciler, denemeler, sinavTuru, kademe, netHarita
     .sort((a,b)=>Number(a)-Number(b));
 
   if (kurumRaporuAcik) {
-    return <KurumRaporuModal ogrenciler={tumOgr} denemeler={denemeler} records={records} sinavTuru={sinavTuru} kademe={kademe} aktifYil={aktifYil} onKapat={()=>setKurumRaporuAcik(false)} />;
+    return <KurumRaporuModal ogrenciler={tumOgr} denemeler={denemeler} records={records} sinavTuru={sinavTuru} kademe={kademe} aktifYil={aktifYil} riskListesi={riskListesi} sosyometri={sosyometri} onKapat={()=>setKurumRaporuAcik(false)} />;
   }
 
   if (!seciliDuzey) {
@@ -19347,6 +19537,8 @@ function pdrBaslangicSekmesi() {
             konuHaritasiVerisi={konuHaritasiVerisi}
             records={records}
             aktifYil={aktifYil}
+            riskListesi={riskListesi}
+            sosyometri={sosyometri}
           />
         )}
 

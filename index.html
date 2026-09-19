@@ -2235,54 +2235,86 @@ function pasperfGenelYorumla({ planlama, dikkat, eszamanli, ardisik }, kademeAya
 const PASPERF_MUDAHALE_PROGRAMLARI = {
   dikkat: {
     ad: "Dikkat ve Öz-Düzenleme Destek Çalışması",
+    amac: "Öğrencinin dikkatini sürdürme, dikkat dağıtıcılarla baş etme ve dürtülerini denetleme becerilerini haftalık, oyun/etkinlik temelli çalışmalarla geliştirerek sınıf içi ve ödev sürecindeki odaklanma güçlüklerini azaltmak.",
+    genelKazanimlar: [
+      "Dikkatinin dağıldığı anları fark eder ve bunu sözel olarak ifade eder.",
+      "Kesintisiz dikkat gerektiren bir görevi belirlenen sürede tamamlar.",
+      "Dikkat dağıtıcılarla karşılaştığında öğrendiği bir stratejiyi kullanır.",
+      "Çok adımlı bir görevi kontrol listesi kullanarak organize eder.",
+      "Kendi dikkat stratejilerini tanımlayan bir özet oluşturur.",
+    ],
     oturumlar: [
-      { baslik: "Tanışma ve Dikkat Farkındalığı", hedef: "Dikkatin ne olduğunu, ne zaman dağıldığını fark etmeyi sağlamak.", etkinlikler: ["Öğrenciyle 'dikkatim nereye gidiyor' sohbeti", "Kısa bir bulmaca/fark bulma etkinliğiyle ısınma", "Oturum boyunca dikkatin dağıldığı anları birlikte not etme"], sureDk: 30 },
-      { baslik: "Sürdürülebilir Dikkat Oyunları", hedef: "Kesintisiz dikkat süresini kademeli olarak artırmak.", etkinlikler: ["Fark bulma / labirent kartları (süre tutarak)", "Basit bir görevi zamanlayıcıyla (3-5 dk) kesintisiz tamamlama", "Süreyi bir önceki oturumla karşılaştırma"], sureDk: 30 },
-      { baslik: "Dikkat Dağıtıcılarla Baş Etme", hedef: "Ortamdaki dikkat dağıtıcıları fark edip görmezden gelme stratejisi kazandırmak.", etkinlikler: ["Hafif sesli/görsel dikkat dağıtıcı varken görev yapma denemesi", "'Fark ettim, geri dönüyorum' cümlesini alıştırma", "Kendine hatırlatma kartı hazırlama"], sureDk: 30 },
-      { baslik: "Görsel Tarama ve Organizasyon", hedef: "Görsel taramada sistematik bir strateji (soldan sağa, satır satır) kazandırmak.", etkinlikler: ["Harf/sayı avı çalışma kağıdı", "Bulmaca içinde belirli bir şekli sistematik tarayarak bulma", "Stratejisini sözel olarak anlatma"], sureDk: 30 },
-      { baslik: "Zamanlayıcı ile Odaklanma Pratiği", hedef: "Kısa, ölçülebilir çalışma bloklarıyla odaklanma alışkanlığı kazandırmak.", etkinlikler: ["10 dk odak + 2 dk mola bloklarını deneme (mini-Pomodoro)", "Blok sonunda kendini değerlendirme (1-5 puan)", "Ev/okul ödevine uyarlama önerisi"], sureDk: 30 },
-      { baslik: "Dürtü Kontrolü: Dur-Düşün-Uygula", hedef: "Tepki vermeden önce durup düşünme alışkanlığı kazandırmak.", etkinlikler: ["'Dur-Düşün-Uygula' kartlarıyla rol oyunu", "Hızlı tepki gerektiren basit bir oyunda bilinçli yavaşlama denemesi", "Günlük hayattan bir örnek üzerinde uygulama"], sureDk: 30 },
-      { baslik: "Görev/Ödev Organizasyonu", hedef: "Çok adımlı bir görevi listeleyip sırayla tamamlama alışkanlığı kazandırmak.", etkinlikler: ["Bir ödevi/görevi adımlara bölme", "Kontrol listesi (checklist) hazırlama ve kullanma", "Tamamlanan adımı işaretlemenin verdiği tatmini fark etme"], sureDk: 30 },
-      { baslik: "Genel Değerlendirme ve Geri Bildirim", hedef: "Kazanılan stratejileri pekiştirmek, öğretmen/veliyle paylaşılacak özet çıkarmak.", etkinlikler: ["Öğrenciyle hangi stratejilerin işine yaradığını gözden geçirme", "Kısa bir 'benim dikkat stratejilerim' kartı hazırlama", "Öğretmen/veli için özet not"], sureDk: 30 },
+      { baslik: "Tanışma ve Dikkat Farkındalığı", hedef: "Dikkatin ne olduğunu, ne zaman dağıldığını fark etmeyi sağlamak.", kazanimlar: ["Öğrenci dikkatinin dağıldığı en az bir anı kendi sözcükleriyle tanımlar.", "Öğrenci kısa bir fark bulma etkinliğini oturumun sonuna kadar tamamlar."], etkinlikler: ["Öğrenciyle 'dikkatim nereye gidiyor' sohbeti", "Kısa bir bulmaca/fark bulma etkinliğiyle ısınma", "Oturum boyunca dikkatin dağıldığı anları birlikte not etme"], sureDk: 30 },
+      { baslik: "Sürdürülebilir Dikkat Oyunları", hedef: "Kesintisiz dikkat süresini kademeli olarak artırmak.", kazanimlar: ["Öğrenci zamanlayıcılı bir görevi kesintisiz tamamlar.", "Öğrenci kendi süresini bir önceki denemeyle karşılaştırıp farkı ifade eder."], etkinlikler: ["Fark bulma / labirent kartları (süre tutarak)", "Basit bir görevi zamanlayıcıyla (3-5 dk) kesintisiz tamamlama", "Süreyi bir önceki oturumla karşılaştırma"], sureDk: 30 },
+      { baslik: "Dikkat Dağıtıcılarla Baş Etme", hedef: "Ortamdaki dikkat dağıtıcıları fark edip görmezden gelme stratejisi kazandırmak.", kazanimlar: ["Öğrenci dikkat dağıtıcı bir uyaran varken görevine geri döner.", "Öğrenci 'fark ettim, geri dönüyorum' cümlesini bağımsız olarak kullanır."], etkinlikler: ["Hafif sesli/görsel dikkat dağıtıcı varken görev yapma denemesi", "'Fark ettim, geri dönüyorum' cümlesini alıştırma", "Kendine hatırlatma kartı hazırlama"], sureDk: 30 },
+      { baslik: "Görsel Tarama ve Organizasyon", hedef: "Görsel taramada sistematik bir strateji (soldan sağa, satır satır) kazandırmak.", kazanimlar: ["Öğrenci soldan sağa/satır satır tarama stratejisini uygular.", "Öğrenci kullandığı stratejiyi sözel olarak açıklar."], etkinlikler: ["Harf/sayı avı çalışma kağıdı", "Bulmaca içinde belirli bir şekli sistematik tarayarak bulma", "Stratejisini sözel olarak anlatma"], sureDk: 30 },
+      { baslik: "Zamanlayıcı ile Odaklanma Pratiği", hedef: "Kısa, ölçülebilir çalışma bloklarıyla odaklanma alışkanlığı kazandırmak.", kazanimlar: ["Öğrenci en az bir odak+mola bloğunu tamamlar.", "Öğrenci kendi odaklanma düzeyini 1-5 arası puanlar."], etkinlikler: ["10 dk odak + 2 dk mola bloklarını deneme (mini-Pomodoro)", "Blok sonunda kendini değerlendirme (1-5 puan)", "Ev/okul ödevine uyarlama önerisi"], sureDk: 30 },
+      { baslik: "Dürtü Kontrolü: Dur-Düşün-Uygula", hedef: "Tepki vermeden önce durup düşünme alışkanlığı kazandırmak.", kazanimlar: ["Öğrenci 'Dur-Düşün-Uygula' adımlarını bir rol oyununda sırasıyla uygular.", "Öğrenci günlük hayattan dürtüsel bir tepki örneğini bu adımlarla yeniden kurgular."], etkinlikler: ["'Dur-Düşün-Uygula' kartlarıyla rol oyunu", "Hızlı tepki gerektiren basit bir oyunda bilinçli yavaşlama denemesi", "Günlük hayattan bir örnek üzerinde uygulama"], sureDk: 30 },
+      { baslik: "Görev/Ödev Organizasyonu", hedef: "Çok adımlı bir görevi listeleyip sırayla tamamlama alışkanlığı kazandırmak.", kazanimlar: ["Öğrenci bir görevi adımlara ayırıp kontrol listesi oluşturur.", "Öğrenci tamamladığı adımları işaretleyerek görevi sonlandırır."], etkinlikler: ["Bir ödevi/görevi adımlara bölme", "Kontrol listesi (checklist) hazırlama ve kullanma", "Tamamlanan adımı işaretlemenin verdiği tatmini fark etme"], sureDk: 30 },
+      { baslik: "Genel Değerlendirme ve Geri Bildirim", hedef: "Kazanılan stratejileri pekiştirmek, öğretmen/veliyle paylaşılacak özet çıkarmak.", kazanimlar: ["Öğrenci kendisine en çok yardımcı olan 2-3 stratejiyi listeler.", "Öğretmen/veli için paylaşılabilir bir özet not oluşturulur."], etkinlikler: ["Öğrenciyle hangi stratejilerin işine yaradığını gözden geçirme", "Kısa bir 'benim dikkat stratejilerim' kartı hazırlama", "Öğretmen/veli için özet not"], sureDk: 30 },
     ],
   },
   planlama: {
     ad: "Planlama Becerilerini Geliştirme Çalışması",
+    amac: "Öğrencinin bir görevi adımlara bölme, sıralama, süre tahmini yapma ve hata durumunda stratejisini değiştirme becerilerini geliştirerek gerçek okul görevlerini bağımsız planlayabilmesini sağlamak.",
+    genelKazanimlar: [
+      "Bir günlük işi/ödevi mantıklı adımlara böler.",
+      "Adımları doğru sırada uygular ve hatalı sıralamayı düzeltir.",
+      "Küçük, ölçülebilir bir hedef için gerçekçi bir plan hazırlar.",
+      "Bir görev için gereken süreyi tahmin eder ve gerçek süreyle karşılaştırır.",
+      "Planı işe yaramadığında alternatif bir strateji dener.",
+    ],
     oturumlar: [
-      { baslik: "Tanışma ve Plan Kavramı", hedef: "Planlamanın ne işe yaradığını somut bir örnekle kavratmak.", etkinlikler: ["Basit bir günlük işi (örn. sabah hazırlığı) adımlara bölme", "'Plansız yapsaydık ne olurdu' sohbeti", "Isınma amaçlı sıralama oyunu"], sureDk: 30 },
-      { baslik: "Sıralama ve Sıra Takibi", hedef: "Bir dizi adımı doğru sırada takip edebilme becerisini geliştirmek.", etkinlikler: ["Karışık sıradaki resim/kartları doğru sıraya dizme", "Bir tarifi/yönergeyi adım adım uygulama", "Hatalı sıralamayı birlikte düzeltme"], sureDk: 30 },
-      { baslik: "Hedef Belirleme", hedef: "Küçük, ölçülebilir bir hedef koyup buna göre adım planlamayı öğretmek.", etkinlikler: ["Öğrenciyle birlikte 1 haftalık küçük bir hedef belirleme", "Hedefe ulaşmak için 3 adım yazma", "Adımların gerçekçiliğini birlikte kontrol etme"], sureDk: 30 },
-      { baslik: "Bağlantı Kurma / Yol Bulma Çalışmaları", hedef: "Görsel-uzamsal planlama becerisini (sırayla bağlantı kurma, en kısa yol) geliştirmek.", etkinlikler: ["Noktaları sırayla birleştirme / labirent çalışması (süre tutarak)", "Bir sonraki adımı tahmin etmeyi sesli düşünerek anlatma", "Süre ve hata sayısını bir önceki denemeyle karşılaştırma"], sureDk: 30 },
-      { baslik: "Zaman Yönetimi", hedef: "Bir görev için gereken süreyi tahmin edip planlamayı öğretmek.", etkinlikler: ["Bir görevin ne kadar süreceğini tahmin etme, sonra gerçek süreyle karşılaştırma", "Basit bir haftalık çalışma çizelgesi taslağı hazırlama", "Zamanlayıcı ile küçük bir görevi planlanan sürede tamamlama"], sureDk: 30 },
-      { baslik: "Hata Fark Etme ve Strateji Değiştirme", hedef: "Planı uygularken hatayı fark edip stratejiyi değiştirebilmeyi geliştirmek.", etkinlikler: ["Kasıtlı olarak zorlaştırılmış bir bulmaca/görevde takılma anını konuşma", "'Bu işe yaramadı, ne deneyebilirim' sorusunu alıştırma", "Alternatif bir strateji deneyip sonucu karşılaştırma"], sureDk: 30 },
-      { baslik: "Gerçek Bir Ödevi Planlama", hedef: "Öğrendiği planlama becerisini gerçek bir okul görevine uygulamak.", etkinlikler: ["Yaklaşan bir ödevi/projeyi birlikte adımlara bölme", "Her adıma yaklaşık bir tarih/süre koyma", "Planı yazılı olarak öğrenciyle birlikte oluşturma"], sureDk: 30 },
-      { baslik: "Genel Değerlendirme ve Geri Bildirim", hedef: "Kazanılan planlama stratejilerini pekiştirmek ve özetlemek.", etkinlikler: ["Hangi stratejilerin işe yaradığını gözden geçirme", "'Benim plan yapma adımlarım' kartı hazırlama", "Öğretmen/veli için özet not"], sureDk: 30 },
+      { baslik: "Tanışma ve Plan Kavramı", hedef: "Planlamanın ne işe yaradığını somut bir örnekle kavratmak.", kazanimlar: ["Öğrenci günlük bir işi en az 3 adıma böler.", "Öğrenci planlı ve plansız yapmanın farkını bir örnekle açıklar."], etkinlikler: ["Basit bir günlük işi (örn. sabah hazırlığı) adımlara bölme", "'Plansız yapsaydık ne olurdu' sohbeti", "Isınma amaçlı sıralama oyunu"], sureDk: 30 },
+      { baslik: "Sıralama ve Sıra Takibi", hedef: "Bir dizi adımı doğru sırada takip edebilme becerisini geliştirmek.", kazanimlar: ["Öğrenci karışık sıradaki kartları/resimleri doğru sıraya dizer.", "Öğrenci hatalı bir sıralamayı fark edip düzeltir."], etkinlikler: ["Karışık sıradaki resim/kartları doğru sıraya dizme", "Bir tarifi/yönergeyi adım adım uygulama", "Hatalı sıralamayı birlikte düzeltme"], sureDk: 30 },
+      { baslik: "Hedef Belirleme", hedef: "Küçük, ölçülebilir bir hedef koyup buna göre adım planlamayı öğretmek.", kazanimlar: ["Öğrenci 1 haftalık ölçülebilir bir hedef belirler.", "Öğrenci hedefe ulaşmak için 3 somut adım yazar."], etkinlikler: ["Öğrenciyle birlikte 1 haftalık küçük bir hedef belirleme", "Hedefe ulaşmak için 3 adım yazma", "Adımların gerçekçiliğini birlikte kontrol etme"], sureDk: 30 },
+      { baslik: "Bağlantı Kurma / Yol Bulma Çalışmaları", hedef: "Görsel-uzamsal planlama becerisini (sırayla bağlantı kurma, en kısa yol) geliştirmek.", kazanimlar: ["Öğrenci bir labirent/bağlantı görevini süresini iyileştirerek tamamlar.", "Öğrenci bir sonraki adımını sesli düşünerek tahmin eder."], etkinlikler: ["Noktaları sırayla birleştirme / labirent çalışması (süre tutarak)", "Bir sonraki adımı tahmin etmeyi sesli düşünerek anlatma", "Süre ve hata sayısını bir önceki denemeyle karşılaştırma"], sureDk: 30 },
+      { baslik: "Zaman Yönetimi", hedef: "Bir görev için gereken süreyi tahmin edip planlamayı öğretmek.", kazanimlar: ["Öğrenci bir görev için süre tahmini yapar ve gerçek süreyle karşılaştırır.", "Öğrenci basit bir haftalık çalışma çizelgesi taslağı oluşturur."], etkinlikler: ["Bir görevin ne kadar süreceğini tahmin etme, sonra gerçek süreyle karşılaştırma", "Basit bir haftalık çalışma çizelgesi taslağı hazırlama", "Zamanlayıcı ile küçük bir görevi planlanan sürede tamamlama"], sureDk: 30 },
+      { baslik: "Hata Fark Etme ve Strateji Değiştirme", hedef: "Planı uygularken hatayı fark edip stratejiyi değiştirebilmeyi geliştirmek.", kazanimlar: ["Öğrenci işe yaramayan bir stratejiyi fark eder ve adını koyar.", "Öğrenci alternatif bir strateji deneyip sonucu karşılaştırır."], etkinlikler: ["Kasıtlı olarak zorlaştırılmış bir bulmaca/görevde takılma anını konuşma", "'Bu işe yaramadı, ne deneyebilirim' sorusunu alıştırma", "Alternatif bir strateji deneyip sonucu karşılaştırma"], sureDk: 30 },
+      { baslik: "Gerçek Bir Ödevi Planlama", hedef: "Öğrendiği planlama becerisini gerçek bir okul görevine uygulamak.", kazanimlar: ["Öğrenci yaklaşan bir ödevi adımlara böler.", "Öğrenci her adıma yaklaşık bir tarih/süre atar."], etkinlikler: ["Yaklaşan bir ödevi/projeyi birlikte adımlara bölme", "Her adıma yaklaşık bir tarih/süre koyma", "Planı yazılı olarak öğrenciyle birlikte oluşturma"], sureDk: 30 },
+      { baslik: "Genel Değerlendirme ve Geri Bildirim", hedef: "Kazanılan planlama stratejilerini pekiştirmek ve özetlemek.", kazanimlar: ["Öğrenci işine yarayan planlama adımlarını sıralar.", "Öğretmen/veli için paylaşılabilir bir özet not oluşturulur."], etkinlikler: ["Hangi stratejilerin işe yaradığını gözden geçirme", "'Benim plan yapma adımlarım' kartı hazırlama", "Öğretmen/veli için özet not"], sureDk: 30 },
     ],
   },
   eszamanli: {
     ad: "Görsel-Uzamsal Organizasyon (Eşzamanlı İşlemleme) Destek Çalışması",
+    amac: "Öğrencinin parçalar arasındaki ilişkiyi ve bütünü bir arada görme, örüntü tanıma, sınıflama ve görsel-uzamsal bilgiyi organize etme becerilerini geliştirerek tablo/şema okuma gibi okul görevlerindeki performansını desteklemek.",
+    genelKazanimlar: [
+      "Artan zorlukta örüntüleri analiz edip tamamlar.",
+      "Parçalardan bütünü, bütünden parçaları çıkarabilir.",
+      "Nesneleri/kavramları birden fazla kritere göre sınıflar.",
+      "Kısa süre gösterilen bir görsel düzeni hafızadan yeniden kurar.",
+      "Bir tablo/şema/grafiği okuyup ilişkileri yorumlar.",
+    ],
     oturumlar: [
-      { baslik: "Tanışma ve Örüntü Farkındalığı", hedef: "Örüntü/ilişki fark etmenin ne işe yaradığını kavratmak.", etkinlikler: ["Basit renk/şekil örüntülerini tamamlama", "'Bu neden böyle devam ediyor' sorusunu birlikte tartışma", "Isınma amaçlı kategori oyunu"], sureDk: 30 },
-      { baslik: "Örüntü Tamamlama Çalışmaları", hedef: "Artan zorlukta örüntüleri analiz edip tamamlama becerisini geliştirmek.", etkinlikler: ["Kademeli zorlukta örüntü tamamlama kartları", "Doğru cevabı nasıl bulduğunu sesli anlatma", "Yanlış cevaplanan örüntüyü birlikte analiz etme"], sureDk: 30 },
-      { baslik: "Parça-Bütün İlişkisi", hedef: "Parçalardan bütünü, bütünden parçaları çıkarabilmeyi geliştirmek.", etkinlikler: ["Puzzle/yapboz çalışması", "Bir resmi parçalara ayırıp yeniden birleştirme", "'Hangi parça eksik' oyunu"], sureDk: 30 },
-      { baslik: "Sınıflama ve Kategorileme", hedef: "Nesneleri/kavramları ortak özelliklerine göre gruplama becerisini geliştirmek.", etkinlikler: ["Kart setini birden fazla kritere göre gruplama", "Gruplama mantığını sözel olarak açıklama", "Farklı bir kritere göre yeniden gruplama"], sureDk: 30 },
-      { baslik: "Görsel Bellek Çalışmaları", hedef: "Görsel bir düzeni kısa süre inceleyip yeniden oluşturabilmeyi geliştirmek.", etkinlikler: ["Kısa süre gösterilen bir görsel düzeni hafızadan yeniden kurma", "Zorluk seviyesini kademeli artırma", "Hatalı kısımları birlikte inceleme"], sureDk: 30 },
-      { baslik: "Harita ve Uzamsal İlişkiler", hedef: "Nesneler arası konum ilişkilerini (üst-alt, sağ-sol, içeri-dışarı) pekiştirmek.", etkinlikler: ["Basit bir kroki/harita üzerinde yönerge takip etme", "'Sağına, altına, içine koy' gibi yönergelerle oyun", "Kendi basit krokisini çizme"], sureDk: 30 },
-      { baslik: "Gerçek Bir Görsel Görevle Uygulama", hedef: "Kazanılan becerileri okul içeriğine (tablo/şema okuma vb.) uygulamak.", etkinlikler: ["Ders kitabından bir tablo/şema/grafik okuma çalışması", "Şemadaki ilişkileri birlikte yorumlama", "Kendi basit şemasını oluşturma"], sureDk: 30 },
-      { baslik: "Genel Değerlendirme ve Geri Bildirim", hedef: "Kazanılan stratejileri pekiştirmek ve özetlemek.", etkinlikler: ["Hangi çalışmaların kolaylaştığını gözden geçirme", "'Benim örüntü/ilişki bulma stratejilerim' kartı hazırlama", "Öğretmen/veli için özet not"], sureDk: 30 },
+      { baslik: "Tanışma ve Örüntü Farkındalığı", hedef: "Örüntü/ilişki fark etmenin ne işe yaradığını kavratmak.", kazanimlar: ["Öğrenci basit bir renk/şekil örüntüsünü tamamlar.", "Öğrenci örüntünün neden o şekilde devam ettiğini açıklar."], etkinlikler: ["Basit renk/şekil örüntülerini tamamlama", "'Bu neden böyle devam ediyor' sorusunu birlikte tartışma", "Isınma amaçlı kategori oyunu"], sureDk: 30 },
+      { baslik: "Örüntü Tamamlama Çalışmaları", hedef: "Artan zorlukta örüntüleri analiz edip tamamlama becerisini geliştirmek.", kazanimlar: ["Öğrenci kademeli zorluktaki örüntü kartlarını tamamlar.", "Öğrenci doğru cevaba nasıl ulaştığını sesli anlatır."], etkinlikler: ["Kademeli zorlukta örüntü tamamlama kartları", "Doğru cevabı nasıl bulduğunu sesli anlatma", "Yanlış cevaplanan örüntüyü birlikte analiz etme"], sureDk: 30 },
+      { baslik: "Parça-Bütün İlişkisi", hedef: "Parçalardan bütünü, bütünden parçaları çıkarabilmeyi geliştirmek.", kazanimlar: ["Öğrenci bir yapbozu/puzzle'ı tamamlar.", "Öğrenci eksik parçayı bütüne bakarak bulur."], etkinlikler: ["Puzzle/yapboz çalışması", "Bir resmi parçalara ayırıp yeniden birleştirme", "'Hangi parça eksik' oyunu"], sureDk: 30 },
+      { baslik: "Sınıflama ve Kategorileme", hedef: "Nesneleri/kavramları ortak özelliklerine göre gruplama becerisini geliştirmek.", kazanimlar: ["Öğrenci bir kart setini en az bir kritere göre gruplar.", "Öğrenci gruplama mantığını sözel olarak açıklar."], etkinlikler: ["Kart setini birden fazla kritere göre gruplama", "Gruplama mantığını sözel olarak açıklama", "Farklı bir kritere göre yeniden gruplama"], sureDk: 30 },
+      { baslik: "Görsel Bellek Çalışmaları", hedef: "Görsel bir düzeni kısa süre inceleyip yeniden oluşturabilmeyi geliştirmek.", kazanimlar: ["Öğrenci kısa süre gösterilen bir düzeni hafızadan yeniden kurar.", "Öğrenci hatalı kısımları geri bildirimle düzeltir."], etkinlikler: ["Kısa süre gösterilen bir görsel düzeni hafızadan yeniden kurma", "Zorluk seviyesini kademeli artırma", "Hatalı kısımları birlikte inceleme"], sureDk: 30 },
+      { baslik: "Harita ve Uzamsal İlişkiler", hedef: "Nesneler arası konum ilişkilerini (üst-alt, sağ-sol, içeri-dışarı) pekiştirmek.", kazanimlar: ["Öğrenci basit bir kroki üzerinde yönergeyi doğru uygular.", "Öğrenci kendi basit krokisini çizer."], etkinlikler: ["Basit bir kroki/harita üzerinde yönerge takip etme", "'Sağına, altına, içine koy' gibi yönergelerle oyun", "Kendi basit krokisini çizme"], sureDk: 30 },
+      { baslik: "Gerçek Bir Görsel Görevle Uygulama", hedef: "Kazanılan becerileri okul içeriğine (tablo/şema okuma vb.) uygulamak.", kazanimlar: ["Öğrenci ders kitabından bir tablo/şemayı okuyup yorumlar.", "Öğrenci kendi basit şemasını oluşturur."], etkinlikler: ["Ders kitabından bir tablo/şema/grafik okuma çalışması", "Şemadaki ilişkileri birlikte yorumlama", "Kendi basit şemasını oluşturma"], sureDk: 30 },
+      { baslik: "Genel Değerlendirme ve Geri Bildirim", hedef: "Kazanılan stratejileri pekiştirmek ve özetlemek.", kazanimlar: ["Öğrenci kendisine kolaylaşan çalışmaları listeler.", "Öğretmen/veli için paylaşılabilir bir özet not oluşturulur."], etkinlikler: ["Hangi çalışmaların kolaylaştığını gözden geçirme", "'Benim örüntü/ilişki bulma stratejilerim' kartı hazırlama", "Öğretmen/veli için özet not"], sureDk: 30 },
     ],
   },
   ardisik: {
     ad: "Sıralı Bellek (Ardışık İşlemleme) Destek Çalışması",
+    amac: "Öğrencinin bilgiyi doğru sırayla alma, saklama ve hatırlama becerisini (sözel yönergeler, sayı/harf dizileri, olay/hikaye sıralaması) kademeli olarak geliştirerek çok adımlı yönergeleri takip etme performansını artırmak.",
+    genelKazanimlar: [
+      "Kısa sayı/harf dizilerini doğru sırayla tekrar eder.",
+      "Çok adımlı sözel bir yönergeyi doğru sırayla uygular.",
+      "Bir hikayenin/olayın akışını doğru sırayla anlatır.",
+      "Günlük bir rutini doğru adım sırasıyla listeler ve uygular.",
+      "Ulaştığı dizi uzunluğunu bir önceki performansıyla karşılaştırır.",
+    ],
     oturumlar: [
-      { baslik: "Tanışma ve Sıra Farkındalığı", hedef: "Bilginin doğru sırayla hatırlanmasının önemini kavratmak.", etkinlikler: ["Kısa bir günlük rutini (sabah hazırlığı vb.) sırayla anlatma", "Sırası karıştırılmış bir olayı doğru sıraya koyma", "Isınma amaçlı basit tekrar oyunu"], sureDk: 30 },
-      { baslik: "Sayı/Harf Dizisi Çalışmaları", hedef: "Kısa dizileri dinleyip doğru sırayla tekrar edebilme becerisini geliştirmek.", etkinlikler: ["Kademeli uzunlukta sayı/harf dizilerini tekrar ettirme", "Diziyi geriye doğru söyleme denemesi", "Başarılan en uzun diziyi kaydetme"], sureDk: 30 },
-      { baslik: "Ritim ve Ses Sırası Tekrarı", hedef: "İşitsel-sıralı bilgiyi (ritim/ses örüntüsü) doğru sırayla tekrarlayabilmeyi geliştirmek.", etkinlikler: ["Basit el çırpma ritmini tekrar ettirme", "Ritmi kademeli olarak uzatma", "Öğrencinin kendi ritmini oluşturup danışmana tekrar ettirmesi"], sureDk: 30 },
-      { baslik: "Sözel Yönergeleri Sırayla Uygulama", hedef: "Çok adımlı sözel bir yönergeyi doğru sırayla uygulayabilmeyi geliştirmek.", etkinlikler: ["2-3 adımlı basit yönergeyle başlama, kademeli olarak adım sayısını artırma", "Yönergeyi kendi cümleleriyle tekrar ettirme", "Yanlış uygulanan adımı birlikte inceleme"], sureDk: 30 },
-      { baslik: "Hikaye/Olay Sıralama", hedef: "Bir hikayenin/olayın akışını doğru sırayla hatırlayıp anlatabilmeyi geliştirmek.", etkinlikler: ["Kısa bir hikayeyi dinleyip olay sırasına göre anlatma", "Karışık sıradaki resimli hikaye kartlarını doğru sıraya dizme", "Kendi kısa hikayesini sıralı şekilde anlatma"], sureDk: 30 },
-      { baslik: "Günlük Rutin ve Çok Adımlı Görev Sıralama", hedef: "Gerçek yaşam görevlerinde adım sırasını doğru takip edebilmeyi pekiştirmek.", etkinlikler: ["Okul/ev rutinini adım adım listeleme", "Adımları karıştırıp doğru sıraya koyma", "Rutini gerçek hayatta uygulama planı yapma"], sureDk: 30 },
-      { baslik: "Dizi Uzunluğunu Artırma Pratiği", hedef: "Ulaşılan dizi uzunluğunu bir üst seviyeye taşımayı hedeflemek.", etkinlikler: ["Bir önceki en yüksek başarıyı hatırlatma", "Bir basamak üstünü deneme (staircase mantığı)", "Başarıyı kutlama, zorlandığında bir basamak geri dönme"], sureDk: 30 },
-      { baslik: "Genel Değerlendirme ve Geri Bildirim", hedef: "Kazanılan sıralı bellek stratejilerini pekiştirmek ve özetlemek.", etkinlikler: ["Ulaşılan ilerlemeyi öğrenciyle gözden geçirme", "'Benim hatırlama stratejilerim' kartı hazırlama", "Öğretmen/veli için özet not"], sureDk: 30 },
+      { baslik: "Tanışma ve Sıra Farkındalığı", hedef: "Bilginin doğru sırayla hatırlanmasının önemini kavratmak.", kazanimlar: ["Öğrenci günlük bir rutini doğru sırayla anlatır.", "Öğrenci sırası karıştırılmış bir olayı doğru sıraya koyar."], etkinlikler: ["Kısa bir günlük rutini (sabah hazırlığı vb.) sırayla anlatma", "Sırası karıştırılmış bir olayı doğru sıraya koyma", "Isınma amaçlı basit tekrar oyunu"], sureDk: 30 },
+      { baslik: "Sayı/Harf Dizisi Çalışmaları", hedef: "Kısa dizileri dinleyip doğru sırayla tekrar edebilme becerisini geliştirmek.", kazanimlar: ["Öğrenci kademeli uzunluktaki dizileri doğru sırayla tekrar eder.", "Öğrenci ulaştığı en uzun diziyi bir önceki denemeyle karşılaştırır."], etkinlikler: ["Kademeli uzunlukta sayı/harf dizilerini tekrar ettirme", "Diziyi geriye doğru söyleme denemesi", "Başarılan en uzun diziyi kaydetme"], sureDk: 30 },
+      { baslik: "Ritim ve Ses Sırası Tekrarı", hedef: "İşitsel-sıralı bilgiyi (ritim/ses örüntüsü) doğru sırayla tekrarlayabilmeyi geliştirmek.", kazanimlar: ["Öğrenci basit bir el çırpma ritmini doğru sırayla tekrar eder.", "Öğrenci kendi oluşturduğu ritmi danışmana aktarır."], etkinlikler: ["Basit el çırpma ritmini tekrar ettirme", "Ritmi kademeli olarak uzatma", "Öğrencinin kendi ritmini oluşturup danışmana tekrar ettirmesi"], sureDk: 30 },
+      { baslik: "Sözel Yönergeleri Sırayla Uygulama", hedef: "Çok adımlı sözel bir yönergeyi doğru sırayla uygulayabilmeyi geliştirmek.", kazanimlar: ["Öğrenci 2-3 adımlı bir yönergeyi doğru sırayla uygular.", "Öğrenci yönergeyi kendi cümleleriyle tekrar eder."], etkinlikler: ["2-3 adımlı basit yönergeyle başlama, kademeli olarak adım sayısını artırma", "Yönergeyi kendi cümleleriyle tekrar ettirme", "Yanlış uygulanan adımı birlikte inceleme"], sureDk: 30 },
+      { baslik: "Hikaye/Olay Sıralama", hedef: "Bir hikayenin/olayın akışını doğru sırayla hatırlayıp anlatabilmeyi geliştirmek.", kazanimlar: ["Öğrenci dinlediği kısa bir hikayeyi olay sırasına göre anlatır.", "Öğrenci karışık sıradaki resimli hikaye kartlarını doğru sıraya dizer."], etkinlikler: ["Kısa bir hikayeyi dinleyip olay sırasına göre anlatma", "Karışık sıradaki resimli hikaye kartlarını doğru sıraya dizme", "Kendi kısa hikayesini sıralı şekilde anlatma"], sureDk: 30 },
+      { baslik: "Günlük Rutin ve Çok Adımlı Görev Sıralama", hedef: "Gerçek yaşam görevlerinde adım sırasını doğru takip edebilmeyi pekiştirmek.", kazanimlar: ["Öğrenci bir okul/ev rutinini adım adım listeler.", "Öğrenci karıştırılmış adımları doğru sıraya koyar."], etkinlikler: ["Okul/ev rutinini adım adım listeleme", "Adımları karıştırıp doğru sıraya koyma", "Rutini gerçek hayatta uygulama planı yapma"], sureDk: 30 },
+      { baslik: "Dizi Uzunluğunu Artırma Pratiği", hedef: "Ulaşılan dizi uzunluğunu bir üst seviyeye taşımayı hedeflemek.", kazanimlar: ["Öğrenci bir önceki en yüksek başarısının üstünde bir dizi dener.", "Öğrenci zorlandığında bir basamak geri dönüp yeniden dener."], etkinlikler: ["Bir önceki en yüksek başarıyı hatırlatma", "Bir basamak üstünü deneme (staircase mantığı)", "Başarıyı kutlama, zorlandığında bir basamak geri dönme"], sureDk: 30 },
+      { baslik: "Genel Değerlendirme ve Geri Bildirim", hedef: "Kazanılan sıralı bellek stratejilerini pekiştirmek ve özetlemek.", kazanimlar: ["Öğrenci ulaştığı ilerlemeyi kendi sözcükleriyle özetler.", "Öğretmen/veli için paylaşılabilir bir özet not oluşturulur."], etkinlikler: ["Ulaşılan ilerlemeyi öğrenciyle gözden geçirme", "'Benim hatırlama stratejilerim' kartı hazırlama", "Öğretmen/veli için özet not"], sureDk: 30 },
     ],
   },
 };
@@ -2292,18 +2324,22 @@ function pasperfMudahalePlaniOlustur(zayifAlanlar) {
   let no = 1;
   const oturumlar = [];
   const alanAdlari = [];
+  const amaclar = [];
+  const genelKazanimlar = [];
   zayifAlanlar.forEach(alan => {
     const program = PASPERF_MUDAHALE_PROGRAMLARI[alan.key];
     if (!program) return;
     alanAdlari.push(alan.ad);
+    if (program.amac) amaclar.push(`${program.ad}: ${program.amac}`);
+    if (Array.isArray(program.genelKazanimlar)) genelKazanimlar.push(...program.genelKazanimlar.map(k => `[${alan.ad}] ${k}`));
     program.oturumlar.forEach(o => {
-      oturumlar.push({ no: no++, alanKey: alan.key, alanAd: alan.ad, programAdi: program.ad, baslik: o.baslik, hedef: o.hedef, etkinlikler: o.etkinlikler, sureDk: o.sureDk, tamamlandi: false, not: "" });
+      oturumlar.push({ no: no++, alanKey: alan.key, alanAd: alan.ad, programAdi: program.ad, baslik: o.baslik, hedef: o.hedef, kazanimlar: o.kazanimlar || [], etkinlikler: o.etkinlikler, sureDk: o.sureDk, tamamlandi: false, not: "" });
     });
   });
   const hedef = alanAdlari.length > 0
     ? `CAS Tarzı Bilişsel Süreçler Performans Testi sonucuna göre desteklenmesi önerilen alan(lar)da (${alanAdlari.join(", ")}) yapılandırılmış ${oturumlar.length} oturumluk destek çalışmasının tamamlanması.`
     : "";
-  return { hedef, oturumlar, sure: `${oturumlar.length} hafta (haftada 1 oturum önerilir)`, alanAdlari };
+  return { hedef, oturumlar, sure: `${oturumlar.length} hafta (haftada 1 oturum önerilir)`, alanAdlari, genelAmac: amaclar.join(" \n"), genelKazanimlar };
 }
 
 
@@ -8685,6 +8721,24 @@ ${kademe ? "Planı öğrencinin yaş/gelişim dönemine uygun şekilde oluştur.
                     </div>
                     <div style={{fontSize:11,color:MUTED,marginBottom:6}}>{p.tarih} · {p.sure} · {p.oncelik} öncelik{p.kaynak==="cas-performans" && " · 📋 CAS Performans Sonucuna Göre"}</div>
                     {p.adimlar && <div style={{fontSize:12,color:TEXT,lineHeight:1.7,whiteSpace:"pre-wrap",background:"#f9f9f9",borderRadius:6,padding:"6px 8px",marginBottom:8}}>{p.adimlar}</div>}
+                    {(p.genelAmac || (p.genelKazanimlar && p.genelKazanimlar.length > 0)) && (
+                      <div style={{background:"#EAF0F7", border:"1px solid #b7c6dc", borderRadius:8, padding:"8px 10px", marginBottom:8}}>
+                        {p.genelAmac && (
+                          <div style={{marginBottom: p.genelKazanimlar && p.genelKazanimlar.length > 0 ? 6 : 0}}>
+                            <div style={{fontSize:10.5, fontWeight:800, color:"#3D5A80", marginBottom:2}}>🎯 Genel Amaç</div>
+                            <div style={{fontSize:11, color:TEXT, lineHeight:1.6, whiteSpace:"pre-wrap"}}>{p.genelAmac}</div>
+                          </div>
+                        )}
+                        {p.genelKazanimlar && p.genelKazanimlar.length > 0 && (
+                          <div>
+                            <div style={{fontSize:10.5, fontWeight:800, color:"#3D5A80", marginBottom:2}}>📌 Genel Kazanımlar</div>
+                            <ul style={{margin:0, paddingLeft:16, fontSize:11, color:TEXT, lineHeight:1.6}}>
+                              {p.genelKazanimlar.map((k,i)=><li key={i}>{k}</li>)}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    )}
                     {p.oturumlar && p.oturumlar.length > 0 && (() => {
                       const tamamlanan = p.oturumlar.filter(o=>o.tamamlandi).length;
                       return (
@@ -8707,7 +8761,15 @@ ${kademe ? "Planı öğrencinin yaş/gelişim dönemine uygun şekilde oluştur.
                                     <input type="checkbox" checked={!!o.tamamlandi} onChange={()=>handleOturumToggle(p.ogrenci,p.ogrenciSinif,p.id,o.no)} style={{marginTop:2,flexShrink:0}} />
                                     <span style={{flex:1}}>
                                       <b>{o.no}. Oturum — {o.baslik}</b> ({o.sureDk} dk)
-                                      {!o.tamamlandi && <span style={{display:"block",fontSize:10.5,color:MUTED,marginTop:2}}>{o.hedef}</span>}
+                                      {!o.tamamlandi && <span style={{display:"block",fontSize:10.5,color:MUTED,marginTop:2}}>🎯 {o.hedef}</span>}
+                                      {!o.tamamlandi && o.kazanimlar && o.kazanimlar.length > 0 && (
+                                        <span style={{display:"block",fontSize:10, color:"#B5651D", marginTop:3, textDecoration:"none"}}>
+                                          <b>📌 Kazanımlar:</b>
+                                          <ul style={{margin:"2px 0 0", paddingLeft:14, listStyle:"disc"}}>
+                                            {o.kazanimlar.map((k,i)=><li key={i} style={{marginBottom:1}}>{k}</li>)}
+                                          </ul>
+                                        </span>
+                                      )}
                                       {o.tamamlandi && o.not && <span style={{display:"block",fontSize:10, color:"#1A8C5B", marginTop:2, textDecoration:"none"}}>✓ {o.not}</span>}
                                     </span>
                                     {o.alanKey && !o.tamamlandi && (
@@ -15852,6 +15914,7 @@ function PASPerformansPaneli({ seciliAd, seciliSinif, seciliNumara, pasPerforman
       id: uid(), tarih: today(), ogrenci: seciliAd, ogrenciSinif: seciliSinif,
       hedef: uretilen.hedef, adimlar: "", sorumlu: "pdr", sure: uretilen.sure, oncelik: "Orta", durum: "Devam Ediyor",
       kaynak: "cas-performans", oturumlar: uretilen.oturumlar,
+      genelAmac: uretilen.genelAmac || "", genelKazanimlar: uretilen.genelKazanimlar || [],
     };
     const mevcutPlanlar = pdrSozlukOku(mudahalePlan, seciliAd, seciliSinif) || [];
     const updated = pdrSozlukYaz(mudahalePlan, seciliAd, seciliSinif, [yeniPlan, ...mevcutPlanlar]);

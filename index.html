@@ -2170,7 +2170,90 @@ function pasperfGenelYorumla({ planlama, dikkat, eszamanli, ardisik }) {
   const genelYorum = zayifAlanlar.length > 0
     ? zayifAlanlar.map(a => `${a.ad} (%${a.skor}): ${a.dusukYorum}`).join("\n\n")
     : "Değerlendirilen 4 süreç alanında (Planlama, Dikkat, Eşzamanlı İşlemleme, Ardışık İşlemleme) performans yaşıtları için beklenen düzeyde veya üzerindedir.";
-  return { genelSkor, seviye, genelYorum, alanlar };
+  return { genelSkor, seviye, genelYorum, alanlar, zayifAlanlar };
+}
+
+// ── Değerlendirme sonucundan otomatik yapılandırılmış müdahale programı ────
+// AMAÇ: Danışman "sonuca göre bir çalışma planı" istediğinde, zayıf çıkan
+// PASS alan(lar)ı için hazır, oturum oturum ilerleyen, özgün bir destek
+// çalışması üretmek — mevcut Müdahale Planı sistemine (mudahalePlan) EK bir
+// "oturumlar" listesi olarak kaydedilir, PARALEL/AYRI bir depolama açılmaz.
+// ÖNEMLİ: Bu bir klinik tedavi protokolü DEĞİLDİR; okul PDR düzeyinde,
+// oyun/etkinlik temelli, haftalık uygulanabilecek bir destek çalışmasıdır.
+// Klinik düzeyde güçlük şüphesinde ilgili uzmana (çocuk psikiyatristi/
+// nöropsikolog) yönlendirme her zaman önceliklidir.
+const PASPERF_MUDAHALE_PROGRAMLARI = {
+  dikkat: {
+    ad: "Dikkat ve Öz-Düzenleme Destek Çalışması",
+    oturumlar: [
+      { baslik: "Tanışma ve Dikkat Farkındalığı", hedef: "Dikkatin ne olduğunu, ne zaman dağıldığını fark etmeyi sağlamak.", etkinlikler: ["Öğrenciyle 'dikkatim nereye gidiyor' sohbeti", "Kısa bir bulmaca/fark bulma etkinliğiyle ısınma", "Oturum boyunca dikkatin dağıldığı anları birlikte not etme"], sureDk: 30 },
+      { baslik: "Sürdürülebilir Dikkat Oyunları", hedef: "Kesintisiz dikkat süresini kademeli olarak artırmak.", etkinlikler: ["Fark bulma / labirent kartları (süre tutarak)", "Basit bir görevi zamanlayıcıyla (3-5 dk) kesintisiz tamamlama", "Süreyi bir önceki oturumla karşılaştırma"], sureDk: 30 },
+      { baslik: "Dikkat Dağıtıcılarla Baş Etme", hedef: "Ortamdaki dikkat dağıtıcıları fark edip görmezden gelme stratejisi kazandırmak.", etkinlikler: ["Hafif sesli/görsel dikkat dağıtıcı varken görev yapma denemesi", "'Fark ettim, geri dönüyorum' cümlesini alıştırma", "Kendine hatırlatma kartı hazırlama"], sureDk: 30 },
+      { baslik: "Görsel Tarama ve Organizasyon", hedef: "Görsel taramada sistematik bir strateji (soldan sağa, satır satır) kazandırmak.", etkinlikler: ["Harf/sayı avı çalışma kağıdı", "Bulmaca içinde belirli bir şekli sistematik tarayarak bulma", "Stratejisini sözel olarak anlatma"], sureDk: 30 },
+      { baslik: "Zamanlayıcı ile Odaklanma Pratiği", hedef: "Kısa, ölçülebilir çalışma bloklarıyla odaklanma alışkanlığı kazandırmak.", etkinlikler: ["10 dk odak + 2 dk mola bloklarını deneme (mini-Pomodoro)", "Blok sonunda kendini değerlendirme (1-5 puan)", "Ev/okul ödevine uyarlama önerisi"], sureDk: 30 },
+      { baslik: "Dürtü Kontrolü: Dur-Düşün-Uygula", hedef: "Tepki vermeden önce durup düşünme alışkanlığı kazandırmak.", etkinlikler: ["'Dur-Düşün-Uygula' kartlarıyla rol oyunu", "Hızlı tepki gerektiren basit bir oyunda bilinçli yavaşlama denemesi", "Günlük hayattan bir örnek üzerinde uygulama"], sureDk: 30 },
+      { baslik: "Görev/Ödev Organizasyonu", hedef: "Çok adımlı bir görevi listeleyip sırayla tamamlama alışkanlığı kazandırmak.", etkinlikler: ["Bir ödevi/görevi adımlara bölme", "Kontrol listesi (checklist) hazırlama ve kullanma", "Tamamlanan adımı işaretlemenin verdiği tatmini fark etme"], sureDk: 30 },
+      { baslik: "Genel Değerlendirme ve Geri Bildirim", hedef: "Kazanılan stratejileri pekiştirmek, öğretmen/veliyle paylaşılacak özet çıkarmak.", etkinlikler: ["Öğrenciyle hangi stratejilerin işine yaradığını gözden geçirme", "Kısa bir 'benim dikkat stratejilerim' kartı hazırlama", "Öğretmen/veli için özet not"], sureDk: 30 },
+    ],
+  },
+  planlama: {
+    ad: "Planlama Becerilerini Geliştirme Çalışması",
+    oturumlar: [
+      { baslik: "Tanışma ve Plan Kavramı", hedef: "Planlamanın ne işe yaradığını somut bir örnekle kavratmak.", etkinlikler: ["Basit bir günlük işi (örn. sabah hazırlığı) adımlara bölme", "'Plansız yapsaydık ne olurdu' sohbeti", "Isınma amaçlı sıralama oyunu"], sureDk: 30 },
+      { baslik: "Sıralama ve Sıra Takibi", hedef: "Bir dizi adımı doğru sırada takip edebilme becerisini geliştirmek.", etkinlikler: ["Karışık sıradaki resim/kartları doğru sıraya dizme", "Bir tarifi/yönergeyi adım adım uygulama", "Hatalı sıralamayı birlikte düzeltme"], sureDk: 30 },
+      { baslik: "Hedef Belirleme", hedef: "Küçük, ölçülebilir bir hedef koyup buna göre adım planlamayı öğretmek.", etkinlikler: ["Öğrenciyle birlikte 1 haftalık küçük bir hedef belirleme", "Hedefe ulaşmak için 3 adım yazma", "Adımların gerçekçiliğini birlikte kontrol etme"], sureDk: 30 },
+      { baslik: "Bağlantı Kurma / Yol Bulma Çalışmaları", hedef: "Görsel-uzamsal planlama becerisini (sırayla bağlantı kurma, en kısa yol) geliştirmek.", etkinlikler: ["Noktaları sırayla birleştirme / labirent çalışması (süre tutarak)", "Bir sonraki adımı tahmin etmeyi sesli düşünerek anlatma", "Süre ve hata sayısını bir önceki denemeyle karşılaştırma"], sureDk: 30 },
+      { baslik: "Zaman Yönetimi", hedef: "Bir görev için gereken süreyi tahmin edip planlamayı öğretmek.", etkinlikler: ["Bir görevin ne kadar süreceğini tahmin etme, sonra gerçek süreyle karşılaştırma", "Basit bir haftalık çalışma çizelgesi taslağı hazırlama", "Zamanlayıcı ile küçük bir görevi planlanan sürede tamamlama"], sureDk: 30 },
+      { baslik: "Hata Fark Etme ve Strateji Değiştirme", hedef: "Planı uygularken hatayı fark edip stratejiyi değiştirebilmeyi geliştirmek.", etkinlikler: ["Kasıtlı olarak zorlaştırılmış bir bulmaca/görevde takılma anını konuşma", "'Bu işe yaramadı, ne deneyebilirim' sorusunu alıştırma", "Alternatif bir strateji deneyip sonucu karşılaştırma"], sureDk: 30 },
+      { baslik: "Gerçek Bir Ödevi Planlama", hedef: "Öğrendiği planlama becerisini gerçek bir okul görevine uygulamak.", etkinlikler: ["Yaklaşan bir ödevi/projeyi birlikte adımlara bölme", "Her adıma yaklaşık bir tarih/süre koyma", "Planı yazılı olarak öğrenciyle birlikte oluşturma"], sureDk: 30 },
+      { baslik: "Genel Değerlendirme ve Geri Bildirim", hedef: "Kazanılan planlama stratejilerini pekiştirmek ve özetlemek.", etkinlikler: ["Hangi stratejilerin işe yaradığını gözden geçirme", "'Benim plan yapma adımlarım' kartı hazırlama", "Öğretmen/veli için özet not"], sureDk: 30 },
+    ],
+  },
+  eszamanli: {
+    ad: "Görsel-Uzamsal Organizasyon (Eşzamanlı İşlemleme) Destek Çalışması",
+    oturumlar: [
+      { baslik: "Tanışma ve Örüntü Farkındalığı", hedef: "Örüntü/ilişki fark etmenin ne işe yaradığını kavratmak.", etkinlikler: ["Basit renk/şekil örüntülerini tamamlama", "'Bu neden böyle devam ediyor' sorusunu birlikte tartışma", "Isınma amaçlı kategori oyunu"], sureDk: 30 },
+      { baslik: "Örüntü Tamamlama Çalışmaları", hedef: "Artan zorlukta örüntüleri analiz edip tamamlama becerisini geliştirmek.", etkinlikler: ["Kademeli zorlukta örüntü tamamlama kartları", "Doğru cevabı nasıl bulduğunu sesli anlatma", "Yanlış cevaplanan örüntüyü birlikte analiz etme"], sureDk: 30 },
+      { baslik: "Parça-Bütün İlişkisi", hedef: "Parçalardan bütünü, bütünden parçaları çıkarabilmeyi geliştirmek.", etkinlikler: ["Puzzle/yapboz çalışması", "Bir resmi parçalara ayırıp yeniden birleştirme", "'Hangi parça eksik' oyunu"], sureDk: 30 },
+      { baslik: "Sınıflama ve Kategorileme", hedef: "Nesneleri/kavramları ortak özelliklerine göre gruplama becerisini geliştirmek.", etkinlikler: ["Kart setini birden fazla kritere göre gruplama", "Gruplama mantığını sözel olarak açıklama", "Farklı bir kritere göre yeniden gruplama"], sureDk: 30 },
+      { baslik: "Görsel Bellek Çalışmaları", hedef: "Görsel bir düzeni kısa süre inceleyip yeniden oluşturabilmeyi geliştirmek.", etkinlikler: ["Kısa süre gösterilen bir görsel düzeni hafızadan yeniden kurma", "Zorluk seviyesini kademeli artırma", "Hatalı kısımları birlikte inceleme"], sureDk: 30 },
+      { baslik: "Harita ve Uzamsal İlişkiler", hedef: "Nesneler arası konum ilişkilerini (üst-alt, sağ-sol, içeri-dışarı) pekiştirmek.", etkinlikler: ["Basit bir kroki/harita üzerinde yönerge takip etme", "'Sağına, altına, içine koy' gibi yönergelerle oyun", "Kendi basit krokisini çizme"], sureDk: 30 },
+      { baslik: "Gerçek Bir Görsel Görevle Uygulama", hedef: "Kazanılan becerileri okul içeriğine (tablo/şema okuma vb.) uygulamak.", etkinlikler: ["Ders kitabından bir tablo/şema/grafik okuma çalışması", "Şemadaki ilişkileri birlikte yorumlama", "Kendi basit şemasını oluşturma"], sureDk: 30 },
+      { baslik: "Genel Değerlendirme ve Geri Bildirim", hedef: "Kazanılan stratejileri pekiştirmek ve özetlemek.", etkinlikler: ["Hangi çalışmaların kolaylaştığını gözden geçirme", "'Benim örüntü/ilişki bulma stratejilerim' kartı hazırlama", "Öğretmen/veli için özet not"], sureDk: 30 },
+    ],
+  },
+  ardisik: {
+    ad: "Sıralı Bellek (Ardışık İşlemleme) Destek Çalışması",
+    oturumlar: [
+      { baslik: "Tanışma ve Sıra Farkındalığı", hedef: "Bilginin doğru sırayla hatırlanmasının önemini kavratmak.", etkinlikler: ["Kısa bir günlük rutini (sabah hazırlığı vb.) sırayla anlatma", "Sırası karıştırılmış bir olayı doğru sıraya koyma", "Isınma amaçlı basit tekrar oyunu"], sureDk: 30 },
+      { baslik: "Sayı/Harf Dizisi Çalışmaları", hedef: "Kısa dizileri dinleyip doğru sırayla tekrar edebilme becerisini geliştirmek.", etkinlikler: ["Kademeli uzunlukta sayı/harf dizilerini tekrar ettirme", "Diziyi geriye doğru söyleme denemesi", "Başarılan en uzun diziyi kaydetme"], sureDk: 30 },
+      { baslik: "Ritim ve Ses Sırası Tekrarı", hedef: "İşitsel-sıralı bilgiyi (ritim/ses örüntüsü) doğru sırayla tekrarlayabilmeyi geliştirmek.", etkinlikler: ["Basit el çırpma ritmini tekrar ettirme", "Ritmi kademeli olarak uzatma", "Öğrencinin kendi ritmini oluşturup danışmana tekrar ettirmesi"], sureDk: 30 },
+      { baslik: "Sözel Yönergeleri Sırayla Uygulama", hedef: "Çok adımlı sözel bir yönergeyi doğru sırayla uygulayabilmeyi geliştirmek.", etkinlikler: ["2-3 adımlı basit yönergeyle başlama, kademeli olarak adım sayısını artırma", "Yönergeyi kendi cümleleriyle tekrar ettirme", "Yanlış uygulanan adımı birlikte inceleme"], sureDk: 30 },
+      { baslik: "Hikaye/Olay Sıralama", hedef: "Bir hikayenin/olayın akışını doğru sırayla hatırlayıp anlatabilmeyi geliştirmek.", etkinlikler: ["Kısa bir hikayeyi dinleyip olay sırasına göre anlatma", "Karışık sıradaki resimli hikaye kartlarını doğru sıraya dizme", "Kendi kısa hikayesini sıralı şekilde anlatma"], sureDk: 30 },
+      { baslik: "Günlük Rutin ve Çok Adımlı Görev Sıralama", hedef: "Gerçek yaşam görevlerinde adım sırasını doğru takip edebilmeyi pekiştirmek.", etkinlikler: ["Okul/ev rutinini adım adım listeleme", "Adımları karıştırıp doğru sıraya koyma", "Rutini gerçek hayatta uygulama planı yapma"], sureDk: 30 },
+      { baslik: "Dizi Uzunluğunu Artırma Pratiği", hedef: "Ulaşılan dizi uzunluğunu bir üst seviyeye taşımayı hedeflemek.", etkinlikler: ["Bir önceki en yüksek başarıyı hatırlatma", "Bir basamak üstünü deneme (staircase mantığı)", "Başarıyı kutlama, zorlandığında bir basamak geri dönme"], sureDk: 30 },
+      { baslik: "Genel Değerlendirme ve Geri Bildirim", hedef: "Kazanılan sıralı bellek stratejilerini pekiştirmek ve özetlemek.", etkinlikler: ["Ulaşılan ilerlemeyi öğrenciyle gözden geçirme", "'Benim hatırlama stratejilerim' kartı hazırlama", "Öğretmen/veli için özet not"], sureDk: 30 },
+    ],
+  },
+};
+
+function pasperfMudahalePlaniOlustur(zayifAlanlar) {
+  // zayifAlanlar: pasperfGenelYorumla().zayifAlanlar dizisi ({key, ad, skor, ...})
+  let no = 1;
+  const oturumlar = [];
+  const alanAdlari = [];
+  zayifAlanlar.forEach(alan => {
+    const program = PASPERF_MUDAHALE_PROGRAMLARI[alan.key];
+    if (!program) return;
+    alanAdlari.push(alan.ad);
+    program.oturumlar.forEach(o => {
+      oturumlar.push({ no: no++, alanKey: alan.key, alanAd: alan.ad, programAdi: program.ad, baslik: o.baslik, hedef: o.hedef, etkinlikler: o.etkinlikler, sureDk: o.sureDk, tamamlandi: false, not: "" });
+    });
+  });
+  const hedef = alanAdlari.length > 0
+    ? `CAS Tarzı Bilişsel Süreçler Performans Testi sonucuna göre desteklenmesi önerilen alan(lar)da (${alanAdlari.join(", ")}) yapılandırılmış ${oturumlar.length} oturumluk destek çalışmasının tamamlanması.`
+    : "";
+  return { hedef, oturumlar, sure: `${oturumlar.length} hafta (haftada 1 oturum önerilir)`, alanAdlari };
 }
 
 
@@ -7612,7 +7695,7 @@ function D2Paneli({ seciliAd, seciliSinif, seciliNumara, profiles2, setProfiles2
   );
 }
 
-function TestlerEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, testKayitlari, setTestKayitlari, profiles2, setProfiles2, oogDegerlendirmeler, setOogDegerlendirmeler, osbDegerlendirmeler, setOsbDegerlendirmeler, castDegerlendirmeler, setCastDegerlendirmeler, pasDegerlendirmeler, setPasDegerlendirmeler, pasPerformanslar, setPasPerformanslar }) {
+function TestlerEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, testKayitlari, setTestKayitlari, profiles2, setProfiles2, oogDegerlendirmeler, setOogDegerlendirmeler, osbDegerlendirmeler, setOsbDegerlendirmeler, castDegerlendirmeler, setCastDegerlendirmeler, pasDegerlendirmeler, setPasDegerlendirmeler, pasPerformanslar, setPasPerformanslar, mudahalePlan, setMudahalePlan, setTab }) {
   const [seciliAd, setSeciliAd] = useState(aktifOgrenci?.name || "");
   const [ogrenciArama, setOgrenciArama] = useState("");
   const [kategori, setKategori] = useState(null); // "objektif" | "projektif" | null
@@ -7899,7 +7982,7 @@ SADECE aşağıdaki JSON formatında cevap ver, başka hiçbir açıklama/markdo
               ) : kategori === "pasperf" ? (
                 <div>
                   <button onClick={()=>setKategori(null)} style={{ background:"none", border:"none", color:MUTED, fontSize:12, cursor:"pointer", marginBottom:8, padding:0 }}>← Kategoriyi değiştir</button>
-                  <PASPerformansPaneli seciliAd={seciliAd} seciliSinif={seciliSinif} seciliNumara={seciliNumara} pasPerformanslar={pasPerformanslar} setPasPerformanslar={setPasPerformanslar} />
+                  <PASPerformansPaneli seciliAd={seciliAd} seciliSinif={seciliSinif} seciliNumara={seciliNumara} pasPerformanslar={pasPerformanslar} setPasPerformanslar={setPasPerformanslar} mudahalePlan={mudahalePlan} setMudahalePlan={setMudahalePlan} setTab={setTab} setAktifOgrenci={setAktifOgrenci} />
                 </div>
               ) : (
                 <div>
@@ -8373,6 +8456,21 @@ ${kademe ? "Planı öğrencinin yaş/gelişim dönemine uygun şekilde oluştur.
     await saveMudahalePlan(updated);
   }
 
+  // Oturum bazlı planlar (örn. CAS Performans sonucuna göre otomatik
+  // oluşturulanlar) için tek tek oturum işaretleme — tüm oturumlar
+  // tamamlanınca planın genel durumu da otomatik "Tamamlandı" olur.
+  async function handleOturumToggle(ogrenci, ogrenciSinif, id, oturumNo) {
+    const mevcutPlanlar = pdrSozlukOku(mudahalePlan, ogrenci, ogrenciSinif) || [];
+    const updated = pdrSozlukYaz(mudahalePlan, ogrenci, ogrenciSinif, mevcutPlanlar.map(p => {
+      if (p.id !== id || !p.oturumlar) return p;
+      const yeniOturumlar = p.oturumlar.map(o => o.no === oturumNo ? { ...o, tamamlandi: !o.tamamlandi } : o);
+      const hepsiTamam = yeniOturumlar.every(o => o.tamamlandi);
+      return { ...p, oturumlar: yeniOturumlar, durum: hepsiTamam ? "Tamamlandı" : (p.durum === "Tamamlandı" ? "Devam Ediyor" : p.durum) };
+    }));
+    setMudahalePlan(updated);
+    await saveMudahalePlan(updated);
+  }
+
   const inp = { width:"100%", padding:"9px 11px", border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius:9, fontSize:13, background:CARD, color:TEXT, outline:"none", boxSizing:"border-box", fontFamily:"inherit" };
   const lbl = { fontSize:11, fontWeight:600, color:MUTED, display:"block", marginBottom:4, textTransform:"uppercase" };
   const durumRenk = { "Devam Ediyor":["#1A8C5B","#E6F5EE"], "Tamamlandı":["#457B9D","#EEF2FF"], "Askıda":["#B07D1A","#FDF6E3"] };
@@ -8457,8 +8555,30 @@ ${kademe ? "Planı öğrencinin yaş/gelişim dönemine uygun şekilde oluştur.
                       <div style={{fontSize:13,fontWeight:700,color:TEXT,flex:1}}>{p.hedef}</div>
                       <span style={{background:rbg,color:rc,borderRadius:20,padding:"2px 10px",fontSize:10,fontWeight:700,flexShrink:0,marginLeft:8}}>{p.durum}</span>
                     </div>
-                    <div style={{fontSize:11,color:MUTED,marginBottom:6}}>{p.tarih} · {p.sure} · {p.oncelik} öncelik</div>
+                    <div style={{fontSize:11,color:MUTED,marginBottom:6}}>{p.tarih} · {p.sure} · {p.oncelik} öncelik{p.kaynak==="cas-performans" && " · 📋 CAS Performans Sonucuna Göre"}</div>
                     {p.adimlar && <div style={{fontSize:12,color:TEXT,lineHeight:1.7,whiteSpace:"pre-wrap",background:"#f9f9f9",borderRadius:6,padding:"6px 8px",marginBottom:8}}>{p.adimlar}</div>}
+                    {p.oturumlar && p.oturumlar.length > 0 && (() => {
+                      const tamamlanan = p.oturumlar.filter(o=>o.tamamlandi).length;
+                      return (
+                        <div style={{marginBottom:8}}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                            <span style={{fontSize:11,fontWeight:800,color:"#B5651D"}}>⚡ Oturum Takibi</span>
+                            <span style={{fontSize:10.5,color:MUTED,fontWeight:700}}>{tamamlanan}/{p.oturumlar.length} tamamlandı</span>
+                          </div>
+                          <div style={{height:6,background:BORDER,borderRadius:4,overflow:"hidden",marginBottom:8}}>
+                            <div style={{height:"100%",width:`${Math.round(tamamlanan/p.oturumlar.length*100)}%`,background:"#B5651D"}} />
+                          </div>
+                          <div style={{display:"flex",flexDirection:"column",gap:5}}>
+                            {p.oturumlar.map(o => (
+                              <label key={o.no} style={{display:"flex",alignItems:"flex-start",gap:8,fontSize:11.5,color:o.tamamlandi?MUTED:TEXT,background:o.tamamlandi?"#f5f5f5":"#fff",border:`1px solid ${BORDER}`,borderRadius:8,padding:"7px 9px",cursor:"pointer",textDecoration:o.tamamlandi?"line-through":"none"}}>
+                                <input type="checkbox" checked={!!o.tamamlandi} onChange={()=>handleOturumToggle(p.ogrenci,p.ogrenciSinif,p.id,o.no)} style={{marginTop:2,flexShrink:0}} />
+                                <span><b>{o.no}. Oturum — {o.baslik}</b> ({o.sureDk} dk){!o.tamamlandi && <span style={{display:"block",fontSize:10.5,color:MUTED,marginTop:2}}>{o.hedef}</span>}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
                     <div style={{display:"flex",gap:6}}>
                       {["Devam Ediyor","Tamamlandı","Askıda"].map(d=>(
                         <button key={d} onClick={()=>handleDurumGuncelle(p.ogrenci,p.ogrenciSinif,p.id,d)} style={{flex:1,padding:"5px",fontSize:10,fontWeight:p.durum===d?700:500,borderRadius:7,border:`1px solid ${p.durum===d?rc:BORDER}`,background:p.durum===d?rbg:CARD,color:p.durum===d?rc:MUTED,cursor:"pointer"}}>{d}</button>
@@ -15416,7 +15536,7 @@ function PPTDiziGorevi({ onTamamla }) {
   );
 }
 
-function PASPerformansPaneli({ seciliAd, seciliSinif, seciliNumara, pasPerformanslar, setPasPerformanslar }) {
+function PASPerformansPaneli({ seciliAd, seciliSinif, seciliNumara, pasPerformanslar, setPasPerformanslar, mudahalePlan, setMudahalePlan, setTab, setAktifOgrenci }) {
   const mevcut = pasPerformanslar.find(o => pdrAyniOgrenci(o.studentName, o.className, seciliAd, seciliSinif, o.numara, seciliNumara));
   const [adim, setAdim] = useState("giris");
   const [planlama, setPlanlama] = useState(null);
@@ -15424,6 +15544,7 @@ function PASPerformansPaneli({ seciliAd, seciliSinif, seciliNumara, pasPerforman
   const [eszamanli, setEszamanli] = useState(null);
   const [ardisik, setArdisik] = useState(null);
   const [kaydedildi, setKaydedildi] = useState(false);
+  const [planOlusturuldu, setPlanOlusturuldu] = useState(false);
 
   useEffect(() => {
     setAdim("giris"); setPlanlama(null); setDikkat(null); setEszamanli(null); setArdisik(null); setKaydedildi(false);
@@ -15449,6 +15570,27 @@ function PASPerformansPaneli({ seciliAd, seciliSinif, seciliNumara, pasPerforman
     await savePasPerformanslar(updated);
     setKaydedildi(true);
     setTimeout(() => setKaydedildi(false), 2500);
+  }
+
+  // Sonuçtaki zayıf alan(lar)a göre, mevcut Müdahale Planı sistemine (aynı
+  // depoya — pdrSozlukYaz ile) oturum oturum ilerleyen bir destek çalışması
+  // planı ekler; PARALEL bir depolama açmaz, mevcut ekrandan takip edilir.
+  async function handleMudahalePlaniOlustur() {
+    if (!sonuc || !sonuc.zayifAlanlar || sonuc.zayifAlanlar.length === 0 || !setMudahalePlan) return;
+    const uretilen = pasperfMudahalePlaniOlustur(sonuc.zayifAlanlar);
+    if (uretilen.oturumlar.length === 0) return;
+    const yeniPlan = {
+      id: uid(), tarih: today(), ogrenci: seciliAd, ogrenciSinif: seciliSinif,
+      hedef: uretilen.hedef, adimlar: "", sorumlu: "pdr", sure: uretilen.sure, oncelik: "Orta", durum: "Devam Ediyor",
+      kaynak: "cas-performans", oturumlar: uretilen.oturumlar,
+    };
+    const mevcutPlanlar = pdrSozlukOku(mudahalePlan, seciliAd, seciliSinif) || [];
+    const updated = pdrSozlukYaz(mudahalePlan, seciliAd, seciliSinif, [yeniPlan, ...mevcutPlanlar]);
+    setMudahalePlan(updated);
+    await saveMudahalePlan(updated);
+    setPlanOlusturuldu(true);
+    if (setAktifOgrenci) setAktifOgrenci({ name: seciliAd, className: seciliSinif });
+    if (setTab) setTab("mudahale");
   }
 
   return (
@@ -15510,7 +15652,17 @@ function PASPerformansPaneli({ seciliAd, seciliSinif, seciliNumara, pasPerforman
             width:"100%", padding:13, background:ACCENT, color:"#fff", border:"none", borderRadius:12,
             fontSize:15, fontWeight:800, cursor:"pointer", marginTop:4
           }}>{kaydedildi ? "✓ Kaydedildi" : "💾 Kaydet"}</button>
-          <button onClick={() => { setAdim("giris"); setPlanlama(null); setDikkat(null); setEszamanli(null); setArdisik(null); }} style={{
+
+          {sonuc.zayifAlanlar && sonuc.zayifAlanlar.length > 0 ? (
+            <button onClick={handleMudahalePlaniOlustur} disabled={planOlusturuldu} style={{
+              width:"100%", padding:13, background: planOlusturuldu ? BORDER : "#B5651D", color:"#fff", border:"none", borderRadius:12,
+              fontSize:14, fontWeight:800, cursor: planOlusturuldu ? "default" : "pointer", marginTop:8
+            }}>{planOlusturuldu ? "✓ Müdahale Planı Oluşturuldu (Müdahale Planı sekmesinde)" : `🎯 Bu Sonuca Göre Müdahale Planı Oluştur (${sonuc.zayifAlanlar.map(a=>a.ad).join(", ")})`}</button>
+          ) : (
+            <div style={{fontSize:11, color:MUTED, textAlign:"center", marginTop:10}}>Belirgin bir güçlük alanı gözlenmediği için müdahale planı önerilmiyor.</div>
+          )}
+
+          <button onClick={() => { setAdim("giris"); setPlanlama(null); setDikkat(null); setEszamanli(null); setArdisik(null); setPlanOlusturuldu(false); }} style={{
             width:"100%", padding:10, background:"transparent", color:MUTED, border:`1px solid ${BORDER}`, borderRadius:12,
             fontSize:12, fontWeight:700, cursor:"pointer", marginTop:8
           }}>🔄 Yeniden Uygula</button>
@@ -21186,6 +21338,9 @@ function pdrBaslangicSekmesi() {
             setPasDegerlendirmeler={setPasDegerlendirmeler}
             pasPerformanslar={pasPerformanslar}
             setPasPerformanslar={setPasPerformanslar}
+            mudahalePlan={mudahalePlan}
+            setMudahalePlan={setMudahalePlan}
+            setTab={setTab}
           />
         )}
 

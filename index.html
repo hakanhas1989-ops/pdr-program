@@ -2107,6 +2107,8 @@ const PASPERF_ORUNTU_SORULARI = [
   { id: "p4", izgara: ["➡️","⬇️","⬅️","⬆️","➡️","⬇️","⬅️","⬆️","❓"], secenekler: ["➡️","⬇️","⬅️","⬆️"], dogruCevap: "➡️" },
   { id: "p5", izgara: ["1️⃣","2️⃣","3️⃣","3️⃣","1️⃣","2️⃣","2️⃣","3️⃣","❓"], secenekler: ["1️⃣","2️⃣","3️⃣","4️⃣"], dogruCevap: "1️⃣" },
   { id: "p6", izgara: ["🍎","🍋","🍇","🍇","🍎","🍋","🍋","🍇","❓"], secenekler: ["🍎","🍋","🍇","🍊"], dogruCevap: "🍎" },
+  { id: "p9", izgara: ["🐱","🐶","🐱","🐱","🐶","🐱","🐶","🐶","❓"], secenekler: ["🐱","🐶","🐭","🐰"], dogruCevap: "🐱" },
+  { id: "p10", izgara: ["⬆️","➡️","➡️","⬆️","➡️","➡️","⬆️","➡️","❓"], secenekler: ["⬆️","➡️","⬇️","⬅️"], dogruCevap: "➡️" },
 ];
 // Lise için, aynı döngü mantığıyla ama daha büyük (4x4=16 hücre) ve bu yüzden
 // daha çok görsel tarama/organizasyon gerektiren 2 ek soru — ilkokul/ortaokul
@@ -2122,6 +2124,104 @@ const PASPERF_RENKLER = [
   { ad: "Sarı", hex: "#D4AC0D" },
 ];
 
+// ── Tarayıcı üzerinden sesli okuma (Web Speech API) ─────────────────────────
+// AMAÇ: İşitsel maddeleri (kelime/dizi/yönerge) gerçek CAS'taki gibi "sözel
+// olarak sunmak" için. Tarayıcı desteklemiyorsa (ör. bazı gömülü webview'lar)
+// sessizce false döner; görevler bu durumda metni ekranda da gösterecek
+// şekilde tasarlanmıştır, tamamen sese bağımlı değildir.
+function pdrSesliOku(metin) {
+  try {
+    if (!("speechSynthesis" in window) || !metin) return false;
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(metin);
+    u.lang = "tr-TR";
+    u.rate = 0.92;
+    window.speechSynthesis.speak(u);
+    return true;
+  } catch (e) { return false; }
+}
+function pdrSesDestekliMi() {
+  try { return "speechSynthesis" in window; } catch (e) { return false; }
+}
+
+// ── Sözel Sıralama (Planlama alanı — sözel/işitsel madde) ───────────────────
+// AMAÇ: Görsel-motor bağlantı kurma görevine ek olarak, sözel bilgiyi mantıklı
+// bir sıraya dizerek planlama yapabilmeyi ölçen bir madde türü eklemek.
+const PASPERF_SOZEL_PLANLAMA_CUMLELERI = {
+  ilkokul: [
+    { kelimeler: ["Kedi", "bahçede", "koşuyor"] },
+    { kelimeler: ["Ali", "topu", "sert", "attı"] },
+    { kelimeler: ["Güneş", "her", "sabah", "doğar"] },
+  ],
+  ortaokul: [
+    { kelimeler: ["Öğrenci", "ödevini", "dikkatli", "şekilde", "tamamladı"] },
+    { kelimeler: ["Öğretmen", "sınıfa", "yeni", "bir", "konu", "anlattı"] },
+    { kelimeler: ["Ayşe", "kütüphaneden", "iki", "kitap", "ödünç", "aldı"] },
+  ],
+  lise: [
+    { kelimeler: ["Sınav", "sonuçları", "önümüzdeki", "hafta", "sisteme", "yüklenecek"] },
+    { kelimeler: ["Öğrenciler", "proje", "ödevlerini", "grup", "hâlinde", "hazırladılar"] },
+    { kelimeler: ["Danışman", "veliyle", "randevusunu", "erken", "saatte", "planladı"] },
+  ],
+};
+function pasperfSozelPlanlamaSkorla({ sureMs, hata, kelimeSayisi }) {
+  const sureSaniye = sureMs / 1000;
+  const beklenenSure = kelimeSayisi * 2.2;
+  const skor = Math.max(0, Math.min(100, Math.round(100 - (sureSaniye - beklenenSure) * 3 - hata * 15)));
+  return { sureMs, hata, kelimeSayisi, skor };
+}
+
+// ── İşitsel Seçici Dikkat (Dikkat alanı — işitsel madde) ────────────────────
+// AMAÇ: Görsel Stroop-tarzı göreve ek olarak, kulaktan gelen bilgi akışında
+// hedef bir uyarana seçici şekilde tepki verebilmeyi (işitsel sürdürülebilir/
+// seçici dikkat) ölçen bir madde türü eklemek.
+const PASPERF_ISITSEL_DIKKAT_HEDEF = "elma";
+const PASPERF_ISITSEL_DIKKAT_KELIME_HAVUZU = ["kalem","masa","kitap","bardak","çanta","pencere","kapı","top","araba","bulut","ağaç","deniz","sandalye","defter","şemsiye"];
+function pasperfIsitselDikkatSkorla(denemeler) {
+  // denemeler: [{hedef, tikladi}]
+  const hedefDenemeler = denemeler.filter(d => d.hedef);
+  const hedefOlmayan = denemeler.filter(d => !d.hedef);
+  const dogruTepki = hedefDenemeler.filter(d => d.tikladi).length; // hit
+  const yanlisAlarm = hedefOlmayan.filter(d => d.tikladi).length; // false alarm
+  const hitYuzde = hedefDenemeler.length ? Math.round(dogruTepki / hedefDenemeler.length * 100) : 0;
+  const yanlisAlarmYuzde = hedefOlmayan.length ? Math.round(yanlisAlarm / hedefOlmayan.length * 100) : 0;
+  const skor = Math.max(0, Math.min(100, Math.round(hitYuzde - yanlisAlarmYuzde * 0.6)));
+  return { hedefSayisi: hedefDenemeler.length, dogruTepki, yanlisAlarm, hitYuzde, yanlisAlarmYuzde, skor };
+}
+
+// ── Sözel-Uzamsal İlişki (Eşzamanlı İşlemleme alanı — sözel madde) ──────────
+// AMAÇ: Görsel örüntü tamamlamaya ek olarak, sözel bir yönergeyle anlatılan
+// uzamsal ilişkiyi (üstünde/altında/solunda/sağında) doğru görsel düzenle
+// eşleştirebilmeyi ölçen bir madde türü — CAS'ın Sözel-Uzamsal İlişkiler alt
+// testinden esinlenir. Izgara indeksleri: 0=sol-üst,1=sağ-üst,2=sol-alt,3=sağ-alt.
+const PASPERF_SOZEL_UZAMSAL_SORULARI = [
+  { cumle: "⭐ yıldız ⬛ karenin ÜSTÜNDE ve SOLUNDADIR.",
+    secenekler: [["⭐","","","⬛"], ["","⭐","⬛",""], ["⬛","","","⭐"], ["","⬛","⭐",""]], dogruIndex: 0 },
+  { cumle: "🔵 daire 🔺 üçgenin ALTINDA ve SAĞINDADIR.",
+    secenekler: [["🔺","","","🔵"], ["","🔺","🔵",""], ["🔵","","","🔺"], ["","🔵","🔺",""]], dogruIndex: 0 },
+  { cumle: "🟡 sarı şekil 🟢 yeşil şeklin ÜSTÜNDE ve SAĞINDADIR.",
+    secenekler: [["","🟡","🟢",""], ["🟡","","","🟢"], ["","🟢","🟡",""], ["🟢","","","🟡"]], dogruIndex: 0 },
+  { cumle: "🟣 mor şekil 🟠 turuncu şeklin ALTINDA ve SOLUNDADIR.",
+    secenekler: [["","🟠","🟣",""], ["🟠","","","🟣"], ["","🟣","🟠",""], ["🟣","","","🟠"]], dogruIndex: 0 },
+];
+function pasperfSozelUzamsalSkorla(cevaplar, toplamSoru) {
+  const toplam = toplamSoru ?? cevaplar.length;
+  let dogruSayisi = 0, toplamSureMs = 0;
+  cevaplar.forEach(c => { if (c.dogru) dogruSayisi++; toplamSureMs += c.sureMs; });
+  const dogruYuzde = toplam > 0 ? Math.round(dogruSayisi / toplam * 100) : 0;
+  const ortSureMs = toplam > 0 ? Math.round(toplamSureMs / toplam) : 0;
+  return { toplam, dogruSayisi, dogruYuzde, ortSureMs, skor: dogruYuzde };
+}
+
+// ── İşitsel Kelime Dizisi (Ardışık İşlemleme alanı — işitsel/sözel madde) ───
+// AMAÇ: Ekranda yanıp sönen rakam dizisine ek olarak, gerçek CAS'taki gibi
+// SESLİ okunan bir kelime dizisini doğru sırayla hatırlayabilmeyi (işitsel-
+// sıralı bellek) ölçen bir madde türü eklemek.
+const PASPERF_ISITSEL_KELIME_HAVUZU = ["kedi","kuş","balık","at","tavuk","köpek","kaplan","aslan","fil","tavşan"];
+function pasperfIsitselDiziSkorla({ ulasilanSpan }, skorTablosu, maksSpan) {
+  return pasperfArdisikSkorla({ ulasilanSpan }, skorTablosu, maksSpan);
+}
+
 // ── Kademe (yaş grubu) bazlı zorluk ayarları ────────────────────────────────
 // AMAÇ: Gerçek CAS testi de yaşa göre normlanır (5-17 yaş, farklı zorluk).
 // Bizim özgün aracımız normlanmış olmasa da, en azından görev zorluğunun
@@ -2133,29 +2233,47 @@ const PASPERF_RENKLER = [
 const PASPERF_KADEME_AYARLARI = {
   ilkokul: {
     ad: "İlkokul (1-4. sınıf)",
-    planlamaNoktaSayisi: 6, planlamaBeklenenSnBasi: 1.9,
-    dikkatDenemeSayisi: 8, dikkatTepkiEsikMs: 3200,
-    oruntuHavuzu: PASPERF_ORUNTU_SORULARI.slice(0, 4),
+    yonergeSureSn: 25,
+    planlamaNoktaSayisi: 8, planlamaBeklenenSnBasi: 1.9,
+    sozelPlanlamaCumleleri: PASPERF_SOZEL_PLANLAMA_CUMLELERI.ilkokul,
+    dikkatDenemeSayisi: 10, dikkatTepkiEsikMs: 3200,
+    isitselDikkatKelimeSayisi: 8,
+    oruntuHavuzu: PASPERF_ORUNTU_SORULARI.slice(0, 5),
+    sozelUzamsalSoruSayisi: 2,
     digitBaslangicSpan: 2, digitMaksSpan: 6,
     digitSkorTablosu: { 2:30, 3:50, 4:70, 5:85, 6:100 },
+    isitselDiziBaslangicSpan: 2, isitselDiziMaksSpan: 4,
+    isitselDiziSkorTablosu: { 2:40, 3:70, 4:100 },
     beklenenSpanMetni: "yaklaşık 3-4 hane",
   },
   ortaokul: {
     ad: "Ortaokul (5-8. sınıf)",
-    planlamaNoktaSayisi: 9, planlamaBeklenenSnBasi: 1.7,
-    dikkatDenemeSayisi: 12, dikkatTepkiEsikMs: 2500,
+    yonergeSureSn: 18,
+    planlamaNoktaSayisi: 11, planlamaBeklenenSnBasi: 1.7,
+    sozelPlanlamaCumleleri: PASPERF_SOZEL_PLANLAMA_CUMLELERI.ortaokul,
+    dikkatDenemeSayisi: 16, dikkatTepkiEsikMs: 2500,
+    isitselDikkatKelimeSayisi: 12,
     oruntuHavuzu: PASPERF_ORUNTU_SORULARI,
+    sozelUzamsalSoruSayisi: 3,
     digitBaslangicSpan: 3, digitMaksSpan: 9,
     digitSkorTablosu: { 3:20, 4:35, 5:50, 6:65, 7:78, 8:90, 9:100 },
+    isitselDiziBaslangicSpan: 2, isitselDiziMaksSpan: 6,
+    isitselDiziSkorTablosu: { 2:20, 3:40, 4:60, 5:80, 6:100 },
     beklenenSpanMetni: "yaklaşık 5-6 hane",
   },
   lise: {
     ad: "Lise (9-12. sınıf)",
+    yonergeSureSn: 12,
     planlamaNoktaSayisi: 12, planlamaBeklenenSnBasi: 1.6,
-    dikkatDenemeSayisi: 16, dikkatTepkiEsikMs: 2000,
+    sozelPlanlamaCumleleri: PASPERF_SOZEL_PLANLAMA_CUMLELERI.lise,
+    dikkatDenemeSayisi: 20, dikkatTepkiEsikMs: 2000,
+    isitselDikkatKelimeSayisi: 15,
     oruntuHavuzu: [...PASPERF_ORUNTU_SORULARI, ...PASPERF_ORUNTU_SORULARI_LISE_EK],
+    sozelUzamsalSoruSayisi: 4,
     digitBaslangicSpan: 4, digitMaksSpan: 9,
     digitSkorTablosu: { 4:20, 5:35, 6:50, 7:65, 8:80, 9:100 },
+    isitselDiziBaslangicSpan: 3, isitselDiziMaksSpan: 7,
+    isitselDiziSkorTablosu: { 3:20, 4:35, 5:55, 6:78, 7:100 },
     beklenenSpanMetni: "yaklaşık 6-7 hane",
   },
 };
@@ -2199,17 +2317,40 @@ function pasperfArdisikSkorla({ ulasilanSpan }, skorTablosu, maksSpan = 9) {
   const skor = tablo[ulasilanSpan] ?? (ulasilanSpan > maksSpan ? 100 : 10);
   return { ulasilanSpan, skor };
 }
+
+// ── Görsel + Sözel/İşitsel madde sonuçlarını tek alan skoruna birleştirme ───
+// AMAÇ: Her PASS alanı artık hem görsel/motor hem de sözel/işitsel bir madde
+// içeriyor (gerçek CAS'ta da alt testler madde türü bakımından çeşitlidir).
+// Görsel madde ana ağırlığı taşır (bu araçta daha uzun süredir doğrulanmış
+// ölçüm), sözel/işitsel madde ek/tamamlayıcı ağırlıkla katılır.
+function pasperfPlanlamaSonucBirlestir(gorsel, sozel) {
+  const skor = sozel ? Math.round(gorsel.skor * 0.65 + sozel.skor * 0.35) : gorsel.skor;
+  return { ...gorsel, sozel: sozel || null, skor };
+}
+function pasperfDikkatSonucBirlestir(gorsel, isitsel) {
+  const skor = isitsel ? Math.round(gorsel.skor * 0.65 + isitsel.skor * 0.35) : gorsel.skor;
+  return { ...gorsel, isitsel: isitsel || null, skor };
+}
+function pasperfEszamanliSonucBirlestir(gorsel, sozel) {
+  const skor = sozel ? Math.round(gorsel.skor * 0.6 + sozel.skor * 0.4) : gorsel.skor;
+  return { ...gorsel, sozel: sozel || null, skor };
+}
+function pasperfArdisikSonucBirlestir(gorselDigit, isitselKelime) {
+  const skor = isitselKelime ? Math.round(gorselDigit.skor * 0.55 + isitselKelime.skor * 0.45) : gorselDigit.skor;
+  return { ...gorselDigit, isitsel: isitselKelime || null, skor };
+}
+
 function pasperfGenelYorumla({ planlama, dikkat, eszamanli, ardisik }, kademeAyarlari) {
   const ayarlar = kademeAyarlari || PASPERF_KADEME_AYARLARI.ortaokul;
   const alanlar = [
     { key: "planlama", ad: "Planlama", skor: planlama.skor,
-      dusukYorum: `Bağlantı kurma görevinde ${(planlama.sureMs/1000).toFixed(1)} saniyede ve ${planlama.hata} hatayla tamamladı. Bu, göreve stratejik yaklaşma, sırayı takip etme ve hata izleme konusunda yaşıtlarına göre daha fazla zamana/desteğe ihtiyaç duyabileceğine işaret edebilir.` },
+      dusukYorum: `Bağlantı kurma (görsel) görevinde ${(planlama.sureMs/1000).toFixed(1)} saniyede ve ${planlama.hata} hatayla tamamladı.${planlama.sozel ? ` Sözel sıralama (cümle kurma) görevinde %${planlama.sozel.skor} başarı gösterdi.` : ""} Bu, göreve stratejik yaklaşma, sırayı takip etme ve hata izleme konusunda yaşıtlarına göre daha fazla zamana/desteğe ihtiyaç duyabileceğine işaret edebilir.` },
     { key: "dikkat", ad: "Dikkat", skor: dikkat.skor,
-      dusukYorum: `Renk-kelime çelişkisi görevinde %${dikkat.dogruYuzde} doğruluk gösterdi, ortalama tepki süresi ${dikkat.ortTepkiMs} ms.${dikkat.stroopEtkisiMs !== null ? ` Uyumsuz denemelerde uyumlu denemelere göre ${dikkat.stroopEtkisiMs} ms daha yavaş tepki verdi (dürtü kontrolü/ket vurma göstergesi).` : ""} Bu bulgular sürdürülebilir ve seçici dikkatte güçlüğe işaret edebilir.` },
+      dusukYorum: `Renk-kelime çelişkisi (görsel) görevinde %${dikkat.dogruYuzde} doğruluk gösterdi, ortalama tepki süresi ${dikkat.ortTepkiMs} ms.${dikkat.stroopEtkisiMs !== null ? ` Uyumsuz denemelerde uyumlu denemelere göre ${dikkat.stroopEtkisiMs} ms daha yavaş tepki verdi (dürtü kontrolü/ket vurma göstergesi).` : ""}${dikkat.isitsel ? ` İşitsel seçici dikkat görevinde hedef sese %${dikkat.isitsel.hitYuzde} doğru tepki, %${dikkat.isitsel.yanlisAlarmYuzde} yanlış alarm oranı gösterdi.` : ""} Bu bulgular sürdürülebilir ve seçici dikkatte güçlüğe işaret edebilir.` },
     { key: "eszamanli", ad: "Eşzamanlı İşlemleme", skor: eszamanli.skor,
-      dusukYorum: `Örüntü tamamlama görevinde ${eszamanli.dogruSayisi}/${eszamanli.toplam} doğru cevap verdi. Bu, bilgiyi bütünsel olarak organize etme ve görsel-uzamsal ilişkileri kavrama konusunda güçlüğe işaret edebilir.` },
+      dusukYorum: `Örüntü tamamlama (görsel) görevinde ${eszamanli.dogruSayisi}/${eszamanli.toplam} doğru cevap verdi.${eszamanli.sozel ? ` Sözel-uzamsal ilişki görevinde ${eszamanli.sozel.dogruSayisi}/${eszamanli.sozel.toplam} doğru cevap verdi.` : ""} Bu, bilgiyi bütünsel olarak organize etme ve görsel-uzamsal ilişkileri kavrama konusunda güçlüğe işaret edebilir.` },
     { key: "ardisik", ad: "Ardışık İşlemleme", skor: ardisik.skor,
-      dusukYorum: `Dizi hatırlama görevinde ulaşabildiği en uzun dizi ${ardisik.ulasilanSpan} haneydi (yaşıtlarında ortalama beklenti ${ayarlar.beklenenSpanMetni}). Bu, sıralı bilgiyi kısa süreli bellekte tutma ve doğru sırayla yeniden üretme konusunda güçlüğe işaret edebilir.` },
+      dusukYorum: `Dizi hatırlama (görsel+sesli rakam) görevinde ulaşabildiği en uzun dizi ${ardisik.ulasilanSpan} haneydi (yaşıtlarında ortalama beklenti ${ayarlar.beklenenSpanMetni}).${ardisik.isitsel ? ` Sesli kelime dizisi görevinde ulaşabildiği en uzun dizi ${ardisik.isitsel.ulasilanSpan} kelimeydi.` : ""} Bu, sıralı bilgiyi kısa süreli bellekte tutma ve doğru sırayla yeniden üretme konusunda güçlüğe işaret edebilir.` },
   ];
   const genelSkor = Math.round((planlama.skor + dikkat.skor + eszamanli.skor + ardisik.skor) / 4);
   const seviye = genelSkor >= 80 ? { label: "Güçlü Performans", color: "#1A8C5B", bg: "#E6F5EE" }
@@ -2754,13 +2895,13 @@ Okul Kademesi: ${kademeAd}
 
 CAS TARZI BİLİŞSEL SÜREÇLER PERFORMANS TESTİ HAM SONUÇLARI (PASS Kuramı: Planlama, Dikkat, Eşzamanlı İşlemleme, Ardışık İşlemleme):
 
-1) PLANLAMA (Bağlantı Kurma görevi): Süre ${(planlama.sureMs/1000).toFixed(1)} sn, Hata sayısı ${planlama.hata}, Alan Skoru %${planlama.skor}
+1) PLANLAMA (Bağlantı Kurma [görsel] + Sözel Sıralama [sözel] görevi): Görsel görev — Süre ${(planlama.sureMs/1000).toFixed(1)} sn, Hata sayısı ${planlama.hata}.${planlama.sozel ? ` Sözel görev — Süre ${(planlama.sozel.sureMs/1000).toFixed(1)} sn, Hata ${planlama.sozel.hata}, Kelime sayısı ${planlama.sozel.kelimeSayisi}, Skor %${planlama.sozel.skor}.` : ""} Birleşik Alan Skoru %${planlama.skor}
 
-2) DİKKAT (Renk-Kelime/Stroop tarzı görev): Doğruluk %${dikkat.dogruYuzde}, Ortalama tepki süresi ${dikkat.ortTepkiMs} ms, Uyumlu denemelerde doğruluk ${dikkat.uyumluDogruYuzde !== null ? "%"+dikkat.uyumluDogruYuzde : "veri yok"}, Uyumsuz denemelerde doğruluk ${dikkat.uyumsuzDogruYuzde !== null ? "%"+dikkat.uyumsuzDogruYuzde : "veri yok"}, Stroop Etkisi (uyumsuz-uyumlu tepki farkı) ${dikkat.stroopEtkisiMs !== null ? dikkat.stroopEtkisiMs+" ms" : "veri yok"}, Alan Skoru %${dikkat.skor}
+2) DİKKAT (Renk-Kelime/Stroop [görsel] + Seçici Dikkat [işitsel] görevi): Görsel görev — Doğruluk %${dikkat.dogruYuzde}, Ortalama tepki süresi ${dikkat.ortTepkiMs} ms, Uyumlu denemelerde doğruluk ${dikkat.uyumluDogruYuzde !== null ? "%"+dikkat.uyumluDogruYuzde : "veri yok"}, Uyumsuz denemelerde doğruluk ${dikkat.uyumsuzDogruYuzde !== null ? "%"+dikkat.uyumsuzDogruYuzde : "veri yok"}, Stroop Etkisi ${dikkat.stroopEtkisiMs !== null ? dikkat.stroopEtkisiMs+" ms" : "veri yok"}.${dikkat.isitsel ? ` İşitsel görev — Hedef sese doğru tepki %${dikkat.isitsel.hitYuzde}, yanlış alarm %${dikkat.isitsel.yanlisAlarmYuzde}.` : ""} Birleşik Alan Skoru %${dikkat.skor}
 
-3) EŞZAMANLI İŞLEMLEME (Örüntü Tamamlama görevi): ${eszamanli.dogruSayisi}/${eszamanli.toplam} doğru, Ortalama süre/soru ${eszamanli.ortSureMs} ms, Alan Skoru %${eszamanli.skor}
+3) EŞZAMANLI İŞLEMLEME (Örüntü Tamamlama [görsel] + Sözel-Uzamsal İlişki [sözel] görevi): Görsel görev — ${eszamanli.dogruSayisi}/${eszamanli.toplam} doğru, Ortalama süre/soru ${eszamanli.ortSureMs} ms.${eszamanli.sozel ? ` Sözel görev — ${eszamanli.sozel.dogruSayisi}/${eszamanli.sozel.toplam} doğru, Ortalama süre/soru ${eszamanli.sozel.ortSureMs} ms.` : ""} Birleşik Alan Skoru %${eszamanli.skor}
 
-4) ARDIŞIK İŞLEMLEME (Dizi Hatırlama görevi): Ulaşılan en uzun dizi ${ardisik.ulasilanSpan} hane, Alan Skoru %${ardisik.skor}
+4) ARDIŞIK İŞLEMLEME (Sesli Rakam Dizisi + Sesli Kelime Dizisi görevi): Rakam dizisi — Ulaşılan en uzun dizi ${ardisik.ulasilanSpan} hane.${ardisik.isitsel ? ` Kelime dizisi — Ulaşılan en uzun dizi ${ardisik.isitsel.ulasilanSpan} kelime.` : ""} Birleşik Alan Skoru %${ardisik.skor}
 
 GENEL SKOR: %${genelSkor} (${seviyeLabel})
 
@@ -8786,18 +8927,23 @@ ${kademe ? "Planı öğrencinin yaş/gelişim dönemine uygun şekilde oluştur.
                                       </div>
                                       {o.alanKey === "planlama" && (
                                         <PPTBaglantiGorevi noktaSayisi={kademeAyarlariOturum.planlamaNoktaSayisi} beklenenSnBasi={kademeAyarlariOturum.planlamaBeklenenSnBasi}
+                                          yonergeSureSn={kademeAyarlariOturum.yonergeSureSn} sozelCumleler={kademeAyarlariOturum.sozelPlanlamaCumleleri}
                                           onTamamla={(s)=>handleOturumUyguladi(p.ogrenci,p.ogrenciSinif,p.id,o.no,pasperfOturumOzetMetni("planlama",s))} />
                                       )}
                                       {o.alanKey === "dikkat" && (
                                         <PPTDikkatGorevi toplamDeneme={kademeAyarlariOturum.dikkatDenemeSayisi} tepkiEsikMs={kademeAyarlariOturum.dikkatTepkiEsikMs}
+                                          yonergeSureSn={kademeAyarlariOturum.yonergeSureSn} isitselKelimeSayisi={kademeAyarlariOturum.isitselDikkatKelimeSayisi}
                                           onTamamla={(s)=>handleOturumUyguladi(p.ogrenci,p.ogrenciSinif,p.id,o.no,pasperfOturumOzetMetni("dikkat",s))} />
                                       )}
                                       {o.alanKey === "eszamanli" && (
                                         <PPTOruntuGorevi sorular={kademeAyarlariOturum.oruntuHavuzu}
+                                          yonergeSureSn={kademeAyarlariOturum.yonergeSureSn} sozelSoruSayisi={kademeAyarlariOturum.sozelUzamsalSoruSayisi}
                                           onTamamla={(s)=>handleOturumUyguladi(p.ogrenci,p.ogrenciSinif,p.id,o.no,pasperfOturumOzetMetni("eszamanli",s))} />
                                       )}
                                       {o.alanKey === "ardisik" && (
                                         <PPTDiziGorevi baslangicSpan={kademeAyarlariOturum.digitBaslangicSpan} maksSpan={kademeAyarlariOturum.digitMaksSpan} skorTablosu={kademeAyarlariOturum.digitSkorTablosu}
+                                          yonergeSureSn={kademeAyarlariOturum.yonergeSureSn} isitselBaslangicSpan={kademeAyarlariOturum.isitselDiziBaslangicSpan}
+                                          isitselMaksSpan={kademeAyarlariOturum.isitselDiziMaksSpan} isitselSkorTablosu={kademeAyarlariOturum.isitselDiziSkorTablosu}
                                           onTamamla={(s)=>handleOturumUyguladi(p.ogrenci,p.ogrenciSinif,p.id,o.no,pasperfOturumOzetMetni("ardisik",s))} />
                                       )}
                                     </div>
@@ -15586,19 +15732,57 @@ function PASPaneli({ seciliAd, seciliSinif, seciliNumara, pasDegerlendirmeler, s
 
 // 12'ye kadar nokta konumlayabilen ortak havuz — kademeye göre ilk N tanesi
 // kullanılır (ilkokul:6, ortaokul:9, lise:12).
+// ── Ortak: Yönerge okuma ekranı ─────────────────────────────────────────────
+// AMAÇ: Gerçek CAS'ta uygulayıcı göreve başlamadan standart yönergeyi okur;
+// bizim aracımızda da öğrencinin göreve atlamadan ÖNCE yönergeyi okuması için
+// geri sayımlı bir zorunlu bekleme süresi veriyoruz (süre dolmadan "Başla"
+// butonu aktif olmaz).
+function PPTYonergeEkrani({ baslik, madde, sureSn = 15, renk, onDevam }) {
+  const [kalan, setKalan] = useState(sureSn);
+  const r = renk || ACCENT;
+  useEffect(() => {
+    if (kalan <= 0) return;
+    const t = setTimeout(() => setKalan(k => k - 1), 1000);
+    return () => clearTimeout(t);
+  }, [kalan]);
+  return (
+    <div style={{textAlign:"center", padding:"6px 2px"}}>
+      <div style={{fontSize:13, fontWeight:800, color:r, marginBottom:10}}>📖 {baslik}</div>
+      <div style={{fontSize:12.5, color:TEXT, lineHeight:1.7, background:"#fff", border:`1.5px solid ${r}`, borderRadius:12, padding:"14px 16px", marginBottom:14, textAlign:"left"}}>{madde}</div>
+      <button onClick={onDevam} disabled={kalan > 0} style={{
+        padding:"11px 24px", background: kalan > 0 ? "#ccc" : r, color:"#fff", border:"none", borderRadius:11,
+        fontWeight:800, fontSize:13, cursor: kalan > 0 ? "not-allowed" : "pointer"
+      }}>{kalan > 0 ? `Yönergeyi okuyun… (${kalan} sn)` : "▶️ Göreve Başla"}</button>
+    </div>
+  );
+}
+
 const PPT_BAGLANTI_KONUM_HAVUZU = [
   { top: "8%", left: "12%" }, { top: "18%", left: "62%" }, { top: "40%", left: "30%" },
   { top: "10%", left: "82%" }, { top: "55%", left: "8%" }, { top: "68%", left: "55%" },
   { top: "35%", left: "78%" }, { top: "82%", left: "28%" }, { top: "85%", left: "75%" },
   { top: "5%", left: "45%" }, { top: "60%", left: "88%" }, { top: "90%", left: "50%" },
 ];
-function PPTBaglantiGorevi({ onTamamla, noktaSayisi = 9, beklenenSnBasi = 1.7 }) {
+
+// ── Planlama: Bağlantı Kurma (görsel) + Sözel Sıralama (sözel) ──────────────
+function PPTBaglantiGorevi({ onTamamla, noktaSayisi = 9, beklenenSnBasi = 1.7, yonergeSureSn = 15, sozelCumleler }) {
+  const [faz, setFaz] = useState("yonerge"); // yonerge | gorsel | sozel
+  const [gorselSonuc, setGorselSonuc] = useState(null);
   const KONUMLAR = PPT_BAGLANTI_KONUM_HAVUZU.slice(0, noktaSayisi);
   const [sonraki, setSonraki] = useState(1);
   const [hata, setHata] = useState(0);
   const [tiklanan, setTiklanan] = useState([]);
   const baslangicRef = useRef(null);
-  useEffect(() => { baslangicRef.current = Date.now(); }, []);
+  useEffect(() => { if (faz === "gorsel") baslangicRef.current = Date.now(); }, [faz]);
+
+  const cumleHavuzu = sozelCumleler && sozelCumleler.length > 0 ? sozelCumleler : PASPERF_SOZEL_PLANLAMA_CUMLELERI.ortaokul;
+  const [sozelSoru] = useState(() => cumleHavuzu[Math.floor(Math.random() * cumleHavuzu.length)]);
+  const [karisikKelimeler] = useState(() => sozelSoru.kelimeler.map((k, i) => ({ k, i })).sort(() => Math.random() - 0.5));
+  const [sozelSirasi, setSozelSirasi] = useState(1); // sıradaki doğru konum (1-index)
+  const [sozelHata, setSozelHata] = useState(0);
+  const [secilenIdx, setSecilenIdx] = useState([]);
+  const sozelBaslangicRef = useRef(null);
+  useEffect(() => { if (faz === "sozel") sozelBaslangicRef.current = Date.now(); }, [faz]);
 
   function tikla(n) {
     if (tiklanan.includes(n)) return;
@@ -15607,13 +15791,67 @@ function PPTBaglantiGorevi({ onTamamla, noktaSayisi = 9, beklenenSnBasi = 1.7 })
       setTiklanan(yeniTiklanan);
       if (n === noktaSayisi) {
         const sureMs = Date.now() - (baslangicRef.current || Date.now());
-        onTamamla(pasperfPlanlamaSkorla({ sureMs, hata, noktaSayisi, beklenenSnBasi }));
+        const sonuc = pasperfPlanlamaSkorla({ sureMs, hata, noktaSayisi, beklenenSnBasi });
+        setGorselSonuc(sonuc);
+        if (cumleHavuzu.length > 0) setFaz("sozel");
+        else onTamamla(pasperfPlanlamaSonucBirlestir(sonuc, null));
       } else {
         setSonraki(n + 1);
       }
     } else {
       setHata(h => h + 1);
     }
+  }
+
+  function sozelKelimeTikla(entry) {
+    if (secilenIdx.includes(entry.i)) return;
+    const beklenenKelime = sozelSoru.kelimeler[sozelSirasi - 1];
+    if (entry.k === beklenenKelime && !secilenIdx.includes(entry.i)) {
+      // Aynı kelime birden fazla kez geçmiyor olsa da index bazlı eşleştirme güvenlidir.
+      const yeni = [...secilenIdx, entry.i];
+      setSecilenIdx(yeni);
+      if (sozelSirasi === sozelSoru.kelimeler.length) {
+        const sureMs = Date.now() - (sozelBaslangicRef.current || Date.now());
+        const sozelSonuc = pasperfSozelPlanlamaSkorla({ sureMs, hata: sozelHata, kelimeSayisi: sozelSoru.kelimeler.length });
+        onTamamla(pasperfPlanlamaSonucBirlestir(gorselSonuc, sozelSonuc));
+      } else {
+        setSozelSirasi(s => s + 1);
+      }
+    } else {
+      setSozelHata(h => h + 1);
+    }
+  }
+
+  if (faz === "yonerge") {
+    return <PPTYonergeEkrani sureSn={yonergeSureSn} baslik="Yönerge: Bağlantı Kurma"
+      madde={<>Ekranda 1'den {noktaSayisi}'a kadar numaralı daireler göreceksin. Sayılara <b>küçükten büyüğe, sırasıyla</b>, mümkün olduğunca <b>hızlı ve hatasız</b> dokun. Bir sayıyı atlayıp başka bir sayıya dokunursan bu hata sayılır. Hazır olduğunda "Göreve Başla"ya bas.</>}
+      onDevam={() => setFaz("gorsel")} />;
+  }
+
+  if (faz === "sozel") {
+    return (
+      <div>
+        <div style={{fontSize:12, color:MUTED, marginBottom:10, textAlign:"center"}}>
+          Aşağıdaki karışık kelimelerden <b>anlamlı ve doğru sıralı bir cümle</b> kurmak için kelimelere <b>sırasıyla</b> dokun. (Sözel Sıralama — Planlama)
+        </div>
+        <div style={{minHeight:44, background:"#fff", border:`1.5px solid ${BORDER}`, borderRadius:10, padding:"10px 12px", marginBottom:12, fontSize:14, fontWeight:700, textAlign:"center"}}>
+          {secilenIdx.length > 0 ? secilenIdx.map(i => sozelSoru.kelimeler[i]).join(" ") : "…"}
+        </div>
+        <div style={{display:"flex", flexWrap:"wrap", gap:8, justifyContent:"center"}}>
+          {karisikKelimeler.map(entry => {
+            const secili = secilenIdx.includes(entry.i);
+            return (
+              <button key={entry.i} onClick={() => sozelKelimeTikla(entry)} disabled={secili} style={{
+                padding:"9px 14px", borderRadius:10, border:`2px solid ${secili?ACCENT:BORDER}`,
+                background: secili ? ACCENT : "#fff", color: secili ? "#fff" : TEXT,
+                fontSize:13, fontWeight:700, cursor: secili ? "default" : "pointer"
+              }}>{entry.k}</button>
+            );
+          })}
+        </div>
+        <div style={{marginTop:8, fontSize:10.5, color:MUTED, textAlign:"center"}}>Kelime {sozelSirasi > sozelSoru.kelimeler.length ? sozelSoru.kelimeler.length : sozelSirasi}/{sozelSoru.kelimeler.length} · Hata: {sozelHata}</div>
+      </div>
+    );
   }
 
   return (
@@ -15642,7 +15880,10 @@ function PPTBaglantiGorevi({ onTamamla, noktaSayisi = 9, beklenenSnBasi = 1.7 })
   );
 }
 
-function PPTDikkatGorevi({ onTamamla, toplamDeneme = 12, tepkiEsikMs = 2500 }) {
+// ── Dikkat: Renk-Kelime/Stroop (görsel) + Seçici Dikkat (işitsel) ───────────
+function PPTDikkatGorevi({ onTamamla, toplamDeneme = 12, tepkiEsikMs = 2500, yonergeSureSn = 15, isitselKelimeSayisi = 12 }) {
+  const [faz, setFaz] = useState("yonerge"); // yonerge | gorsel | isitsel
+  const [gorselSonuc, setGorselSonuc] = useState(null);
   const [denemeIndex, setDenemeIndex] = useState(0);
   const [denemeler, setDenemeler] = useState([]);
   const [deneme, setDeneme] = useState(null);
@@ -15660,7 +15901,7 @@ function PPTDikkatGorevi({ onTamamla, toplamDeneme = 12, tepkiEsikMs = 2500 }) {
     gosterimRef.current = Date.now();
   }
 
-  useEffect(() => { yeniDenemeUret(); }, []);
+  useEffect(() => { if (faz === "gorsel" && !deneme) yeniDenemeUret(); }, [faz]);
 
   function cevapVer(secilenAd) {
     if (!deneme) return;
@@ -15669,11 +15910,84 @@ function PPTDikkatGorevi({ onTamamla, toplamDeneme = 12, tepkiEsikMs = 2500 }) {
     const yeniDenemeler = [...denemeler, { uyumlu: deneme.uyumlu, dogru, tepkiMs }];
     setDenemeler(yeniDenemeler);
     if (denemeIndex + 1 >= toplamDeneme) {
-      onTamamla(pasperfDikkatSkorla(yeniDenemeler, tepkiEsikMs));
+      const sonuc = pasperfDikkatSkorla(yeniDenemeler, tepkiEsikMs);
+      setGorselSonuc(sonuc);
+      if (isitselKelimeSayisi > 0) setFaz("isitsel");
+      else onTamamla(pasperfDikkatSonucBirlestir(sonuc, null));
     } else {
       setDenemeIndex(i => i + 1);
       yeniDenemeUret();
     }
+  }
+
+  // İşitsel seçici dikkat: sırayla sesli kelimeler okunur, hedef kelime
+  // ("elma") duyulduğunda butona basılmalı, diğerlerinde basılMAMALI.
+  const [isitselSira] = useState(() => {
+    const dizi = [];
+    for (let i = 0; i < isitselKelimeSayisi; i++) {
+      const hedef = Math.random() < 0.3;
+      const kelime = hedef ? PASPERF_ISITSEL_DIKKAT_HEDEF : PASPERF_ISITSEL_DIKKAT_KELIME_HAVUZU[Math.floor(Math.random() * PASPERF_ISITSEL_DIKKAT_KELIME_HAVUZU.length)];
+      dizi.push({ kelime, hedef });
+    }
+    return dizi;
+  });
+  const [isitselIndex, setIsitselIndex] = useState(0);
+  const [isitselTiklandi, setIsitselTiklandi] = useState(false);
+  const [isitselSonuclar, setIsitselSonuclar] = useState([]);
+  const [isitselOynuyor, setIsitselOynuyor] = useState(false);
+  const sesDestekli = pdrSesDestekliMi();
+  const isitselTiklandiRef = useRef(false);
+
+  useEffect(() => {
+    if (faz !== "isitsel") return;
+    if (isitselIndex >= isitselSira.length) {
+      const isitselSonuc = pasperfIsitselDikkatSkorla(isitselSonuclar);
+      onTamamla(pasperfDikkatSonucBirlestir(gorselSonuc, isitselSonuc));
+      return;
+    }
+    setIsitselOynuyor(true);
+    setIsitselTiklandi(false);
+    isitselTiklandiRef.current = false;
+    pdrSesliOku(isitselSira[isitselIndex].kelime);
+    const t = setTimeout(() => {
+      setIsitselSonuclar(s => [...s, { hedef: isitselSira[isitselIndex].hedef, tikladi: isitselTiklandiRef.current }]);
+      setIsitselOynuyor(false);
+      setIsitselIndex(i => i + 1);
+    }, 1700);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line
+  }, [faz, isitselIndex]);
+
+  function isitselDuydumTikla() {
+    if (isitselTiklandiRef.current) return;
+    isitselTiklandiRef.current = true;
+    setIsitselTiklandi(true);
+  }
+
+  if (faz === "yonerge") {
+    return <PPTYonergeEkrani sureSn={yonergeSureSn} baslik="Yönerge: Renk-Kelime Görevi"
+      madde={<>Ekranda bir renk adı, farklı bir <b>renkte yazılmış</b> şekilde görünecek. Kelimenin <b>anlamına değil</b>, yazıldığı <b>renge</b> bakıp o rengin butonuna dokun. Ardından kulaklıkla/hoparlörle sırayla kelimeler okunacak; sadece <b>"elma"</b> kelimesini duyduğunda "🎯 Duydum!" butonuna bas, başka kelimelerde basma.</>}
+      onDevam={() => setFaz("gorsel")} />;
+  }
+
+  if (faz === "isitsel") {
+    return (
+      <div style={{textAlign:"center"}}>
+        <div style={{fontSize:12, color:MUTED, marginBottom:14}}>
+          Sadece <b>"{PASPERF_ISITSEL_DIKKAT_HEDEF}"</b> kelimesini duyunca butona bas. (İşitsel Seçici Dikkat)
+        </div>
+        <div style={{padding:"30px 0", background:"#fff", border:`1.5px solid ${BORDER}`, borderRadius:12, marginBottom:14}}>
+          <span style={{fontSize:34}}>{isitselOynuyor ? "🔊" : "…"}</span>
+          {!sesDestekli && <div style={{marginTop:10, fontSize:20, fontWeight:800, color:ACCENT}}>{isitselSira[isitselIndex]?.kelime}</div>}
+        </div>
+        <button onClick={isitselDuydumTikla} disabled={isitselTiklandi} style={{
+          padding:"14px 30px", borderRadius:14, border:"none", fontSize:15, fontWeight:800,
+          background: isitselTiklandi ? BORDER : "#B5651D", color: isitselTiklandi ? MUTED : "#fff",
+          cursor: isitselTiklandi ? "default" : "pointer"
+        }}>🎯 Duydum!</button>
+        <div style={{marginTop:10, fontSize:10.5, color:MUTED}}>Kelime {Math.min(isitselIndex+1, isitselSira.length)}/{isitselSira.length}</div>
+      </div>
+    );
   }
 
   if (!deneme) return null;
@@ -15698,15 +16012,24 @@ function PPTDikkatGorevi({ onTamamla, toplamDeneme = 12, tepkiEsikMs = 2500 }) {
   );
 }
 
-function PPTOruntuGorevi({ onTamamla, sorular }) {
+// ── Eşzamanlı: Örüntü Tamamlama (görsel) + Sözel-Uzamsal İlişki (sözel) ─────
+function PPTOruntuGorevi({ onTamamla, sorular, yonergeSureSn = 15, sozelSoruSayisi = 3 }) {
+  const [faz, setFaz] = useState("yonerge"); // yonerge | gorsel | sozel
+  const [gorselSonuc, setGorselSonuc] = useState(null);
   const soruListesi = sorular && sorular.length > 0 ? sorular : PASPERF_ORUNTU_SORULARI;
   const [soruIndex, setSoruIndex] = useState(0);
   const [cevaplar, setCevaplar] = useState([]);
   const gosterimRef = useRef(Date.now());
-  useEffect(() => { gosterimRef.current = Date.now(); }, [soruIndex]);
+  useEffect(() => { if (faz === "gorsel") gosterimRef.current = Date.now(); }, [faz, soruIndex]);
+
+  const sozelListesi = PASPERF_SOZEL_UZAMSAL_SORULARI.slice(0, sozelSoruSayisi);
+  const [sozelIndex, setSozelIndex] = useState(0);
+  const [sozelCevaplar, setSozelCevaplar] = useState([]);
+  const sozelGosterimRef = useRef(Date.now());
+  useEffect(() => { if (faz === "sozel") sozelGosterimRef.current = Date.now(); }, [faz, sozelIndex]);
 
   const soru = soruListesi[soruIndex];
-  const kolon = soru.izgara.length === 4 ? 2 : soru.izgara.length === 16 ? 4 : 3;
+  const kolon = soru ? (soru.izgara.length === 4 ? 2 : soru.izgara.length === 16 ? 4 : 3) : 3;
 
   function cevapVer(secim) {
     const sureMs = Date.now() - gosterimRef.current;
@@ -15714,10 +16037,59 @@ function PPTOruntuGorevi({ onTamamla, sorular }) {
     const yeniCevaplar = [...cevaplar, { dogru, sureMs }];
     setCevaplar(yeniCevaplar);
     if (soruIndex + 1 >= soruListesi.length) {
-      onTamamla(pasperfEszamanliSkorla(yeniCevaplar, soruListesi.length));
+      const sonuc = pasperfEszamanliSkorla(yeniCevaplar, soruListesi.length);
+      setGorselSonuc(sonuc);
+      if (sozelListesi.length > 0) setFaz("sozel");
+      else onTamamla(pasperfEszamanliSonucBirlestir(sonuc, null));
     } else {
       setSoruIndex(i => i + 1);
     }
+  }
+
+  function sozelCevapVer(secilenIndex) {
+    const sozelSoru = sozelListesi[sozelIndex];
+    const sureMs = Date.now() - sozelGosterimRef.current;
+    const dogru = secilenIndex === sozelSoru.dogruIndex;
+    const yeni = [...sozelCevaplar, { dogru, sureMs }];
+    setSozelCevaplar(yeni);
+    if (sozelIndex + 1 >= sozelListesi.length) {
+      const sozelSonuc = pasperfSozelUzamsalSkorla(yeni, sozelListesi.length);
+      onTamamla(pasperfEszamanliSonucBirlestir(gorselSonuc, sozelSonuc));
+    } else {
+      setSozelIndex(i => i + 1);
+    }
+  }
+
+  if (faz === "yonerge") {
+    return <PPTYonergeEkrani sureSn={yonergeSureSn} baslik="Yönerge: Örüntü ve İlişki Görevi"
+      madde={<>Önce bir <b>örüntü</b> (tekrar eden şekil/renk dizisi) göreceksin; ❓ yerine gelmesi gereken doğru öğeyi seçeceksin. Ardından bir <b>cümle</b> okuyup, o cümlenin anlattığı yerleşimi (ör. "üstünde ve solunda") doğru gösteren küçük şekli seçeceksin.</>}
+      onDevam={() => setFaz("gorsel")} />;
+  }
+
+  if (faz === "sozel") {
+    const sozelSoru = sozelListesi[sozelIndex];
+    return (
+      <div>
+        <div style={{fontSize:12, color:MUTED, marginBottom:10, textAlign:"center"}}>
+          Cümleyi oku, anlattığı yerleşimi doğru gösteren şekli seç. (Sözel-Uzamsal İlişki)
+        </div>
+        <div style={{fontSize:13, fontWeight:700, color:TEXT, textAlign:"center", background:"#fff", border:`1.5px solid ${BORDER}`, borderRadius:10, padding:"10px 12px", marginBottom:14}}>{sozelSoru.cumle}</div>
+        <div style={{display:"grid", gridTemplateColumns:"repeat(2, 1fr)", gap:10}}>
+          {sozelSoru.secenekler.map((duzen, i) => (
+            <button key={i} onClick={() => sozelCevapVer(i)} style={{
+              padding:8, borderRadius:10, border:`2px solid ${BORDER}`, background:CARD, cursor:"pointer"
+            }}>
+              <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gridTemplateRows:"1fr 1fr", gap:2, width:56, height:56, margin:"0 auto"}}>
+                {duzen.map((hucre, j) => (
+                  <div key={j} style={{border:`1px dashed ${BORDER}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, background:"#fff"}}>{hucre}</div>
+                ))}
+              </div>
+            </button>
+          ))}
+        </div>
+        <div style={{marginTop:8, fontSize:10.5, color:MUTED, textAlign:"center"}}>Soru {sozelIndex + 1}/{sozelListesi.length}</div>
+      </div>
+    );
   }
 
   return (
@@ -15742,7 +16114,10 @@ function PPTOruntuGorevi({ onTamamla, sorular }) {
   );
 }
 
-function PPTDiziGorevi({ onTamamla, baslangicSpan = 3, maksSpan = 9, skorTablosu }) {
+// ── Ardışık: Sesli Rakam Dizisi (görsel+işitsel) + Sesli Kelime Dizisi (işitsel) ─
+function PPTDiziGorevi({ onTamamla, baslangicSpan = 3, maksSpan = 9, skorTablosu, yonergeSureSn = 15, isitselBaslangicSpan = 2, isitselMaksSpan = 6, isitselSkorTablosu }) {
+  const [faz, setFaz] = useState("yonerge"); // yonerge | gorsel | isitsel
+  const [gorselSonuc, setGorselSonuc] = useState(null);
   const MAKS_SPAN = maksSpan;
   const [span, setSpan] = useState(baslangicSpan);
   const [deneme, setDeneme] = useState(1); // 1 veya 2. deneme
@@ -15760,21 +16135,22 @@ function PPTDiziGorevi({ onTamamla, baslangicSpan = 3, maksSpan = 9, skorTablosu
     setAsama("gosterim");
   }
 
-  useEffect(() => { yeniDiziUret(span); }, [span, deneme]);
+  useEffect(() => { if (faz === "gorsel") yeniDiziUret(span); }, [faz, span, deneme]);
 
   useEffect(() => {
-    if (asama !== "gosterim" || dizi.length === 0) return;
+    if (faz !== "gorsel" || asama !== "gosterim" || dizi.length === 0) return;
     if (gosterilenIndex >= dizi.length) {
       setAsama("girdi");
       return;
     }
+    if (gosterilenIndex >= 0) pdrSesliOku(String(dizi[gosterilenIndex])); // görsel+işitsel birlikte (gerçek CAS'ta sözel okunur)
     const t = setTimeout(() => setGosterilenIndex(i => i + 1), 900);
     return () => clearTimeout(t);
-  }, [asama, gosterilenIndex, dizi]);
+  }, [faz, asama, gosterilenIndex, dizi]);
 
   useEffect(() => {
-    if (asama === "gosterim" && gosterilenIndex === -1) setGosterilenIndex(0);
-  }, [asama]);
+    if (faz === "gorsel" && asama === "gosterim" && gosterilenIndex === -1) setGosterilenIndex(0);
+  }, [faz, asama]);
 
   function tuşaBas(d) {
     const yeniGirilen = [...girilen, d];
@@ -15783,14 +16159,14 @@ function PPTDiziGorevi({ onTamamla, baslangicSpan = 3, maksSpan = 9, skorTablosu
       const dogru = yeniGirilen.every((v, i) => v === dizi[i]);
       if (dogru) {
         if (span >= MAKS_SPAN) {
-          onTamamla(pasperfArdisikSkorla({ ulasilanSpan: MAKS_SPAN }, skorTablosu, MAKS_SPAN));
+          bitirGorsel(MAKS_SPAN);
         } else {
           setSpan(s => s + 1);
           setDeneme(1);
         }
       } else {
         if (deneme >= 2) {
-          onTamamla(pasperfArdisikSkorla({ ulasilanSpan: Math.max(0, span - 1) }, skorTablosu, MAKS_SPAN));
+          bitirGorsel(Math.max(0, span - 1));
         } else {
           setDeneme(2);
         }
@@ -15798,10 +16174,109 @@ function PPTDiziGorevi({ onTamamla, baslangicSpan = 3, maksSpan = 9, skorTablosu
     }
   }
 
+  function bitirGorsel(ulasilanSpan) {
+    const sonuc = pasperfArdisikSkorla({ ulasilanSpan }, skorTablosu, MAKS_SPAN);
+    setGorselSonuc(sonuc);
+    if (isitselMaksSpan > 0) { setFaz("isitsel"); }
+    else onTamamla(pasperfArdisikSonucBirlestir(sonuc, null));
+  }
+
+  // İşitsel kelime dizisi (aynı staircase mantığı, kelimelerle ve sadece sesle)
+  const IS_MAKS = isitselMaksSpan;
+  const [isSpan, setIsSpan] = useState(isitselBaslangicSpan);
+  const [isDeneme, setIsDeneme] = useState(1);
+  const [isAsama, setIsAsama] = useState("gosterim");
+  const [isDizi, setIsDizi] = useState([]);
+  const [isGosterilenIndex, setIsGosterilenIndex] = useState(-1);
+  const [isGirilen, setIsGirilen] = useState([]);
+  const sesDestekli = pdrSesDestekliMi();
+
+  function yeniIsDiziUret(uzunluk) {
+    const yeni = Array.from({length: uzunluk}, () => PASPERF_ISITSEL_KELIME_HAVUZU[Math.floor(Math.random() * PASPERF_ISITSEL_KELIME_HAVUZU.length)]);
+    setIsDizi(yeni);
+    setIsGirilen([]);
+    setIsGosterilenIndex(-1);
+    setIsAsama("gosterim");
+  }
+  useEffect(() => { if (faz === "isitsel") yeniIsDiziUret(isSpan); }, [faz, isSpan, isDeneme]);
+  useEffect(() => {
+    if (faz !== "isitsel" || isAsama !== "gosterim" || isDizi.length === 0) return;
+    if (isGosterilenIndex >= isDizi.length) { setIsAsama("girdi"); return; }
+    if (isGosterilenIndex >= 0) pdrSesliOku(isDizi[isGosterilenIndex]);
+    const t = setTimeout(() => setIsGosterilenIndex(i => i + 1), 1400);
+    return () => clearTimeout(t);
+  }, [faz, isAsama, isGosterilenIndex, isDizi]);
+  useEffect(() => {
+    if (faz === "isitsel" && isAsama === "gosterim" && isGosterilenIndex === -1) setIsGosterilenIndex(0);
+  }, [faz, isAsama]);
+
+  function isKelimeTusaBas(w) {
+    const yeni = [...isGirilen, w];
+    setIsGirilen(yeni);
+    if (yeni.length === isDizi.length) {
+      const dogru = yeni.every((v, i) => v === isDizi[i]);
+      if (dogru) {
+        if (isSpan >= IS_MAKS) {
+          const isitselSonuc = pasperfIsitselDiziSkorla({ ulasilanSpan: IS_MAKS }, isitselSkorTablosu, IS_MAKS);
+          onTamamla(pasperfArdisikSonucBirlestir(gorselSonuc, isitselSonuc));
+        } else {
+          setIsSpan(s => s + 1);
+          setIsDeneme(1);
+        }
+      } else {
+        if (isDeneme >= 2) {
+          const isitselSonuc = pasperfIsitselDiziSkorla({ ulasilanSpan: Math.max(0, isSpan - 1) }, isitselSkorTablosu, IS_MAKS);
+          onTamamla(pasperfArdisikSonucBirlestir(gorselSonuc, isitselSonuc));
+        } else {
+          setIsDeneme(2);
+        }
+      }
+    }
+  }
+
+  if (faz === "yonerge") {
+    return <PPTYonergeEkrani sureSn={yonergeSureSn} baslik="Yönerge: Dizi Hatırlama Görevi"
+      madde={<>Ekranda sırayla rakamlar görünecek (sesle de okunacak); bitince <b>aynı sırayla</b> tuşlara bas. Ardından bu kez rakam yerine <b>sesli olarak birkaç kelime</b> okunacak; duyduğun kelimeleri <b>aynı sırayla</b> ekrandaki kelime tuşlarına dokunarak tekrar et.</>}
+      onDevam={() => setFaz("gorsel")} />;
+  }
+
+  if (faz === "isitsel") {
+    return (
+      <div>
+        <div style={{fontSize:12, color:MUTED, marginBottom:10, textAlign:"center"}}>
+          Sırayla <b>sesli okunan kelimeleri</b> dinle, bitince <b>aynı sırayla</b> kelime tuşlarına bas. (İşitsel Kelime Dizisi)
+        </div>
+        <div style={{textAlign:"center", padding:"30px 0", background:"#fff", border:`1.5px solid ${BORDER}`, borderRadius:12, marginBottom:12, minHeight:100}}>
+          {isAsama === "gosterim" ? (
+            <div>
+              <span style={{fontSize:34}}>🔊</span>
+              {!sesDestekli && <div style={{marginTop:8, fontSize:24, fontWeight:900, color:"#B5651D"}}>{isGosterilenIndex >= 0 && isGosterilenIndex < isDizi.length ? isDizi[isGosterilenIndex] : "•"}</div>}
+            </div>
+          ) : (
+            <div>
+              <div style={{fontSize:12, color:MUTED, marginBottom:8}}>Şimdi sırayla dokun:</div>
+              <div style={{fontSize:15, fontWeight:800}}>{isGirilen.join(" - ")}{isGirilen.length < isDizi.length ? " …" : ""}</div>
+            </div>
+          )}
+        </div>
+        {isAsama === "girdi" && (
+          <div style={{display:"grid", gridTemplateColumns:"repeat(5, 1fr)", gap:8}}>
+            {PASPERF_ISITSEL_KELIME_HAVUZU.map(w => (
+              <button key={w} onClick={() => isKelimeTusaBas(w)} style={{
+                padding:"10px 2px", borderRadius:10, border:`2px solid ${BORDER}`, background:CARD, fontSize:11.5, fontWeight:700, cursor:"pointer"
+              }}>{w}</button>
+            ))}
+          </div>
+        )}
+        <div style={{marginTop:8, fontSize:10.5, color:MUTED, textAlign:"center"}}>Dizi uzunluğu: {isSpan} · Deneme {isDeneme}/2</div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div style={{fontSize:12, color:MUTED, marginBottom:10, textAlign:"center"}}>
-        Ekranda sırayla gösterilen rakamları izle, bitince <b>aynı sırayla</b> tuşlara bas.
+        Ekranda sırayla gösterilen (ve sesle okunan) rakamları izle, bitince <b>aynı sırayla</b> tuşlara bas.
       </div>
       <div style={{textAlign:"center", padding:"30px 0", background:"#fff", border:`1.5px solid ${BORDER}`, borderRadius:12, marginBottom:12, minHeight:100}}>
         {asama === "gosterim" ? (
@@ -15941,33 +16416,42 @@ function PASPerformansPaneli({ seciliAd, seciliSinif, seciliNumara, pasPerforman
 
       {adim === "giris" && (
         <div style={{textAlign:"center", padding:20}}>
-          <div style={{fontSize:13, color:TEXT, marginBottom:16}}>Sırasıyla 4 kısa görev uygulanacak: <b>Bağlantı Kurma</b> → <b>Renk-Kelime</b> → <b>Örüntü Tamamlama</b> → <b>Dizi Hatırlama</b>.</div>
+          <div style={{fontSize:13, color:TEXT, marginBottom:16}}>Sırasıyla 4 alan uygulanacak, her biri hem <b>görsel</b> hem <b>sözel/işitsel</b> madde içerir: <b>Planlama</b> → <b>Dikkat</b> → <b>Eşzamanlı İşlemleme</b> → <b>Ardışık İşlemleme</b>. Her alandan önce kısa bir yönerge okunacak.</div>
           <button onClick={() => setAdim("planlama")} style={{padding:"12px 26px", background:ACCENT, color:"#fff", border:"none", borderRadius:12, fontSize:14, fontWeight:800, cursor:"pointer"}}>▶️ Teste Başla</button>
         </div>
       )}
 
       {adim === "planlama" && (
         <div>
-          <div style={{fontSize:12, fontWeight:800, color:ACCENT, marginBottom:10}}>🧭 1/4 · Planlama (Bağlantı Kurma)</div>
-          <PPTBaglantiGorevi noktaSayisi={kademeAyarlari.planlamaNoktaSayisi} beklenenSnBasi={kademeAyarlari.planlamaBeklenenSnBasi} onTamamla={(s) => { setPlanlama(s); setAdim("dikkat"); }} />
+          <div style={{fontSize:12, fontWeight:800, color:ACCENT, marginBottom:10}}>🧭 1/4 · Planlama (Bağlantı Kurma + Sözel Sıralama)</div>
+          <PPTBaglantiGorevi noktaSayisi={kademeAyarlari.planlamaNoktaSayisi} beklenenSnBasi={kademeAyarlari.planlamaBeklenenSnBasi}
+            yonergeSureSn={kademeAyarlari.yonergeSureSn} sozelCumleler={kademeAyarlari.sozelPlanlamaCumleleri}
+            onTamamla={(s) => { setPlanlama(s); setAdim("dikkat"); }} />
         </div>
       )}
       {adim === "dikkat" && (
         <div>
-          <div style={{fontSize:12, fontWeight:800, color:ACCENT, marginBottom:10}}>🎯 2/4 · Dikkat (Renk-Kelime)</div>
-          <PPTDikkatGorevi toplamDeneme={kademeAyarlari.dikkatDenemeSayisi} tepkiEsikMs={kademeAyarlari.dikkatTepkiEsikMs} onTamamla={(s) => { setDikkat(s); setAdim("eszamanli"); }} />
+          <div style={{fontSize:12, fontWeight:800, color:ACCENT, marginBottom:10}}>🎯 2/4 · Dikkat (Renk-Kelime + İşitsel Seçici Dikkat)</div>
+          <PPTDikkatGorevi toplamDeneme={kademeAyarlari.dikkatDenemeSayisi} tepkiEsikMs={kademeAyarlari.dikkatTepkiEsikMs}
+            yonergeSureSn={kademeAyarlari.yonergeSureSn} isitselKelimeSayisi={kademeAyarlari.isitselDikkatKelimeSayisi}
+            onTamamla={(s) => { setDikkat(s); setAdim("eszamanli"); }} />
         </div>
       )}
       {adim === "eszamanli" && (
         <div>
-          <div style={{fontSize:12, fontWeight:800, color:ACCENT, marginBottom:10}}>🧩 3/4 · Eşzamanlı İşlemleme (Örüntü)</div>
-          <PPTOruntuGorevi sorular={kademeAyarlari.oruntuHavuzu} onTamamla={(s) => { setEszamanli(s); setAdim("ardisik"); }} />
+          <div style={{fontSize:12, fontWeight:800, color:ACCENT, marginBottom:10}}>🧩 3/4 · Eşzamanlı İşlemleme (Örüntü + Sözel-Uzamsal İlişki)</div>
+          <PPTOruntuGorevi sorular={kademeAyarlari.oruntuHavuzu}
+            yonergeSureSn={kademeAyarlari.yonergeSureSn} sozelSoruSayisi={kademeAyarlari.sozelUzamsalSoruSayisi}
+            onTamamla={(s) => { setEszamanli(s); setAdim("ardisik"); }} />
         </div>
       )}
       {adim === "ardisik" && (
         <div>
-          <div style={{fontSize:12, fontWeight:800, color:ACCENT, marginBottom:10}}>🔢 4/4 · Ardışık İşlemleme (Dizi Hatırlama)</div>
-          <PPTDiziGorevi baslangicSpan={kademeAyarlari.digitBaslangicSpan} maksSpan={kademeAyarlari.digitMaksSpan} skorTablosu={kademeAyarlari.digitSkorTablosu} onTamamla={(s) => { setArdisik(s); setAdim("sonuc"); }} />
+          <div style={{fontSize:12, fontWeight:800, color:ACCENT, marginBottom:10}}>🔢 4/4 · Ardışık İşlemleme (Rakam Dizisi + Sesli Kelime Dizisi)</div>
+          <PPTDiziGorevi baslangicSpan={kademeAyarlari.digitBaslangicSpan} maksSpan={kademeAyarlari.digitMaksSpan} skorTablosu={kademeAyarlari.digitSkorTablosu}
+            yonergeSureSn={kademeAyarlari.yonergeSureSn} isitselBaslangicSpan={kademeAyarlari.isitselDiziBaslangicSpan}
+            isitselMaksSpan={kademeAyarlari.isitselDiziMaksSpan} isitselSkorTablosu={kademeAyarlari.isitselDiziSkorTablosu}
+            onTamamla={(s) => { setArdisik(s); setAdim("sonuc"); }} />
         </div>
       )}
 

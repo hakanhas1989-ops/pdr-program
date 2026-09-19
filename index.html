@@ -19961,6 +19961,9 @@ function pdrBaslangicSekmesi() {
 
               const kalanSinavKaygisi = pdrSozlukTemizle(sinavKaygisi);
               setSinavKaygisi(kalanSinavKaygisi); await saveSinavKaygisi(kalanSinavKaygisi);
+
+              const kalanMudahaleOnerileri = pdrSozlukTemizle(mudahaleOnerileri);
+              setMudahaleOnerileri(kalanMudahaleOnerileri); await saveMudahaleOnerileri(kalanMudahaleOnerileri);
             }}
             onYilSifirla={async (yil) => {
               // Yılı yıllar listesinden ÇIKARMADAN, sadece o yıla ait öğrenci ve ilişkili
@@ -20049,6 +20052,9 @@ function pdrBaslangicSekmesi() {
 
               const kalanSinavKaygisi2 = pdrSozlukTemizleSifirla(sinavKaygisi);
               setSinavKaygisi(kalanSinavKaygisi2); await saveSinavKaygisi(kalanSinavKaygisi2);
+
+              const kalanMudahaleOnerileri2 = pdrSozlukTemizleSifirla(mudahaleOnerileri);
+              setMudahaleOnerileri(kalanMudahaleOnerileri2); await saveMudahaleOnerileri(kalanMudahaleOnerileri2);
             }}
           />
         )}

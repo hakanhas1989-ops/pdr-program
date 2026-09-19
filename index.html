@@ -2108,6 +2108,13 @@ const PASPERF_ORUNTU_SORULARI = [
   { id: "p5", izgara: ["1️⃣","2️⃣","3️⃣","3️⃣","1️⃣","2️⃣","2️⃣","3️⃣","❓"], secenekler: ["1️⃣","2️⃣","3️⃣","4️⃣"], dogruCevap: "1️⃣" },
   { id: "p6", izgara: ["🍎","🍋","🍇","🍇","🍎","🍋","🍋","🍇","❓"], secenekler: ["🍎","🍋","🍇","🍊"], dogruCevap: "🍎" },
 ];
+// Lise için, aynı döngü mantığıyla ama daha büyük (4x4=16 hücre) ve bu yüzden
+// daha çok görsel tarama/organizasyon gerektiren 2 ek soru — ilkokul/ortaokul
+// havuzuna KARIŞTIRILMAZ, sadece lise kademesinde havuza eklenir.
+const PASPERF_ORUNTU_SORULARI_LISE_EK = [
+  { id: "p7", izgara: ["🟥","🟦","🟨","🟩","🟥","🟦","🟨","🟩","🟥","🟦","🟨","🟩","🟥","🟦","🟨","❓"], secenekler: ["🟥","🟦","🟨","🟩"], dogruCevap: "🟩" },
+  { id: "p8", izgara: ["↗️","↘️","↙️","↖️","↗️","↘️","↙️","↖️","↗️","↘️","↙️","↖️","↗️","↘️","↙️","❓"], secenekler: ["↗️","↘️","↙️","↖️"], dogruCevap: "↖️" },
+];
 const PASPERF_RENKLER = [
   { ad: "Kırmızı", hex: "#C0392B" },
   { ad: "Mavi", hex: "#2980B9" },
@@ -2115,12 +2122,54 @@ const PASPERF_RENKLER = [
   { ad: "Sarı", hex: "#D4AC0D" },
 ];
 
-function pasperfPlanlamaSkorla({ sureMs, hata }) {
-  const sureSaniye = sureMs / 1000;
-  const skor = Math.max(0, Math.min(100, Math.round(100 - (sureSaniye - 15) * 2 - hata * 8)));
-  return { sureMs, hata, skor };
+// ── Kademe (yaş grubu) bazlı zorluk ayarları ────────────────────────────────
+// AMAÇ: Gerçek CAS testi de yaşa göre normlanır (5-17 yaş, farklı zorluk).
+// Bizim özgün aracımız normlanmış olmasa da, en azından görev zorluğunun
+// (nokta sayısı, deneme sayısı, dizi uzunluğu, beklenen tepki süresi vb.)
+// öğrencinin okul kademesine uygun olması gerekir — aksi halde ilkokul
+// öğrencisine lise zorluğunda görev vermiş oluruz. kademe bilgisi önce
+// öğrencinin kendi sınıfından (sinifKademesi), yoksa Ayarlar'daki genel
+// kademeden, o da yoksa "ortaokul" varsayılanından gelir.
+const PASPERF_KADEME_AYARLARI = {
+  ilkokul: {
+    ad: "İlkokul (1-4. sınıf)",
+    planlamaNoktaSayisi: 6, planlamaBeklenenSnBasi: 1.9,
+    dikkatDenemeSayisi: 8, dikkatTepkiEsikMs: 3200,
+    oruntuHavuzu: PASPERF_ORUNTU_SORULARI.slice(0, 4),
+    digitBaslangicSpan: 2, digitMaksSpan: 6,
+    digitSkorTablosu: { 2:30, 3:50, 4:70, 5:85, 6:100 },
+    beklenenSpanMetni: "yaklaşık 3-4 hane",
+  },
+  ortaokul: {
+    ad: "Ortaokul (5-8. sınıf)",
+    planlamaNoktaSayisi: 9, planlamaBeklenenSnBasi: 1.7,
+    dikkatDenemeSayisi: 12, dikkatTepkiEsikMs: 2500,
+    oruntuHavuzu: PASPERF_ORUNTU_SORULARI,
+    digitBaslangicSpan: 3, digitMaksSpan: 9,
+    digitSkorTablosu: { 3:20, 4:35, 5:50, 6:65, 7:78, 8:90, 9:100 },
+    beklenenSpanMetni: "yaklaşık 5-6 hane",
+  },
+  lise: {
+    ad: "Lise (9-12. sınıf)",
+    planlamaNoktaSayisi: 12, planlamaBeklenenSnBasi: 1.6,
+    dikkatDenemeSayisi: 16, dikkatTepkiEsikMs: 2000,
+    oruntuHavuzu: [...PASPERF_ORUNTU_SORULARI, ...PASPERF_ORUNTU_SORULARI_LISE_EK],
+    digitBaslangicSpan: 4, digitMaksSpan: 9,
+    digitSkorTablosu: { 4:20, 5:35, 6:50, 7:65, 8:80, 9:100 },
+    beklenenSpanMetni: "yaklaşık 6-7 hane",
+  },
+};
+function pasperfKademeAyarlariGetir(kademe) {
+  return PASPERF_KADEME_AYARLARI[kademe] || PASPERF_KADEME_AYARLARI.ortaokul;
 }
-function pasperfDikkatSkorla(denemeler) {
+
+function pasperfPlanlamaSkorla({ sureMs, hata, noktaSayisi = 9, beklenenSnBasi = 1.7 }) {
+  const sureSaniye = sureMs / 1000;
+  const beklenenSure = noktaSayisi * beklenenSnBasi;
+  const skor = Math.max(0, Math.min(100, Math.round(100 - (sureSaniye - beklenenSure) * 2 - hata * 8)));
+  return { sureMs, hata, noktaSayisi, skor };
+}
+function pasperfDikkatSkorla(denemeler, tepkiEsikMs = 2500) {
   const toplam = denemeler.length;
   const dogruDenemeler = denemeler.filter(d => d.dogru);
   const dogruSayisi = dogruDenemeler.length;
@@ -2133,24 +2182,25 @@ function pasperfDikkatSkorla(denemeler) {
   const uyumsuzOrtTepki = uyumsuzDenemeler.filter(d=>d.dogru).length ? Math.round(uyumsuzDenemeler.filter(d=>d.dogru).reduce((s,d)=>s+d.tepkiMs,0) / uyumsuzDenemeler.filter(d=>d.dogru).length) : null;
   const stroopEtkisiMs = (uyumluOrtTepki !== null && uyumsuzOrtTepki !== null) ? (uyumsuzOrtTepki - uyumluOrtTepki) : null;
   const dogruYuzde = toplam > 0 ? Math.round(dogruSayisi / toplam * 100) : 0;
-  const skor = Math.max(0, Math.min(100, Math.round(dogruYuzde - (ortTepkiMs > 2500 ? 10 : 0))));
+  const skor = Math.max(0, Math.min(100, Math.round(dogruYuzde - (ortTepkiMs > tepkiEsikMs ? 10 : 0))));
   return { toplam, dogruSayisi, dogruYuzde, ortTepkiMs, uyumluDogruYuzde, uyumsuzDogruYuzde, stroopEtkisiMs, skor };
 }
-function pasperfEszamanliSkorla(cevaplar) {
-  const toplam = PASPERF_ORUNTU_SORULARI.length;
+function pasperfEszamanliSkorla(cevaplar, toplamSoru) {
+  const toplam = toplamSoru ?? cevaplar.length;
   let dogruSayisi = 0, toplamSureMs = 0;
   cevaplar.forEach(c => { if (c.dogru) dogruSayisi++; toplamSureMs += c.sureMs; });
-  const dogruYuzde = Math.round(dogruSayisi / toplam * 100);
-  const ortSureMs = Math.round(toplamSureMs / toplam);
+  const dogruYuzde = toplam > 0 ? Math.round(dogruSayisi / toplam * 100) : 0;
+  const ortSureMs = toplam > 0 ? Math.round(toplamSureMs / toplam) : 0;
   const skor = dogruYuzde;
   return { toplam, dogruSayisi, dogruYuzde, ortSureMs, skor };
 }
-function pasperfArdisikSkorla({ ulasilanSpan }) {
-  const skorTablosu = { 2:20, 3:35, 4:50, 5:65, 6:78, 7:88, 8:95, 9:100 };
-  const skor = skorTablosu[ulasilanSpan] ?? (ulasilanSpan > 9 ? 100 : 10);
+function pasperfArdisikSkorla({ ulasilanSpan }, skorTablosu, maksSpan = 9) {
+  const tablo = skorTablosu || { 2:20, 3:35, 4:50, 5:65, 6:78, 7:88, 8:95, 9:100 };
+  const skor = tablo[ulasilanSpan] ?? (ulasilanSpan > maksSpan ? 100 : 10);
   return { ulasilanSpan, skor };
 }
-function pasperfGenelYorumla({ planlama, dikkat, eszamanli, ardisik }) {
+function pasperfGenelYorumla({ planlama, dikkat, eszamanli, ardisik }, kademeAyarlari) {
+  const ayarlar = kademeAyarlari || PASPERF_KADEME_AYARLARI.ortaokul;
   const alanlar = [
     { key: "planlama", ad: "Planlama", skor: planlama.skor,
       dusukYorum: `Bağlantı kurma görevinde ${(planlama.sureMs/1000).toFixed(1)} saniyede ve ${planlama.hata} hatayla tamamladı. Bu, göreve stratejik yaklaşma, sırayı takip etme ve hata izleme konusunda yaşıtlarına göre daha fazla zamana/desteğe ihtiyaç duyabileceğine işaret edebilir.` },
@@ -2159,7 +2209,7 @@ function pasperfGenelYorumla({ planlama, dikkat, eszamanli, ardisik }) {
     { key: "eszamanli", ad: "Eşzamanlı İşlemleme", skor: eszamanli.skor,
       dusukYorum: `Örüntü tamamlama görevinde ${eszamanli.dogruSayisi}/${eszamanli.toplam} doğru cevap verdi. Bu, bilgiyi bütünsel olarak organize etme ve görsel-uzamsal ilişkileri kavrama konusunda güçlüğe işaret edebilir.` },
     { key: "ardisik", ad: "Ardışık İşlemleme", skor: ardisik.skor,
-      dusukYorum: `Dizi hatırlama görevinde ulaşabildiği en uzun dizi ${ardisik.ulasilanSpan} haneydi (yaşıtlarında ortalama beklenti yaklaşık 5-7 hane). Bu, sıralı bilgiyi kısa süreli bellekte tutma ve doğru sırayla yeniden üretme konusunda güçlüğe işaret edebilir.` },
+      dusukYorum: `Dizi hatırlama görevinde ulaşabildiği en uzun dizi ${ardisik.ulasilanSpan} haneydi (yaşıtlarında ortalama beklenti ${ayarlar.beklenenSpanMetni}). Bu, sıralı bilgiyi kısa süreli bellekte tutma ve doğru sırayla yeniden üretme konusunda güçlüğe işaret edebilir.` },
   ];
   const genelSkor = Math.round((planlama.skor + dikkat.skor + eszamanli.skor + ardisik.skor) / 4);
   const seviye = genelSkor >= 80 ? { label: "Güçlü Performans", color: "#1A8C5B", bg: "#E6F5EE" }
@@ -2649,6 +2699,50 @@ Analiz yaparken:
 3. Kütüphane kaynakları varsa öncelikli referans olarak kullan
 4. Öneri yaparken teorik temeli belirt (örn. "Bandura'nın öz-yeterlilik yaklaşımına göre...")
 5. Pratik ve uygulanabilir öneriler ver`,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+  const data = await res.json();
+  return data.content?.[0]?.text || "";
+}
+
+// AI'nin, CAS Performans Testi'nin (PASS kuramına dayalı özgün tarama aracı)
+// ham verilerini gerçek CAS/PASS değerlendirme mantığına (alan bazlı güçlü/
+// zayıf profil, alanlar arası fark analizi, yaşa göre beklenti, somut öneri)
+// göre yorumlaması için. ÖNEMLİ: Bu, gerçek normlanmış CAS test verisi
+// DEĞİLDİR — AI'a bunu açıkça hatırlatıyoruz ki yanıtında da netleştirsin.
+async function getPasperfYorum(studentName, className, kademeAd, ham) {
+  const { planlama, dikkat, eszamanli, ardisik, genelSkor, seviyeLabel } = ham;
+  const prompt = `Öğrenci: ${pdrAnonimKimlik(studentName, className)}
+Okul Kademesi: ${kademeAd}
+
+CAS TARZI BİLİŞSEL SÜREÇLER PERFORMANS TESTİ HAM SONUÇLARI (PASS Kuramı: Planlama, Dikkat, Eşzamanlı İşlemleme, Ardışık İşlemleme):
+
+1) PLANLAMA (Bağlantı Kurma görevi): Süre ${(planlama.sureMs/1000).toFixed(1)} sn, Hata sayısı ${planlama.hata}, Alan Skoru %${planlama.skor}
+
+2) DİKKAT (Renk-Kelime/Stroop tarzı görev): Doğruluk %${dikkat.dogruYuzde}, Ortalama tepki süresi ${dikkat.ortTepkiMs} ms, Uyumlu denemelerde doğruluk ${dikkat.uyumluDogruYuzde !== null ? "%"+dikkat.uyumluDogruYuzde : "veri yok"}, Uyumsuz denemelerde doğruluk ${dikkat.uyumsuzDogruYuzde !== null ? "%"+dikkat.uyumsuzDogruYuzde : "veri yok"}, Stroop Etkisi (uyumsuz-uyumlu tepki farkı) ${dikkat.stroopEtkisiMs !== null ? dikkat.stroopEtkisiMs+" ms" : "veri yok"}, Alan Skoru %${dikkat.skor}
+
+3) EŞZAMANLI İŞLEMLEME (Örüntü Tamamlama görevi): ${eszamanli.dogruSayisi}/${eszamanli.toplam} doğru, Ortalama süre/soru ${eszamanli.ortSureMs} ms, Alan Skoru %${eszamanli.skor}
+
+4) ARDIŞIK İŞLEMLEME (Dizi Hatırlama görevi): Ulaşılan en uzun dizi ${ardisik.ulasilanSpan} hane, Alan Skoru %${ardisik.skor}
+
+GENEL SKOR: %${genelSkor} (${seviyeLabel})
+
+Yukarıdaki 4 alanlık PASS profilini, gerçek CAS (Cognitive Assessment System) değerlendirme formunun yorumlama mantığına göre analiz et:
+GÜÇLÜ ALAN(LAR): (en yüksek skorlu alan(lar), bunun akademik/günlük yaşama olası yansımaları)
+ZAYIF ALAN(LAR): (en düşük skorlu alan(lar), bunun akademik/günlük yaşama olası yansımaları)
+ALANLAR ARASI FARK: (alanlar arasındaki puan farkının anlamlı olup olmadığı, PASS profilinde "dengesiz profil" mi "dengeli profil" mi olduğu)
+YAŞA/KADEMEYE GÖRE DEĞERLENDİRME: (${kademeAd} düzeyi için bu performansın beklenen düzeyle karşılaştırması)
+ÖNERİLER: (danışman için 2-3 somut, uygulanabilir öneri)
+
+Yanıtının EN BAŞINA şu uyarıyı birebir yaz: "Not: Bu, PASS kuramından esinlenen özgün bir tarama aracının sonucudur; normlanmış/standart CAS test puanı değildir, tanı amaçlı kullanılamaz."
+Sade, profesyonel, PDR diline uygun yaz. Markdown veya JSON kullanma.`;
+  const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-6", max_tokens: 1200,
+      system: "Sen çocuk nöropsikolojisi ve Das-Naglieri PASS kuramı/CAS (Cognitive Assessment System) değerlendirme formuna hakim bir uzmansın. Sana verilen ham performans verilerini CAS'ın PASS profili yorumlama mantığına (alan bazlı güçlü/zayıf belirleme, alanlar arası anlamlı fark analizi, yaşa göre beklenti karşılaştırması, somut öneri) göre yorumlarsın. Bu bir tanı aracı değildir, elindeki veri gerçek normlanmış CAS verisi değildir — bunu her zaman netleştirirsin. Türkçe, yargılamayan, PDR danışmanına yönelik profesyonel bir dille yazarsın.",
       messages: [{ role: "user", content: prompt }],
     }),
   });
@@ -5962,6 +6056,13 @@ function RaporModal({ rapor, onKapat }) {
                       ))}
                     </div>
                     <div style={{ fontSize:10, color:"#555", whiteSpace:"pre-wrap", lineHeight:1.5 }}>{s.genelYorum}</div>
+                    {perfKayit.kademe && <div style={{ fontSize:8.5, color:"#999", marginTop:4 }}>Uygulama kademesi: {pasperfKademeAyarlariGetir(perfKayit.kademe).ad}</div>}
+                    {perfKayit.aiYorum && (
+                      <div style={{ marginTop:8, paddingTop:8, borderTop:"1px dashed #ddd" }}>
+                        <div style={{ fontSize:9.5, fontWeight:800, color:PURPLE, marginBottom:3 }}>🤖 AI Klinik Yorumu (CAS Değerlendirme Formuna Göre)</div>
+                        <div style={{ fontSize:9.5, color:"#555", whiteSpace:"pre-wrap", lineHeight:1.5 }}>{perfKayit.aiYorum}</div>
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -7695,7 +7796,7 @@ function D2Paneli({ seciliAd, seciliSinif, seciliNumara, profiles2, setProfiles2
   );
 }
 
-function TestlerEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, testKayitlari, setTestKayitlari, profiles2, setProfiles2, oogDegerlendirmeler, setOogDegerlendirmeler, osbDegerlendirmeler, setOsbDegerlendirmeler, castDegerlendirmeler, setCastDegerlendirmeler, pasDegerlendirmeler, setPasDegerlendirmeler, pasPerformanslar, setPasPerformanslar, mudahalePlan, setMudahalePlan, setTab }) {
+function TestlerEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, testKayitlari, setTestKayitlari, profiles2, setProfiles2, oogDegerlendirmeler, setOogDegerlendirmeler, osbDegerlendirmeler, setOsbDegerlendirmeler, castDegerlendirmeler, setCastDegerlendirmeler, pasDegerlendirmeler, setPasDegerlendirmeler, pasPerformanslar, setPasPerformanslar, mudahalePlan, setMudahalePlan, setTab, kademe }) {
   const [seciliAd, setSeciliAd] = useState(aktifOgrenci?.name || "");
   const [ogrenciArama, setOgrenciArama] = useState("");
   const [kategori, setKategori] = useState(null); // "objektif" | "projektif" | null
@@ -7982,7 +8083,7 @@ SADECE aşağıdaki JSON formatında cevap ver, başka hiçbir açıklama/markdo
               ) : kategori === "pasperf" ? (
                 <div>
                   <button onClick={()=>setKategori(null)} style={{ background:"none", border:"none", color:MUTED, fontSize:12, cursor:"pointer", marginBottom:8, padding:0 }}>← Kategoriyi değiştir</button>
-                  <PASPerformansPaneli seciliAd={seciliAd} seciliSinif={seciliSinif} seciliNumara={seciliNumara} pasPerformanslar={pasPerformanslar} setPasPerformanslar={setPasPerformanslar} mudahalePlan={mudahalePlan} setMudahalePlan={setMudahalePlan} setTab={setTab} setAktifOgrenci={setAktifOgrenci} />
+                  <PASPerformansPaneli seciliAd={seciliAd} seciliSinif={seciliSinif} seciliNumara={seciliNumara} pasPerformanslar={pasPerformanslar} setPasPerformanslar={setPasPerformanslar} mudahalePlan={mudahalePlan} setMudahalePlan={setMudahalePlan} setTab={setTab} setAktifOgrenci={setAktifOgrenci} kademe={kademe} />
                 </div>
               ) : (
                 <div>
@@ -8471,6 +8572,33 @@ ${kademe ? "Planı öğrencinin yaş/gelişim dönemine uygun şekilde oluştur.
     await saveMudahalePlan(updated);
   }
 
+  // "Uygulamalı" oturum: danışman öğrenciyle birlikte, o oturumun alanına
+  // (dikkat/planlama/eşzamanlı/ardışık) uygun interaktif mini-görevi bizzat
+  // ekranda çalıştırır (CAS Performans Testi'ndeki aynı görevler, kademeye
+  // göre ölçeklenmiş) — tamamlanınca oturum otomatik işaretlenir ve kısa bir
+  // performans notu kaydedilir. Hangi öğrenci için açıldığını izlemek için
+  // "planId-oturumNo" anahtarı kullanılır.
+  const [acikOturum, setAcikOturum] = useState(null);
+  async function handleOturumUyguladi(ogrenci, ogrenciSinif, id, oturumNo, notMetni) {
+    const mevcutPlanlar = pdrSozlukOku(mudahalePlan, ogrenci, ogrenciSinif) || [];
+    const updated = pdrSozlukYaz(mudahalePlan, ogrenci, ogrenciSinif, mevcutPlanlar.map(p => {
+      if (p.id !== id || !p.oturumlar) return p;
+      const yeniOturumlar = p.oturumlar.map(o => o.no === oturumNo ? { ...o, tamamlandi: true, not: notMetni } : o);
+      const hepsiTamam = yeniOturumlar.every(o => o.tamamlandi);
+      return { ...p, oturumlar: yeniOturumlar, durum: hepsiTamam ? "Tamamlandı" : p.durum };
+    }));
+    setMudahalePlan(updated);
+    await saveMudahalePlan(updated);
+    setAcikOturum(null);
+  }
+  function pasperfOturumOzetMetni(alanKey, s) {
+    if (alanKey === "planlama") return `${(s.sureMs/1000).toFixed(1)} sn, ${s.hata} hata (skor %${s.skor})`;
+    if (alanKey === "dikkat") return `%${s.dogruYuzde} doğruluk, ort. tepki ${s.ortTepkiMs} ms (skor %${s.skor})`;
+    if (alanKey === "eszamanli") return `${s.dogruSayisi}/${s.toplam} doğru (skor %${s.skor})`;
+    if (alanKey === "ardisik") return `Ulaşılan dizi: ${s.ulasilanSpan} hane (skor %${s.skor})`;
+    return `Skor %${s.skor}`;
+  }
+
   const inp = { width:"100%", padding:"9px 11px", border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius:9, fontSize:13, background:CARD, color:TEXT, outline:"none", boxSizing:"border-box", fontFamily:"inherit" };
   const lbl = { fontSize:11, fontWeight:600, color:MUTED, display:"block", marginBottom:4, textTransform:"uppercase" };
   const durumRenk = { "Devam Ediyor":["#1A8C5B","#E6F5EE"], "Tamamlandı":["#457B9D","#EEF2FF"], "Askıda":["#B07D1A","#FDF6E3"] };
@@ -8569,12 +8697,52 @@ ${kademe ? "Planı öğrencinin yaş/gelişim dönemine uygun şekilde oluştur.
                             <div style={{height:"100%",width:`${Math.round(tamamlanan/p.oturumlar.length*100)}%`,background:"#B5651D"}} />
                           </div>
                           <div style={{display:"flex",flexDirection:"column",gap:5}}>
-                            {p.oturumlar.map(o => (
-                              <label key={o.no} style={{display:"flex",alignItems:"flex-start",gap:8,fontSize:11.5,color:o.tamamlandi?MUTED:TEXT,background:o.tamamlandi?"#f5f5f5":"#fff",border:`1px solid ${BORDER}`,borderRadius:8,padding:"7px 9px",cursor:"pointer",textDecoration:o.tamamlandi?"line-through":"none"}}>
-                                <input type="checkbox" checked={!!o.tamamlandi} onChange={()=>handleOturumToggle(p.ogrenci,p.ogrenciSinif,p.id,o.no)} style={{marginTop:2,flexShrink:0}} />
-                                <span><b>{o.no}. Oturum — {o.baslik}</b> ({o.sureDk} dk){!o.tamamlandi && <span style={{display:"block",fontSize:10.5,color:MUTED,marginTop:2}}>{o.hedef}</span>}</span>
-                              </label>
-                            ))}
+                            {p.oturumlar.map(o => {
+                              const oturumAnahtari = p.id + "-" + o.no;
+                              const acik = acikOturum === oturumAnahtari;
+                              const kademeAyarlariOturum = pasperfKademeAyarlariGetir(sinifKademesi(p.ogrenciSinif) || kademe || "ortaokul");
+                              return (
+                                <div key={o.no}>
+                                  <label style={{display:"flex",alignItems:"flex-start",gap:8,fontSize:11.5,color:o.tamamlandi?MUTED:TEXT,background:o.tamamlandi?"#f5f5f5":"#fff",border:`1px solid ${BORDER}`,borderRadius:8,padding:"7px 9px",cursor:"pointer",textDecoration:o.tamamlandi?"line-through":"none"}}>
+                                    <input type="checkbox" checked={!!o.tamamlandi} onChange={()=>handleOturumToggle(p.ogrenci,p.ogrenciSinif,p.id,o.no)} style={{marginTop:2,flexShrink:0}} />
+                                    <span style={{flex:1}}>
+                                      <b>{o.no}. Oturum — {o.baslik}</b> ({o.sureDk} dk)
+                                      {!o.tamamlandi && <span style={{display:"block",fontSize:10.5,color:MUTED,marginTop:2}}>{o.hedef}</span>}
+                                      {o.tamamlandi && o.not && <span style={{display:"block",fontSize:10, color:"#1A8C5B", marginTop:2, textDecoration:"none"}}>✓ {o.not}</span>}
+                                    </span>
+                                    {o.alanKey && !o.tamamlandi && (
+                                      <button onClick={(e)=>{ e.preventDefault(); setAcikOturum(acik ? null : oturumAnahtari); }} style={{
+                                        flexShrink:0, padding:"4px 9px", borderRadius:7, border:"none", background:"#B5651D", color:"#fff",
+                                        fontSize:10, fontWeight:700, cursor:"pointer"
+                                      }}>{acik ? "✕ Kapat" : "▶️ Uygula"}</button>
+                                    )}
+                                  </label>
+                                  {acik && o.alanKey && (
+                                    <div style={{border:`1.5px solid #B5651D`, borderRadius:10, padding:12, marginTop:4, marginBottom:4, background:"#FBF0E7"}}>
+                                      <div style={{fontSize:10.5, color:"#B5651D", fontWeight:700, marginBottom:8, textAlign:"center"}}>
+                                        Öğrenciye ekranı/cihazı verin — {kademeAyarlariOturum.ad} düzeyine göre ayarlandı
+                                      </div>
+                                      {o.alanKey === "planlama" && (
+                                        <PPTBaglantiGorevi noktaSayisi={kademeAyarlariOturum.planlamaNoktaSayisi} beklenenSnBasi={kademeAyarlariOturum.planlamaBeklenenSnBasi}
+                                          onTamamla={(s)=>handleOturumUyguladi(p.ogrenci,p.ogrenciSinif,p.id,o.no,pasperfOturumOzetMetni("planlama",s))} />
+                                      )}
+                                      {o.alanKey === "dikkat" && (
+                                        <PPTDikkatGorevi toplamDeneme={kademeAyarlariOturum.dikkatDenemeSayisi} tepkiEsikMs={kademeAyarlariOturum.dikkatTepkiEsikMs}
+                                          onTamamla={(s)=>handleOturumUyguladi(p.ogrenci,p.ogrenciSinif,p.id,o.no,pasperfOturumOzetMetni("dikkat",s))} />
+                                      )}
+                                      {o.alanKey === "eszamanli" && (
+                                        <PPTOruntuGorevi sorular={kademeAyarlariOturum.oruntuHavuzu}
+                                          onTamamla={(s)=>handleOturumUyguladi(p.ogrenci,p.ogrenciSinif,p.id,o.no,pasperfOturumOzetMetni("eszamanli",s))} />
+                                      )}
+                                      {o.alanKey === "ardisik" && (
+                                        <PPTDiziGorevi baslangicSpan={kademeAyarlariOturum.digitBaslangicSpan} maksSpan={kademeAyarlariOturum.digitMaksSpan} skorTablosu={kademeAyarlariOturum.digitSkorTablosu}
+                                          onTamamla={(s)=>handleOturumUyguladi(p.ogrenci,p.ogrenciSinif,p.id,o.no,pasperfOturumOzetMetni("ardisik",s))} />
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       );
@@ -14880,6 +15048,16 @@ function OOGPaneli({ seciliAd, seciliSinif, seciliNumara, oogDegerlendirmeler, s
     setTimeout(() => setKaydedildi(false), 2500);
   }
 
+  // Yanlışlıkla kaydedilmiş/işaretlenmiş bir değerlendirmeyi geri almak için.
+  async function handleSil() {
+    if (!mevcut) return;
+    if (!confirm("Bu öğrencinin kayıtlı ÖÖG ön-tarama sonucunu silmek istediğinize emin misiniz? Bu işlem geri alınamaz.")) return;
+    const updated = oogDegerlendirmeler.filter(o => o.id !== mevcut.id);
+    setOogDegerlendirmeler(updated);
+    await saveOogDegerlendirmeler(updated);
+    setCevaplar({});
+  }
+
   if (!seciliAd.trim()) {
     return <div style={{textAlign:"center", color:MUTED, padding:20, fontSize:13}}>Önce bir öğrenci seçin</div>;
   }
@@ -14942,6 +15120,12 @@ function OOGPaneli({ seciliAd, seciliSinif, seciliNumara, oogDegerlendirmeler, s
         width:"100%", padding:13, background:ACCENT, color:"#fff", border:"none", borderRadius:12,
         fontSize:15, fontWeight:800, cursor:"pointer", marginTop:4
       }}>{kaydedildi ? "✓ Kaydedildi" : "💾 Kaydet"}</button>
+      {mevcut && (
+        <button onClick={handleSil} style={{
+          width:"100%", padding:10, background:"transparent", color:"#C0392B", border:"1px solid #F5B7B1", borderRadius:12,
+          fontSize:12, fontWeight:700, cursor:"pointer", marginTop:8
+        }}>🗑️ Kaydı Sil</button>
+      )}
     </div>
   );
 }
@@ -14979,6 +15163,15 @@ function OSBPaneli({ seciliAd, seciliSinif, seciliNumara, osbDegerlendirmeler, s
     await saveOsbDegerlendirmeler(updated);
     setKaydedildi(true);
     setTimeout(() => setKaydedildi(false), 2500);
+  }
+
+  async function handleSil() {
+    if (!mevcut) return;
+    if (!confirm("Bu öğrencinin kayıtlı OSB ön-tarama sonucunu silmek istediğinize emin misiniz? Bu işlem geri alınamaz.")) return;
+    const updated = osbDegerlendirmeler.filter(o => o.id !== mevcut.id);
+    setOsbDegerlendirmeler(updated);
+    await saveOsbDegerlendirmeler(updated);
+    setCevaplar({});
   }
 
   if (!seciliAd.trim()) {
@@ -15043,6 +15236,12 @@ function OSBPaneli({ seciliAd, seciliSinif, seciliNumara, osbDegerlendirmeler, s
         width:"100%", padding:13, background:ACCENT, color:"#fff", border:"none", borderRadius:12,
         fontSize:15, fontWeight:800, cursor:"pointer", marginTop:4
       }}>{kaydedildi ? "✓ Kaydedildi" : "💾 Kaydet"}</button>
+      {mevcut && (
+        <button onClick={handleSil} style={{
+          width:"100%", padding:10, background:"transparent", color:"#C0392B", border:"1px solid #F5B7B1", borderRadius:12,
+          fontSize:12, fontWeight:700, cursor:"pointer", marginTop:8
+        }}>🗑️ Kaydı Sil</button>
+      )}
     </div>
   );
 }
@@ -15083,6 +15282,15 @@ function CASTPaneli({ seciliAd, seciliSinif, seciliNumara, castDegerlendirmeler,
     await saveCastDegerlendirmeler(updated);
     setKaydedildi(true);
     setTimeout(() => setKaydedildi(false), 2500);
+  }
+
+  async function handleSil() {
+    if (!mevcut) return;
+    if (!confirm("Bu öğrencinin kayıtlı CAST tarzı tarama sonucunu silmek istediğinize emin misiniz? Bu işlem geri alınamaz.")) return;
+    const updated = castDegerlendirmeler.filter(o => o.id !== mevcut.id);
+    setCastDegerlendirmeler(updated);
+    await saveCastDegerlendirmeler(updated);
+    setCevaplar({});
   }
 
   if (!seciliAd.trim()) {
@@ -15176,6 +15384,12 @@ function CASTPaneli({ seciliAd, seciliSinif, seciliNumara, castDegerlendirmeler,
         width:"100%", padding:13, background:ACCENT, color:"#fff", border:"none", borderRadius:12,
         fontSize:15, fontWeight:800, cursor:"pointer", marginTop:4
       }}>{kaydedildi ? "✓ Kaydedildi" : "💾 Kaydet"}</button>
+      {mevcut && (
+        <button onClick={handleSil} style={{
+          width:"100%", padding:10, background:"transparent", color:"#C0392B", border:"1px solid #F5B7B1", borderRadius:12,
+          fontSize:12, fontWeight:700, cursor:"pointer", marginTop:8
+        }}>🗑️ Kaydı Sil</button>
+      )}
     </div>
   );
 }
@@ -15216,6 +15430,15 @@ function PASPaneli({ seciliAd, seciliSinif, seciliNumara, pasDegerlendirmeler, s
     await savePasDegerlendirmeler(updated);
     setKaydedildi(true);
     setTimeout(() => setKaydedildi(false), 2500);
+  }
+
+  async function handleSil() {
+    if (!mevcut) return;
+    if (!confirm("Bu öğrencinin kayıtlı CAS tarzı ön-tarama sonucunu silmek istediğinize emin misiniz? Bu işlem geri alınamaz.")) return;
+    const updated = pasDegerlendirmeler.filter(o => o.id !== mevcut.id);
+    setPasDegerlendirmeler(updated);
+    await savePasDegerlendirmeler(updated);
+    setCevaplar({});
   }
 
   if (!seciliAd.trim()) {
@@ -15284,6 +15507,12 @@ function PASPaneli({ seciliAd, seciliSinif, seciliNumara, pasDegerlendirmeler, s
         width:"100%", padding:13, background:ACCENT, color:"#fff", border:"none", borderRadius:12,
         fontSize:15, fontWeight:800, cursor:"pointer", marginTop:4
       }}>{kaydedildi ? "✓ Kaydedildi" : "💾 Kaydet"}</button>
+      {mevcut && (
+        <button onClick={handleSil} style={{
+          width:"100%", padding:10, background:"transparent", color:"#C0392B", border:"1px solid #F5B7B1", borderRadius:12,
+          fontSize:12, fontWeight:700, cursor:"pointer", marginTop:8
+        }}>🗑️ Kaydı Sil</button>
+      )}
     </div>
   );
 }
@@ -15293,12 +15522,16 @@ function PASPaneli({ seciliAd, seciliSinif, seciliNumara, pasDegerlendirmeler, s
 // normlanmış standart puan değildir; yalnızca gözlemsel/heuristik bir
 // göstergedir.
 
-function PPTBaglantiGorevi({ onTamamla }) {
-  const KONUMLAR = [
-    { top: "8%", left: "12%" }, { top: "18%", left: "62%" }, { top: "40%", left: "30%" },
-    { top: "10%", left: "82%" }, { top: "55%", left: "8%" }, { top: "68%", left: "55%" },
-    { top: "35%", left: "78%" }, { top: "82%", left: "28%" }, { top: "85%", left: "75%" },
-  ];
+// 12'ye kadar nokta konumlayabilen ortak havuz — kademeye göre ilk N tanesi
+// kullanılır (ilkokul:6, ortaokul:9, lise:12).
+const PPT_BAGLANTI_KONUM_HAVUZU = [
+  { top: "8%", left: "12%" }, { top: "18%", left: "62%" }, { top: "40%", left: "30%" },
+  { top: "10%", left: "82%" }, { top: "55%", left: "8%" }, { top: "68%", left: "55%" },
+  { top: "35%", left: "78%" }, { top: "82%", left: "28%" }, { top: "85%", left: "75%" },
+  { top: "5%", left: "45%" }, { top: "60%", left: "88%" }, { top: "90%", left: "50%" },
+];
+function PPTBaglantiGorevi({ onTamamla, noktaSayisi = 9, beklenenSnBasi = 1.7 }) {
+  const KONUMLAR = PPT_BAGLANTI_KONUM_HAVUZU.slice(0, noktaSayisi);
   const [sonraki, setSonraki] = useState(1);
   const [hata, setHata] = useState(0);
   const [tiklanan, setTiklanan] = useState([]);
@@ -15310,9 +15543,9 @@ function PPTBaglantiGorevi({ onTamamla }) {
     if (n === sonraki) {
       const yeniTiklanan = [...tiklanan, n];
       setTiklanan(yeniTiklanan);
-      if (n === 9) {
+      if (n === noktaSayisi) {
         const sureMs = Date.now() - (baslangicRef.current || Date.now());
-        onTamamla(pasperfPlanlamaSkorla({ sureMs, hata }));
+        onTamamla(pasperfPlanlamaSkorla({ sureMs, hata, noktaSayisi, beklenenSnBasi }));
       } else {
         setSonraki(n + 1);
       }
@@ -15324,7 +15557,7 @@ function PPTBaglantiGorevi({ onTamamla }) {
   return (
     <div>
       <div style={{fontSize:12, color:MUTED, marginBottom:10, textAlign:"center"}}>
-        1'den 9'a kadar olan sayılara <b>sırasıyla</b> mümkün olduğunca hızlı ve hatasız tıkla.
+        1'den {noktaSayisi}'a kadar olan sayılara <b>sırasıyla</b> mümkün olduğunca hızlı ve hatasız tıkla.
       </div>
       <div style={{position:"relative", height:280, background:"#fff", border:`1.5px solid ${BORDER}`, borderRadius:12, overflow:"hidden"}}>
         {KONUMLAR.map((pos, i) => {
@@ -15347,8 +15580,7 @@ function PPTBaglantiGorevi({ onTamamla }) {
   );
 }
 
-function PPTDikkatGorevi({ onTamamla }) {
-  const TOPLAM_DENEME = 12;
+function PPTDikkatGorevi({ onTamamla, toplamDeneme = 12, tepkiEsikMs = 2500 }) {
   const [denemeIndex, setDenemeIndex] = useState(0);
   const [denemeler, setDenemeler] = useState([]);
   const [deneme, setDeneme] = useState(null);
@@ -15374,8 +15606,8 @@ function PPTDikkatGorevi({ onTamamla }) {
     const dogru = secilenAd === deneme.murekkepAd;
     const yeniDenemeler = [...denemeler, { uyumlu: deneme.uyumlu, dogru, tepkiMs }];
     setDenemeler(yeniDenemeler);
-    if (denemeIndex + 1 >= TOPLAM_DENEME) {
-      onTamamla(pasperfDikkatSkorla(yeniDenemeler));
+    if (denemeIndex + 1 >= toplamDeneme) {
+      onTamamla(pasperfDikkatSkorla(yeniDenemeler, tepkiEsikMs));
     } else {
       setDenemeIndex(i => i + 1);
       yeniDenemeUret();
@@ -15399,27 +15631,28 @@ function PPTDikkatGorevi({ onTamamla }) {
           }}>{r.ad}</button>
         ))}
       </div>
-      <div style={{marginTop:8, fontSize:10.5, color:MUTED, textAlign:"center"}}>Deneme {denemeIndex + 1}/{TOPLAM_DENEME}</div>
+      <div style={{marginTop:8, fontSize:10.5, color:MUTED, textAlign:"center"}}>Deneme {denemeIndex + 1}/{toplamDeneme}</div>
     </div>
   );
 }
 
-function PPTOruntuGorevi({ onTamamla }) {
+function PPTOruntuGorevi({ onTamamla, sorular }) {
+  const soruListesi = sorular && sorular.length > 0 ? sorular : PASPERF_ORUNTU_SORULARI;
   const [soruIndex, setSoruIndex] = useState(0);
   const [cevaplar, setCevaplar] = useState([]);
   const gosterimRef = useRef(Date.now());
   useEffect(() => { gosterimRef.current = Date.now(); }, [soruIndex]);
 
-  const soru = PASPERF_ORUNTU_SORULARI[soruIndex];
-  const kolon = soru.izgara.length === 4 ? 2 : 3;
+  const soru = soruListesi[soruIndex];
+  const kolon = soru.izgara.length === 4 ? 2 : soru.izgara.length === 16 ? 4 : 3;
 
   function cevapVer(secim) {
     const sureMs = Date.now() - gosterimRef.current;
     const dogru = secim === soru.dogruCevap;
     const yeniCevaplar = [...cevaplar, { dogru, sureMs }];
     setCevaplar(yeniCevaplar);
-    if (soruIndex + 1 >= PASPERF_ORUNTU_SORULARI.length) {
-      onTamamla(pasperfEszamanliSkorla(yeniCevaplar));
+    if (soruIndex + 1 >= soruListesi.length) {
+      onTamamla(pasperfEszamanliSkorla(yeniCevaplar, soruListesi.length));
     } else {
       setSoruIndex(i => i + 1);
     }
@@ -15430,9 +15663,9 @@ function PPTOruntuGorevi({ onTamamla }) {
       <div style={{fontSize:12, color:MUTED, marginBottom:10, textAlign:"center"}}>
         Örüntüyü incele ve <b>❓</b> yerine gelmesi gereken doğru öğeyi seç.
       </div>
-      <div style={{display:"grid", gridTemplateColumns:`repeat(${kolon}, 1fr)`, gap:6, maxWidth:220, margin:"0 auto 16px", background:"#fff", border:`1.5px solid ${BORDER}`, borderRadius:12, padding:14}}>
+      <div style={{display:"grid", gridTemplateColumns:`repeat(${kolon}, 1fr)`, gap:6, maxWidth:kolon===4?280:220, margin:"0 auto 16px", background:"#fff", border:`1.5px solid ${BORDER}`, borderRadius:12, padding:14}}>
         {soru.izgara.map((hucre, i) => (
-          <div key={i} style={{fontSize:22, textAlign:"center", padding:"6px 0"}}>{hucre}</div>
+          <div key={i} style={{fontSize:kolon===4?17:22, textAlign:"center", padding:"6px 0"}}>{hucre}</div>
         ))}
       </div>
       <div style={{display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:8}}>
@@ -15442,14 +15675,14 @@ function PPTOruntuGorevi({ onTamamla }) {
           }}>{s}</button>
         ))}
       </div>
-      <div style={{marginTop:8, fontSize:10.5, color:MUTED, textAlign:"center"}}>Soru {soruIndex + 1}/{PASPERF_ORUNTU_SORULARI.length}</div>
+      <div style={{marginTop:8, fontSize:10.5, color:MUTED, textAlign:"center"}}>Soru {soruIndex + 1}/{soruListesi.length}</div>
     </div>
   );
 }
 
-function PPTDiziGorevi({ onTamamla }) {
-  const MAKS_SPAN = 9;
-  const [span, setSpan] = useState(3);
+function PPTDiziGorevi({ onTamamla, baslangicSpan = 3, maksSpan = 9, skorTablosu }) {
+  const MAKS_SPAN = maksSpan;
+  const [span, setSpan] = useState(baslangicSpan);
   const [deneme, setDeneme] = useState(1); // 1 veya 2. deneme
   const [asama, setAsama] = useState("gosterim"); // gosterim | girdi
   const [dizi, setDizi] = useState([]);
@@ -15488,14 +15721,14 @@ function PPTDiziGorevi({ onTamamla }) {
       const dogru = yeniGirilen.every((v, i) => v === dizi[i]);
       if (dogru) {
         if (span >= MAKS_SPAN) {
-          onTamamla(pasperfArdisikSkorla({ ulasilanSpan: MAKS_SPAN }));
+          onTamamla(pasperfArdisikSkorla({ ulasilanSpan: MAKS_SPAN }, skorTablosu, MAKS_SPAN));
         } else {
           setSpan(s => s + 1);
           setDeneme(1);
         }
       } else {
         if (deneme >= 2) {
-          onTamamla(pasperfArdisikSkorla({ ulasilanSpan: Math.max(0, span - 1) }));
+          onTamamla(pasperfArdisikSkorla({ ulasilanSpan: Math.max(0, span - 1) }, skorTablosu, MAKS_SPAN));
         } else {
           setDeneme(2);
         }
@@ -15536,8 +15769,13 @@ function PPTDiziGorevi({ onTamamla }) {
   );
 }
 
-function PASPerformansPaneli({ seciliAd, seciliSinif, seciliNumara, pasPerformanslar, setPasPerformanslar, mudahalePlan, setMudahalePlan, setTab, setAktifOgrenci }) {
+function PASPerformansPaneli({ seciliAd, seciliSinif, seciliNumara, pasPerformanslar, setPasPerformanslar, mudahalePlan, setMudahalePlan, setTab, setAktifOgrenci, kademe }) {
   const mevcut = pasPerformanslar.find(o => pdrAyniOgrenci(o.studentName, o.className, seciliAd, seciliSinif, o.numara, seciliNumara));
+  // Öğrencinin KENDİ sınıfından çıkan kademe, uygulama zorluğu için Ayarlar'daki
+  // genel kademeden ÖNCELİKLİDİR (örn. danışman ortaokulda ama bir sınıf farklı
+  // kademedense — çok nadir ama olabilir); ikisi de yoksa ortaokul varsayılır.
+  const kademeTahmin = sinifKademesi(seciliSinif) || kademe || "ortaokul";
+  const kademeAyarlari = pasperfKademeAyarlariGetir(kademeTahmin);
   const [adim, setAdim] = useState("giris");
   const [planlama, setPlanlama] = useState(null);
   const [dikkat, setDikkat] = useState(null);
@@ -15545,23 +15783,26 @@ function PASPerformansPaneli({ seciliAd, seciliSinif, seciliNumara, pasPerforman
   const [ardisik, setArdisik] = useState(null);
   const [kaydedildi, setKaydedildi] = useState(false);
   const [planOlusturuldu, setPlanOlusturuldu] = useState(false);
+  const [aiYorum, setAiYorum] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
 
   useEffect(() => {
-    setAdim("giris"); setPlanlama(null); setDikkat(null); setEszamanli(null); setArdisik(null); setKaydedildi(false);
+    setAdim("giris"); setPlanlama(null); setDikkat(null); setEszamanli(null); setArdisik(null); setKaydedildi(false); setAiYorum(""); setPlanOlusturuldu(false);
   }, [seciliAd, seciliSinif, seciliNumara]);
 
   if (!seciliAd || !seciliAd.trim()) {
     return <div style={{textAlign:"center", color:MUTED, padding:20, fontSize:13}}>Önce bir öğrenci seçin</div>;
   }
 
-  const sonuc = (planlama && dikkat && eszamanli && ardisik) ? pasperfGenelYorumla({ planlama, dikkat, eszamanli, ardisik }) : null;
+  const sonuc = (planlama && dikkat && eszamanli && ardisik) ? pasperfGenelYorumla({ planlama, dikkat, eszamanli, ardisik }, kademeAyarlari) : null;
 
   async function handleKaydet() {
     const kayit = {
       id: mevcut?.id || uid(),
       date: today(),
       studentName: seciliAd, className: seciliSinif, numara: seciliNumara,
-      sonuc,
+      kademe: kademeTahmin, ham: { planlama, dikkat, eszamanli, ardisik },
+      sonuc, aiYorum: aiYorum || (mevcut?.aiYorum || ""),
     };
     const updated = mevcut
       ? pasPerformanslar.map(o => o.id === mevcut.id ? kayit : o)
@@ -15570,6 +15811,34 @@ function PASPerformansPaneli({ seciliAd, seciliSinif, seciliNumara, pasPerforman
     await savePasPerformanslar(updated);
     setKaydedildi(true);
     setTimeout(() => setKaydedildi(false), 2500);
+  }
+
+  // Kayıtlı sonucu tamamen siler — yanlışlıkla tamamlanmış/kaydedilmiş bir
+  // uygulamayı geri almak için (kullanıcı isteği: "yanlışlıkla bir tuşa
+  // basılırsa" diye güvenlik amaçlı eklendi).
+  async function handleSil() {
+    if (!mevcut) return;
+    if (!confirm("Bu öğrencinin kayıtlı CAS Performans Testi sonucunu silmek istediğinize emin misiniz? Bu işlem geri alınamaz.")) return;
+    const updated = pasPerformanslar.filter(o => o.id !== mevcut.id);
+    setPasPerformanslar(updated);
+    await savePasPerformanslar(updated);
+    setAdim("giris"); setPlanlama(null); setDikkat(null); setEszamanli(null); setArdisik(null); setAiYorum(""); setPlanOlusturuldu(false);
+  }
+
+  // Ham metrikleri, CAS'ın PASS değerlendirme formu mantığına göre yorumlaması
+  // için AI'a gönderir — sonucu ekranda ve PDF raporda gösterir.
+  async function handleAiYorum() {
+    if (!sonuc) return;
+    setAiLoading(true);
+    try {
+      const yorum = await getPasperfYorum(seciliAd, seciliSinif, kademeAyarlari.ad, {
+        planlama, dikkat, eszamanli, ardisik, genelSkor: sonuc.genelSkor, seviyeLabel: sonuc.seviye.label,
+      });
+      setAiYorum(yorum);
+    } catch (e) {
+      alert("AI yorumu alınamadı: " + e.message);
+    }
+    setAiLoading(false);
   }
 
   // Sonuçtaki zayıf alan(lar)a göre, mevcut Müdahale Planı sistemine (aynı
@@ -15597,7 +15866,15 @@ function PASPerformansPaneli({ seciliAd, seciliSinif, seciliNumara, pasPerforman
     <div>
       <div style={{background:"#EAF0F7", border:`1px solid #b7c6dc`, borderRadius:10, padding:"10px 12px", marginBottom:14, fontSize:11, color:"#3D5A80", lineHeight:1.6}}>
         ⚡ Bu bölüm, <b>CAS (Cognitive Assessment System)</b> ölçeğinin PASS kuramına (Planlama, Dikkat, Eşzamanlı ve Ardışık İşlemleme) esinlenen <b>öğrencinin bizzat uyguladığı, özgün, 4 kısa göreve dayalı bir performans taramasıdır; tanı koymaz, normlanmış standart puan değildir</b>. Öğrenciye ekranı/cihazı verip görevleri kendisinin tamamlamasını sağlayın.
+        <div style={{marginTop:6, fontWeight:700}}>🎓 Uygulama zorluğu: {kademeAyarlari.ad} düzeyine göre ayarlandı.</div>
       </div>
+
+      {mevcut && adim === "giris" && (
+        <div style={{background:"#FDECEA", border:"1px solid #F5B7B1", borderRadius:10, padding:"8px 12px", marginBottom:14, display:"flex", justifyContent:"space-between", alignItems:"center"}}>
+          <span style={{fontSize:11, color:"#C0392B"}}>Bu öğrenci için kayıtlı bir sonuç var ({mevcut.date}).</span>
+          <button onClick={handleSil} style={{background:"none", border:"1px solid #C0392B", color:"#C0392B", borderRadius:8, padding:"4px 9px", fontSize:10.5, fontWeight:700, cursor:"pointer"}}>🗑️ Kaydı Sil</button>
+        </div>
+      )}
 
       {adim === "giris" && (
         <div style={{textAlign:"center", padding:20}}>
@@ -15609,25 +15886,25 @@ function PASPerformansPaneli({ seciliAd, seciliSinif, seciliNumara, pasPerforman
       {adim === "planlama" && (
         <div>
           <div style={{fontSize:12, fontWeight:800, color:ACCENT, marginBottom:10}}>🧭 1/4 · Planlama (Bağlantı Kurma)</div>
-          <PPTBaglantiGorevi onTamamla={(s) => { setPlanlama(s); setAdim("dikkat"); }} />
+          <PPTBaglantiGorevi noktaSayisi={kademeAyarlari.planlamaNoktaSayisi} beklenenSnBasi={kademeAyarlari.planlamaBeklenenSnBasi} onTamamla={(s) => { setPlanlama(s); setAdim("dikkat"); }} />
         </div>
       )}
       {adim === "dikkat" && (
         <div>
           <div style={{fontSize:12, fontWeight:800, color:ACCENT, marginBottom:10}}>🎯 2/4 · Dikkat (Renk-Kelime)</div>
-          <PPTDikkatGorevi onTamamla={(s) => { setDikkat(s); setAdim("eszamanli"); }} />
+          <PPTDikkatGorevi toplamDeneme={kademeAyarlari.dikkatDenemeSayisi} tepkiEsikMs={kademeAyarlari.dikkatTepkiEsikMs} onTamamla={(s) => { setDikkat(s); setAdim("eszamanli"); }} />
         </div>
       )}
       {adim === "eszamanli" && (
         <div>
           <div style={{fontSize:12, fontWeight:800, color:ACCENT, marginBottom:10}}>🧩 3/4 · Eşzamanlı İşlemleme (Örüntü)</div>
-          <PPTOruntuGorevi onTamamla={(s) => { setEszamanli(s); setAdim("ardisik"); }} />
+          <PPTOruntuGorevi sorular={kademeAyarlari.oruntuHavuzu} onTamamla={(s) => { setEszamanli(s); setAdim("ardisik"); }} />
         </div>
       )}
       {adim === "ardisik" && (
         <div>
           <div style={{fontSize:12, fontWeight:800, color:ACCENT, marginBottom:10}}>🔢 4/4 · Ardışık İşlemleme (Dizi Hatırlama)</div>
-          <PPTDiziGorevi onTamamla={(s) => { setArdisik(s); setAdim("sonuc"); }} />
+          <PPTDiziGorevi baslangicSpan={kademeAyarlari.digitBaslangicSpan} maksSpan={kademeAyarlari.digitMaksSpan} skorTablosu={kademeAyarlari.digitSkorTablosu} onTamamla={(s) => { setArdisik(s); setAdim("sonuc"); }} />
         </div>
       )}
 
@@ -15636,6 +15913,7 @@ function PASPerformansPaneli({ seciliAd, seciliSinif, seciliNumara, pasPerforman
           <div style={{background:sonuc.seviye.bg, border:`1px solid ${sonuc.seviye.color}33`, borderRadius:12, padding:14, marginBottom:16, textAlign:"center"}}>
             <div style={{fontSize:32, fontWeight:900, color:sonuc.seviye.color}}>%{sonuc.genelSkor}</div>
             <div style={{fontSize:13, fontWeight:700, color:sonuc.seviye.color, marginBottom:4}}>{sonuc.seviye.label}</div>
+            <div style={{fontSize:10, color:MUTED, marginBottom:4}}>{kademeAyarlari.ad} normuna göre değerlendirildi</div>
             <div style={{display:"flex", flexWrap:"wrap", gap:6, justifyContent:"center", marginTop:10}}>
               {sonuc.alanlar.map(a => (
                 <span key={a.key} style={{fontSize:10, fontWeight:700, padding:"3px 8px", borderRadius:10, background:"#fff", border:`1px solid ${BORDER}`, color:TEXT}}>
@@ -15648,9 +15926,22 @@ function PASPerformansPaneli({ seciliAd, seciliSinif, seciliNumara, pasPerforman
               {sonuc.genelYorum}
             </div>
           </div>
+
+          <button onClick={handleAiYorum} disabled={aiLoading} style={{
+            width:"100%", padding:12, background: aiLoading ? BORDER : PURPLE, color:"#fff", border:"none", borderRadius:12,
+            fontSize:13.5, fontWeight:800, cursor: aiLoading ? "default" : "pointer", marginTop:4
+          }}>{aiLoading ? "⏳ AI, CAS değerlendirme mantığına göre yorumluyor…" : "🤖 AI Klinik Yorumu Al (CAS Değerlendirme Formuna Göre)"}</button>
+
+          {aiYorum && (
+            <div style={{marginTop:10, background:PURPLE_LIGHT, border:`1px solid ${PURPLE}`, borderRadius:10, padding:12, fontSize:11.5, color:TEXT, lineHeight:1.7, whiteSpace:"pre-wrap"}}>
+              <div style={{fontWeight:800, marginBottom:6, color:PURPLE}}>🤖 AI Klinik Yorumu</div>
+              {aiYorum}
+            </div>
+          )}
+
           <button onClick={handleKaydet} style={{
             width:"100%", padding:13, background:ACCENT, color:"#fff", border:"none", borderRadius:12,
-            fontSize:15, fontWeight:800, cursor:"pointer", marginTop:4
+            fontSize:15, fontWeight:800, cursor:"pointer", marginTop:8
           }}>{kaydedildi ? "✓ Kaydedildi" : "💾 Kaydet"}</button>
 
           {sonuc.zayifAlanlar && sonuc.zayifAlanlar.length > 0 ? (
@@ -15662,10 +15953,18 @@ function PASPerformansPaneli({ seciliAd, seciliSinif, seciliNumara, pasPerforman
             <div style={{fontSize:11, color:MUTED, textAlign:"center", marginTop:10}}>Belirgin bir güçlük alanı gözlenmediği için müdahale planı önerilmiyor.</div>
           )}
 
-          <button onClick={() => { setAdim("giris"); setPlanlama(null); setDikkat(null); setEszamanli(null); setArdisik(null); setPlanOlusturuldu(false); }} style={{
-            width:"100%", padding:10, background:"transparent", color:MUTED, border:`1px solid ${BORDER}`, borderRadius:12,
-            fontSize:12, fontWeight:700, cursor:"pointer", marginTop:8
-          }}>🔄 Yeniden Uygula</button>
+          <div style={{display:"flex", gap:8, marginTop:8}}>
+            <button onClick={() => { setAdim("giris"); setPlanlama(null); setDikkat(null); setEszamanli(null); setArdisik(null); setPlanOlusturuldu(false); setAiYorum(""); }} style={{
+              flex:1, padding:10, background:"transparent", color:MUTED, border:`1px solid ${BORDER}`, borderRadius:12,
+              fontSize:12, fontWeight:700, cursor:"pointer"
+            }}>🔄 Yeniden Uygula</button>
+            {mevcut && (
+              <button onClick={handleSil} style={{
+                flex:1, padding:10, background:"transparent", color:"#C0392B", border:"1px solid #F5B7B1", borderRadius:12,
+                fontSize:12, fontWeight:700, cursor:"pointer"
+              }}>🗑️ Kaydı Sil</button>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -21341,6 +21640,7 @@ function pdrBaslangicSekmesi() {
             mudahalePlan={mudahalePlan}
             setMudahalePlan={setMudahalePlan}
             setTab={setTab}
+            kademe={kademe}
           />
         )}
 

@@ -2088,6 +2088,91 @@ function pasSonucHesapla(cevaplar) {
   return { yuzde, seviye, kategoriPuan, tamamlananSoru: Object.keys(cevaplar).length, gozlenemeyenSayisi, puanlananSoru: toplamSoru - gozlenemeyenSayisi, toplamSoru, genelYorum, oneCikanAlanlar };
 }
 
+// ── CAS Tarzı Bilişsel Süreçler PERFORMANS Testi (PASS Modeli) ────────────────
+// Yukarıdaki gözlem formundan farklı olarak burada ÖĞRENCİ ekranda doğrudan
+// görev uygular (gerçek CAS'taki gibi süreli/performans tabanlı). 4 orijinal
+// mini görev: Planlama (bağlantı kurma/iz sürme), Dikkat (Stroop tarzı renk-
+// kelime çelişkisi), Eşzamanlı İşlemleme (görsel örüntü tamamlama), Ardışık
+// İşlemleme (uyarlanabilir dizi hatırlama). ÖNEMLİ: Bu puanlar yaşa göre
+// normlanmış STANDART PUAN DEĞİLDİR; klinik CAS'ın yerini tutmaz, yalnızca
+// karşılaştırmalı/gözlemsel bir ön-fikir sağlayan sezgisel (heuristic) bir
+// puanlamadır. Tanı koymaz.
+
+// Eşzamanlı İşlemleme alt testi için özgün örüntü tamamlama maddeleri (Latin
+// kare / dizi mantığıyla, artan zorlukta).
+const PASPERF_ORUNTU_SORULARI = [
+  { id: "p1", izgara: ["🟥","🟦","🟥","❓"], secenekler: ["🟥","🟦","🟨","⬜"], dogruCevap: "🟦" },
+  { id: "p2", izgara: ["⚪","⚪⚪","⚪⚪⚪","❓"], secenekler: ["⚪","⚪⚪","⚪⚪⚪","⚪⚪⚪⚪"], dogruCevap: "⚪⚪⚪⚪" },
+  { id: "p3", izgara: ["🟥","🟦","🟨","🟨","🟥","🟦","🟦","🟨","❓"], secenekler: ["🟥","🟦","🟨","🟩"], dogruCevap: "🟥" },
+  { id: "p4", izgara: ["➡️","⬇️","⬅️","⬆️","➡️","⬇️","⬅️","⬆️","❓"], secenekler: ["➡️","⬇️","⬅️","⬆️"], dogruCevap: "➡️" },
+  { id: "p5", izgara: ["1️⃣","2️⃣","3️⃣","3️⃣","1️⃣","2️⃣","2️⃣","3️⃣","❓"], secenekler: ["1️⃣","2️⃣","3️⃣","4️⃣"], dogruCevap: "1️⃣" },
+  { id: "p6", izgara: ["🍎","🍋","🍇","🍇","🍎","🍋","🍋","🍇","❓"], secenekler: ["🍎","🍋","🍇","🍊"], dogruCevap: "🍎" },
+];
+const PASPERF_RENKLER = [
+  { ad: "Kırmızı", hex: "#C0392B" },
+  { ad: "Mavi", hex: "#2980B9" },
+  { ad: "Yeşil", hex: "#27AE60" },
+  { ad: "Sarı", hex: "#D4AC0D" },
+];
+
+function pasperfPlanlamaSkorla({ sureMs, hata }) {
+  const sureSaniye = sureMs / 1000;
+  const skor = Math.max(0, Math.min(100, Math.round(100 - (sureSaniye - 15) * 2 - hata * 8)));
+  return { sureMs, hata, skor };
+}
+function pasperfDikkatSkorla(denemeler) {
+  const toplam = denemeler.length;
+  const dogruDenemeler = denemeler.filter(d => d.dogru);
+  const dogruSayisi = dogruDenemeler.length;
+  const uyumluDenemeler = denemeler.filter(d => d.uyumlu);
+  const uyumsuzDenemeler = denemeler.filter(d => !d.uyumlu);
+  const uyumluDogruYuzde = uyumluDenemeler.length ? Math.round(uyumluDenemeler.filter(d=>d.dogru).length / uyumluDenemeler.length * 100) : null;
+  const uyumsuzDogruYuzde = uyumsuzDenemeler.length ? Math.round(uyumsuzDenemeler.filter(d=>d.dogru).length / uyumsuzDenemeler.length * 100) : null;
+  const ortTepkiMs = dogruSayisi > 0 ? Math.round(dogruDenemeler.reduce((s,d)=>s+d.tepkiMs,0) / dogruSayisi) : 0;
+  const uyumluOrtTepki = uyumluDenemeler.filter(d=>d.dogru).length ? Math.round(uyumluDenemeler.filter(d=>d.dogru).reduce((s,d)=>s+d.tepkiMs,0) / uyumluDenemeler.filter(d=>d.dogru).length) : null;
+  const uyumsuzOrtTepki = uyumsuzDenemeler.filter(d=>d.dogru).length ? Math.round(uyumsuzDenemeler.filter(d=>d.dogru).reduce((s,d)=>s+d.tepkiMs,0) / uyumsuzDenemeler.filter(d=>d.dogru).length) : null;
+  const stroopEtkisiMs = (uyumluOrtTepki !== null && uyumsuzOrtTepki !== null) ? (uyumsuzOrtTepki - uyumluOrtTepki) : null;
+  const dogruYuzde = toplam > 0 ? Math.round(dogruSayisi / toplam * 100) : 0;
+  const skor = Math.max(0, Math.min(100, Math.round(dogruYuzde - (ortTepkiMs > 2500 ? 10 : 0))));
+  return { toplam, dogruSayisi, dogruYuzde, ortTepkiMs, uyumluDogruYuzde, uyumsuzDogruYuzde, stroopEtkisiMs, skor };
+}
+function pasperfEszamanliSkorla(cevaplar) {
+  const toplam = PASPERF_ORUNTU_SORULARI.length;
+  let dogruSayisi = 0, toplamSureMs = 0;
+  cevaplar.forEach(c => { if (c.dogru) dogruSayisi++; toplamSureMs += c.sureMs; });
+  const dogruYuzde = Math.round(dogruSayisi / toplam * 100);
+  const ortSureMs = Math.round(toplamSureMs / toplam);
+  const skor = dogruYuzde;
+  return { toplam, dogruSayisi, dogruYuzde, ortSureMs, skor };
+}
+function pasperfArdisikSkorla({ ulasilanSpan }) {
+  const skorTablosu = { 2:20, 3:35, 4:50, 5:65, 6:78, 7:88, 8:95, 9:100 };
+  const skor = skorTablosu[ulasilanSpan] ?? (ulasilanSpan > 9 ? 100 : 10);
+  return { ulasilanSpan, skor };
+}
+function pasperfGenelYorumla({ planlama, dikkat, eszamanli, ardisik }) {
+  const alanlar = [
+    { key: "planlama", ad: "Planlama", skor: planlama.skor,
+      dusukYorum: `Bağlantı kurma görevinde ${(planlama.sureMs/1000).toFixed(1)} saniyede ve ${planlama.hata} hatayla tamamladı. Bu, göreve stratejik yaklaşma, sırayı takip etme ve hata izleme konusunda yaşıtlarına göre daha fazla zamana/desteğe ihtiyaç duyabileceğine işaret edebilir.` },
+    { key: "dikkat", ad: "Dikkat", skor: dikkat.skor,
+      dusukYorum: `Renk-kelime çelişkisi görevinde %${dikkat.dogruYuzde} doğruluk gösterdi, ortalama tepki süresi ${dikkat.ortTepkiMs} ms.${dikkat.stroopEtkisiMs !== null ? ` Uyumsuz denemelerde uyumlu denemelere göre ${dikkat.stroopEtkisiMs} ms daha yavaş tepki verdi (dürtü kontrolü/ket vurma göstergesi).` : ""} Bu bulgular sürdürülebilir ve seçici dikkatte güçlüğe işaret edebilir.` },
+    { key: "eszamanli", ad: "Eşzamanlı İşlemleme", skor: eszamanli.skor,
+      dusukYorum: `Örüntü tamamlama görevinde ${eszamanli.dogruSayisi}/${eszamanli.toplam} doğru cevap verdi. Bu, bilgiyi bütünsel olarak organize etme ve görsel-uzamsal ilişkileri kavrama konusunda güçlüğe işaret edebilir.` },
+    { key: "ardisik", ad: "Ardışık İşlemleme", skor: ardisik.skor,
+      dusukYorum: `Dizi hatırlama görevinde ulaşabildiği en uzun dizi ${ardisik.ulasilanSpan} haneydi (yaşıtlarında ortalama beklenti yaklaşık 5-7 hane). Bu, sıralı bilgiyi kısa süreli bellekte tutma ve doğru sırayla yeniden üretme konusunda güçlüğe işaret edebilir.` },
+  ];
+  const genelSkor = Math.round((planlama.skor + dikkat.skor + eszamanli.skor + ardisik.skor) / 4);
+  const seviye = genelSkor >= 80 ? { label: "Güçlü Performans", color: "#1A8C5B", bg: "#E6F5EE" }
+    : genelSkor >= 60 ? { label: "Yaşına Uygun Performans", color: "#457B9D", bg: "#EEF2FF" }
+    : genelSkor >= 40 ? { label: "Sınırda Performans", color: "#B07D1A", bg: "#FDF6E3" }
+    : { label: "Belirgin Zorlanma", color: "#C0392B", bg: "#FDECEA" };
+  const zayifAlanlar = alanlar.filter(a => a.skor < 60).sort((a,b) => a.skor - b.skor).slice(0, 2);
+  const genelYorum = zayifAlanlar.length > 0
+    ? zayifAlanlar.map(a => `${a.ad} (%${a.skor}): ${a.dusukYorum}`).join("\n\n")
+    : "Değerlendirilen 4 süreç alanında (Planlama, Dikkat, Eşzamanlı İşlemleme, Ardışık İşlemleme) performans yaşıtları için beklenen düzeyde veya üzerindedir.";
+  return { genelSkor, seviye, genelYorum, alanlar };
+}
+
 
 const PROF_HAKAN = "Sen Prof. Dr. Hakan'sin. Klinik psikoloji, cocuk-ergen psikiyatrisi, egitim psikolojisi, PDR, psikoterapi, norobiyoloji ve aile sistemleri alanlarinda 30 yillik akademik ve klinik deneyime sahip ust duzey bir supervizor ve akademisyensin. BDT, psikanalitik, humanistik, varoluşcu, sistem teorisi ve norobiyolojik perspektifleri entegre kullanırsın. Diger AI degerlendirmelerini de okuyarak butunsel klinik supervizyon sunarsın. ONEMLI: Degerlendirmeni yaptiktan sonra mutlaka vakayı daha iyi anlamak icin 2-3 adet derinlestirilmis soru sor. Bu sorular: danismanin dogrudan gozlemlemedigi bilgileri ortaya cikarmalı, ogrenci hakkinda kritik eksik bilgileri tamamlamalı, veya fark edilmemis bir boyutu aydınlatmalıdır. Sorularını 'DAHA İYİ ANLAYABİLMEK İÇİN SORULARIM:' basligi altında yaz. Turkce yaz, akademik ama anlasilir ol, Markdown kullanma. Ogrencinin en yuksek yararını on planda tut.";
 
@@ -2612,6 +2697,12 @@ async function loadPasDegerlendirmeler() {
 }
 async function savePasDegerlendirmeler(items) {
   try { await window.storage.set("pdr-pas", JSON.stringify(items)); } catch(e) { console.warn(e); }
+}
+async function loadPasPerformanslar() {
+  try { const r = await window.storage.get("pdr-pasperf"); return r ? JSON.parse(r.value) : []; } catch { return []; }
+}
+async function savePasPerformanslar(items) {
+  try { await window.storage.set("pdr-pasperf", JSON.stringify(items)); } catch(e) { console.warn(e); }
 }
 
 async function loadYillar() {
@@ -5446,8 +5537,8 @@ function raporCizgiGrafik(noktalar, { genislik = 460, yukseklik = 130, renk = "#
   );
 }
 
-function raporVerisiOlustur({ ogrenci, ogrenciSinif, profil1, profil2, gorusmeler, denemeler, mudahalePlan, riskListesi, sinavTuru, testKayitlari, kaynastirma, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler, osbDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, hazirlikNotlari, ilerlemeNotlari, sevkler, mudahaleOnerileri, uyumIzleme }) {
-  return { ogrenci, ogrenciSinif, profil1, profil2, gorusmeler, denemeler: denemeler || {}, mudahalePlan: mudahalePlan || {}, riskListesi: riskListesi || [], sinavTuru, testKayitlari: testKayitlari || [], kaynastirma: kaynastirma || [], bireyiTanima: bireyiTanima || [], bdtAnaliz: bdtAnaliz || [], sinavKaygisi: sinavKaygisi || {}, ogrenciler: ogrenciler || [], oogDegerlendirmeler: oogDegerlendirmeler || [], osbDegerlendirmeler: osbDegerlendirmeler || [], castDegerlendirmeler: castDegerlendirmeler || [], pasDegerlendirmeler: pasDegerlendirmeler || [], hazirlikNotlari: hazirlikNotlari || {}, ilerlemeNotlari: ilerlemeNotlari || {}, sevkler: sevkler || [], mudahaleOnerileri: mudahaleOnerileri || {}, uyumIzleme: uyumIzleme || [], tarih: new Date().toLocaleDateString("tr-TR") };
+function raporVerisiOlustur({ ogrenci, ogrenciSinif, profil1, profil2, gorusmeler, denemeler, mudahalePlan, riskListesi, sinavTuru, testKayitlari, kaynastirma, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler, osbDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, pasPerformanslar, hazirlikNotlari, ilerlemeNotlari, sevkler, mudahaleOnerileri, uyumIzleme }) {
+  return { ogrenci, ogrenciSinif, profil1, profil2, gorusmeler, denemeler: denemeler || {}, mudahalePlan: mudahalePlan || {}, riskListesi: riskListesi || [], sinavTuru, testKayitlari: testKayitlari || [], kaynastirma: kaynastirma || [], bireyiTanima: bireyiTanima || [], bdtAnaliz: bdtAnaliz || [], sinavKaygisi: sinavKaygisi || {}, ogrenciler: ogrenciler || [], oogDegerlendirmeler: oogDegerlendirmeler || [], osbDegerlendirmeler: osbDegerlendirmeler || [], castDegerlendirmeler: castDegerlendirmeler || [], pasDegerlendirmeler: pasDegerlendirmeler || [], pasPerformanslar: pasPerformanslar || [], hazirlikNotlari: hazirlikNotlari || {}, ilerlemeNotlari: ilerlemeNotlari || {}, sevkler: sevkler || [], mudahaleOnerileri: mudahaleOnerileri || {}, uyumIzleme: uyumIzleme || [], tarih: new Date().toLocaleDateString("tr-TR") };
 }
 
 // ── PDF Rapor Bileşeni ────────────────────────────────────────────────────────
@@ -5761,6 +5852,33 @@ function RaporModal({ rapor, onKapat }) {
                       ))}
                     </div>
                     <div style={{ fontSize:10, color:"#555", whiteSpace:"pre-wrap", lineHeight:1.5 }}>{sonuc.genelYorum}</div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* CAS Tarzı Bilişsel Süreçler PERFORMANS Testi — öğrencinin bizzat
+                uyguladığı görev tabanlı test; tanı koymaz, normlanmış standart
+                puan değildir; sadece doldurulmuşsa gösterilir. */}
+            {(() => {
+              const perfKayit = (rapor.pasPerformanslar||[]).find(o => pdrAyniOgrenci(o.studentName, o.className, ogrenci, ogrenciSinif));
+              if (!perfKayit || !perfKayit.sonuc) return null;
+              const s = perfKayit.sonuc;
+              return (
+                <div style={{ marginTop:10, pageBreakInside:"avoid" }}>
+                  <div style={{ ...S.bolumBaslik2 }}><KaynakRozeti ikon="📋" ad="Profil" />CAS Tarzı Bilişsel Süreçler Performans Testi (Tanı Değil)</div>
+                  <div style={S.bolumIcerik2}>
+                    <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+                      <span style={{ fontSize:16, fontWeight:900, color:s.seviye.color }}>%{s.genelSkor}</span>
+                      <span style={{ fontSize:10.5, fontWeight:700, color:s.seviye.color, background:s.seviye.bg, borderRadius:8, padding:"2px 8px" }}>{s.seviye.label}</span>
+                      <span style={{ fontSize:9, color:"#888" }}>({perfKayit.date})</span>
+                    </div>
+                    <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:8 }}>
+                      {s.alanlar.map(a => (
+                        <span key={a.key} style={{ fontSize:9.5, background:"#f5f5f5", borderRadius:4, padding:"2px 7px" }}>{a.ad}: %{a.skor}</span>
+                      ))}
+                    </div>
+                    <div style={{ fontSize:10, color:"#555", whiteSpace:"pre-wrap", lineHeight:1.5 }}>{s.genelYorum}</div>
                   </div>
                 </div>
               );
@@ -7494,7 +7612,7 @@ function D2Paneli({ seciliAd, seciliSinif, seciliNumara, profiles2, setProfiles2
   );
 }
 
-function TestlerEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, testKayitlari, setTestKayitlari, profiles2, setProfiles2, oogDegerlendirmeler, setOogDegerlendirmeler, osbDegerlendirmeler, setOsbDegerlendirmeler, castDegerlendirmeler, setCastDegerlendirmeler, pasDegerlendirmeler, setPasDegerlendirmeler }) {
+function TestlerEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, testKayitlari, setTestKayitlari, profiles2, setProfiles2, oogDegerlendirmeler, setOogDegerlendirmeler, osbDegerlendirmeler, setOsbDegerlendirmeler, castDegerlendirmeler, setCastDegerlendirmeler, pasDegerlendirmeler, setPasDegerlendirmeler, pasPerformanslar, setPasPerformanslar }) {
   const [seciliAd, setSeciliAd] = useState(aktifOgrenci?.name || "");
   const [ogrenciArama, setOgrenciArama] = useState("");
   const [kategori, setKategori] = useState(null); // "objektif" | "projektif" | null
@@ -7749,6 +7867,9 @@ SADECE aşağıdaki JSON formatında cevap ver, başka hiçbir açıklama/markdo
                   <div style={{ display:"flex", gap:8, marginTop:8 }}>
                     <button onClick={()=>setKategori("pas")} style={{ flex:1, padding:"14px 8px", borderRadius:12, border:`2px solid #3D5A80`, background:"#EAF0F7", color:"#3D5A80", fontSize:13, fontWeight:800, cursor:"pointer" }}>🧠 CAS Tarzı Bilişsel Süreçler Taraması</button>
                   </div>
+                  <div style={{ display:"flex", gap:8, marginTop:8 }}>
+                    <button onClick={()=>setKategori("pasperf")} style={{ flex:1, padding:"14px 8px", borderRadius:12, border:`2px solid #B5651D`, background:"#FBF0E7", color:"#B5651D", fontSize:13, fontWeight:800, cursor:"pointer" }}>⚡ CAS Performans Testi (Öğrenci Uygulamalı)</button>
+                  </div>
                 </div>
               ) : kategori === "d2panel" ? (
                 <div>
@@ -7774,6 +7895,11 @@ SADECE aşağıdaki JSON formatında cevap ver, başka hiçbir açıklama/markdo
                 <div>
                   <button onClick={()=>setKategori(null)} style={{ background:"none", border:"none", color:MUTED, fontSize:12, cursor:"pointer", marginBottom:8, padding:0 }}>← Kategoriyi değiştir</button>
                   <PASPaneli seciliAd={seciliAd} seciliSinif={seciliSinif} seciliNumara={seciliNumara} pasDegerlendirmeler={pasDegerlendirmeler} setPasDegerlendirmeler={setPasDegerlendirmeler} />
+                </div>
+              ) : kategori === "pasperf" ? (
+                <div>
+                  <button onClick={()=>setKategori(null)} style={{ background:"none", border:"none", color:MUTED, fontSize:12, cursor:"pointer", marginBottom:8, padding:0 }}>← Kategoriyi değiştir</button>
+                  <PASPerformansPaneli seciliAd={seciliAd} seciliSinif={seciliSinif} seciliNumara={seciliNumara} pasPerformanslar={pasPerformanslar} setPasPerformanslar={setPasPerformanslar} />
                 </div>
               ) : (
                 <div>
@@ -15042,6 +15168,358 @@ function PASPaneli({ seciliAd, seciliSinif, seciliNumara, pasDegerlendirmeler, s
   );
 }
 
+// ── CAS Tarzı Bilişsel Süreçler PERFORMANS Testi — öğrencinin bizzat
+// uyguladığı, 4 kısa göreve dayalı interaktif tarama aracı. Tanı koymaz,
+// normlanmış standart puan değildir; yalnızca gözlemsel/heuristik bir
+// göstergedir.
+
+function PPTBaglantiGorevi({ onTamamla }) {
+  const KONUMLAR = [
+    { top: "8%", left: "12%" }, { top: "18%", left: "62%" }, { top: "40%", left: "30%" },
+    { top: "10%", left: "82%" }, { top: "55%", left: "8%" }, { top: "68%", left: "55%" },
+    { top: "35%", left: "78%" }, { top: "82%", left: "28%" }, { top: "85%", left: "75%" },
+  ];
+  const [sonraki, setSonraki] = useState(1);
+  const [hata, setHata] = useState(0);
+  const [tiklanan, setTiklanan] = useState([]);
+  const baslangicRef = useRef(null);
+  useEffect(() => { baslangicRef.current = Date.now(); }, []);
+
+  function tikla(n) {
+    if (tiklanan.includes(n)) return;
+    if (n === sonraki) {
+      const yeniTiklanan = [...tiklanan, n];
+      setTiklanan(yeniTiklanan);
+      if (n === 9) {
+        const sureMs = Date.now() - (baslangicRef.current || Date.now());
+        onTamamla(pasperfPlanlamaSkorla({ sureMs, hata }));
+      } else {
+        setSonraki(n + 1);
+      }
+    } else {
+      setHata(h => h + 1);
+    }
+  }
+
+  return (
+    <div>
+      <div style={{fontSize:12, color:MUTED, marginBottom:10, textAlign:"center"}}>
+        1'den 9'a kadar olan sayılara <b>sırasıyla</b> mümkün olduğunca hızlı ve hatasız tıkla.
+      </div>
+      <div style={{position:"relative", height:280, background:"#fff", border:`1.5px solid ${BORDER}`, borderRadius:12, overflow:"hidden"}}>
+        {KONUMLAR.map((pos, i) => {
+          const n = i + 1;
+          const tamam = tiklanan.includes(n);
+          return (
+            <button key={n} onClick={() => tikla(n)} disabled={tamam} style={{
+              position:"absolute", top:pos.top, left:pos.left, width:42, height:42, borderRadius:"50%",
+              display:"flex", alignItems:"center", justifyContent:"center", fontSize:15, fontWeight:800,
+              cursor: tamam ? "default" : "pointer",
+              border:`2px solid ${tamam?ACCENT:BORDER}`,
+              background: tamam ? ACCENT : "#fff",
+              color: tamam ? "#fff" : TEXT,
+            }}>{n}</button>
+          );
+        })}
+      </div>
+      <div style={{marginTop:8, fontSize:10.5, color:MUTED, textAlign:"center"}}>Sıradaki: <b>{sonraki}</b> · Hata: {hata}</div>
+    </div>
+  );
+}
+
+function PPTDikkatGorevi({ onTamamla }) {
+  const TOPLAM_DENEME = 12;
+  const [denemeIndex, setDenemeIndex] = useState(0);
+  const [denemeler, setDenemeler] = useState([]);
+  const [deneme, setDeneme] = useState(null);
+  const [secenekSirasi, setSecenekSirasi] = useState([]);
+  const gosterimRef = useRef(null);
+
+  function yeniDenemeUret() {
+    const kelimeIdx = Math.floor(Math.random() * PASPERF_RENKLER.length);
+    let murekkepIdx = Math.floor(Math.random() * PASPERF_RENKLER.length);
+    if (Math.random() < 0.5) murekkepIdx = kelimeIdx; // ~yarısı uyumlu
+    const uyumlu = kelimeIdx === murekkepIdx;
+    const sirali = [...PASPERF_RENKLER].sort(() => Math.random() - 0.5);
+    setDeneme({ kelime: PASPERF_RENKLER[kelimeIdx].ad, murekkepHex: PASPERF_RENKLER[murekkepIdx].hex, murekkepAd: PASPERF_RENKLER[murekkepIdx].ad, uyumlu });
+    setSecenekSirasi(sirali);
+    gosterimRef.current = Date.now();
+  }
+
+  useEffect(() => { yeniDenemeUret(); }, []);
+
+  function cevapVer(secilenAd) {
+    if (!deneme) return;
+    const tepkiMs = Date.now() - (gosterimRef.current || Date.now());
+    const dogru = secilenAd === deneme.murekkepAd;
+    const yeniDenemeler = [...denemeler, { uyumlu: deneme.uyumlu, dogru, tepkiMs }];
+    setDenemeler(yeniDenemeler);
+    if (denemeIndex + 1 >= TOPLAM_DENEME) {
+      onTamamla(pasperfDikkatSkorla(yeniDenemeler));
+    } else {
+      setDenemeIndex(i => i + 1);
+      yeniDenemeUret();
+    }
+  }
+
+  if (!deneme) return null;
+  return (
+    <div>
+      <div style={{fontSize:12, color:MUTED, marginBottom:10, textAlign:"center"}}>
+        Kelimenin <b>anlamına değil</b>, yazıldığı <b>renge</b> bak ve o rengin butonuna tıkla.
+      </div>
+      <div style={{textAlign:"center", padding:"26px 0", background:"#fff", border:`1.5px solid ${BORDER}`, borderRadius:12, marginBottom:12}}>
+        <span style={{fontSize:30, fontWeight:900, color:deneme.murekkepHex}}>{deneme.kelime}</span>
+      </div>
+      <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8}}>
+        {secenekSirasi.map(r => (
+          <button key={r.ad} onClick={() => cevapVer(r.ad)} style={{
+            padding:"12px 6px", borderRadius:10, border:`2px solid ${BORDER}`, background:r.hex, color:"#fff",
+            fontSize:12, fontWeight:800, cursor:"pointer"
+          }}>{r.ad}</button>
+        ))}
+      </div>
+      <div style={{marginTop:8, fontSize:10.5, color:MUTED, textAlign:"center"}}>Deneme {denemeIndex + 1}/{TOPLAM_DENEME}</div>
+    </div>
+  );
+}
+
+function PPTOruntuGorevi({ onTamamla }) {
+  const [soruIndex, setSoruIndex] = useState(0);
+  const [cevaplar, setCevaplar] = useState([]);
+  const gosterimRef = useRef(Date.now());
+  useEffect(() => { gosterimRef.current = Date.now(); }, [soruIndex]);
+
+  const soru = PASPERF_ORUNTU_SORULARI[soruIndex];
+  const kolon = soru.izgara.length === 4 ? 2 : 3;
+
+  function cevapVer(secim) {
+    const sureMs = Date.now() - gosterimRef.current;
+    const dogru = secim === soru.dogruCevap;
+    const yeniCevaplar = [...cevaplar, { dogru, sureMs }];
+    setCevaplar(yeniCevaplar);
+    if (soruIndex + 1 >= PASPERF_ORUNTU_SORULARI.length) {
+      onTamamla(pasperfEszamanliSkorla(yeniCevaplar));
+    } else {
+      setSoruIndex(i => i + 1);
+    }
+  }
+
+  return (
+    <div>
+      <div style={{fontSize:12, color:MUTED, marginBottom:10, textAlign:"center"}}>
+        Örüntüyü incele ve <b>❓</b> yerine gelmesi gereken doğru öğeyi seç.
+      </div>
+      <div style={{display:"grid", gridTemplateColumns:`repeat(${kolon}, 1fr)`, gap:6, maxWidth:220, margin:"0 auto 16px", background:"#fff", border:`1.5px solid ${BORDER}`, borderRadius:12, padding:14}}>
+        {soru.izgara.map((hucre, i) => (
+          <div key={i} style={{fontSize:22, textAlign:"center", padding:"6px 0"}}>{hucre}</div>
+        ))}
+      </div>
+      <div style={{display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:8}}>
+        {soru.secenekler.map((s, i) => (
+          <button key={i} onClick={() => cevapVer(s)} style={{
+            padding:"10px 4px", borderRadius:10, border:`2px solid ${BORDER}`, background:CARD, fontSize:20, cursor:"pointer"
+          }}>{s}</button>
+        ))}
+      </div>
+      <div style={{marginTop:8, fontSize:10.5, color:MUTED, textAlign:"center"}}>Soru {soruIndex + 1}/{PASPERF_ORUNTU_SORULARI.length}</div>
+    </div>
+  );
+}
+
+function PPTDiziGorevi({ onTamamla }) {
+  const MAKS_SPAN = 9;
+  const [span, setSpan] = useState(3);
+  const [deneme, setDeneme] = useState(1); // 1 veya 2. deneme
+  const [asama, setAsama] = useState("gosterim"); // gosterim | girdi
+  const [dizi, setDizi] = useState([]);
+  const [gosterilenIndex, setGosterilenIndex] = useState(-1);
+  const [girilen, setGirilen] = useState([]);
+  const [tuşlar] = useState(() => Array.from({length:10}, (_,i)=>i).sort(() => Math.random() - 0.5));
+
+  function yeniDiziUret(uzunluk) {
+    const yeniDizi = Array.from({length: uzunluk}, () => Math.floor(Math.random() * 10));
+    setDizi(yeniDizi);
+    setGirilen([]);
+    setGosterilenIndex(-1);
+    setAsama("gosterim");
+  }
+
+  useEffect(() => { yeniDiziUret(span); }, [span, deneme]);
+
+  useEffect(() => {
+    if (asama !== "gosterim" || dizi.length === 0) return;
+    if (gosterilenIndex >= dizi.length) {
+      setAsama("girdi");
+      return;
+    }
+    const t = setTimeout(() => setGosterilenIndex(i => i + 1), 900);
+    return () => clearTimeout(t);
+  }, [asama, gosterilenIndex, dizi]);
+
+  useEffect(() => {
+    if (asama === "gosterim" && gosterilenIndex === -1) setGosterilenIndex(0);
+  }, [asama]);
+
+  function tuşaBas(d) {
+    const yeniGirilen = [...girilen, d];
+    setGirilen(yeniGirilen);
+    if (yeniGirilen.length === dizi.length) {
+      const dogru = yeniGirilen.every((v, i) => v === dizi[i]);
+      if (dogru) {
+        if (span >= MAKS_SPAN) {
+          onTamamla(pasperfArdisikSkorla({ ulasilanSpan: MAKS_SPAN }));
+        } else {
+          setSpan(s => s + 1);
+          setDeneme(1);
+        }
+      } else {
+        if (deneme >= 2) {
+          onTamamla(pasperfArdisikSkorla({ ulasilanSpan: Math.max(0, span - 1) }));
+        } else {
+          setDeneme(2);
+        }
+      }
+    }
+  }
+
+  return (
+    <div>
+      <div style={{fontSize:12, color:MUTED, marginBottom:10, textAlign:"center"}}>
+        Ekranda sırayla gösterilen rakamları izle, bitince <b>aynı sırayla</b> tuşlara bas.
+      </div>
+      <div style={{textAlign:"center", padding:"30px 0", background:"#fff", border:`1.5px solid ${BORDER}`, borderRadius:12, marginBottom:12, minHeight:100}}>
+        {asama === "gosterim" ? (
+          <span style={{fontSize:40, fontWeight:900, color:ACCENT}}>
+            {gosterilenIndex >= 0 && gosterilenIndex < dizi.length ? dizi[gosterilenIndex] : "•"}
+          </span>
+        ) : (
+          <div>
+            <div style={{fontSize:12, color:MUTED, marginBottom:8}}>Şimdi sırayla gir:</div>
+            <div style={{fontSize:18, fontWeight:800, letterSpacing:3}}>
+              {girilen.map((g,i)=>g).join(" - ")}{girilen.length < dizi.length ? " …" : ""}
+            </div>
+          </div>
+        )}
+      </div>
+      {asama === "girdi" && (
+        <div style={{display:"grid", gridTemplateColumns:"repeat(5, 1fr)", gap:8}}>
+          {tuşlar.map(d => (
+            <button key={d} onClick={() => tuşaBas(d)} style={{
+              padding:"12px 0", borderRadius:10, border:`2px solid ${BORDER}`, background:CARD, fontSize:16, fontWeight:800, cursor:"pointer"
+            }}>{d}</button>
+          ))}
+        </div>
+      )}
+      <div style={{marginTop:8, fontSize:10.5, color:MUTED, textAlign:"center"}}>Dizi uzunluğu: {span} · Deneme {deneme}/2</div>
+    </div>
+  );
+}
+
+function PASPerformansPaneli({ seciliAd, seciliSinif, seciliNumara, pasPerformanslar, setPasPerformanslar }) {
+  const mevcut = pasPerformanslar.find(o => pdrAyniOgrenci(o.studentName, o.className, seciliAd, seciliSinif, o.numara, seciliNumara));
+  const [adim, setAdim] = useState("giris");
+  const [planlama, setPlanlama] = useState(null);
+  const [dikkat, setDikkat] = useState(null);
+  const [eszamanli, setEszamanli] = useState(null);
+  const [ardisik, setArdisik] = useState(null);
+  const [kaydedildi, setKaydedildi] = useState(false);
+
+  useEffect(() => {
+    setAdim("giris"); setPlanlama(null); setDikkat(null); setEszamanli(null); setArdisik(null); setKaydedildi(false);
+  }, [seciliAd, seciliSinif, seciliNumara]);
+
+  if (!seciliAd || !seciliAd.trim()) {
+    return <div style={{textAlign:"center", color:MUTED, padding:20, fontSize:13}}>Önce bir öğrenci seçin</div>;
+  }
+
+  const sonuc = (planlama && dikkat && eszamanli && ardisik) ? pasperfGenelYorumla({ planlama, dikkat, eszamanli, ardisik }) : null;
+
+  async function handleKaydet() {
+    const kayit = {
+      id: mevcut?.id || uid(),
+      date: today(),
+      studentName: seciliAd, className: seciliSinif, numara: seciliNumara,
+      sonuc,
+    };
+    const updated = mevcut
+      ? pasPerformanslar.map(o => o.id === mevcut.id ? kayit : o)
+      : [kayit, ...pasPerformanslar];
+    setPasPerformanslar(updated);
+    await savePasPerformanslar(updated);
+    setKaydedildi(true);
+    setTimeout(() => setKaydedildi(false), 2500);
+  }
+
+  return (
+    <div>
+      <div style={{background:"#EAF0F7", border:`1px solid #b7c6dc`, borderRadius:10, padding:"10px 12px", marginBottom:14, fontSize:11, color:"#3D5A80", lineHeight:1.6}}>
+        ⚡ Bu bölüm, <b>CAS (Cognitive Assessment System)</b> ölçeğinin PASS kuramına (Planlama, Dikkat, Eşzamanlı ve Ardışık İşlemleme) esinlenen <b>öğrencinin bizzat uyguladığı, özgün, 4 kısa göreve dayalı bir performans taramasıdır; tanı koymaz, normlanmış standart puan değildir</b>. Öğrenciye ekranı/cihazı verip görevleri kendisinin tamamlamasını sağlayın.
+      </div>
+
+      {adim === "giris" && (
+        <div style={{textAlign:"center", padding:20}}>
+          <div style={{fontSize:13, color:TEXT, marginBottom:16}}>Sırasıyla 4 kısa görev uygulanacak: <b>Bağlantı Kurma</b> → <b>Renk-Kelime</b> → <b>Örüntü Tamamlama</b> → <b>Dizi Hatırlama</b>.</div>
+          <button onClick={() => setAdim("planlama")} style={{padding:"12px 26px", background:ACCENT, color:"#fff", border:"none", borderRadius:12, fontSize:14, fontWeight:800, cursor:"pointer"}}>▶️ Teste Başla</button>
+        </div>
+      )}
+
+      {adim === "planlama" && (
+        <div>
+          <div style={{fontSize:12, fontWeight:800, color:ACCENT, marginBottom:10}}>🧭 1/4 · Planlama (Bağlantı Kurma)</div>
+          <PPTBaglantiGorevi onTamamla={(s) => { setPlanlama(s); setAdim("dikkat"); }} />
+        </div>
+      )}
+      {adim === "dikkat" && (
+        <div>
+          <div style={{fontSize:12, fontWeight:800, color:ACCENT, marginBottom:10}}>🎯 2/4 · Dikkat (Renk-Kelime)</div>
+          <PPTDikkatGorevi onTamamla={(s) => { setDikkat(s); setAdim("eszamanli"); }} />
+        </div>
+      )}
+      {adim === "eszamanli" && (
+        <div>
+          <div style={{fontSize:12, fontWeight:800, color:ACCENT, marginBottom:10}}>🧩 3/4 · Eşzamanlı İşlemleme (Örüntü)</div>
+          <PPTOruntuGorevi onTamamla={(s) => { setEszamanli(s); setAdim("ardisik"); }} />
+        </div>
+      )}
+      {adim === "ardisik" && (
+        <div>
+          <div style={{fontSize:12, fontWeight:800, color:ACCENT, marginBottom:10}}>🔢 4/4 · Ardışık İşlemleme (Dizi Hatırlama)</div>
+          <PPTDiziGorevi onTamamla={(s) => { setArdisik(s); setAdim("sonuc"); }} />
+        </div>
+      )}
+
+      {adim === "sonuc" && sonuc && (
+        <div>
+          <div style={{background:sonuc.seviye.bg, border:`1px solid ${sonuc.seviye.color}33`, borderRadius:12, padding:14, marginBottom:16, textAlign:"center"}}>
+            <div style={{fontSize:32, fontWeight:900, color:sonuc.seviye.color}}>%{sonuc.genelSkor}</div>
+            <div style={{fontSize:13, fontWeight:700, color:sonuc.seviye.color, marginBottom:4}}>{sonuc.seviye.label}</div>
+            <div style={{display:"flex", flexWrap:"wrap", gap:6, justifyContent:"center", marginTop:10}}>
+              {sonuc.alanlar.map(a => (
+                <span key={a.key} style={{fontSize:10, fontWeight:700, padding:"3px 8px", borderRadius:10, background:"#fff", border:`1px solid ${BORDER}`, color:TEXT}}>
+                  {a.ad}: %{a.skor}
+                </span>
+              ))}
+            </div>
+            <div style={{marginTop:12, textAlign:"left", background:"#fff", borderRadius:8, padding:"10px 12px", fontSize:11, color:TEXT, lineHeight:1.6, whiteSpace:"pre-wrap"}}>
+              <div style={{fontWeight:800, marginBottom:4, color:ACCENT}}>📝 Değerlendirme / Yorum</div>
+              {sonuc.genelYorum}
+            </div>
+          </div>
+          <button onClick={handleKaydet} style={{
+            width:"100%", padding:13, background:ACCENT, color:"#fff", border:"none", borderRadius:12,
+            fontSize:15, fontWeight:800, cursor:"pointer", marginTop:4
+          }}>{kaydedildi ? "✓ Kaydedildi" : "💾 Kaydet"}</button>
+          <button onClick={() => { setAdim("giris"); setPlanlama(null); setDikkat(null); setEszamanli(null); setArdisik(null); }} style={{
+            width:"100%", padding:10, background:"transparent", color:MUTED, border:`1px solid ${BORDER}`, borderRadius:12,
+            fontSize:12, fontWeight:700, cursor:"pointer", marginTop:8
+          }}>🔄 Yeniden Uygula</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ProfilMerkez({
   aktifOgrenci, setAktifOgrenci, kayitliListesi,
   profiles, setProfiles,
@@ -18269,7 +18747,7 @@ function RecordCard({ rec, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz, bireyiTa
   );
 }
 
-function AyarlarEkrani({ ogrenciler, setOgrenciler, records, setRecords, profiles, setProfiles, profiles2, setProfiles2, oogDegerlendirmeler, setOogDegerlendirmeler, osbDegerlendirmeler, setOsbDegerlendirmeler, castDegerlendirmeler, setCastDegerlendirmeler, pasDegerlendirmeler, setPasDegerlendirmeler, riskListesi, setRiskListesi, denemeler, setDenemeler, sevkler, setSevkler, mudahalePlan, setMudahalePlan, hazirlikNotlari, setHazirlikNotlari, ilerlemeNotlari, setIlerlemeNotlari, profNotlari, setProfNotlari, kutuphane, setKutuphane, yillar, setYillar, sinifListesi, setSinifListesi, aktifYil, setAktifYil, kademe, setKademe, sinavTuru, setSinavTuru, testKayitlari, setTestKayitlari, hatirlatmalar, setHatirlatmalar, netHaritasiKayitlari, setNetHaritasiKayitlari, konuHaritasiVerisi, setKonuHaritasiVerisi, bireyiTanima, setBireyiTanima, bdtAnaliz, setBdtAnaliz, sinavKaygisi, setSinavKaygisi, sosyometri, setSosyometri, uyumIzleme, setUyumIzleme, onTumOzellikler }) {
+function AyarlarEkrani({ ogrenciler, setOgrenciler, records, setRecords, profiles, setProfiles, profiles2, setProfiles2, oogDegerlendirmeler, setOogDegerlendirmeler, osbDegerlendirmeler, setOsbDegerlendirmeler, castDegerlendirmeler, setCastDegerlendirmeler, pasDegerlendirmeler, setPasDegerlendirmeler, pasPerformanslar, setPasPerformanslar, riskListesi, setRiskListesi, denemeler, setDenemeler, sevkler, setSevkler, mudahalePlan, setMudahalePlan, hazirlikNotlari, setHazirlikNotlari, ilerlemeNotlari, setIlerlemeNotlari, profNotlari, setProfNotlari, kutuphane, setKutuphane, yillar, setYillar, sinifListesi, setSinifListesi, aktifYil, setAktifYil, kademe, setKademe, sinavTuru, setSinavTuru, testKayitlari, setTestKayitlari, hatirlatmalar, setHatirlatmalar, netHaritasiKayitlari, setNetHaritasiKayitlari, konuHaritasiVerisi, setKonuHaritasiVerisi, bireyiTanima, setBireyiTanima, bdtAnaliz, setBdtAnaliz, sinavKaygisi, setSinavKaygisi, sosyometri, setSosyometri, uyumIzleme, setUyumIzleme, onTumOzellikler }) {
   const [yedekIndiriliyor, setYedekIndiriliyor] = useState(false);
   const [geriYuklemeOnay, setGeriYuklemeOnay] = useState(null);
   const [geriYukleniyor, setGeriYukleniyor] = useState(false);
@@ -18333,6 +18811,7 @@ function AyarlarEkrani({ ogrenciler, setOgrenciler, records, setRecords, profile
     const yeniOsb = diziGuncelle(osbDegerlendirmeler);
     const yeniCast = diziGuncelle(castDegerlendirmeler);
     const yeniPas = diziGuncelle(pasDegerlendirmeler);
+    const yeniPasPerf = diziGuncelle(pasPerformanslar);
     const yeniNetHaritasi = diziGuncelle(netHaritasiKayitlari);
     const yeniHatirlatmalar = diziGuncelle(hatirlatmalar);
     const yeniBireyiTanima = diziGuncelle(bireyiTanima);
@@ -18406,6 +18885,7 @@ function AyarlarEkrani({ ogrenciler, setOgrenciler, records, setRecords, profile
     setOsbDegerlendirmeler(yeniOsb); await saveOsbDegerlendirmeler(yeniOsb);
     setCastDegerlendirmeler(yeniCast); await saveCastDegerlendirmeler(yeniCast);
     setPasDegerlendirmeler(yeniPas); await savePasDegerlendirmeler(yeniPas);
+    setPasPerformanslar(yeniPasPerf); await savePasPerformanslar(yeniPasPerf);
     setNetHaritasiKayitlari(yeniNetHaritasi); await saveNetHaritasi(yeniNetHaritasi);
     setHatirlatmalar(yeniHatirlatmalar); await saveHatirlatmalar(yeniHatirlatmalar);
     setBireyiTanima(yeniBireyiTanima); await saveBireyiTanima(yeniBireyiTanima);
@@ -18459,6 +18939,7 @@ function AyarlarEkrani({ ogrenciler, setOgrenciler, records, setRecords, profile
         ["osbDegerlendirmeler", setOsbDegerlendirmeler, saveOsbDegerlendirmeler],
         ["castDegerlendirmeler", setCastDegerlendirmeler, saveCastDegerlendirmeler],
         ["pasDegerlendirmeler", setPasDegerlendirmeler, savePasDegerlendirmeler],
+        ["pasPerformanslar", setPasPerformanslar, savePasPerformanslar],
         ["riskListesi", setRiskListesi, saveRiskListesi],
         ["denemeler", setDenemeler, saveDenemeler],
         ["sevkler", setSevkler, saveSevkler],
@@ -18504,7 +18985,7 @@ function AyarlarEkrani({ ogrenciler, setOgrenciler, records, setRecords, profile
       const yedek = {
         yedekTarihi: new Date().toISOString(),
         aktifYil, yillar, sinifListesi,
-        ogrenciler, records, profiles, profiles2, oogDegerlendirmeler, osbDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler,
+        ogrenciler, records, profiles, profiles2, oogDegerlendirmeler, osbDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, pasPerformanslar,
         riskListesi, denemeler, sevkler, mudahalePlan,
         hazirlikNotlari, ilerlemeNotlari, profNotlari, kutuphane,
         testKayitlari, hatirlatmalar, netHaritasiKayitlari, konuHaritasiVerisi, bireyiTanima, bdtAnaliz, sinavKaygisi,
@@ -18852,6 +19333,7 @@ export default function App() {
   const [osbDegerlendirmeler, setOsbDegerlendirmeler] = useState([]);
   const [castDegerlendirmeler, setCastDegerlendirmeler] = useState([]);
   const [pasDegerlendirmeler, setPasDegerlendirmeler] = useState([]);
+  const [pasPerformanslar, setPasPerformanslar] = useState([]);
   const [tab, setTab] = useState(() => pdrBaslangicSekmesi() || "ogrenci");
   // 3B Görünüm'den gelindiğinde hash tüketildikten sonra temizlenir —
   // sayfa yenilenince aynı sekmeye tekrar tekrar zıplamasın diye.
@@ -19034,6 +19516,7 @@ export default function App() {
     loadOsbDegerlendirmeler().then(setOsbDegerlendirmeler);
     loadCastDegerlendirmeler().then(setCastDegerlendirmeler);
     loadPasDegerlendirmeler().then(setPasDegerlendirmeler);
+    loadPasPerformanslar().then(setPasPerformanslar);
     loadKutuphane().then(setKutuphane);
     loadRiskListesi().then(setRiskListesi);
     loadDenemeler().then(setDenemeler);
@@ -19088,6 +19571,7 @@ export default function App() {
       "pdr-osb": () => loadOsbDegerlendirmeler().then(setOsbDegerlendirmeler),
       "pdr-cast": () => loadCastDegerlendirmeler().then(setCastDegerlendirmeler),
       "pdr-pas": () => loadPasDegerlendirmeler().then(setPasDegerlendirmeler),
+      "pdr-pasperf": () => loadPasPerformanslar().then(setPasPerformanslar),
       "pdr-kutuphane": () => loadKutuphane().then(setKutuphane),
       "pdr-risk": () => loadRiskListesi().then(setRiskListesi),
       "pdr-denemeler": () => loadDenemeler().then(setDenemeler),
@@ -19609,6 +20093,9 @@ export default function App() {
     const updPas = pasDegerlendirmeler.filter(o => !silinecekMi(o.studentName, o.className, o.numara));
     setPasDegerlendirmeler(updPas); await savePasDegerlendirmeler(updPas);
 
+    const updPasPerf = pasPerformanslar.filter(o => !silinecekMi(o.studentName, o.className, o.numara));
+    setPasPerformanslar(updPasPerf); await savePasPerformanslar(updPasPerf);
+
     function pdrSozlukSinifTemizle(sozluk) {
       const yeni = { ...sozluk };
       silinecekler.forEach(o => {
@@ -19666,7 +20153,7 @@ export default function App() {
         const parse = d => { const [g, ay, y] = (d||"").split("."); return new Date(`${y}-${ay}-${g}`); };
         return parse(a.date) - parse(b.date);
       });
-    setRaporVerisi(raporVerisiOlustur({ ogrenci: ogrenciAdi, ogrenciSinif: profil1.className, profil1, profil2, gorusmeler, denemeler: pdrSozlukOku(denemeler, ogrenciAdi, profil1.className, profil1.numara) || {}, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler, osbDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, hazirlikNotlari, ilerlemeNotlari, sevkler }));
+    setRaporVerisi(raporVerisiOlustur({ ogrenci: ogrenciAdi, ogrenciSinif: profil1.className, profil1, profil2, gorusmeler, denemeler: pdrSozlukOku(denemeler, ogrenciAdi, profil1.className, profil1.numara) || {}, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler, osbDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, pasPerformanslar, hazirlikNotlari, ilerlemeNotlari, sevkler }));
   }
 
   async function handleProf2Analiz() {
@@ -20136,6 +20623,9 @@ function pdrBaslangicSekmesi() {
 
     const kalanPas = pasDegerlendirmeler.filter(o => !silinecekMi(o.studentName, o.className, o.numara));
     setPasDegerlendirmeler(kalanPas); await savePasDegerlendirmeler(kalanPas);
+
+    const kalanPasPerf = pasPerformanslar.filter(o => !silinecekMi(o.studentName, o.className, o.numara));
+    setPasPerformanslar(kalanPasPerf); await savePasPerformanslar(kalanPasPerf);
 
     // Grup çalışmaları öğrenciye değil doğrudan yıla bağlı — silinen
     // yılın kayıtları da temizlenmeli.
@@ -20694,6 +21184,8 @@ function pdrBaslangicSekmesi() {
             setCastDegerlendirmeler={setCastDegerlendirmeler}
             pasDegerlendirmeler={pasDegerlendirmeler}
             setPasDegerlendirmeler={setPasDegerlendirmeler}
+            pasPerformanslar={pasPerformanslar}
+            setPasPerformanslar={setPasPerformanslar}
           />
         )}
 
@@ -20809,6 +21301,7 @@ function pdrBaslangicSekmesi() {
           osbDegerlendirmeler={osbDegerlendirmeler} setOsbDegerlendirmeler={setOsbDegerlendirmeler}
           castDegerlendirmeler={castDegerlendirmeler} setCastDegerlendirmeler={setCastDegerlendirmeler}
           pasDegerlendirmeler={pasDegerlendirmeler} setPasDegerlendirmeler={setPasDegerlendirmeler}
+          pasPerformanslar={pasPerformanslar} setPasPerformanslar={setPasPerformanslar}
           riskListesi={riskListesi} setRiskListesi={setRiskListesi}
           denemeler={denemeler} setDenemeler={setDenemeler}
           sevkler={sevkler} setSevkler={setSevkler}
@@ -20870,7 +21363,7 @@ function pdrBaslangicSekmesi() {
             records={records}
             kutuphane={kutuphane}
             sinavTuru={sinavTuru}
-            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler, osbDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, hazirlikNotlari, ilerlemeNotlari, sevkler, mudahaleOnerileri, uyumIzleme }))}
+            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler, osbDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, pasPerformanslar, hazirlikNotlari, ilerlemeNotlari, sevkler, mudahaleOnerileri, uyumIzleme }))}
             onDegerlendirmeAc={() => setDegerlendirmeAcik(true)}
           />
         )}
@@ -20948,7 +21441,7 @@ function pdrBaslangicSekmesi() {
             setOogDegerlendirmeler={setOogDegerlendirmeler}
             profNotlari={profNotlari}
             setProfNotlari={setProfNotlari}
-            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler, osbDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, hazirlikNotlari, ilerlemeNotlari, sevkler, mudahaleOnerileri, uyumIzleme }))}
+            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler, osbDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, pasPerformanslar, hazirlikNotlari, ilerlemeNotlari, sevkler, mudahaleOnerileri, uyumIzleme }))}
             onSinifGuncelle={async (eskiAd, eskiSinif, eskiNumara, yeniAd, yeniSinif) => {
               const ayniMi = (ad, sinif, no) => pdrAyniOgrenci(eskiAd, eskiSinif, ad, sinif, eskiNumara, no);
 
@@ -21073,6 +21566,9 @@ function pdrBaslangicSekmesi() {
 
               const yeniPas = pasDegerlendirmeler.map(o => ayniMi(o.studentName, o.className, o.numara) ? { ...o, studentName: yeniAd, className: yeniSinif } : o);
               setPasDegerlendirmeler(yeniPas); await savePasDegerlendirmeler(yeniPas);
+
+              const yeniPasPerf = pasPerformanslar.map(o => ayniMi(o.studentName, o.className, o.numara) ? { ...o, studentName: yeniAd, className: yeniSinif } : o);
+              setPasPerformanslar(yeniPasPerf); await savePasPerformanslar(yeniPasPerf);
             }}
             onOgrenciSil={async (studentName, className, numara) => {
               const silinecekMi = (ad, sinif, no) => pdrAyniOgrenci(studentName, className, ad, sinif, numara, no);
@@ -21112,6 +21608,9 @@ function pdrBaslangicSekmesi() {
 
               const updPas = pasDegerlendirmeler.filter(o => !silinecekMi(o.studentName, o.className, o.numara));
               setPasDegerlendirmeler(updPas); await savePasDegerlendirmeler(updPas);
+
+              const updPasPerf = pasPerformanslar.filter(o => !silinecekMi(o.studentName, o.className, o.numara));
+              setPasPerformanslar(updPasPerf); await savePasPerformanslar(updPasPerf);
 
               // Bireyi Tanıma notları ve BDT (bilişsel davranışçı terapi) analiz
               // maddeleri de öğrenciye özel diziler — daha önce silme işleminde
@@ -21267,7 +21766,7 @@ function pdrBaslangicSekmesi() {
             profiles2={profiles2}
             sosyometri={sosyometri}
             uyumIzleme={uyumIzleme}
-            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler, osbDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, hazirlikNotlari, ilerlemeNotlari, sevkler, mudahaleOnerileri, uyumIzleme }))}
+            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler, osbDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, pasPerformanslar, hazirlikNotlari, ilerlemeNotlari, sevkler, mudahaleOnerileri, uyumIzleme }))}
           />
         )}
 

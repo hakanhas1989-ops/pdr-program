@@ -2180,8 +2180,10 @@ function pasperfSozelUzamsalSkorla(cevaplar, toplamSoru) {
 // SESLİ okunan bir kelime dizisini doğru sırayla hatırlayabilmeyi (işitsel-
 // sıralı bellek) ölçen bir madde türü eklemek.
 const PASPERF_ISITSEL_KELIME_HAVUZU = ["kedi","kuş","balık","at","tavuk","köpek","kaplan","aslan","fil","tavşan","geyik","ayı","maymun","zürafa","kurbağa"];
-function pasperfIsitselDiziSkorla({ ulasilanSpan }, skorTablosu, maksSpan) {
-  return pasperfArdisikSkorla({ ulasilanSpan }, skorTablosu, maksSpan);
+function pasperfIsitselDiziSkorla({ ulasilanSpan, cevapSureMs }, skorTablosu, maksSpan) {
+  // Kelime söylemek/dokunmak rakam tuşlamaktan daha yavaş olduğu için beklenen
+  // süre biraz daha geniş tutuldu (hane başına 1800ms yerine 2400ms).
+  return pasperfArdisikSkorla({ ulasilanSpan, cevapSureMs }, skorTablosu, maksSpan, 2400);
 }
 
 // ── Kademe (yaş grubu) bazlı zorluk ayarları ────────────────────────────────
@@ -2262,22 +2264,42 @@ function pasperfDikkatSkorla(denemeler, tepkiEsikMs = 2500) {
   const uyumsuzOrtTepki = uyumsuzDenemeler.filter(d=>d.dogru).length ? Math.round(uyumsuzDenemeler.filter(d=>d.dogru).reduce((s,d)=>s+d.tepkiMs,0) / uyumsuzDenemeler.filter(d=>d.dogru).length) : null;
   const stroopEtkisiMs = (uyumluOrtTepki !== null && uyumsuzOrtTepki !== null) ? (uyumsuzOrtTepki - uyumluOrtTepki) : null;
   const dogruYuzde = toplam > 0 ? Math.round(dogruSayisi / toplam * 100) : 0;
-  const skor = Math.max(0, Math.min(100, Math.round(dogruYuzde - (ortTepkiMs > tepkiEsikMs ? 10 : 0))));
-  return { toplam, dogruSayisi, dogruYuzde, ortTepkiMs, uyumluDogruYuzde, uyumsuzDogruYuzde, stroopEtkisiMs, skor };
+  // Tepki süresi cezası artık diğer alanlarla (Planlama, Eşzamanlı) tutarlı biçimde
+  // ORANTILI hesaplanıyor: eşiği aşan her 100 ms için 2 puan, en fazla 20 puan ceza
+  // (eskiden eşiği geçince sabit 10 puan düşülüyordu — az geçmekle çok geçmek aynı
+  // cezayı alıyordu, bu artık düzeltildi).
+  const tepkiCezasi = ortTepkiMs > tepkiEsikMs ? Math.min(20, Math.round((ortTepkiMs - tepkiEsikMs) / 100 * 2)) : 0;
+  const skor = Math.max(0, Math.min(100, Math.round(dogruYuzde - tepkiCezasi)));
+  return { toplam, dogruSayisi, dogruYuzde, ortTepkiMs, tepkiCezasi, uyumluDogruYuzde, uyumsuzDogruYuzde, stroopEtkisiMs, skor };
 }
-function pasperfEszamanliSkorla(cevaplar, toplamSoru) {
+function pasperfEszamanliSkorla(cevaplar, toplamSoru, beklenenSureMsPerSoru = 8000) {
   const toplam = toplamSoru ?? cevaplar.length;
   let dogruSayisi = 0, toplamSureMs = 0;
   cevaplar.forEach(c => { if (c.dogru) dogruSayisi++; toplamSureMs += c.sureMs; });
   const dogruYuzde = toplam > 0 ? Math.round(dogruSayisi / toplam * 100) : 0;
   const ortSureMs = toplam > 0 ? Math.round(toplamSureMs / toplam) : 0;
-  const skor = dogruYuzde;
-  return { toplam, dogruSayisi, dogruYuzde, ortSureMs, skor };
+  // Süre daha önce kaydediliyor ama skora hiç girmiyordu — Planlama ve Dikkat'teki gibi
+  // ORANTILI bir ceza ekleyerek tutarlı hale getirildi: beklenen süreyi aşan her 1 saniye
+  // için 2 puan, en fazla 20 puan ceza. Beklentinin altında/civarında ceza yok.
+  const fazlaSn = Math.max(0, (ortSureMs - beklenenSureMsPerSoru) / 1000);
+  const tepkiCezasi = toplam > 0 ? Math.min(20, Math.round(fazlaSn * 2)) : 0;
+  const skor = Math.max(0, Math.min(100, Math.round(dogruYuzde - tepkiCezasi)));
+  return { toplam, dogruSayisi, dogruYuzde, ortSureMs, tepkiCezasi, skor };
 }
-function pasperfArdisikSkorla({ ulasilanSpan }, skorTablosu, maksSpan = 9) {
+function pasperfArdisikSkorla({ ulasilanSpan, cevapSureMs }, skorTablosu, maksSpan = 9, beklenenMsPerHane = 1800) {
   const tablo = skorTablosu || { 2:20, 3:35, 4:50, 5:65, 6:78, 7:88, 8:95, 9:100 };
-  const skor = tablo[ulasilanSpan] ?? (ulasilanSpan > maksSpan ? 100 : 10);
-  return { ulasilanSpan, skor };
+  const temelSkor = tablo[ulasilanSpan] ?? (ulasilanSpan > maksSpan ? 100 : 10);
+  // Diğer üç alanda artık tepki süresi skora giriyor; Ardışık'ta asıl ölçüt ulaşılan
+  // dizi uzunluğu olduğu için süre burada ana skoru EZMEYEN, ince bir ayar (±5 puan
+  // tavanlı) olarak ekleniyor — isteğe bağlı: cevapSureMs verilmezse eskisi gibi
+  // sadece span'e göre skorlanır.
+  let inceAyar = 0;
+  if (typeof cevapSureMs === "number" && ulasilanSpan > 0) {
+    const beklenenMs = ulasilanSpan * beklenenMsPerHane;
+    inceAyar = Math.max(-5, Math.min(5, Math.round((beklenenMs - cevapSureMs) / 400)));
+  }
+  const skor = Math.max(0, Math.min(100, temelSkor + inceAyar));
+  return { ulasilanSpan, cevapSureMs: typeof cevapSureMs === "number" ? cevapSureMs : null, temelSkor, inceAyar, skor };
 }
 
 // ── Görsel + Sözel/İşitsel madde sonuçlarını tek alan skoruna birleştirme ───
@@ -16264,6 +16286,7 @@ function PPTDiziGorevi({ onTamamla, baslangicSpan = 3, maksSpan = 9, skorTablosu
   const [gosterilenIndex, setGosterilenIndex] = useState(-1);
   const [girilen, setGirilen] = useState([]);
   const [tuşlar] = useState(() => Array.from({length:10}, (_,i)=>i).sort(() => Math.random() - 0.5));
+  const girisZamaniRef = useRef(null); // görsel (rakam) girdi aşaması başladığında damgalanır — tepki süresi ölçümü için
 
   function yeniDiziUret(uzunluk) {
     const yeniDizi = Array.from({length: uzunluk}, () => Math.floor(Math.random() * 10));
@@ -16278,6 +16301,7 @@ function PPTDiziGorevi({ onTamamla, baslangicSpan = 3, maksSpan = 9, skorTablosu
   useEffect(() => {
     if (faz !== "gorsel" || asama !== "gosterim" || dizi.length === 0) return;
     if (gosterilenIndex >= dizi.length) {
+      girisZamaniRef.current = Date.now(); // öğrenci tuşlamaya başlamadan hemen önce damgala
       setAsama("girdi");
       return;
     }
@@ -16294,17 +16318,18 @@ function PPTDiziGorevi({ onTamamla, baslangicSpan = 3, maksSpan = 9, skorTablosu
     const yeniGirilen = [...girilen, d];
     setGirilen(yeniGirilen);
     if (yeniGirilen.length === dizi.length) {
+      const cevapSureMs = girisZamaniRef.current ? Date.now() - girisZamaniRef.current : null;
       const dogru = yeniGirilen.every((v, i) => v === dizi[i]);
       if (dogru) {
         if (span >= MAKS_SPAN) {
-          bitirGorsel(MAKS_SPAN);
+          bitirGorsel(MAKS_SPAN, cevapSureMs);
         } else {
           setSpan(s => s + 1);
           setDeneme(1);
         }
       } else {
         if (deneme >= 2) {
-          bitirGorsel(Math.max(0, span - 1));
+          bitirGorsel(Math.max(0, span - 1), cevapSureMs);
         } else {
           setDeneme(2);
         }
@@ -16312,8 +16337,8 @@ function PPTDiziGorevi({ onTamamla, baslangicSpan = 3, maksSpan = 9, skorTablosu
     }
   }
 
-  function bitirGorsel(ulasilanSpan) {
-    const sonuc = pasperfArdisikSkorla({ ulasilanSpan }, skorTablosu, MAKS_SPAN);
+  function bitirGorsel(ulasilanSpan, cevapSureMs) {
+    const sonuc = pasperfArdisikSkorla({ ulasilanSpan, cevapSureMs }, skorTablosu, MAKS_SPAN);
     setGorselSonuc(sonuc);
     if (isitselMaksSpan > 0) { setFaz("isitsel"); }
     else onTamamla(pasperfArdisikSonucBirlestir(sonuc, null));
@@ -16328,6 +16353,7 @@ function PPTDiziGorevi({ onTamamla, baslangicSpan = 3, maksSpan = 9, skorTablosu
   const [isGosterilenIndex, setIsGosterilenIndex] = useState(-1);
   const [isGirilen, setIsGirilen] = useState([]);
   const sesDestekli = pdrSesDestekliMi();
+  const isGirisZamaniRef = useRef(null); // işitsel (kelime) girdi aşaması başladığında damgalanır
 
   function yeniIsDiziUret(uzunluk) {
     const yeni = Array.from({length: uzunluk}, () => PASPERF_ISITSEL_KELIME_HAVUZU[Math.floor(Math.random() * PASPERF_ISITSEL_KELIME_HAVUZU.length)]);
@@ -16339,7 +16365,7 @@ function PPTDiziGorevi({ onTamamla, baslangicSpan = 3, maksSpan = 9, skorTablosu
   useEffect(() => { if (faz === "isitsel") yeniIsDiziUret(isSpan); }, [faz, isSpan, isDeneme]);
   useEffect(() => {
     if (faz !== "isitsel" || isAsama !== "gosterim" || isDizi.length === 0) return;
-    if (isGosterilenIndex >= isDizi.length) { setIsAsama("girdi"); return; }
+    if (isGosterilenIndex >= isDizi.length) { isGirisZamaniRef.current = Date.now(); setIsAsama("girdi"); return; }
     if (isGosterilenIndex >= 0) pdrSesliOku(isDizi[isGosterilenIndex]);
     const t = setTimeout(() => setIsGosterilenIndex(i => i + 1), 1400);
     return () => clearTimeout(t);
@@ -16352,10 +16378,11 @@ function PPTDiziGorevi({ onTamamla, baslangicSpan = 3, maksSpan = 9, skorTablosu
     const yeni = [...isGirilen, w];
     setIsGirilen(yeni);
     if (yeni.length === isDizi.length) {
+      const cevapSureMs = isGirisZamaniRef.current ? Date.now() - isGirisZamaniRef.current : null;
       const dogru = yeni.every((v, i) => v === isDizi[i]);
       if (dogru) {
         if (isSpan >= IS_MAKS) {
-          const isitselSonuc = pasperfIsitselDiziSkorla({ ulasilanSpan: IS_MAKS }, isitselSkorTablosu, IS_MAKS);
+          const isitselSonuc = pasperfIsitselDiziSkorla({ ulasilanSpan: IS_MAKS, cevapSureMs }, isitselSkorTablosu, IS_MAKS);
           onTamamla(pasperfArdisikSonucBirlestir(gorselSonuc, isitselSonuc));
         } else {
           setIsSpan(s => s + 1);
@@ -16363,7 +16390,7 @@ function PPTDiziGorevi({ onTamamla, baslangicSpan = 3, maksSpan = 9, skorTablosu
         }
       } else {
         if (isDeneme >= 2) {
-          const isitselSonuc = pasperfIsitselDiziSkorla({ ulasilanSpan: Math.max(0, isSpan - 1) }, isitselSkorTablosu, IS_MAKS);
+          const isitselSonuc = pasperfIsitselDiziSkorla({ ulasilanSpan: Math.max(0, isSpan - 1), cevapSureMs }, isitselSkorTablosu, IS_MAKS);
           onTamamla(pasperfArdisikSonucBirlestir(gorselSonuc, isitselSonuc));
         } else {
           setIsDeneme(2);

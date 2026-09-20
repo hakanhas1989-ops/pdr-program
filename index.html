@@ -2460,6 +2460,38 @@ const PASPERF_ILERLEME_OLCEGI = [
   { puan: 5, label: "Çok Başarılı", aciklama: "Görevi hatasız/hataya yakın ve tamamen bağımsız tamamladı." },
 ];
 
+// ── Gelişim Hızı — oturum bazlı performans puanlarından en küçük kareler
+// (basit doğrusal regresyon) yöntemiyle tek bir eğim (slope) sayısı çıkarır.
+// x ekseni: oturum sırası (1,2,3,...), y ekseni: o oturumun puanı (1-5).
+// Eğim > 0  → puanlar oturum ilerledikçe ortalama olarak yükseliyor (gelişiyor)
+// Eğim ≈ 0  → puanlar yatay seyrediyor (stabil ama ilerlemiyor)
+// Eğim < 0  → puanlar oturum ilerledikçe düşüyor (gerileme/yorgunluk sinyali)
+// Formül: b = Σ((xi - x̄)(yi - ȳ)) / Σ((xi - x̄)²)  — klasik en küçük kareler eğimi.
+function pasperfGelisimHiziHesapla(puanliOturumlar) {
+  // puanliOturumlar: [{no, puan}, ...] — tamamlanmış ve puanlanmış oturumlar (sırayla değil, no'ya göre sıralanır)
+  const veri = (puanliOturumlar || [])
+    .filter(o => typeof o.puan === "number")
+    .sort((a, b) => a.no - b.no);
+  const n = veri.length;
+  if (n < 2) return null; // en az 2 nokta olmadan bir "hız/eğim" tanımlanamaz
+  const xOrt = veri.reduce((s, o) => s + o.no, 0) / n;
+  const yOrt = veri.reduce((s, o) => s + o.puan, 0) / n;
+  let pay = 0, payda = 0;
+  veri.forEach(o => {
+    pay += (o.no - xOrt) * (o.puan - yOrt);
+    payda += (o.no - xOrt) * (o.no - xOrt);
+  });
+  if (payda === 0) return null;
+  const egim = pay / payda; // oturum başına ortalama puan değişimi
+  const kesisim = yOrt - egim * xOrt; // y = egim*x + kesisim (doğrunun denklemi)
+  let yorum, renk;
+  if (egim >= 0.15) { yorum = "İvmeli gelişim"; renk = "#1A8C5B"; }
+  else if (egim >= 0.03) { yorum = "Yavaş ama istikrarlı gelişim"; renk = "#457B9D"; }
+  else if (egim > -0.03) { yorum = "Yatay seyir (platoda)"; renk = "#B07D1A"; }
+  else { yorum = "Gerileme sinyali"; renk = "#C0392B"; }
+  return { egim, kesisim, n, yorum, renk, ilkPuan: veri[0].puan, sonPuan: veri[n - 1].puan };
+}
+
 function pasperfMudahalePlaniOlustur(zayifAlanlar, kademe) {
   // zayifAlanlar: pasperfGenelYorumla().zayifAlanlar dizisi ({key, ad, skor, ...})
   // kademe: "ilkokul" | "ortaokul" | "lise" — her oturumun kademeye özgü uyarlama notunu seçmek için.
@@ -8994,6 +9026,7 @@ ${kademe ? "Planı öğrencinin yaş/gelişim dönemine uygun şekilde oluştur.
                       const puanliOturumlar = p.oturumlar.filter(o=>o.tamamlandi && typeof o.puan === "number");
                       const ortPuan = puanliOturumlar.length > 0 ? (puanliOturumlar.reduce((s,o)=>s+o.puan,0)/puanliOturumlar.length) : null;
                       const puanRenk = (puan) => puan >= 4 ? "#1A8C5B" : puan >= 3 ? "#457B9D" : puan >= 2 ? "#B07D1A" : "#C0392B";
+                      const gelisimHizi = pasperfGelisimHiziHesapla(puanliOturumlar);
                       return (
                         <div style={{marginBottom:8}}>
                           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
@@ -9011,6 +9044,17 @@ ${kademe ? "Planı öğrencinin yaş/gelişim dönemine uygun şekilde oluştur.
                                 }} />
                               ))}
                               <span style={{fontSize:9.5, color:MUTED, marginLeft:4, marginBottom:1}}>oturum bazlı performans trendi</span>
+                            </div>
+                          )}
+                          {gelisimHizi && (
+                            <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:8, background:"#F7F7F7", border:`1px solid ${BORDER}`, borderRadius:8, padding:"6px 10px"}}>
+                              <span style={{fontSize:15}}>{gelisimHizi.egim >= 0.03 ? "📈" : gelisimHizi.egim > -0.03 ? "➖" : "📉"}</span>
+                              <span style={{flex:1, fontSize:10.5, color:TEXT}}>
+                                <b style={{color:gelisimHizi.renk}}>Gelişim Hızı: {gelisimHizi.egim >= 0 ? "+" : ""}{gelisimHizi.egim.toFixed(2)} puan/oturum</b>
+                                <span style={{display:"block", color:MUTED, marginTop:1}}>
+                                  {gelisimHizi.yorum} · {gelisimHizi.n} puanlı oturuma göre hesaplandı (ilk: {gelisimHizi.ilkPuan}/5 → son: {gelisimHizi.sonPuan}/5)
+                                </span>
+                              </span>
                             </div>
                           )}
                           <div style={{display:"flex",flexDirection:"column",gap:5}}>

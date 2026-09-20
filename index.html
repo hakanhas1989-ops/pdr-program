@@ -9026,7 +9026,18 @@ ${kademe ? "Planı öğrencinin yaş/gelişim dönemine uygun şekilde oluştur.
                       const puanliOturumlar = p.oturumlar.filter(o=>o.tamamlandi && typeof o.puan === "number");
                       const ortPuan = puanliOturumlar.length > 0 ? (puanliOturumlar.reduce((s,o)=>s+o.puan,0)/puanliOturumlar.length) : null;
                       const puanRenk = (puan) => puan >= 4 ? "#1A8C5B" : puan >= 3 ? "#457B9D" : puan >= 2 ? "#B07D1A" : "#C0392B";
-                      const gelisimHizi = pasperfGelisimHiziHesapla(puanliOturumlar);
+                      // Bir plan birden fazla zayıf alanı (Dikkat, Planlama, ...) tek listede art arda
+                      // numaralandırıp barındırabiliyor — gelişim hızını alanlar karışmasın diye HER ALAN
+                      // İÇİN AYRI hesaplıyoruz (aynı planda tek alan varsa tek satır çıkar).
+                      const alanGruplari = {};
+                      puanliOturumlar.forEach(o => {
+                        const anahtar = o.alanKey || "_genel";
+                        if (!alanGruplari[anahtar]) alanGruplari[anahtar] = { alanAd: o.alanAd || p.hedef || "Genel", oturumlar: [] };
+                        alanGruplari[anahtar].oturumlar.push(o);
+                      });
+                      const gelisimHizlari = Object.entries(alanGruplari)
+                        .map(([anahtar, grup]) => ({ anahtar, alanAd: grup.alanAd, sonuc: pasperfGelisimHiziHesapla(grup.oturumlar) }))
+                        .filter(g => g.sonuc);
                       return (
                         <div style={{marginBottom:8}}>
                           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
@@ -9046,15 +9057,21 @@ ${kademe ? "Planı öğrencinin yaş/gelişim dönemine uygun şekilde oluştur.
                               <span style={{fontSize:9.5, color:MUTED, marginLeft:4, marginBottom:1}}>oturum bazlı performans trendi</span>
                             </div>
                           )}
-                          {gelisimHizi && (
-                            <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:8, background:"#F7F7F7", border:`1px solid ${BORDER}`, borderRadius:8, padding:"6px 10px"}}>
-                              <span style={{fontSize:15}}>{gelisimHizi.egim >= 0.03 ? "📈" : gelisimHizi.egim > -0.03 ? "➖" : "📉"}</span>
-                              <span style={{flex:1, fontSize:10.5, color:TEXT}}>
-                                <b style={{color:gelisimHizi.renk}}>Gelişim Hızı: {gelisimHizi.egim >= 0 ? "+" : ""}{gelisimHizi.egim.toFixed(2)} puan/oturum</b>
-                                <span style={{display:"block", color:MUTED, marginTop:1}}>
-                                  {gelisimHizi.yorum} · {gelisimHizi.n} puanlı oturuma göre hesaplandı (ilk: {gelisimHizi.ilkPuan}/5 → son: {gelisimHizi.sonPuan}/5)
-                                </span>
-                              </span>
+                          {gelisimHizlari.length > 0 && (
+                            <div style={{display:"flex", flexDirection:"column", gap:5, marginBottom:8}}>
+                              {gelisimHizlari.map(g => (
+                                <div key={g.anahtar} style={{display:"flex", alignItems:"center", gap:8, background:"#F7F7F7", border:`1px solid ${BORDER}`, borderRadius:8, padding:"6px 10px"}}>
+                                  <span style={{fontSize:15}}>{g.sonuc.egim >= 0.03 ? "📈" : g.sonuc.egim > -0.03 ? "➖" : "📉"}</span>
+                                  <span style={{flex:1, fontSize:10.5, color:TEXT}}>
+                                    <b style={{color:g.sonuc.renk}}>
+                                      {gelisimHizlari.length > 1 ? `${g.alanAd} — ` : ""}Gelişim Hızı: {g.sonuc.egim >= 0 ? "+" : ""}{g.sonuc.egim.toFixed(2)} puan/oturum
+                                    </b>
+                                    <span style={{display:"block", color:MUTED, marginTop:1}}>
+                                      {g.sonuc.yorum} · {g.sonuc.n} puanlı oturuma göre hesaplandı (ilk: {g.sonuc.ilkPuan}/5 → son: {g.sonuc.sonPuan}/5)
+                                    </span>
+                                  </span>
+                                </div>
+                              ))}
                             </div>
                           )}
                           <div style={{display:"flex",flexDirection:"column",gap:5}}>

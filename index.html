@@ -2044,13 +2044,27 @@ const PASPERF_ORUNTU_SORULARI = [
   { id: "p6", izgara: ["🍎","🍋","🍇","🍇","🍎","🍋","🍋","🍇","❓"], secenekler: ["🍎","🍋","🍇","🍊"], dogruCevap: "🍎" },
   { id: "p9", izgara: ["🐱","🐶","🐱","🐱","🐶","🐱","🐶","🐶","❓"], secenekler: ["🐱","🐶","🐭","🐰"], dogruCevap: "🐱" },
   { id: "p10", izgara: ["⬆️","➡️","➡️","⬆️","➡️","➡️","⬆️","➡️","❓"], secenekler: ["⬆️","➡️","⬇️","⬅️"], dogruCevap: "➡️" },
+  // — Aşağıdaki 8 madde, soru çeşitliliğini artırmak için eklendi (harf ve
+  // büyüklük gibi yeni sembol alanları + azalan/uzun döngü gibi yeni dizilim
+  // türleri). Kağıt-kalem CAS formundaki genişletilmiş madde havuzuyla
+  // paraleldir.
+  { id: "p11", izgara: ["⚫⚫⚫⚫","⚫⚫⚫","⚫⚫","❓"], secenekler: ["⚫","⚫⚫","⚫⚫⚫","⚫⚫⚫⚫"], dogruCevap: "⚫" },
+  { id: "p12", izgara: ["↗️","↘️","↘️","↗️","↘️","↘️","↗️","↘️","❓"], secenekler: ["↗️","↘️","↙️","↖️"], dogruCevap: "↘️" },
+  { id: "p13", izgara: ["A","B","C","C","A","B","B","C","❓"], secenekler: ["A","B","C","D"], dogruCevap: "A" },
+  { id: "p14", izgara: ["7","3","7","❓"], secenekler: ["3","5","7","9"], dogruCevap: "3" },
+  { id: "p15", izgara: ["•","●","⬤","⬤","•","●","●","⬤","❓"], secenekler: ["•","●","⬤","◯"], dogruCevap: "•" },
+  { id: "p16", izgara: ["Ay","Yıldız","Ay","❓"], secenekler: ["Ay","Yıldız","Güneş","Bulut"], dogruCevap: "Yıldız" },
+  { id: "p17", izgara: ["🟥","🟦","🟨","🟩","🟥","🟦","🟨","🟩","🟥","🟦","🟨","❓"], secenekler: ["🟥","🟦","🟨","🟩"], dogruCevap: "🟩" },
+  { id: "p18", izgara: ["X","Y","X","❓"], secenekler: ["W","X","Y","Z"], dogruCevap: "Y" },
 ];
 // Lise için, aynı döngü mantığıyla ama daha büyük (4x4=16 hücre) ve bu yüzden
-// daha çok görsel tarama/organizasyon gerektiren 2 ek soru — ilkokul/ortaokul
+// daha çok görsel tarama/organizasyon gerektiren ek sorular — ilkokul/ortaokul
 // havuzuna KARIŞTIRILMAZ, sadece lise kademesinde havuza eklenir.
 const PASPERF_ORUNTU_SORULARI_LISE_EK = [
   { id: "p7", izgara: ["🟥","🟦","🟨","🟩","🟥","🟦","🟨","🟩","🟥","🟦","🟨","🟩","🟥","🟦","🟨","❓"], secenekler: ["🟥","🟦","🟨","🟩"], dogruCevap: "🟩" },
   { id: "p8", izgara: ["↗️","↘️","↙️","↖️","↗️","↘️","↙️","↖️","↗️","↘️","↙️","↖️","↗️","↘️","↙️","❓"], secenekler: ["↗️","↘️","↙️","↖️"], dogruCevap: "↖️" },
+  { id: "p19", izgara: ["A","B","C","D","A","B","C","D","A","B","C","D","A","B","C","❓"], secenekler: ["A","B","C","D"], dogruCevap: "D" },
+  { id: "p20", izgara: ["•","●","⬤","⬤","•","●","⬤","⬤","•","●","⬤","⬤","•","●","⬤","❓"], secenekler: ["•","●","⬤","◯"], dogruCevap: "•" },
 ];
 const PASPERF_RENKLER = [
   { ad: "Kırmızı", hex: "#C0392B" },
@@ -2087,16 +2101,19 @@ const PASPERF_SOZEL_PLANLAMA_CUMLELERI = {
     { kelimeler: ["Kedi", "bahçede", "koşuyor"] },
     { kelimeler: ["Ali", "topu", "sert", "attı"] },
     { kelimeler: ["Güneş", "her", "sabah", "doğar"] },
+    { kelimeler: ["Kuşlar", "gökyüzünde", "uçuyor"] },
   ],
   ortaokul: [
     { kelimeler: ["Öğrenci", "ödevini", "dikkatli", "şekilde", "tamamladı"] },
     { kelimeler: ["Öğretmen", "sınıfa", "yeni", "bir", "konu", "anlattı"] },
     { kelimeler: ["Ayşe", "kütüphaneden", "iki", "kitap", "ödünç", "aldı"] },
+    { kelimeler: ["Sınıf", "başkanı", "toplantıyı", "zamanında", "başlattı"] },
   ],
   lise: [
     { kelimeler: ["Sınav", "sonuçları", "önümüzdeki", "hafta", "sisteme", "yüklenecek"] },
     { kelimeler: ["Öğrenciler", "proje", "ödevlerini", "grup", "hâlinde", "hazırladılar"] },
     { kelimeler: ["Danışman", "veliyle", "randevusunu", "erken", "saatte", "planladı"] },
+    { kelimeler: ["Üniversite", "tercih", "listesi", "kılavuzu", "dikkatle", "incelendi"] },
   ],
 };
 function pasperfSozelPlanlamaSkorla({ sureMs, hata, kelimeSayisi }) {
@@ -2111,7 +2128,7 @@ function pasperfSozelPlanlamaSkorla({ sureMs, hata, kelimeSayisi }) {
 // hedef bir uyarana seçici şekilde tepki verebilmeyi (işitsel sürdürülebilir/
 // seçici dikkat) ölçen bir madde türü eklemek.
 const PASPERF_ISITSEL_DIKKAT_HEDEF = "elma";
-const PASPERF_ISITSEL_DIKKAT_KELIME_HAVUZU = ["kalem","masa","kitap","bardak","çanta","pencere","kapı","top","araba","bulut","ağaç","deniz","sandalye","defter","şemsiye"];
+const PASPERF_ISITSEL_DIKKAT_KELIME_HAVUZU = ["kalem","masa","kitap","bardak","çanta","pencere","kapı","top","araba","bulut","ağaç","deniz","sandalye","defter","şemsiye","anahtar","saat","gözlük","telefon","kutu","halı","lamba"];
 function pasperfIsitselDikkatSkorla(denemeler) {
   // denemeler: [{hedef, tikladi}]
   const hedefDenemeler = denemeler.filter(d => d.hedef);
@@ -2138,6 +2155,16 @@ const PASPERF_SOZEL_UZAMSAL_SORULARI = [
     secenekler: [["","🟡","🟢",""], ["🟡","","","🟢"], ["","🟢","🟡",""], ["🟢","","","🟡"]], dogruIndex: 0 },
   { cumle: "🟣 mor şekil 🟠 turuncu şeklin ALTINDA ve SOLUNDADIR.",
     secenekler: [["","🟠","🟣",""], ["🟠","","","🟣"], ["","🟣","🟠",""], ["🟣","","","🟠"]], dogruIndex: 0 },
+  // — Aşağıdaki 4 madde, aynı 4 konumsal kalıbı (üst-sol / alt-sağ / üst-sağ /
+  // alt-sol) yeni şekil/renk çiftleriyle tekrarlayarak çeşitliliği artırır.
+  { cumle: "🔴 kırmızı daire 🟪 mor karenin ÜSTÜNDE ve SOLUNDADIR.",
+    secenekler: [["🔴","","","🟪"], ["","🔴","🟪",""], ["🟪","","","🔴"], ["","🟪","🔴",""]], dogruIndex: 0 },
+  { cumle: "🟩 yeşil kare 🔺 kırmızı üçgenin ALTINDA ve SAĞINDADIR.",
+    secenekler: [["🔺","","","🟩"], ["","🔺","🟩",""], ["🟩","","","🔺"], ["","🟩","🔺",""]], dogruIndex: 0 },
+  { cumle: "🔷 mavi baklava 🟫 kahverengi karenin ÜSTÜNDE ve SAĞINDADIR.",
+    secenekler: [["","🔷","🟫",""], ["🔷","","","🟫"], ["","🟫","🔷",""], ["🟫","","","🔷"]], dogruIndex: 0 },
+  { cumle: "⚫ siyah daire ⚪ beyaz dairenin ALTINDA ve SOLUNDADIR.",
+    secenekler: [["","⚪","⚫",""], ["⚪","","","⚫"], ["","⚫","⚪",""], ["⚫","","","⚪"]], dogruIndex: 0 },
 ];
 function pasperfSozelUzamsalSkorla(cevaplar, toplamSoru) {
   const toplam = toplamSoru ?? cevaplar.length;
@@ -2152,7 +2179,7 @@ function pasperfSozelUzamsalSkorla(cevaplar, toplamSoru) {
 // AMAÇ: Ekranda yanıp sönen rakam dizisine ek olarak, gerçek CAS'taki gibi
 // SESLİ okunan bir kelime dizisini doğru sırayla hatırlayabilmeyi (işitsel-
 // sıralı bellek) ölçen bir madde türü eklemek.
-const PASPERF_ISITSEL_KELIME_HAVUZU = ["kedi","kuş","balık","at","tavuk","köpek","kaplan","aslan","fil","tavşan"];
+const PASPERF_ISITSEL_KELIME_HAVUZU = ["kedi","kuş","balık","at","tavuk","köpek","kaplan","aslan","fil","tavşan","geyik","ayı","maymun","zürafa","kurbağa"];
 function pasperfIsitselDiziSkorla({ ulasilanSpan }, skorTablosu, maksSpan) {
   return pasperfArdisikSkorla({ ulasilanSpan }, skorTablosu, maksSpan);
 }
@@ -2169,12 +2196,12 @@ const PASPERF_KADEME_AYARLARI = {
   ilkokul: {
     ad: "İlkokul (1-4. sınıf)",
     yonergeSureSn: 25,
-    planlamaNoktaSayisi: 8, planlamaBeklenenSnBasi: 1.9,
+    planlamaNoktaSayisi: 10, planlamaBeklenenSnBasi: 1.9,
     sozelPlanlamaCumleleri: PASPERF_SOZEL_PLANLAMA_CUMLELERI.ilkokul,
-    dikkatDenemeSayisi: 10, dikkatTepkiEsikMs: 3200,
-    isitselDikkatKelimeSayisi: 8,
-    oruntuHavuzu: PASPERF_ORUNTU_SORULARI.slice(0, 5),
-    sozelUzamsalSoruSayisi: 2,
+    dikkatDenemeSayisi: 13, dikkatTepkiEsikMs: 3200,
+    isitselDikkatKelimeSayisi: 12,
+    oruntuHavuzu: PASPERF_ORUNTU_SORULARI.slice(0, 10),
+    sozelUzamsalSoruSayisi: 4,
     digitBaslangicSpan: 2, digitMaksSpan: 6,
     digitSkorTablosu: { 2:30, 3:50, 4:70, 5:85, 6:100 },
     isitselDiziBaslangicSpan: 2, isitselDiziMaksSpan: 4,
@@ -2184,12 +2211,12 @@ const PASPERF_KADEME_AYARLARI = {
   ortaokul: {
     ad: "Ortaokul (5-8. sınıf)",
     yonergeSureSn: 18,
-    planlamaNoktaSayisi: 11, planlamaBeklenenSnBasi: 1.7,
+    planlamaNoktaSayisi: 14, planlamaBeklenenSnBasi: 1.7,
     sozelPlanlamaCumleleri: PASPERF_SOZEL_PLANLAMA_CUMLELERI.ortaokul,
-    dikkatDenemeSayisi: 16, dikkatTepkiEsikMs: 2500,
-    isitselDikkatKelimeSayisi: 12,
+    dikkatDenemeSayisi: 20, dikkatTepkiEsikMs: 2500,
+    isitselDikkatKelimeSayisi: 18,
     oruntuHavuzu: PASPERF_ORUNTU_SORULARI,
-    sozelUzamsalSoruSayisi: 3,
+    sozelUzamsalSoruSayisi: 6,
     digitBaslangicSpan: 3, digitMaksSpan: 9,
     digitSkorTablosu: { 3:20, 4:35, 5:50, 6:65, 7:78, 8:90, 9:100 },
     isitselDiziBaslangicSpan: 2, isitselDiziMaksSpan: 6,
@@ -2199,12 +2226,12 @@ const PASPERF_KADEME_AYARLARI = {
   lise: {
     ad: "Lise (9-12. sınıf)",
     yonergeSureSn: 12,
-    planlamaNoktaSayisi: 12, planlamaBeklenenSnBasi: 1.6,
+    planlamaNoktaSayisi: 15, planlamaBeklenenSnBasi: 1.6,
     sozelPlanlamaCumleleri: PASPERF_SOZEL_PLANLAMA_CUMLELERI.lise,
-    dikkatDenemeSayisi: 20, dikkatTepkiEsikMs: 2000,
-    isitselDikkatKelimeSayisi: 15,
+    dikkatDenemeSayisi: 25, dikkatTepkiEsikMs: 2000,
+    isitselDikkatKelimeSayisi: 22,
     oruntuHavuzu: [...PASPERF_ORUNTU_SORULARI, ...PASPERF_ORUNTU_SORULARI_LISE_EK],
-    sozelUzamsalSoruSayisi: 4,
+    sozelUzamsalSoruSayisi: 8,
     digitBaslangicSpan: 4, digitMaksSpan: 9,
     digitSkorTablosu: { 4:20, 5:35, 6:50, 7:65, 8:80, 9:100 },
     isitselDiziBaslangicSpan: 3, isitselDiziMaksSpan: 7,
@@ -15768,6 +15795,8 @@ const PPT_BAGLANTI_KONUM_HAVUZU = [
   { top: "10%", left: "82%" }, { top: "55%", left: "8%" }, { top: "68%", left: "55%" },
   { top: "35%", left: "78%" }, { top: "82%", left: "28%" }, { top: "85%", left: "75%" },
   { top: "5%", left: "45%" }, { top: "60%", left: "88%" }, { top: "90%", left: "50%" },
+  // — Lise kademesinde madde/nokta sayısı arttığı için 3 ek konum eklendi.
+  { top: "28%", left: "10%" }, { top: "48%", left: "92%" }, { top: "75%", left: "42%" },
 ];
 
 // ── Planlama: Bağlantı Kurma (görsel) + Sözel Sıralama (sözel) ──────────────

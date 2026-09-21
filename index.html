@@ -9846,9 +9846,13 @@ SADECE aşağıdaki JSON formatında cevap ver, başka hiçbir açıklama/markdo
                   <div style={{ display:"flex", gap:8, marginTop:8 }}>
                     <button onClick={()=>setKategori("pasperf")} style={{ flex:1, padding:"14px 8px", borderRadius:12, border:`2px solid #B5651D`, background:"#FBF0E7", color:"#B5651D", fontSize:13, fontWeight:800, cursor:"pointer" }}>⚡ CAS Performans Testi (Öğrenci Uygulamalı)</button>
                   </div>
-                  <div style={{ display:"flex", gap:8, marginTop:8 }}>
-                    <button onClick={()=>setKategori("akademik")} style={{ flex:1, padding:"14px 8px", borderRadius:12, border:`2px solid #8B5A00`, background:"#FFF4E5", color:"#8B5A00", fontSize:13, fontWeight:800, cursor:"pointer" }}>📚 Akademik Düzey Taraması (5-8. Sınıf)</button>
-                  </div>
+                  {/* Soru havuzu 5-8. sınıf kazanımlarına dayalı olduğu için
+                      bu araç yalnızca ortaokul kademesinde gösterilir. */}
+                  {kademe === "ortaokul" && (
+                    <div style={{ display:"flex", gap:8, marginTop:8 }}>
+                      <button onClick={()=>setKategori("akademik")} style={{ flex:1, padding:"14px 8px", borderRadius:12, border:`2px solid #8B5A00`, background:"#FFF4E5", color:"#8B5A00", fontSize:13, fontWeight:800, cursor:"pointer" }}>📚 Akademik Düzey Taraması (5-8. Sınıf)</button>
+                    </div>
+                  )}
                   <div style={{ display:"flex", gap:8, marginTop:8 }}>
                     <button onClick={()=>setKategori("bilpro")} style={{ flex:1, padding:"14px 8px", borderRadius:12, border:`2px solid #6A4C93`, background:"#F3EEFB", color:"#6A4C93", fontSize:13, fontWeight:800, cursor:"pointer" }}>🧠 BİLPRO — Bilişsel Profil Değerlendirmesi</button>
                   </div>

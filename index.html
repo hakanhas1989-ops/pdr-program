@@ -14073,7 +14073,7 @@ Sade, klinik ama sıcak bir dil kullan. Markdown kullanma.`}]
 function ProfDanismaEkrani({
   kayitliListesi, aktifOgrenci, records, profiles, profiles2,
   denemeler, riskListesi, mudahalePlan, sevkler,
-  hazirlikNotlari, ilerlemeNotlari, profNotlari, setProfNotlari
+  hazirlikNotlari, ilerlemeNotlari, profNotlari, setProfNotlari, sinavTuru
 }) {
   const [seciliAd, setSeciliAd] = useState(aktifOgrenci?.name || "");
   const [aramaMetni, setAramaMetni] = useState("");
@@ -14098,6 +14098,10 @@ function ProfDanismaEkrani({
     const ogrHazirlik = pdrSozlukOku(hazirlikNotlari, ad, sinif) || "";
     const ogrIlerleme = pdrSozlukOku(ilerlemeNotlari, ad, sinif) || "";
 
+    // 'dersler' burada hic tanimli degildi; ogrencinin deneme kaydi varsa bu
+    // satir ReferenceError firlatiyordu. Uygulamanin baska yerlerindeki gibi
+    // aktif sinav turunun ders listesinden aliniyor.
+    const dersler = aktifDersler(sinavTuru);
     const denemeGirilen = Object.entries(ogrDen).sort((a,b)=>a[0]-b[0]).map(([no,nets])=>({
       no:parseInt(no), nets,
       toplam: dersler.reduce((s,d)=>s+(parseFloat(nets[d.key])||0),0)
@@ -14312,6 +14316,7 @@ Bu soruyu tüm verileri ve Dr. Ayşe Kara'nın değerlendirmelerini göz önünd
                     <ProfCevapAlani
                       konusmaId={k.id}
                       seciliAd={seciliAd}
+                      seciliSinif={seciliSinif}
                       oncekiVeri={k.cevap}
                       profNotlari={profNotlari}
                       setProfNotlari={setProfNotlari}
@@ -14380,7 +14385,7 @@ Bu soruyu tüm verileri ve Dr. Ayşe Kara'nın değerlendirmelerini göz önünd
 
 
 // ── Prof. Cevap Alanı Bileşeni ───────────────────────────────────────────────
-function ProfCevapAlani({ konusmaId, seciliAd, oncekiVeri, profNotlari, setProfNotlari }) {
+function ProfCevapAlani({ konusmaId, seciliAd, seciliSinif, oncekiVeri, profNotlari, setProfNotlari }) {
   const [cevap, setCevap] = useState("");
   const [loading, setLoading] = useState(false);
   const [goster, setGoster] = useState(false);
@@ -22805,31 +22810,6 @@ export default function App() {
     setProfAiLoading(false);
   }
 
-  async function handleProfileSave() {
-    if (!profForm.studentName.trim()) return;
-    const p = { id: uid(), date: today(), ...profForm };
-    const updated = [p, ...profiles];
-    setProfiles(updated); await saveProfiles(updated);
-    setProfForm({ studentName: "", className: "", notes: "", scores: { ...EMPTY_SCORES }, analysis: "" });
-    setScoresSet(false);
-    setProfSaved(true); setTimeout(() => setProfSaved(false), 2000); setTab("profil_merkez");
-  }
-
-  async function handleProfileDelete(id) { const u = profiles.filter(p => p.id !== id); setProfiles(u); await saveProfiles(u); }
-
-  async function handlePdfYukle(file) {
-    if (!file || file.type !== "application/pdf") { alert("Lütfen PDF dosyası seçin."); return; }
-    setPdfYukleniyor(true);
-    try {
-      const ozet = await pdfMetinCikar(file);
-      const yeni = { id: uid(), baslik: file.name.replace(".pdf", ""), dosyaAdi: file.name, ozet, tarih: today() };
-      const updated = [yeni, ...kutuphane];
-      setKutuphane(updated);
-      await saveKutuphane(updated);
-    } catch(e) { alert("PDF okunamadı: " + e.message); }
-    setPdfYukleniyor(false);
-  }
-
   // Risk Listesi
   // Elle kaydet — AI hiç çağrılmaz, danışmanın yukarıda kendi seçtiği risk
   // türü/öncelik aynen kaydedilir. "AI Analiz Et ve Kaydet" ile aynı listeye
@@ -23037,32 +23017,6 @@ export default function App() {
       });
     setRaporVerisi(raporVerisiOlustur({ ogrenci: ogrenciAdi, ogrenciSinif: profil1.className, profil1, profil2, gorusmeler, denemeler: pdrSozlukOku(denemeler, ogrenciAdi, profil1.className, profil1.numara) || {}, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, pasPerformanslar, akademikTaramalar, bilproDegerlendirmeler, hazirlikNotlari, ilerlemeNotlari, sevkler }));
   }
-
-  async function handleProf2Analiz() {
-    setProf2AiLoading(true);
-    const gorusmeBolum2 = ogrRec2.length > 0
-      ? "GÖRÜŞME NOTLARI:\n" + ogrRec2.map((r,i)=>`Görüşme ${i+1} (${r.date}): ${r.summary}`).join("\n\n")
-      : "";
-    const ogrDen2 = pdrSozlukOku(denemeler, seciliAd, seciliSinif, seciliNumara) || {};
-    const girilen2 = Object.entries(ogrDen2).sort((a,b)=>a[0]-b[0]).map(([no,nets])=>({
-      no:parseInt(no), nets, toplam: aktifDenemeDersleri.reduce((s,d)=>s+(parseFloat(nets[d.key])||0),0)
-    }));
-    const analiz = await getP2Analiz({ ...prof2Form, studentName: seciliAd, className: seciliSinif, gorusmeler: gorusmeBolum2, denemeGirilen: girilen2, sinavTuru });
-    setProf2Analiz(analiz);
-    setProf2AiLoading(false);
-  }
-
-  async function handleProf2Save() {
-    if (!prof2Form.studentName.trim()) return;
-    const p = { id: uid(), date: today(), ...prof2Form, d2_analiz: prof2Analiz };
-    const updated = [p, ...profiles2];
-    setProfiles2(updated); await saveProfiles2(updated);
-    setProf2Form({ ...EMPTY_PROF2 });
-    setProf2Analiz("");
-    setProf2Saved(true); setTimeout(() => setProf2Saved(false), 2000); setTab("profiller2");
-  }
-
-  async function handleProf2Delete(id) { const u = profiles2.filter(p => p.id !== id); setProfiles2(u); await saveProfiles2(u); }
 
   // Değerlendirmeden Profil 1'e aktar
   // "Gözlem Sorularıyla AI Destekli Değerlendir" akışından dönen puan ve analizi
@@ -24176,6 +24130,7 @@ function pdrBaslangicSekmesi() {
             ilerlemeNotlari={ilerlemeNotlari}
             profNotlari={profNotlari}
             setProfNotlari={setProfNotlari}
+            sinavTuru={sinavTuru}
           />
         )}
 

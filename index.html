@@ -2422,6 +2422,74 @@ const BILPRO_ALANLAR = [
       },
     ],
   },
+  {
+    key: "gsm",
+    kod: "Gsm",
+    ad: "Çalışma Belleği",
+    ikon: "🔁",
+    renk: "#0E7490",
+    tip: "performans",
+    olctugu: "Bilgiyi zihinde kısa süre tutup üzerinde işlem yapabilme. WISC'teki Çalışma Belleği İndeksi (WMI) ve Binet'teki Çalışma Belleği faktörüne karşılık gelir. Öğrenci görevleri ekranda bizzat uygular.",
+    gucluYorum: "Çalışma belleği güçlü: çok adımlı yönergeleri akılda tutup uygulayabiliyor, zihinden işlem yaparken bilgiyi kaybetmiyor. Bu, sınıf içi yönergeleri takip etmede ve problem çözmede belirgin avantaj sağlar.",
+    zayifYorum: "Çalışma belleği zayıf: zihinde tutması gereken bilgi arttığında performansı düşüyor olabilir. Tipik görünüm: çok adımlı yönergenin yalnızca ilk kısmını yapma, zihinden işlemde şaşırma, okurken cümlenin başını unutma, 'dinlemiyor/unutkan' diye yorumlanma.",
+    egitselOneri: "Yönergeyi tek seferde değil, adım adım ver ve yazılı/görsel olarak da bırak. Çok adımlı işlerde kontrol listesi kullandır. Zihinden işlem yerine ara işlemleri kâğıda yazmasına izin ver. Sınavda soru kökünü işaretleyip altını çizmeyi öğret. Yer değiştirme/dikkat dağıtıcı azaltılmış oturma düzeni yararlı olabilir.",
+    altTestler: [
+      {
+        key: "sayiDizisi",
+        ad: "Sayı Dizisi (Düz ve Ters)",
+        sunum: "sozel",
+        eksenDisi: true,
+        gorev: "sayiDizisi",
+        olctugu: "İşitsel-sözel dizi belleği: sayıları sırayla tutma (düz) ve zihinde ters çevirerek söyleme (ters)",
+        yonerge: "Tableti/telefonu öğrenciye ver. Ekranda sayılar tek tek görünecek; düz bölümde aynı sırayla, ters bölümde SONDAN BAŞA tekrar edecek. Önce bir deneme yaptır, anladığından emin ol. Dizi uzadıkça zorlaşır; iki denemede de yanılırsa bölüm biter.",
+        puanlamaNotu: "Ulaşılan düz ve ters dizi uzunluklarının toplamı sezgisel bir yüzdeye dönüştürülür. Norm değildir.",
+      },
+      {
+        key: "gorselDizi",
+        ad: "Görsel Dizi",
+        sunum: "sozelOlmayan",
+        eksenDisi: true,
+        gorev: "gorselDizi",
+        olctugu: "Görsel-uzamsal dizi belleği: sembolleri görüldükleri sırayla hatırlama (WISC'teki Resim Açıklığı görevinin mantığı)",
+        yonerge: "Ekranda semboller tek tek belirecek, sonra karışık bir paletten aynı sırayla seçmesi istenecek. Sözel tekrar etmesini engelleme ama teşvik de etme.",
+        puanlamaNotu: "Ulaşılan dizi uzunluğu sezgisel bir yüzdeye dönüştürülür. Norm değildir.",
+      },
+    ],
+  },
+  {
+    key: "gs",
+    kod: "Gs",
+    ad: "İşlem Hızı",
+    ikon: "⚡",
+    renk: "#BE185D",
+    tip: "performans",
+    olctugu: "Basit görsel bilgiyi hızlı ve doğru işleyebilme. WISC'teki İşlem Hızı İndeksi'ne (PSI) karşılık gelir. İki görev de 60 saniye sürelidir ve öğrenci ekranda bizzat uygular.",
+    gucluYorum: "İşlem hızı güçlü: basit görsel işleri hızlı ve doğru yapıyor. Süreli sınavlarda ve yoğun soru çözümünde zaman yönünden dezavantajı yok.",
+    zayifYorum: "İşlem hızı zayıf: bildiği işi bile yavaş yapıyor olabilir. Tipik görünüm: sınavda soruları yetiştirememe, tahtadan deftere geçirmede geri kalma, ödevin uzun sürmesi, 'ağırdan alıyor/tembel' diye yorumlanma. Akıl yürütmesi iyiyse bu tablo potansiyelinin altında görünmesine yol açar.",
+    egitselOneri: "Sınav ve yazılı işlerde ek süre ya da soru sayısında azaltma düşünülebilir. Tahtadan not aldırmak yerine hazır not/fotokopi ver. Ödevi süreye değil bitirilen işe göre tanımla. Hızlanma baskısı doğruluğu bozuyorsa önce doğruluğu koru; hız zamanla gelir. Belirgin yavaşlık dikkat sorunuyla birlikteyse DEHB açısından da değerlendirilmeli.",
+    altTestler: [
+      {
+        key: "kodlama",
+        ad: "Sembol Kodlama (60 sn)",
+        sunum: "sozelOlmayan",
+        eksenDisi: true,
+        gorev: "kodlama",
+        olctugu: "Sembol-rakam eşleştirme hızı: üstteki anahtara bakarak doğru rakamı bulma (WISC'teki Şifre görevinin mantığı)",
+        yonerge: "Anahtarı öğrenciye göster ve birkaç örnek birlikte yapın. \"Başla\" dedikten sonra 60 saniye boyunca olabildiğince hızlı ve DOĞRU eşleştirmesini iste. Anahtar ekranda sürekli kalacak, ezberlemesi gerekmiyor.",
+        puanlamaNotu: "60 saniyede yapılan doğru eşleştirme sayısı sezgisel bir yüzdeye dönüştürülür. Norm değildir.",
+      },
+      {
+        key: "tarama",
+        ad: "Sembol Tarama (60 sn)",
+        sunum: "sozelOlmayan",
+        eksenDisi: true,
+        gorev: "tarama",
+        olctugu: "Hızlı görsel tarama ve karar verme: hedef sembol satırda var mı yok mu (WISC'teki Sembol Arama görevinin mantığı)",
+        yonerge: "Solda hedef sembol, sağda bir satır sembol görünecek. Hedef satırda VARSA \"Var\", yoksa \"Yok\" düğmesine basacak. 60 saniye boyunca hızlı ve doğru çalışmasını iste.",
+        puanlamaNotu: "60 saniyedeki doğru karar sayısı sezgisel bir yüzdeye dönüştürülür. Norm değildir.",
+      },
+    ],
+  },
 ];
 
 const BILPRO_UYGULANMADI = "uygulanmadi";
@@ -2443,6 +2511,7 @@ function bilproSeviyeBandi(yuzde) {
 // (durdurma kuralı uyarısı için).
 function bilproArdisikYanlis(cevaplar, altTest) {
   let ardisik = 0;
+  if (!altTest.maddeler) return 0;
   altTest.maddeler.forEach((m, i) => {
     const v = cevaplar[`${altTest.key}_${i}`];
     if (v === false) ardisik++;
@@ -2451,14 +2520,47 @@ function bilproArdisikYanlis(cevaplar, altTest) {
   return ardisik;
 }
 
+// ── Süreli performans görevlerinin ham skorunu yüzdeye çeviren SEZGİSEL
+// tablolar. Bunlar norm DEĞİLDİR; ortaokul çağı için kabaca "beklenen"
+// performansın %60-75 bandına düşeceği şekilde kalibre edilmiştir
+// (ör. düz 5 + ters 3 = 8 toplam açıklık → %68). Tek bir öğrencinin
+// puanını mutlak doğru kabul etme; profil içindeki KONUMU anlamlıdır.
+function bilproDiziYuzde(toplamSpan) {
+  const tablo = { 0: 0, 1: 8, 2: 12, 3: 16, 4: 20, 5: 30, 6: 42, 7: 55, 8: 68, 9: 78, 10: 86, 11: 93 };
+  if (toplamSpan >= 12) return 100;
+  return tablo[toplamSpan] !== undefined ? tablo[toplamSpan] : 0;
+}
+function bilproGorselDiziYuzde(span) {
+  const tablo = { 0: 0, 1: 10, 2: 25, 3: 45, 4: 65, 5: 78, 6: 88, 7: 95 };
+  if (span >= 8) return 100;
+  return tablo[span] !== undefined ? tablo[span] : 0;
+}
+function bilproHizYuzde(dogruSayisi, katsayi) {
+  return Math.max(0, Math.min(100, Math.round(dogruSayisi * katsayi)));
+}
+
 function bilproSonucHesapla(cevaplar) {
   const altTestSonuclari = {};
   const alanSonuclari = {};
   let uygulananToplam = 0;
+  let uygulananGorev = 0;
 
   BILPRO_ALANLAR.forEach(alan => {
     const olculenAltTestler = [];
     alan.altTestler.forEach(at => {
+      // ── Süreli performans görevi (öğrenci ekranda uygular) ──
+      if (at.gorev) {
+        const r = cevaplar[`${at.key}_sonuc`];
+        const yuzde = r && typeof r.yuzde === "number" ? r.yuzde : null;
+        const s = {
+          key: at.key, ad: at.ad, sunum: at.sunum, alanKey: alan.key,
+          gorev: at.gorev, eksenDisi: !!at.eksenDisi, performans: r || null,
+          dogru: null, uygulanan: yuzde === null ? 0 : 1, toplam: 1, yuzde, tavan: 0,
+        };
+        altTestSonuclari[at.key] = s;
+        if (yuzde !== null) { uygulananGorev++; olculenAltTestler.push(s); }
+        return;
+      }
       let dogru = 0, uygulanan = 0;
       const zDogru = { 1: 0, 2: 0, 3: 0 }, zToplam = { 1: 0, 2: 0, 3: 0 };
       at.maddeler.forEach((m, i) => {
@@ -2510,10 +2612,13 @@ function bilproSonucHesapla(cevaplar) {
   }
 
   // ── Sözel / sözel olmayan eksen (Binet'in verbal-nonverbal ayrımı mantığı)
+  // NOT: süreli performans görevleri (eksenDisi) bu karşılaştırmaya KATILMAZ.
+  // Binet'in sözel/sözel olmayan çaprazlaması içerik faktörleri içindir; hız ve
+  // bellek görevlerini buraya katmak ekseni yapay biçimde kaydırırdı.
   const sozelListe = [], sozelOlmayanListe = [];
   Object.keys(altTestSonuclari).forEach(k => {
     const s = altTestSonuclari[k];
-    if (s.yuzde === null) return;
+    if (s.yuzde === null || s.eksenDisi) return;
     if (s.sunum === "sozel") sozelListe.push(s.yuzde); else sozelOlmayanListe.push(s.yuzde);
   });
   const ortala = arr => arr.length > 0 ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : null;
@@ -2546,6 +2651,28 @@ function bilproSonucHesapla(cevaplar) {
           + ". Bu tür bir dengesizlik, öğrencinin bazı derslerde iyi bazılarında kötü olmasını açıklayabilir.");
   }
 
+  // ── Akıl Yürütme Kapasitesi ↔ Bilişsel Verimlilik ──────────────────────
+  // WISC-V'teki GAI (Genel Yetenek İndeksi = VCI+VSI+FRI) ile CPI (Bilişsel
+  // Yeterlik İndeksi = WMI+PSI) ayrımının karşılığı. Klinik olarak en işlevsel
+  // karşılaştırmadır: akıl yürütmesi iyi ama verimliliği düşük öğrenci,
+  // sınıfta potansiyelinin altında görünür ve sıklıkla "tembel" sanılır.
+  const aykAlanlar = ["gc", "gv", "gf"], bvAlanlar = ["gsm", "gs"];
+  const grupOrt = keyler => {
+    const v = keyler.map(k => alanSonuclari[k]).filter(a => a && a.yuzde !== null).map(a => a.yuzde);
+    return v.length > 0 ? { yuzde: Math.round(v.reduce((a, b) => a + b, 0) / v.length), alanSayisi: v.length } : null;
+  };
+  const akilYurutme = grupOrt(aykAlanlar);
+  const bilisselVerimlilik = grupOrt(bvAlanlar);
+  // Karşılaştırmayı ancak iki taraf da yeterince ölçülmüşse yap.
+  const aykBvFarki = (akilYurutme && bilisselVerimlilik && akilYurutme.alanSayisi >= 2 && bilisselVerimlilik.alanSayisi >= 1)
+    ? akilYurutme.yuzde - bilisselVerimlilik.yuzde : null;
+  let aykBvYorumu = null;
+  if (aykBvFarki !== null && Math.abs(aykBvFarki) >= BILPRO_IPSATIF_ESIK) {
+    aykBvYorumu = aykBvFarki > 0
+      ? `Akıl yürütme kapasitesi (%${akilYurutme.yuzde}) bilişsel verimliliğinin (%${bilisselVerimlilik.yuzde}) belirgin biçimde üzerinde. Yani kafası çalışıyor ama bilgiyi zihinde tutma ve/veya hızlı işleme tarafı geride. Bu öğrenci çoğu zaman potansiyelinin altında performans gösterir: kavrar ama yetiştiremez, bilir ama sınavda dökemez. Sıklıkla "tembel", "dikkatsiz" ya da "isteksiz" diye yorumlanır — oysa tablo bir kapasite sorunundan çok bir verimlilik sorununu düşündürür. Süre, yönerge yükü ve not tutma gibi uyarlamalar bu öğrencide en hızlı sonucu veren müdahalelerdir.`
+      : `Bilişsel verimlilik (%${bilisselVerimlilik.yuzde}) akıl yürütme kapasitesinin (%${akilYurutme.yuzde}) belirgin biçimde üzerinde. Öğrenci hızlı çalışıyor ve bilgiyi akılda tutabiliyor, ancak yeni/karmaşık problemde kural bulma ve kavramsal akıl yürütme tarafı geride. Böyle bir öğrenci rutin ve tekrara dayalı işlerde başarılı görünüp üst düzey düşünme gerektiren sorularda beklenmedik biçimde düşebilir; hızına bakıp "yapabilir ama çalışmıyor" denmemesi önemlidir.`;
+  }
+
   let eksenYorumu = null;
   if (eksenFarki !== null && Math.abs(eksenFarki) >= BILPRO_IPSATIF_ESIK) {
     eksenYorumu = eksenFarki > 0
@@ -2569,6 +2696,12 @@ function bilproSonucHesapla(cevaplar) {
     if (zayif.some(a => a.key === "gq") || (alanSonuclari.gq && alanSonuclari.gq.yuzde !== null && alanSonuclari.gq.yuzde < 40)) {
       sevkOnerileri.push("Niceliksel akıl yürütmedeki düşüklük sürüyorsa özgül öğrenme güçlüğü (diskalkuli) açısından ÖÖG Ön-Tarama aracını da uygula.");
     }
+    if (aykBvFarki !== null && aykBvFarki >= BILPRO_IPSATIF_ESIK) {
+      const gsDusuk = alanSonuclari.gs && alanSonuclari.gs.yuzde !== null && alanSonuclari.gs.yuzde < 40;
+      const gsmDusuk = alanSonuclari.gsm && alanSonuclari.gsm.yuzde !== null && alanSonuclari.gsm.yuzde < 40;
+      sevkOnerileri.push("Akıl yürütmesi verimliliğinin belirgin biçimde üzerinde. Öğretmenlerle paylaşılacak en önemli bilgi budur: bu öğrenciye ek süre, azaltılmış yazma yükü ve adım adım yönerge verilmesi, ek ders çalışmasından daha hızlı sonuç verir."
+        + ((gsDusuk || gsmDusuk) ? " İşlem hızı ve/veya çalışma belleği ayrıca düşük olduğundan, sınıf içi dikkat gözlemleriyle birlikte DEHB açısından da değerlendirme düşünülmeli (D2 Dikkat Testi ve CAS Performans Testi'ndeki Dikkat alanına bak)." : ""));
+    }
     if (tumGuclu && genelOrtalama >= 85) {
       sevkOnerileri.push("Tüm ölçülen alanlarda yüksek performans var. Üstün yetenek açısından ileri değerlendirme (BİLSEM süreci) ve sınıf içi zenginleştirme gündeme alınabilir.");
     }
@@ -2580,10 +2713,436 @@ function bilproSonucHesapla(cevaplar) {
     seviye: genelOrtalama === null ? null : bilproSeviyeBandi(genelOrtalama),
     guclu: guclu.map(a => a.key), zayif: zayif.map(a => a.key),
     sozelYuzde, sozelOlmayanYuzde, eksenFarki,
+    akilYurutme, bilisselVerimlilik, aykBvFarki, aykBvYorumu,
     genelYorum, alanYorumlari, eksenYorumu, sevkOnerileri,
-    uygulananToplam,
-    toplamMadde: BILPRO_ALANLAR.reduce((t, a) => t + a.altTestler.reduce((x, at) => x + at.maddeler.length, 0), 0),
+    uygulananToplam, uygulananGorev,
+    toplamMadde: BILPRO_ALANLAR.reduce((t, a) => t + a.altTestler.reduce((x, at) => x + (at.maddeler ? at.maddeler.length : 0), 0), 0),
+    toplamGorev: BILPRO_ALANLAR.reduce((t, a) => t + a.altTestler.filter(at => at.gorev).length, 0),
   };
+}
+
+// ── BİLPRO süreli/performans görevleri ────────────────────────────────────
+// Bu dört görevi ÖĞRENCİ ekranda bizzat uygular (danışman maddeleri okumaz).
+// Ham skorlar bilproDiziYuzde / bilproGorselDiziYuzde / bilproHizYuzde ile
+// sezgisel yüzdeye çevrilir — norm değildir.
+
+const BILPRO_SEMBOLLER = ["▲", "●", "■", "◆", "★", "✚", "▼", "◇"];
+const BILPRO_KODLAMA_ANAHTAR = [
+  { sembol: "▲", rakam: 1 }, { sembol: "●", rakam: 2 }, { sembol: "■", rakam: 3 },
+  { sembol: "◆", rakam: 4 }, { sembol: "★", rakam: 5 },
+];
+const BILPRO_GOREV_SURESI_SN = 60;
+
+function bilproRastgele(n) { return Math.floor(Math.random() * n); }
+function bilproDiziUret(havuz, uzunluk) {
+  // Arka arkaya aynı uyaranın gelmemesi için son seçileni dışlar.
+  const d = [];
+  for (let i = 0; i < uzunluk; i++) {
+    let s;
+    do { s = havuz[bilproRastgele(havuz.length)]; } while (d.length > 0 && s === d[d.length - 1]);
+    d.push(s);
+  }
+  return d;
+}
+
+// ── Ortak dizi-açıklığı görevi (sayı dizisi ve görsel dizi bunu kullanır) ──
+function BILPRODiziTemelGorevi({ havuz, palet, baslangicSpan, maksSpan, bolumler, onBitir }) {
+  const [bolumIndex, setBolumIndex] = useState(0);
+  const [span, setSpan] = useState(baslangicSpan);
+  const [deneme, setDeneme] = useState(1);
+  const [dizi, setDizi] = useState(() => bilproDiziUret(havuz, baslangicSpan));
+  const [gosterilen, setGosterilen] = useState(null);
+  const [girilen, setGirilen] = useState([]);
+  const [asama, setAsama] = useState("hazir"); // hazir | gosterim | giris | gecis
+  const [sonuclar, setSonuclar] = useState({});
+  const [geriBildirim, setGeriBildirim] = useState(null);
+
+  const bolum = bolumler[bolumIndex];
+
+  // Uyaranları sırayla göster; bitince girişe geç.
+  useEffect(() => {
+    if (asama !== "gosterim") return;
+    let iptal = false;
+    let i = 0;
+    setGosterilen(null);
+    function adim() {
+      if (iptal) return;
+      if (i >= dizi.length) { setAsama("giris"); return; }
+      setGosterilen(dizi[i]);
+      i++;
+      setTimeout(() => {
+        if (iptal) return;
+        setGosterilen(null);
+        setTimeout(() => { if (!iptal) adim(); }, 250);
+      }, 750);
+    }
+    const t = setTimeout(adim, 500);
+    return () => { iptal = true; clearTimeout(t); };
+  }, [asama, dizi]);
+
+  function bolumuBitir(ulasilan) {
+    const yeniSonuclar = { ...sonuclar, [bolum.key]: ulasilan };
+    setSonuclar(yeniSonuclar);
+    if (bolumIndex + 1 < bolumler.length) {
+      setBolumIndex(bolumIndex + 1);
+      setSpan(bolumler[bolumIndex + 1].baslangicSpan || baslangicSpan);
+      setDeneme(1);
+      setGirilen([]);
+      setAsama("gecis");
+    } else {
+      onBitir(yeniSonuclar);
+    }
+  }
+
+  function cevabiDegerlendir(yeniGirilen) {
+    const beklenen = bolum.ters ? [...dizi].reverse() : dizi;
+    const dogruMu = yeniGirilen.every((x, i) => x === beklenen[i]);
+    // Taban etkisi: başlangıç açıklığında iki denemede de yanılan öğrenciye 0
+    // yazmak, hiç ölçmediğimiz bir alt sınırı cezalandırmak olur. Bunun yerine
+    // "başlangıcın bir altı" kredilendirilir (ör. 3'te kalırsa 2 sayılır).
+    const taban = Math.max(0, (bolum.baslangicSpan || baslangicSpan) - 1);
+    const ulasilan = sonuclar[bolum.key] !== undefined ? sonuclar[bolum.key] : taban;
+    setGeriBildirim(dogruMu ? "dogru" : "yanlis");
+    setTimeout(() => {
+      setGeriBildirim(null);
+      setGirilen([]);
+      if (dogruMu) {
+        setSonuclar(s => ({ ...s, [bolum.key]: span }));
+        if (span >= maksSpan) { bolumuBitir(span); return; }
+        const yeniSpan = span + 1;
+        setSpan(yeniSpan); setDeneme(1);
+        setDizi(bilproDiziUret(havuz, yeniSpan));
+        setAsama("gosterim");
+      } else if (deneme === 1) {
+        setDeneme(2);
+        setDizi(bilproDiziUret(havuz, span));
+        setAsama("gosterim");
+      } else {
+        bolumuBitir(ulasilan);
+      }
+    }, 700);
+  }
+
+  function sembolEkle(s) {
+    if (asama !== "giris" || geriBildirim) return;
+    const yeni = [...girilen, s];
+    setGirilen(yeni);
+    if (yeni.length >= dizi.length) cevabiDegerlendir(yeni);
+  }
+
+  const kutu = { textAlign: "center", padding: "14px 10px" };
+
+  if (asama === "hazir" || asama === "gecis") {
+    return (
+      <div style={kutu}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: ACCENT, marginBottom: 6 }}>{bolum.ad}</div>
+        <div style={{ fontSize: 12, color: TEXT, lineHeight: 1.7, marginBottom: 14, textAlign: "left", background: "#fff", border: `1px solid ${BORDER}`, borderRadius: 10, padding: "10px 12px" }}>
+          {bolum.aciklama}
+        </div>
+        <button onClick={() => { setDizi(bilproDiziUret(havuz, span)); setAsama("gosterim"); }} style={{
+          padding: "11px 26px", background: ACCENT, color: "#fff", border: "none",
+          borderRadius: 11, fontWeight: 800, fontSize: 13, cursor: "pointer",
+        }}>▶️ {asama === "hazir" ? "Başla" : "Bu Bölüme Başla"}</button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={kutu}>
+      <div style={{ fontSize: 11, color: MUTED, fontWeight: 700, marginBottom: 8 }}>
+        {bolum.ad} · {span} uyaran · {deneme}. deneme
+      </div>
+      <div style={{
+        height: 86, display: "flex", alignItems: "center", justifyContent: "center",
+        background: "#fff", border: `2px solid ${BORDER}`, borderRadius: 12, marginBottom: 12,
+        fontSize: 40, fontWeight: 900, color: TEXT,
+      }}>
+        {asama === "gosterim"
+          ? (gosterilen !== null ? gosterilen : "")
+          : geriBildirim === "dogru" ? <span style={{ color: "#1A8C5B", fontSize: 26 }}>✓ Doğru</span>
+          : geriBildirim === "yanlis" ? <span style={{ color: "#C0392B", fontSize: 26 }}>✗</span>
+          : <span style={{ fontSize: 22, color: MUTED, letterSpacing: 3 }}>{girilen.join(" ") || "…"}</span>}
+      </div>
+      {asama === "giris" && !geriBildirim && (
+        <>
+          <div style={{ fontSize: 11, color: MUTED, marginBottom: 8 }}>
+            {bolum.ters ? "SONDAN BAŞA sırayla seç" : "Gördüğün sırayla seç"} ({girilen.length}/{dizi.length})
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6 }}>
+            {palet.map(s => (
+              <button key={s} onClick={() => sembolEkle(s)} style={{
+                padding: "12px 0", fontSize: 18, fontWeight: 800, cursor: "pointer",
+                border: `1.5px solid ${BORDER}`, background: CARD, color: TEXT, borderRadius: 9,
+              }}>{s}</button>
+            ))}
+          </div>
+          <button onClick={() => setGirilen([])} style={{
+            marginTop: 8, padding: "7px 14px", fontSize: 11, fontWeight: 700, cursor: "pointer",
+            border: `1px solid ${BORDER}`, background: "transparent", color: MUTED, borderRadius: 9,
+          }}>↺ Temizle</button>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Sembol Kodlama (60 sn) ────────────────────────────────────────────────
+function BILPROKodlamaGorevi({ onBitir }) {
+  const [asama, setAsama] = useState("hazir");
+  const [aktif, setAktif] = useState(null);
+  const [dogru, setDogru] = useState(0);
+  const [yanlis, setYanlis] = useState(0);
+  const [kalan, setKalan] = useState(BILPRO_GOREV_SURESI_SN);
+  const sonucRef = useRef({ dogru: 0, yanlis: 0 });
+
+  useEffect(() => {
+    if (asama !== "calisiyor") return;
+    if (kalan <= 0) {
+      const { dogru: d, yanlis: y } = sonucRef.current;
+      setAsama("bitti");
+      onBitir({ dogru: d, yanlis: y, toplamDeneme: d + y, sureSn: BILPRO_GOREV_SURESI_SN });
+      return;
+    }
+    const t = setTimeout(() => setKalan(k => k - 1), 1000);
+    return () => clearTimeout(t);
+  }, [asama, kalan]);
+
+  function basla() {
+    sonucRef.current = { dogru: 0, yanlis: 0 };
+    setDogru(0); setYanlis(0); setKalan(BILPRO_GOREV_SURESI_SN);
+    setAktif(BILPRO_KODLAMA_ANAHTAR[bilproRastgele(BILPRO_KODLAMA_ANAHTAR.length)]);
+    setAsama("calisiyor");
+  }
+
+  function bas(rakam) {
+    if (asama !== "calisiyor" || !aktif) return;
+    if (rakam === aktif.rakam) { sonucRef.current.dogru++; setDogru(d => d + 1); }
+    else { sonucRef.current.yanlis++; setYanlis(y => y + 1); }
+    let yeni;
+    do { yeni = BILPRO_KODLAMA_ANAHTAR[bilproRastgele(BILPRO_KODLAMA_ANAHTAR.length)]; } while (yeni.sembol === aktif.sembol);
+    setAktif(yeni);
+  }
+
+  return (
+    <div style={{ textAlign: "center", padding: "14px 10px" }}>
+      <div style={{ display: "flex", justifyContent: "center", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
+        {BILPRO_KODLAMA_ANAHTAR.map(k => (
+          <div key={k.sembol} style={{
+            border: `1.5px solid ${BORDER}`, borderRadius: 8, padding: "5px 9px",
+            background: "#fff", fontSize: 13, fontWeight: 800, color: TEXT,
+          }}>{k.sembol} = {k.rakam}</div>
+        ))}
+      </div>
+      {asama === "hazir" ? (
+        <button onClick={basla} style={{
+          padding: "11px 26px", background: ACCENT, color: "#fff", border: "none",
+          borderRadius: 11, fontWeight: 800, fontSize: 13, cursor: "pointer",
+        }}>▶️ Başla (60 sn)</button>
+      ) : asama === "bitti" ? (
+        <div style={{ fontSize: 13, fontWeight: 800, color: "#1A8C5B" }}>✓ Görev tamamlandı</div>
+      ) : (
+        <>
+          <div style={{ fontSize: 11, fontWeight: 800, color: kalan <= 10 ? "#C0392B" : MUTED, marginBottom: 8 }}>
+            ⏱ {kalan} sn · doğru {dogru} · yanlış {yanlis}
+          </div>
+          <div style={{
+            height: 86, display: "flex", alignItems: "center", justifyContent: "center",
+            background: "#fff", border: `2px solid ${BORDER}`, borderRadius: 12, marginBottom: 12,
+            fontSize: 44, fontWeight: 900, color: TEXT,
+          }}>{aktif ? aktif.sembol : ""}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6 }}>
+            {[1, 2, 3, 4, 5].map(r => (
+              <button key={r} onClick={() => bas(r)} style={{
+                padding: "14px 0", fontSize: 18, fontWeight: 800, cursor: "pointer",
+                border: `1.5px solid ${BORDER}`, background: CARD, color: TEXT, borderRadius: 9,
+              }}>{r}</button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Sembol Tarama (60 sn) ─────────────────────────────────────────────────
+function bilproTaramaDenemeUret() {
+  const hedef = BILPRO_SEMBOLLER[bilproRastgele(BILPRO_SEMBOLLER.length)];
+  const varMi = Math.random() < 0.5;
+  const digerleri = BILPRO_SEMBOLLER.filter(s => s !== hedef);
+  const satir = [];
+  for (let i = 0; i < 5; i++) satir.push(digerleri[bilproRastgele(digerleri.length)]);
+  if (varMi) satir[bilproRastgele(5)] = hedef;
+  return { hedef, satir, varMi };
+}
+
+function BILPROTaramaGorevi({ onBitir }) {
+  const [asama, setAsama] = useState("hazir");
+  const [deneme, setDeneme] = useState(null);
+  const [dogru, setDogru] = useState(0);
+  const [yanlis, setYanlis] = useState(0);
+  const [kalan, setKalan] = useState(BILPRO_GOREV_SURESI_SN);
+  const sonucRef = useRef({ dogru: 0, yanlis: 0 });
+
+  useEffect(() => {
+    if (asama !== "calisiyor") return;
+    if (kalan <= 0) {
+      const { dogru: d, yanlis: y } = sonucRef.current;
+      setAsama("bitti");
+      onBitir({ dogru: d, yanlis: y, toplamDeneme: d + y, sureSn: BILPRO_GOREV_SURESI_SN });
+      return;
+    }
+    const t = setTimeout(() => setKalan(k => k - 1), 1000);
+    return () => clearTimeout(t);
+  }, [asama, kalan]);
+
+  function basla() {
+    sonucRef.current = { dogru: 0, yanlis: 0 };
+    setDogru(0); setYanlis(0); setKalan(BILPRO_GOREV_SURESI_SN);
+    setDeneme(bilproTaramaDenemeUret());
+    setAsama("calisiyor");
+  }
+
+  function cevapla(cevapVar) {
+    if (asama !== "calisiyor" || !deneme) return;
+    if (cevapVar === deneme.varMi) { sonucRef.current.dogru++; setDogru(d => d + 1); }
+    else { sonucRef.current.yanlis++; setYanlis(y => y + 1); }
+    setDeneme(bilproTaramaDenemeUret());
+  }
+
+  return (
+    <div style={{ textAlign: "center", padding: "14px 10px" }}>
+      {asama === "hazir" ? (
+        <button onClick={basla} style={{
+          padding: "11px 26px", background: ACCENT, color: "#fff", border: "none",
+          borderRadius: 11, fontWeight: 800, fontSize: 13, cursor: "pointer",
+        }}>▶️ Başla (60 sn)</button>
+      ) : asama === "bitti" ? (
+        <div style={{ fontSize: 13, fontWeight: 800, color: "#1A8C5B" }}>✓ Görev tamamlandı</div>
+      ) : (
+        <>
+          <div style={{ fontSize: 11, fontWeight: 800, color: kalan <= 10 ? "#C0392B" : MUTED, marginBottom: 8 }}>
+            ⏱ {kalan} sn · doğru {dogru} · yanlış {yanlis}
+          </div>
+          <div style={{
+            display: "flex", alignItems: "center", gap: 8, justifyContent: "center",
+            background: "#fff", border: `2px solid ${BORDER}`, borderRadius: 12,
+            padding: "12px 8px", marginBottom: 12,
+          }}>
+            <div style={{ fontSize: 30, fontWeight: 900, color: ACCENT, paddingRight: 8, borderRight: `2px solid ${BORDER}` }}>
+              {deneme ? deneme.hedef : ""}
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              {deneme && deneme.satir.map((s, i) => (
+                <span key={i} style={{ fontSize: 24, fontWeight: 800, color: TEXT }}>{s}</span>
+              ))}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => cevapla(true)} style={{
+              flex: 1, padding: "14px 0", fontSize: 14, fontWeight: 800, cursor: "pointer",
+              border: "1.5px solid #1A8C5B", background: "#E6F5EE", color: "#1A8C5B", borderRadius: 10,
+            }}>VAR</button>
+            <button onClick={() => cevapla(false)} style={{
+              flex: 1, padding: "14px 0", fontSize: 14, fontWeight: 800, cursor: "pointer",
+              border: "1.5px solid #C0392B", background: "#FDECEA", color: "#C0392B", borderRadius: 10,
+            }}>YOK</button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Görev kartı: yönerge + başlat/sonuç/yeniden uygula sarmalayıcısı ──────
+function BILPROGorevKarti({ altTest, mevcutSonuc, onSonuc }) {
+  const [calisiyor, setCalisiyor] = useState(false);
+
+  function bitir(ham) {
+    let sonuc;
+    if (altTest.gorev === "sayiDizisi") {
+      const ileri = ham.ileri || 0, geri = ham.geri || 0;
+      sonuc = { ileriSpan: ileri, geriSpan: geri, toplamSpan: ileri + geri, yuzde: bilproDiziYuzde(ileri + geri) };
+    } else if (altTest.gorev === "gorselDizi") {
+      const s = ham.gorsel || 0;
+      sonuc = { span: s, yuzde: bilproGorselDiziYuzde(s) };
+    } else if (altTest.gorev === "kodlama") {
+      // 60 sn'de ~35 doğru ≈ %68 olacak biçimde kalibre edildi (sezgisel).
+      sonuc = { ...ham, dogruluk: ham.toplamDeneme > 0 ? Math.round((ham.dogru / ham.toplamDeneme) * 100) : null, yuzde: bilproHizYuzde(ham.dogru, 1.95) };
+    } else {
+      // Tarama: 60 sn'de ~30 doğru ≈ %68 (sezgisel).
+      sonuc = { ...ham, dogruluk: ham.toplamDeneme > 0 ? Math.round((ham.dogru / ham.toplamDeneme) * 100) : null, yuzde: bilproHizYuzde(ham.dogru, 2.25) };
+    }
+    setCalisiyor(false);
+    onSonuc(sonuc);
+  }
+
+  if (calisiyor) {
+    return (
+      <div style={{ background: "#FAFAF8", border: `2px solid ${ACCENT}`, borderRadius: 12, marginBottom: 10 }}>
+        {altTest.gorev === "sayiDizisi" && (
+          <BILPRODiziTemelGorevi
+            havuz={["0","1","2","3","4","5","6","7","8","9"]}
+            palet={["0","1","2","3","4","5","6","7","8","9"]}
+            baslangicSpan={3} maksSpan={9}
+            bolumler={[
+              { key: "ileri", ad: "1. Bölüm — Düz Sıra", ters: false, baslangicSpan: 3, aciklama: "Ekranda sayılar tek tek görünecek. Hepsi bittiğinde, gördüğün sayıları AYNI SIRAYLA seç." },
+              { key: "geri", ad: "2. Bölüm — Ters Sıra", ters: true, baslangicSpan: 2, aciklama: "Şimdi zorlaşıyor: sayılar yine tek tek görünecek ama bu kez SONDAN BAŞA doğru seçeceksin. Örnek: 4 – 7 – 1 gördüysen 1 – 7 – 4 seç." },
+            ]}
+            onBitir={bitir}
+          />
+        )}
+        {altTest.gorev === "gorselDizi" && (
+          <BILPRODiziTemelGorevi
+            havuz={BILPRO_SEMBOLLER} palet={BILPRO_SEMBOLLER}
+            baslangicSpan={2} maksSpan={8}
+            bolumler={[{ key: "gorsel", ad: "Görsel Dizi", ters: false, baslangicSpan: 2, aciklama: "Ekranda semboller tek tek görünecek. Hepsi bittiğinde, gördüğün sembolleri AYNI SIRAYLA seç." }]}
+            onBitir={bitir}
+          />
+        )}
+        {altTest.gorev === "kodlama" && <BILPROKodlamaGorevi onBitir={bitir} />}
+        {altTest.gorev === "tarama" && <BILPROTaramaGorevi onBitir={bitir} />}
+        <div style={{ textAlign: "center", paddingBottom: 10 }}>
+          <button onClick={() => setCalisiyor(false)} style={{
+            background: "none", border: "none", color: MUTED, fontSize: 11, cursor: "pointer", textDecoration: "underline",
+          }}>Görevi iptal et</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 10, padding: "12px", marginBottom: 10 }}>
+      {mevcutSonuc ? (
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 5 }}>
+            <span style={{ fontSize: 20, fontWeight: 900, color: bilproSeviyeBandi(mevcutSonuc.yuzde).color }}>%{mevcutSonuc.yuzde}</span>
+            <span style={{
+              fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 10,
+              background: bilproSeviyeBandi(mevcutSonuc.yuzde).bg, color: bilproSeviyeBandi(mevcutSonuc.yuzde).color,
+            }}>{bilproSeviyeBandi(mevcutSonuc.yuzde).label}</span>
+          </div>
+          <div style={{ fontSize: 11, color: MUTED, lineHeight: 1.6 }}>
+            {altTest.gorev === "sayiDizisi" && `Düz dizi: ${mevcutSonuc.ileriSpan} · Ters dizi: ${mevcutSonuc.geriSpan} · Toplam açıklık: ${mevcutSonuc.toplamSpan}`}
+            {altTest.gorev === "gorselDizi" && `Ulaşılan dizi uzunluğu: ${mevcutSonuc.span}`}
+            {(altTest.gorev === "kodlama" || altTest.gorev === "tarama") &&
+              `60 saniyede ${mevcutSonuc.dogru} doğru, ${mevcutSonuc.yanlis} yanlış${mevcutSonuc.dogruluk !== null ? ` · doğruluk %${mevcutSonuc.dogruluk}` : ""}`}
+          </div>
+          {(altTest.gorev === "kodlama" || altTest.gorev === "tarama") && mevcutSonuc.dogruluk !== null && mevcutSonuc.dogruluk < 80 && (
+            <div style={{ fontSize: 10, color: "#8B5A00", background: "#FDF6E3", border: "1px solid #e0c08a", borderRadius: 8, padding: "6px 9px", marginTop: 6, lineHeight: 1.5 }}>
+              ⚠️ Doğruluk %80'in altında. Öğrenci hız uğruna doğruluktan feda etmiş olabilir (dürtüsel yanıtlama) ya da görevi tam anlamamış olabilir. Hız puanını bu notla birlikte yorumla.
+            </div>
+          )}
+        </div>
+      ) : (
+        <div style={{ fontSize: 11, color: MUTED, marginBottom: 10 }}>Bu görev henüz uygulanmadı.</div>
+      )}
+      <button onClick={() => setCalisiyor(true)} style={{
+        width: "100%", padding: "10px", borderRadius: 10, fontSize: 12, fontWeight: 800, cursor: "pointer",
+        border: `1.5px solid ${ACCENT}`, background: mevcutSonuc ? "transparent" : ACCENT,
+        color: mevcutSonuc ? ACCENT : "#fff",
+      }}>{mevcutSonuc ? "↻ Yeniden Uygula" : "▶️ Görevi Başlat"}</button>
+    </div>
+  );
 }
 
 // ── BİLPRO Paneli — danışman öğrenciye maddeleri tek tek sorar, cevabını
@@ -2646,11 +3205,11 @@ function BILPROPaneli({ seciliAd, seciliSinif, seciliNumara, bilproDegerlendirme
           <b>⚠️ Bu bir zekâ testi değildir.</b> IQ ya da standart puan üretmez, norm örneklemi yoktur, tanı koymaz ve WISC/Binet'in yerine geçmez. Ürettiği şey <b>kişi-içi profildir</b>: öğrencinin <i>kendi ortalamasına göre</i> hangi alanda güçlü, hangi alanda zorlandığı. Resmî eğitsel tanılama yetkisi <b>RAM</b>'dadır.
         </div>
         <div style={{marginTop:6}}>
-          Her maddeyi öğrenciye sen sor, cevabına göre işaretle. <b>Durdurma kuralı:</b> bir alt testte üst üste {BILPRO_DURDURMA_KURALI} yanlış olursa o alt testi bitir, kalanları "Uygulanmadı" bırak — madde havuzu kolaydan zora sıralıdır.
+          <b>İki uygulama biçimi var.</b> İlk dört alanda (Gc, Gf, Gq, Gv) maddeleri <b>sen okursun</b>, öğrencinin cevabına göre işaretlersin; <b>durdurma kuralı:</b> üst üste {BILPRO_DURDURMA_KURALI} yanlışta o alt testi bitir (madde havuzu kolaydan zora sıralıdır). Son iki alanda (Gsm, Gs) ise <b>süreli görevleri öğrenci ekranda bizzat uygular</b> — cihazı ona ver, sessiz bir ortam sağla.
         </div>
       </div>
 
-      {sonuc.uygulananToplam > 0 && (
+      {(sonuc.uygulananToplam + sonuc.uygulananGorev) > 0 && (
         <div style={{background:"#fff", border:`1px solid ${BORDER}`, borderRadius:12, padding:14, marginBottom:16}}>
           <div style={{textAlign:"center", marginBottom:12}}>
             <div style={{fontSize:30, fontWeight:900, color:sonuc.seviye ? sonuc.seviye.color : MUTED}}>%{sonuc.genelOrtalama}</div>
@@ -2658,7 +3217,7 @@ function BILPROPaneli({ seciliAd, seciliSinif, seciliNumara, bilproDegerlendirme
               Genel Profil Ortalaması{sonuc.seviye ? ` — ${sonuc.seviye.label}` : ""}
             </div>
             <div style={{fontSize:9.5, color:MUTED, marginTop:3}}>
-              (zekâ puanı değildir) · {sonuc.uygulananToplam}/{sonuc.toplamMadde} madde uygulandı
+              (zekâ puanı değildir) · {sonuc.uygulananToplam}/{sonuc.toplamMadde} madde · {sonuc.uygulananGorev}/{sonuc.toplamGorev} süreli görev uygulandı
             </div>
           </div>
 
@@ -2684,6 +3243,24 @@ function BILPROPaneli({ seciliAd, seciliSinif, seciliNumara, bilproDegerlendirme
             })}
           </div>
 
+          {sonuc.aykBvFarki !== null && (
+            <div style={{display:"flex", gap:8, marginBottom:10}}>
+              <div style={{flex:1, textAlign:"center", background:"#EEF2FF", borderRadius:8, padding:"6px 4px", border:"1px solid #c7d2fe"}}>
+                <div style={{fontSize:9, color:"#3730A3", fontWeight:700, lineHeight:1.3}}>AKIL YÜRÜTME<br/>KAPASİTESİ</div>
+                <div style={{fontSize:16, fontWeight:900, color:"#3730A3"}}>%{sonuc.akilYurutme.yuzde}</div>
+                <div style={{fontSize:8, color:MUTED}}>Gc + Gv + Gf</div>
+              </div>
+              <div style={{display:"flex", alignItems:"center", fontSize:11, fontWeight:900, color:MUTED}}>
+                {sonuc.aykBvFarki > 0 ? "▸" : "◂"} {Math.abs(sonuc.aykBvFarki)}
+              </div>
+              <div style={{flex:1, textAlign:"center", background:"#FDF2F8", borderRadius:8, padding:"6px 4px", border:"1px solid #fbcfe8"}}>
+                <div style={{fontSize:9, color:"#9D174D", fontWeight:700, lineHeight:1.3}}>BİLİŞSEL<br/>VERİMLİLİK</div>
+                <div style={{fontSize:16, fontWeight:900, color:"#9D174D"}}>%{sonuc.bilisselVerimlilik.yuzde}</div>
+                <div style={{fontSize:8, color:MUTED}}>Gsm + Gs</div>
+              </div>
+            </div>
+          )}
+
           {sonuc.eksenFarki !== null && (
             <div style={{display:"flex", gap:8, marginBottom:10}}>
               <div style={{flex:1, textAlign:"center", background:"#F7F5F0", borderRadius:8, padding:"6px 4px", border:`1px solid ${BORDER}`}}>
@@ -2700,6 +3277,11 @@ function BILPROPaneli({ seciliAd, seciliSinif, seciliNumara, bilproDegerlendirme
           <div style={{background:"#FAFAF8", borderRadius:8, padding:"10px 12px", fontSize:11, color:TEXT, lineHeight:1.65}}>
             <div style={{fontWeight:800, marginBottom:4, color:ACCENT}}>📝 Profil Yorumu</div>
             <div style={{marginBottom:sonuc.alanYorumlari.length>0?8:0}}>{sonuc.genelYorum}</div>
+            {sonuc.aykBvYorumu && (
+              <div style={{marginBottom:8, background:"#fff", border:`1px solid ${BORDER}`, borderRadius:8, padding:"8px 10px"}}>
+                <b>⚖️ Kapasite ↔ Verimlilik:</b> {sonuc.aykBvYorumu}
+              </div>
+            )}
             {sonuc.eksenYorumu && <div style={{marginBottom:8}}><b>Sunum ekseni:</b> {sonuc.eksenYorumu}</div>}
             {sonuc.alanYorumlari.map((y, i) => (
               <div key={i} style={{marginBottom:8, paddingLeft:8, borderLeft:`3px solid ${y.tip==="guclu"?"#1A8C5B":"#C0392B"}`}}>
@@ -2753,13 +3335,24 @@ function BILPROPaneli({ seciliAd, seciliSinif, seciliNumara, bilproDegerlendirme
             <div style={{fontSize:10.5, color:"#5B3E8C", background:"#F8F5FD", border:"1px solid #ddd0f2", borderRadius:8, padding:"6px 9px", marginBottom:8, lineHeight:1.6}}>
               🗣️ <b>Yönerge:</b> {at.yonerge}
             </div>
-            {ardisikYanlis >= BILPRO_DURDURMA_KURALI && (
+            {at.gorev ? (
+              <BILPROGorevKarti
+                altTest={at}
+                mevcutSonuc={cevaplar[`${at.key}_sonuc`] || null}
+                onSonuc={(r) => setCevaplar(c => ({ ...c, [`${at.key}_sonuc`]: r }))}
+              />
+            ) : null}
+            {at.puanlamaNotu && (
+              <div style={{fontSize:9.5, color:MUTED, fontStyle:"italic", marginBottom:8}}>ℹ️ {at.puanlamaNotu}</div>
+            )}
+
+            {!at.gorev && ardisikYanlis >= BILPRO_DURDURMA_KURALI && (
               <div style={{fontSize:10.5, fontWeight:700, color:"#8B5A00", background:"#FDF6E3", border:"1px solid #e0c08a", borderRadius:8, padding:"6px 9px", marginBottom:8}}>
                 ⏹️ Durdurma kuralı: üst üste {ardisikYanlis} yanlış. Bu alt testi burada bitirebilirsin; kalan maddeleri "Uygulanmadı" bırak.
               </div>
             )}
 
-            {at.maddeler.map((m, i) => {
+            {(at.maddeler || []).map((m, i) => {
               const key = `${at.key}_${i}`;
               const secili = cevaplar[key];
               return (
@@ -7236,12 +7829,18 @@ function RaporModal({ rapor, onKapat }) {
                         </span>
                       ))}
                     </div>
+                    {s.aykBvFarki !== null && (
+                      <div style={{ fontSize:9.5, color:"#444", marginBottom:6, background:"#f7f7f5", borderRadius:6, padding:"5px 8px" }}>
+                        <b>Akıl Yürütme Kapasitesi (Gc+Gv+Gf): %{s.akilYurutme.yuzde}</b> · <b>Bilişsel Verimlilik (Gsm+Gs): %{s.bilisselVerimlilik.yuzde}</b> · fark {Math.abs(s.aykBvFarki)}
+                      </div>
+                    )}
                     {s.eksenFarki !== null && (
                       <div style={{ fontSize:9.5, color:"#666", marginBottom:6 }}>
                         Sözel eksen: %{s.sozelYuzde} · Sözel olmayan eksen: %{s.sozelOlmayanYuzde}
                       </div>
                     )}
                     <div style={{ fontSize:10, color:"#555", lineHeight:1.5 }}>{s.genelYorum}</div>
+                    {s.aykBvYorumu && <div style={{ fontSize:10, color:"#555", lineHeight:1.5, marginTop:5 }}><b>Kapasite ↔ Verimlilik:</b> {s.aykBvYorumu}</div>}
                     {s.eksenYorumu && <div style={{ fontSize:10, color:"#555", lineHeight:1.5, marginTop:5 }}>{s.eksenYorumu}</div>}
                     {(s.alanYorumlari||[]).map((y, i) => (
                       <div key={i} style={{ fontSize:10, color:"#555", lineHeight:1.5, marginTop:5 }}>

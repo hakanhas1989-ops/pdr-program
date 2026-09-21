@@ -2231,6 +2231,621 @@ function akademikTaramaSonucHesapla(cevaplar) {
   return dersSonuclari;
 }
 
+// ===== BILPRO BASLANGIC (otomatik uretildi - splice_bilpro.py) =====
+// ── BİLPRO — Bilişsel Profil Değerlendirmesi (CHC kuramı temelli) ─────────
+// WISC'in 5 indeks yapisi ve Stanford-Binet'in faktorleri ayni kurama
+// (Cattell-Horn-Carroll) dayanir. Bu arac o kuramdan yola cikarak
+// hazirlanmis OZGUN bir tarama aracidir: IQ/standart puan uretmez,
+// normu yoktur, tani koymaz. Urettigi sey kisi-ici (ipsatif) profildir.
+const BILPRO_ALANLAR = [
+  {
+    key: "gc",
+    kod: "Gc",
+    ad: "Sözel Kavrama",
+    ikon: "🗣️",
+    renk: "#3D5A80",
+    olctugu: "Birikmiş sözel bilgi, kelime dağarcığı ve kavram oluşturma. WISC'teki Sözel Kavrama İndeksi (VCI) ve Binet'teki Bilgi faktörüyle aynı kuramsal alana karşılık gelir.",
+    gucluYorum: "Sözel kavrama güçlü: kelime dağarcığı ve kavramlar arası ilişki kurma yaşıtlarına göre iyi görünüyor. Sözel anlatım, okuduğunu yorumlama ve sözlü sınavlar bu öğrenci için avantajlı alanlar olabilir.",
+    zayifYorum: "Sözel kavrama zayıf: kelime dağarcığının sınırlı olması ya da kavramları üst kategoriye bağlamakta zorlanma söz konusu olabilir. Bu durum yönergeleri anlama, okuduğunu anlama ve sözel sınav performansını doğrudan etkiler.",
+    egitselOneri: "Yönergeleri kısa ve somut ver, yeni kavramları görselle birlikte öğret. Ders öncesi anahtar kelime listesi çıkar. Okuma sonrası 'kendi cümlenle anlat' çalışmaları yaptır. Sözel sınav yerine çoktan seçmeli/görsel destekli ölçme düşünülebilir. Dil gelişimi ya da iki dillilik geçmişi varsa mutlaka not al.",
+    altTestler: [
+      {
+        key: "benzerlikler",
+        ad: "Benzerlikler",
+        sunum: "sozel",
+        olctugu: "Sözel kavram oluşturma — iki kavramı ortak üst kategoride birleştirebilme",
+        yonerge: "Öğrenciye sor: \"Sana iki şey söyleyeceğim, bunlar birbirine nasıl benziyor, ikisi de nedir?\" Şıkları oku ve seçmesini iste.",
+        maddeler: [
+          {"soru": "Elma ile muz birbirine nasıl benzer?", "secenekler": ["Aynı renktedir", "İkisi de yenilebilen meyvedir", "İkisi de sebzedir", "İkisi de ağaçta yetişmez"], "dogru": 1, "zorluk": 1},
+          {"soru": "Kedi ile köpek birbirine nasıl benzer?", "secenekler": ["İkisi de uçar", "İkisi de bitkidir", "İkisi de evcil hayvandır", "İkisi de suda yaşar"], "dogru": 2, "zorluk": 1},
+          {"soru": "Araba ile bisiklet birbirine nasıl benzer?", "secenekler": ["İkisi de ulaşım aracıdır", "İkisi de motorludur", "İkisi de dört tekerleklidir", "İkisi de yakıt kullanır"], "dogru": 0, "zorluk": 1},
+          {"soru": "Kalem ile tebeşir birbirine nasıl benzer?", "secenekler": ["İkisi de kâğıttan yapılır", "İkisi de aynı renktedir", "İkisi de silinmez", "İkisiyle de yazı yazılabilir"], "dogru": 3, "zorluk": 2},
+          {"soru": "Sevinç ile öfke birbirine nasıl benzer?", "secenekler": ["İkisi de olumlu duygudur", "İkisi de duygudur", "İkisi de hastalıktır", "İkisi de meslektir"], "dogru": 1, "zorluk": 2},
+          {"soru": "Şiir ile roman birbirine nasıl benzer?", "secenekler": ["İkisi de kafiyelidir", "İkisi de aynı uzunluktadır", "İkisi de edebî türdür", "İkisi de gerçek olayları anlatır"], "dogru": 2, "zorluk": 2},
+          {"soru": "Adalet ile dürüstlük birbirine nasıl benzer?", "secenekler": ["İkisi de ahlaki değerdir", "İkisi de bir meslektir", "İkisi de geçici duygu durumudur", "İkisi de bir kanun maddesidir"], "dogru": 0, "zorluk": 3},
+          {"soru": "Termometre ile terazi birbirine nasıl benzer?", "secenekler": ["İkisi de sıcaklık ölçer", "İkisi de elektrikle çalışır", "İkisi de ağırlık ölçer", "İkisi de bir ölçme aracıdır"], "dogru": 3, "zorluk": 3},
+        ],
+      },
+      {
+        key: "sozcuk",
+        ad: "Sözcük Dağarcığı",
+        sunum: "sozel",
+        olctugu: "Kelime bilgisi derinliği ve sözel ifade — birikmiş dil bilgisi (Gc'nin çekirdeği)",
+        yonerge: "Öğrenciye sor: \"... ne demektir?\" Önce kendi cevabını dinle, sonra şıkları okuyup seçmesini iste.",
+        maddeler: [
+          {"soru": "\"Cömert\" ne demektir?", "secenekler": ["Eli sıkı, vermeyi sevmeyen", "Elindekini paylaşmayı seven", "Çabuk kızan", "Çok konuşan"], "dogru": 1, "zorluk": 1},
+          {"soru": "\"Tedirgin\" ne demektir?", "secenekler": ["Huzursuz, içi rahat olmayan", "Çok neşeli", "Sürekli uykulu", "Çok aceleci"], "dogru": 0, "zorluk": 1},
+          {"soru": "\"İnatçı\" ne demektir?", "secenekler": ["Kolayca vazgeçen", "Her şeye gülen", "Fikrinden kolay kolay dönmeyen", "Çok unutkan"], "dogru": 2, "zorluk": 2},
+          {"soru": "\"Özgün\" ne demektir?", "secenekler": ["Başkasından kopyalanmış", "Çok eski", "Ucuz ve basit", "Kendine özgü, taklit olmayan"], "dogru": 3, "zorluk": 2},
+          {"soru": "\"Çekimser\" ne demektir?", "secenekler": ["Karar verirken taraf tutmayan, çekinen", "Çok aceleci", "Çok cesur", "Şakacı"], "dogru": 0, "zorluk": 2},
+          {"soru": "\"Tutarlı\" ne demektir?", "secenekler": ["Sürekli fikir değiştiren", "Söylediğiyle yaptığı birbirine uyan", "Çok sessiz", "Eli açık"], "dogru": 1, "zorluk": 3},
+          {"soru": "\"Önyargı\" ne demektir?", "secenekler": ["Bir konuyu iyice araştırıp karar vermek", "Herkese eşit davranmak", "Yeterli bilgi olmadan önceden edinilen olumsuz kanı", "Geç karar vermek"], "dogru": 2, "zorluk": 3},
+          {"soru": "\"Empati\" ne demektir?", "secenekler": ["Karşıdakine acımak", "Kendini övmek", "Karşıdakiyle yarışmak", "Kendini karşıdakinin yerine koyup onun hissettiğini anlamak"], "dogru": 3, "zorluk": 3},
+        ],
+      },
+    ],
+  },
+  {
+    key: "gf",
+    kod: "Gf",
+    ad: "Akıcı Akıl Yürütme",
+    ikon: "🧠",
+    renk: "#6A4C93",
+    olctugu: "Daha önce öğrenilmemiş, yeni bir problemde kural bulma ve mantık yürütme. WISC'teki Akıcı Akıl Yürütme İndeksi (FRI) ve Binet'teki Akıcı Akıl Yürütme faktörüne karşılık gelir. Okul başarısını en güçlü yordayan alanlardan biridir.",
+    gucluYorum: "Akıcı akıl yürütme güçlü: yeni ve tanımadığı problemlerde kuralı bulup uygulayabiliyor. Bilgi eksiği olsa bile öğretildiğinde hızlı toparlama potansiyeli yüksektir.",
+    zayifYorum: "Akıcı akıl yürütme zayıf: yeni tipte problemlerde kuralı kendi başına bulmakta zorlanıyor olabilir. Ezberlediği yöntem işe yaramadığında tıkanma, 'yeni nesil' sorularda belirgin düşüş beklenir.",
+    egitselOneri: "Yeni soru tipinde önce çözüm stratejisini model ol, sonra benzerini birlikte çöz, en son yalnız bırak (kademeli geri çekilme). Problemi küçük adımlara böldür ve her adımı sesli düşündür. Ezber yöntem yerine 'neden böyle' sorusunu alışkanlık hâline getir. Süre baskısını azalt.",
+    altTestler: [
+      {
+        key: "analoji",
+        ad: "Sözel Analoji",
+        sunum: "sozel",
+        olctugu: "İlişki kurma ve aynı ilişkiyi yeni bir çifte taşıma (tümevarımsal akıl yürütme)",
+        yonerge: "Öğrenciye oku: \"A neyse B'dir; C neyse ... ?\" İlişkiyi bulmasını iste, gerekirse ilk maddede birlikte çöz.",
+        maddeler: [
+          {"soru": "Kuş : Uçmak  =  Balık : ?", "secenekler": ["Yüzmek", "Yürümek", "Koşmak", "Zıplamak"], "dogru": 0, "zorluk": 1},
+          {"soru": "Göz : Görmek  =  Kulak : ?", "secenekler": ["Koklamak", "Duymak", "Tatmak", "Dokunmak"], "dogru": 1, "zorluk": 1},
+          {"soru": "Kalem : Yazmak  =  Makas : ?", "secenekler": ["Yapıştırmak", "Ölçmek", "Kesmek", "Boyamak"], "dogru": 2, "zorluk": 1},
+          {"soru": "Doktor : Hastane  =  Öğretmen : ?", "secenekler": ["Eczane", "Fabrika", "Market", "Okul"], "dogru": 3, "zorluk": 2},
+          {"soru": "Sıcak : Soğuk  =  Aydınlık : ?", "secenekler": ["Karanlık", "Parlak", "Işık", "Güneş"], "dogru": 0, "zorluk": 2},
+          {"soru": "Ayak : Ayakkabı  =  El : ?", "secenekler": ["Kol", "Eldiven", "Parmak", "Yüzük"], "dogru": 1, "zorluk": 2},
+          {"soru": "Saat : Zaman  =  Termometre : ?", "secenekler": ["Ağırlık", "Uzunluk", "Hız", "Sıcaklık"], "dogru": 3, "zorluk": 3},
+          {"soru": "Ağaç : Orman  =  Asker : ?", "secenekler": ["Silah", "Savaş", "Ordu", "Kışla"], "dogru": 2, "zorluk": 3},
+        ],
+      },
+      {
+        key: "matris",
+        ad: "Matris Akıl Yürütme",
+        sunum: "sozelOlmayan",
+        olctugu: "Görsel örüntüde satır ve sütun kuralını birlikte çözerek eksik parçayı bulma — dile en az bağımlı akıl yürütme ölçümü",
+        yonerge: "Ekrandaki ızgarayı öğrenciye göster. \"Buradaki düzeni bul ve soru işaretinin yerine hangisinin gelmesi gerektiğini söyle.\" de. Sınır süre yok ama uzun takılmada geç.",
+        maddeler: [
+          {"soru": "Soru işaretinin yerine hangisi gelmelidir?", "izgara": ["🔴", "🔵", "🟡", "🔴", "🔵", "🟡", "🔴", "🔵", "❓"], "sutun": 3, "secenekler": ["🔴", "🔵", "🟡", "🟢"], "dogru": 2, "zorluk": 1},
+          {"soru": "Soru işaretinin yerine hangisi gelmelidir?", "izgara": ["⬛", "⬛", "⬛", "⬜", "⬜", "⬜", "⬛", "⬛", "❓"], "sutun": 3, "secenekler": ["⬜", "⬛", "🟥", "🟦"], "dogru": 1, "zorluk": 1},
+          {"soru": "Soru işaretinin yerine hangisi gelmelidir?", "izgara": ["⭐", "⭐⭐", "⭐⭐⭐", "🔺", "🔺🔺", "🔺🔺🔺", "⬤", "⬤⬤", "❓"], "sutun": 3, "secenekler": ["⬤", "⬤⬤", "⬤⬤⬤", "⬤⬤⬤⬤"], "dogru": 2, "zorluk": 2},
+          {"soru": "Oklar her adımda saat yönünde dönüyor. Soru işaretinin yerine hangisi gelmelidir?", "izgara": ["⬆️", "➡️", "⬇️", "➡️", "⬇️", "⬅️", "⬇️", "⬅️", "❓"], "sutun": 3, "secenekler": ["⬆️", "⬇️", "⬅️", "➡️"], "dogru": 0, "zorluk": 2},
+          {"soru": "Her satırda ve her sütunda üç farklı büyüklük birer kez kullanılmıştır. Soru işaretinin yerine hangisi gelmelidir?", "izgara": ["•", "●", "⬤", "●", "⬤", "•", "⬤", "•", "❓"], "sutun": 3, "secenekler": ["•", "●", "⬤", "◯"], "dogru": 1, "zorluk": 2},
+          {"soru": "Her satırda ve her sütunda üç harf birer kez kullanılmıştır. Soru işaretinin yerine hangisi gelmelidir?", "izgara": ["A", "B", "C", "B", "C", "A", "C", "A", "❓"], "sutun": 3, "secenekler": ["C", "A", "D", "B"], "dogru": 3, "zorluk": 3},
+          {"soru": "Soru işaretinin yerine hangisi gelmelidir?", "izgara": ["⭐⭐⭐", "⭐⭐", "⭐", "🔺🔺🔺", "🔺🔺", "🔺", "⬛⬛⬛", "⬛⬛", "❓"], "sutun": 3, "secenekler": ["⬛⬛⬛", "⬛⬛", "⬛", "⬜"], "dogru": 2, "zorluk": 3},
+          {"soru": "Soru işaretinin yerine hangisi gelmelidir?", "izgara": ["⬆️", "⬆️⬆️", "⬆️⬆️⬆️", "➡️", "➡️➡️", "➡️➡️➡️", "⬇️", "⬇️⬇️", "❓"], "sutun": 3, "secenekler": ["⬇️⬇️⬇️", "⬇️", "⬇️⬇️", "⬅️⬅️⬅️"], "dogru": 0, "zorluk": 3},
+        ],
+      },
+    ],
+  },
+  {
+    key: "gq",
+    kod: "Gq",
+    ad: "Niceliksel Akıl Yürütme",
+    ikon: "🔢",
+    renk: "#1A7A56",
+    olctugu: "Sayılarla ve miktarlarla akıl yürütme. Stanford-Binet'in ayırt edici faktörlerinden biridir; WISC'te Niceliksel Akıl Yürütme yardımcı indeksi (QRI) olarak yer alır. İşlem becerisinden çok sayısal mantığı ölçer.",
+    gucluYorum: "Niceliksel akıl yürütme güçlü: sayılar arasındaki ilişkiyi ve problemdeki mantığı görebiliyor. Matematikte düşük not alıyorsa sorun büyük olasılıkla kapasite değil; çalışma alışkanlığı, kaygı ya da konu eksiği yönünden bakılmalıdır.",
+    zayifYorum: "Niceliksel akıl yürütme zayıf: sayısal ilişkileri kurmakta ve problemi matematiksel olarak modellemekte zorlanıyor olabilir. Dört işlemi bilse bile problem çözmede tıkanma tipiktir; diskalkuli açısından da akılda tutulmalıdır.",
+    egitselOneri: "Problemi önce somut materyal ya da şema ile göster, sonra sembole geç (somut → yarı somut → soyut). İşlem hızından önce doğruluğa odaklan. Problem metnini parçalara böldürüp 'ne biliyoruz / ne soruyor' şeklinde yazdır. Sürekli ve belirgin zorlanma varsa özgül öğrenme güçlüğü (diskalkuli) yönünden ÖÖG ön-taraması uygula.",
+    altTestler: [
+      {
+        key: "sayiOruntu",
+        ad: "Sayı Örüntüleri",
+        sunum: "sozelOlmayan",
+        olctugu: "Sayı dizisindeki kuralı bulma — niceliksel tümevarım",
+        yonerge: "Diziyi öğrenciye oku ve göster: \"Bu sayılar bir kurala göre gidiyor. Sıradaki sayı hangisi olmalı?\"",
+        maddeler: [
+          {"soru": "2, 4, 6, 8, ?", "secenekler": ["9", "10", "12", "14"], "dogru": 1, "zorluk": 1},
+          {"soru": "5, 10, 15, 20, ?", "secenekler": ["22", "24", "25", "30"], "dogru": 2, "zorluk": 1},
+          {"soru": "3, 6, 12, 24, ?", "secenekler": ["30", "48", "36", "54"], "dogru": 1, "zorluk": 2},
+          {"soru": "1, 4, 9, 16, ?", "secenekler": ["20", "24", "25", "36"], "dogru": 2, "zorluk": 2},
+          {"soru": "20, 17, 14, 11, ?", "secenekler": ["10", "9", "7", "8"], "dogru": 3, "zorluk": 2},
+          {"soru": "1, 1, 2, 3, 5, 8, ?", "secenekler": ["13", "11", "12", "16"], "dogru": 0, "zorluk": 3},
+          {"soru": "2, 6, 12, 20, 30, ?", "secenekler": ["36", "40", "42", "48"], "dogru": 2, "zorluk": 3},
+        ],
+      },
+      {
+        key: "nicelikselProblem",
+        ad: "Niceliksel Problemler",
+        sunum: "sozel",
+        olctugu: "Sözel olarak verilen bir durumu sayısal ilişkiye çevirip sonuç çıkarma",
+        yonerge: "Problemi öğrenciye sesli oku, gerekirse bir kez tekrar et. Kâğıt kalem kullanmasına izin ver; hangi maddede kâğıda ihtiyaç duyduğunu not al.",
+        maddeler: [
+          {"soru": "Bir sepette 12 elma var. Bunların yarısı yenirse kaç elma kalır?", "secenekler": ["4", "6", "8", "10"], "dogru": 1, "zorluk": 1},
+          {"soru": "Ali'nin 3 kalemi var. Ayşe'nin kalem sayısı Ali'nin 3 katıdır. Ayşe'nin kaç kalemi vardır?", "secenekler": ["9", "6", "12", "15"], "dogru": 0, "zorluk": 1},
+          {"soru": "Bir kalem 8 TL, bir defter ise kalemin 3 katı fiyatındadır. İkisi birlikte kaç TL eder?", "secenekler": ["24", "30", "32", "36"], "dogru": 2, "zorluk": 2},
+          {"soru": "Bir işçi bir duvarı 6 günde örüyor. Aynı hızda çalışan 2 işçi aynı duvarı kaç günde örer?", "secenekler": ["3", "2", "6", "12"], "dogru": 0, "zorluk": 2},
+          {"soru": "Bir otobüste 40 kişi var. Otobüs her durakta 5 kişi indirip 2 kişi alıyor. 3 durak sonra otobüste kaç kişi kalır?", "secenekler": ["28", "34", "37", "31"], "dogru": 3, "zorluk": 2},
+          {"soru": "Bir kutuda 5 kırmızı, 3 mavi bilye var. Kutudan bakmadan bir bilye çekiliyor. Hangisi doğrudur?", "secenekler": ["Mavi gelme olasılığı daha yüksektir, çünkü sayısı azdır.", "Kırmızı gelme olasılığı daha yüksektir, çünkü sayısı daha fazladır.", "İki rengin gelme olasılığı eşittir.", "Olasılık hesaplanamaz."], "dogru": 1, "zorluk": 3},
+          {"soru": "Bir ürünün fiyatı önce %50 artırılıyor, sonra yeni fiyatı üzerinden %50 indiriliyor. Son fiyat ilk fiyata göre nasıldır?", "secenekler": ["İlk fiyatla aynıdır", "İlk fiyattan yüksektir", "İlk fiyattan düşüktür", "İlk fiyatın iki katıdır"], "dogru": 2, "zorluk": 3},
+        ],
+      },
+    ],
+  },
+  {
+    key: "gv",
+    kod: "Gv",
+    ad: "Görsel-Uzamsal İşlemleme",
+    ikon: "🧩",
+    renk: "#B5651D",
+    olctugu: "Şekilleri zihinde canlandırma, döndürme ve parça-bütün ilişkisini kavrama. WISC'teki Görsel-Uzamsal İndeks (VSI) ve Binet'teki Görsel-Uzamsal faktöre karşılık gelir.",
+    gucluYorum: "Görsel-uzamsal işlemleme güçlü: şekilleri zihninde canlandırıp döndürebiliyor, bütünü parçalarından kurabiliyor. Geometri, harita/şema okuma, görsel anlatım bu öğrenci için destekleyici kanallardır.",
+    zayifYorum: "Görsel-uzamsal işlemleme zayıf: şekilleri zihinde çevirme, harita/şema/tablo okuma ve geometri konularında zorlanma beklenir. Defter düzeni, yazının satırda kalması ve çizim gerektiren işlerde de yansıması olabilir.",
+    egitselOneri: "Geometride somut materyal (katlanır şekil, blok) ve elle çevirme çalışmaları kullan. Harita/şema okumayı adım adım, işaretleyerek öğret. Defterde kareli/çizgili düzen ve kenar boşluğu desteği ver. Görsel yükü yüksek sayfalarda sadeleştirilmiş materyal sun.",
+    altTestler: [
+      {
+        key: "uzamsal",
+        ad: "Uzamsal İlişkiler",
+        sunum: "sozelOlmayan",
+        olctugu: "Zihinsel döndürme, ayna simetrisi ve üç boyutlu düşünme",
+        yonerge: "Şekli öğrenciye göster ve soruyu oku. Elini kullanarak çevirmesine izin verme; zihninde yapmasını iste.",
+        maddeler: [
+          {"soru": "Bu ok saat yönünde 90° döndürülürse hangi yöne bakar?", "izgara": ["⬆️"], "sutun": 1, "secenekler": ["⬇️", "⬅️", "⬆️", "➡️"], "dogru": 3, "zorluk": 1},
+          {"soru": "Bu ok 180° döndürülürse hangi yöne bakar?", "izgara": ["➡️"], "sutun": 1, "secenekler": ["⬅️", "⬆️", "⬇️", "➡️"], "dogru": 0, "zorluk": 1},
+          {"soru": "Bu ok saat yönünde 90° döndürülürse hangi yöne bakar?", "izgara": ["↗️"], "sutun": 1, "secenekler": ["↖️", "↗️", "↙️", "↘️"], "dogru": 3, "zorluk": 2},
+          {"soru": "Bu şeklin dikey bir aynadaki görüntüsü hangisidir?", "izgara": ["◣"], "sutun": 1, "secenekler": ["◤", "◥", "◢", "◣"], "dogru": 2, "zorluk": 2},
+          {"soru": "\"b\" harfinin dikey bir aynadaki görüntüsü hangi harfe benzer?", "secenekler": ["d", "p", "q", "b"], "dogru": 0, "zorluk": 2},
+          {"soru": "Bir kâğıt tam ortadan ikiye katlanıyor ve katlı hâldeyken tek bir delik deliniyor. Kâğıt açıldığında kaç delik görülür?", "secenekler": ["1", "2", "3", "4"], "dogru": 1, "zorluk": 3},
+          {"soru": "Bir küpün kaç yüzü ve kaç ayrıtı vardır?", "secenekler": ["4 yüz, 8 ayrıt", "8 yüz, 12 ayrıt", "6 yüz, 12 ayrıt", "6 yüz, 8 ayrıt"], "dogru": 2, "zorluk": 3},
+        ],
+      },
+      {
+        key: "parcaButun",
+        ad: "Parça-Bütün ve Görsel Ayırt Etme",
+        sunum: "sozelOlmayan",
+        olctugu: "Görsel gruplama, farklı olanı ayırt etme ve parçalardan bütünü kurma",
+        yonerge: "Şekilleri öğrenciye göster, soruyu oku ve seçmesini iste. Acele ettirme.",
+        maddeler: [
+          {"soru": "Her satırda ve her sütunda iki renk birer kez kullanılmıştır. Soru işaretinin yerine hangisi gelmelidir?", "izgara": ["🟥", "🟦", "🟦", "❓"], "sutun": 2, "secenekler": ["🟥", "🟦", "🟨", "🟩"], "dogru": 0, "zorluk": 1},
+          {"soru": "Aşağıdakilerden hangisi diğer üçünden farklı bir gruba aittir?", "secenekler": ["🔴", "🔵", "🟩", "🟡"], "dogru": 2, "zorluk": 1},
+          {"soru": "Aşağıdakilerden hangisi diğer üçünden farklı bir gruba aittir?", "secenekler": ["⬛", "⬜", "🟥", "🔵"], "dogru": 3, "zorluk": 2},
+          {"soru": "Aşağıdaki harflerden hangisinin dikey (düşey) simetri ekseni vardır?", "secenekler": ["A", "F", "L", "R"], "dogru": 0, "zorluk": 2},
+          {"soru": "Bir dikdörtgen, köşegenlerinden biri boyunca ikiye ayrılırsa hangi iki şekil oluşur?", "secenekler": ["İki kare", "İki üçgen", "İki daire", "İki yamuk"], "dogru": 1, "zorluk": 2},
+          {"soru": "Bir küpün açınımı (açılmış hâli) kaç kareden oluşur?", "secenekler": ["4", "5", "6", "8"], "dogru": 2, "zorluk": 3},
+          {"soru": "İki özdeş eşkenar üçgen, taban kenarlarından birleştirilirse hangi şekil oluşur?", "secenekler": ["Kare", "Eşkenar dörtgen (baklava dilimi)", "Dikdörtgen", "Düzgün altıgen"], "dogru": 1, "zorluk": 3},
+        ],
+      },
+    ],
+  },
+];
+
+const BILPRO_UYGULANMADI = "uygulanmadi";
+// Bir alanın, öğrencinin KENDİ ortalamasından bu kadar sapması "belirgin"
+// sayılır (ipsatif/kişi-içi profil analizi). Norm karşılaştırması DEĞİLDİR.
+const BILPRO_IPSATIF_ESIK = 15;
+// Bir alt testte üst üste bu kadar yanlış olursa o alt test sonlandırılır
+// (gerçek bireysel testlerdeki "durdurma kuralı" mantığı).
+const BILPRO_DURDURMA_KURALI = 3;
+
+function bilproSeviyeBandi(yuzde) {
+  if (yuzde >= 80) return { label: "Güçlü", color: "#1A8C5B", bg: "#E6F5EE" };
+  if (yuzde >= 60) return { label: "Beklenen Aralık", color: "#457B9D", bg: "#EEF2FF" };
+  if (yuzde >= 40) return { label: "Sınırda", color: "#B07D1A", bg: "#FDF6E3" };
+  return { label: "Belirgin Zorlanma", color: "#C0392B", bg: "#FDECEA" };
+}
+
+// Bir alt testte kaç maddedir üst üste yanlış gidildiğini döndürür
+// (durdurma kuralı uyarısı için).
+function bilproArdisikYanlis(cevaplar, altTest) {
+  let ardisik = 0;
+  altTest.maddeler.forEach((m, i) => {
+    const v = cevaplar[`${altTest.key}_${i}`];
+    if (v === false) ardisik++;
+    else if (v === true) ardisik = 0;
+  });
+  return ardisik;
+}
+
+function bilproSonucHesapla(cevaplar) {
+  const altTestSonuclari = {};
+  const alanSonuclari = {};
+  let uygulananToplam = 0;
+
+  BILPRO_ALANLAR.forEach(alan => {
+    const olculenAltTestler = [];
+    alan.altTestler.forEach(at => {
+      let dogru = 0, uygulanan = 0;
+      const zDogru = { 1: 0, 2: 0, 3: 0 }, zToplam = { 1: 0, 2: 0, 3: 0 };
+      at.maddeler.forEach((m, i) => {
+        const v = cevaplar[`${at.key}_${i}`];
+        if (v === undefined || v === BILPRO_UYGULANMADI) return;
+        uygulanan++; zToplam[m.zorluk]++;
+        if (v === true) { dogru++; zDogru[m.zorluk]++; }
+      });
+      // Tavan: öğrencinin en az yarısını doğru yaptığı EN YÜKSEK zorluk düzeyi.
+      // Norm değil, "nereye kadar çıkabildi" betimlemesidir.
+      let tavan = 0;
+      [1, 2, 3].forEach(z => {
+        if (zToplam[z] > 0 && zDogru[z] / zToplam[z] >= 0.5) tavan = z;
+      });
+      const yuzde = uygulanan > 0 ? Math.round((dogru / uygulanan) * 100) : null;
+      const s = {
+        key: at.key, ad: at.ad, sunum: at.sunum, alanKey: alan.key,
+        dogru, uygulanan, toplam: at.maddeler.length, yuzde, tavan,
+      };
+      altTestSonuclari[at.key] = s;
+      uygulananToplam += uygulanan;
+      if (yuzde !== null) olculenAltTestler.push(s);
+    });
+    const alanYuzde = olculenAltTestler.length > 0
+      ? Math.round(olculenAltTestler.reduce((t, s) => t + s.yuzde, 0) / olculenAltTestler.length)
+      : null;
+    alanSonuclari[alan.key] = {
+      key: alan.key, ad: alan.ad, kod: alan.kod, ikon: alan.ikon, renk: alan.renk,
+      yuzde: alanYuzde, seviye: alanYuzde === null ? null : bilproSeviyeBandi(alanYuzde),
+      altTestler: olculenAltTestler, sapma: null,
+    };
+  });
+
+  const olculenAlanlar = BILPRO_ALANLAR.filter(a => alanSonuclari[a.key].yuzde !== null);
+  const genelOrtalama = olculenAlanlar.length > 0
+    ? Math.round(olculenAlanlar.reduce((t, a) => t + alanSonuclari[a.key].yuzde, 0) / olculenAlanlar.length)
+    : null;
+
+  // ── İpsatif (kişi-içi) profil: öğrencinin kendi ortalamasına göre
+  // belirgin güçlü / zayıf alanları. En az 2 alan ölçülmüşse anlamlıdır.
+  const guclu = [], zayif = [];
+  if (genelOrtalama !== null && olculenAlanlar.length >= 2) {
+    olculenAlanlar.forEach(a => {
+      const sapma = alanSonuclari[a.key].yuzde - genelOrtalama;
+      alanSonuclari[a.key].sapma = sapma;
+      if (sapma >= BILPRO_IPSATIF_ESIK) guclu.push(a);
+      else if (sapma <= -BILPRO_IPSATIF_ESIK) zayif.push(a);
+    });
+  }
+
+  // ── Sözel / sözel olmayan eksen (Binet'in verbal-nonverbal ayrımı mantığı)
+  const sozelListe = [], sozelOlmayanListe = [];
+  Object.keys(altTestSonuclari).forEach(k => {
+    const s = altTestSonuclari[k];
+    if (s.yuzde === null) return;
+    if (s.sunum === "sozel") sozelListe.push(s.yuzde); else sozelOlmayanListe.push(s.yuzde);
+  });
+  const ortala = arr => arr.length > 0 ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : null;
+  const sozelYuzde = ortala(sozelListe);
+  const sozelOlmayanYuzde = ortala(sozelOlmayanListe);
+  const eksenFarki = (sozelYuzde !== null && sozelOlmayanYuzde !== null && sozelListe.length >= 2 && sozelOlmayanListe.length >= 2)
+    ? sozelYuzde - sozelOlmayanYuzde : null;
+
+  // ── Yorum metinleri ────────────────────────────────────────────────────
+  // NOT: buraya alanın TAMAMI (altTestler + 60 madde) konmaz — bu nesne
+  // kayıtla birlikte diske yazıldığı için madde havuzunu her kayıtta
+  // tekrar tekrar saklamış oluruz. Sadece gösterim için gereken alanlar.
+  const alanOzet = a => ({ key: a.key, kod: a.kod, ad: a.ad, ikon: a.ikon, renk: a.renk });
+  const alanYorumlari = [];
+  guclu.forEach(a => alanYorumlari.push({ tip: "guclu", alan: alanOzet(a), metin: a.gucluYorum }));
+  zayif.forEach(a => alanYorumlari.push({ tip: "zayif", alan: alanOzet(a), metin: a.zayifYorum, oneri: a.egitselOneri }));
+
+  let genelYorum;
+  if (genelOrtalama === null) {
+    genelYorum = "Henüz hiçbir alt test uygulanmadı.";
+  } else {
+    const bant = bilproSeviyeBandi(genelOrtalama);
+    const duz = guclu.length === 0 && zayif.length === 0;
+    genelYorum = `Uygulanan maddelerde genel profil ortalaması %${genelOrtalama} (${bant.label}). `
+      + (duz
+        ? "Alanlar arasında belirgin bir fark yok; profil kendi içinde dengeli görünüyor. Bu durumda akademik zorlanmanın nedeni bilişsel profilden çok çalışma alışkanlığı, motivasyon, kaygı veya devamsızlık gibi etkenlerde aranmalıdır."
+        : `Profil kendi içinde dengeli değil: ${guclu.length > 0 ? guclu.map(a => a.ad).join(" ve ") + " belirgin biçimde öne çıkıyor" : ""}`
+          + (guclu.length > 0 && zayif.length > 0 ? "; " : "")
+          + (zayif.length > 0 ? zayif.map(a => a.ad).join(" ve ") + " belirgin biçimde geride kalıyor" : "")
+          + ". Bu tür bir dengesizlik, öğrencinin bazı derslerde iyi bazılarında kötü olmasını açıklayabilir.");
+  }
+
+  let eksenYorumu = null;
+  if (eksenFarki !== null && Math.abs(eksenFarki) >= BILPRO_IPSATIF_ESIK) {
+    eksenYorumu = eksenFarki > 0
+      ? `Sözel yolla sunulan görevlerde (%${sozelYuzde}), görsel/sayısal görevlere (%${sozelOlmayanYuzde}) göre belirgin biçimde daha iyi. Öğrenci dinleyerek ve konuşarak daha iyi öğreniyor olabilir; görsel-uzamsal materyalde ek desteğe ihtiyaç duyabilir.`
+      : `Görsel/sayısal görevlerde (%${sozelOlmayanYuzde}), sözel görevlere (%${sozelYuzde}) göre belirgin biçimde daha iyi. Bu tablo dil temelli bir güçlüğe, sınırlı kelime dağarcığına, iki dilli geçmişe ya da işitme ile ilgili bir soruna işaret edebilir; sözel yolla ölçülen derslerde gerçek kapasitesinin altında görünme riski vardır.`;
+  }
+
+  // ── Sevk ve sonraki adım önerileri ─────────────────────────────────────
+  const sevkOnerileri = [];
+  if (genelOrtalama !== null) {
+    const belirginZayif = olculenAlanlar.filter(a => alanSonuclari[a.key].yuzde < 40);
+    const tumGuclu = olculenAlanlar.length >= 3 && olculenAlanlar.every(a => alanSonuclari[a.key].yuzde >= 80);
+    if (belirginZayif.length >= 2 || genelOrtalama < 40) {
+      sevkOnerileri.push("Birden fazla alanda belirgin zorlanma var. Aileyle görüşerek RAM'a eğitsel değerlendirme sevki gündeme alınmalı; öncesinde görme ve işitme taramasının yapıldığından emin ol.");
+    } else if (belirginZayif.length === 1) {
+      sevkOnerileri.push(`Yalnızca ${belirginZayif[0].ad} alanında belirgin zorlanma var, diğer alanlar daha iyi. Bu tablo genel bir yetersizlikten çok o alana özgü bir güçlüğü düşündürür; önce sınıf içi hedefli destekle izlenmesi uygun olur.`);
+    }
+    if (eksenFarki !== null && eksenFarki <= -25) {
+      sevkOnerileri.push("Sözel alan, sözel olmayan alanın belirgin biçimde gerisinde. Dil gelişimi, iki dillilik ve işitme açısından değerlendirme düşünülmeli; gerekirse dil ve konuşma terapisti yönlendirmesi konuşulmalı.");
+    }
+    if (zayif.some(a => a.key === "gq") || (alanSonuclari.gq && alanSonuclari.gq.yuzde !== null && alanSonuclari.gq.yuzde < 40)) {
+      sevkOnerileri.push("Niceliksel akıl yürütmedeki düşüklük sürüyorsa özgül öğrenme güçlüğü (diskalkuli) açısından ÖÖG Ön-Tarama aracını da uygula.");
+    }
+    if (tumGuclu && genelOrtalama >= 85) {
+      sevkOnerileri.push("Tüm ölçülen alanlarda yüksek performans var. Üstün yetenek açısından ileri değerlendirme (BİLSEM süreci) ve sınıf içi zenginleştirme gündeme alınabilir.");
+    }
+    sevkOnerileri.push("Bu profili, varsa CAS Performans Testi ve Akademik Düzey Taraması sonuçlarıyla birlikte oku; üç aracın aynı yöne işaret etmesi hipotezini güçlendirir, çelişmesi ise tek bir ölçümle karar vermemen gerektiğini gösterir.");
+  }
+
+  return {
+    altTestSonuclari, alanSonuclari, genelOrtalama,
+    seviye: genelOrtalama === null ? null : bilproSeviyeBandi(genelOrtalama),
+    guclu: guclu.map(a => a.key), zayif: zayif.map(a => a.key),
+    sozelYuzde, sozelOlmayanYuzde, eksenFarki,
+    genelYorum, alanYorumlari, eksenYorumu, sevkOnerileri,
+    uygulananToplam,
+    toplamMadde: BILPRO_ALANLAR.reduce((t, a) => t + a.altTestler.reduce((x, at) => x + at.maddeler.length, 0), 0),
+  };
+}
+
+// ── BİLPRO Paneli — danışman öğrenciye maddeleri tek tek sorar, cevabını
+// Doğru/Yanlış/Uygulanmadı olarak işaretler. Çıktı bir zekâ puanı DEĞİL,
+// öğrencinin kendi içindeki bilişsel profilidir.
+function BILPROPaneli({ seciliAd, seciliSinif, seciliNumara, bilproDegerlendirmeler, setBilproDegerlendirmeler }) {
+  const mevcut = bilproDegerlendirmeler.find(o => pdrAyniOgrenci(o.studentName, o.className, seciliAd, seciliSinif, o.numara, seciliNumara));
+  const [cevaplar, setCevaplar] = useState(mevcut?.cevaplar || {});
+  const [aktifAlan, setAktifAlan] = useState(BILPRO_ALANLAR[0].key);
+  const [kaydedildi, setKaydedildi] = useState(false);
+
+  useEffect(() => {
+    const m = bilproDegerlendirmeler.find(o => pdrAyniOgrenci(o.studentName, o.className, seciliAd, seciliSinif, o.numara, seciliNumara));
+    setCevaplar(m?.cevaplar || {});
+    setKaydedildi(false);
+  }, [seciliAd, seciliSinif, seciliNumara]);
+
+  function cevapVer(altTestKey, maddeIndex, val) {
+    setCevaplar(c => ({ ...c, [`${altTestKey}_${maddeIndex}`]: val }));
+  }
+
+  const sonuc = bilproSonucHesapla(cevaplar);
+  const alan = BILPRO_ALANLAR.find(a => a.key === aktifAlan) || BILPRO_ALANLAR[0];
+
+  async function handleKaydet() {
+    if (!seciliAd.trim()) return;
+    const kayit = {
+      id: mevcut?.id || uid(),
+      date: today(),
+      studentName: seciliAd, className: seciliSinif, numara: seciliNumara,
+      cevaplar, sonuc,
+    };
+    const updated = mevcut
+      ? bilproDegerlendirmeler.map(o => o.id === mevcut.id ? kayit : o)
+      : [kayit, ...bilproDegerlendirmeler];
+    setBilproDegerlendirmeler(updated);
+    await saveBilproDegerlendirmeler(updated);
+    setKaydedildi(true);
+    setTimeout(() => setKaydedildi(false), 2500);
+  }
+
+  async function handleSil() {
+    if (!mevcut) return;
+    if (!confirm("Bu öğrencinin kayıtlı bilişsel profil değerlendirmesini silmek istediğinize emin misiniz? Bu işlem geri alınamaz.")) return;
+    const updated = bilproDegerlendirmeler.filter(o => o.id !== mevcut.id);
+    setBilproDegerlendirmeler(updated);
+    await saveBilproDegerlendirmeler(updated);
+    setCevaplar({});
+  }
+
+  if (!seciliAd.trim()) {
+    return <div style={{textAlign:"center", color:MUTED, padding:20, fontSize:13}}>Önce bir öğrenci seçin</div>;
+  }
+
+  return (
+    <div>
+      <div style={{background:"#F3EEFB", border:"1px solid #c9b8ea", borderRadius:10, padding:"10px 12px", marginBottom:14, fontSize:11, color:"#5B3E8C", lineHeight:1.6}}>
+        🧠 <b>BİLPRO — Bilişsel Profil Değerlendirmesi.</b> WISC ve Stanford-Binet'in dayandığı <b>CHC kuramı</b> (Cattell-Horn-Carroll) temel alınarak hazırlanmış <b>özgün</b> bir tarama aracıdır.
+        <div style={{marginTop:6, background:"#fff", borderRadius:8, padding:"7px 9px", border:"1px solid #d9cdf0"}}>
+          <b>⚠️ Bu bir zekâ testi değildir.</b> IQ ya da standart puan üretmez, norm örneklemi yoktur, tanı koymaz ve WISC/Binet'in yerine geçmez. Ürettiği şey <b>kişi-içi profildir</b>: öğrencinin <i>kendi ortalamasına göre</i> hangi alanda güçlü, hangi alanda zorlandığı. Resmî eğitsel tanılama yetkisi <b>RAM</b>'dadır.
+        </div>
+        <div style={{marginTop:6}}>
+          Her maddeyi öğrenciye sen sor, cevabına göre işaretle. <b>Durdurma kuralı:</b> bir alt testte üst üste {BILPRO_DURDURMA_KURALI} yanlış olursa o alt testi bitir, kalanları "Uygulanmadı" bırak — madde havuzu kolaydan zora sıralıdır.
+        </div>
+      </div>
+
+      {sonuc.uygulananToplam > 0 && (
+        <div style={{background:"#fff", border:`1px solid ${BORDER}`, borderRadius:12, padding:14, marginBottom:16}}>
+          <div style={{textAlign:"center", marginBottom:12}}>
+            <div style={{fontSize:30, fontWeight:900, color:sonuc.seviye ? sonuc.seviye.color : MUTED}}>%{sonuc.genelOrtalama}</div>
+            <div style={{fontSize:12, fontWeight:700, color:sonuc.seviye ? sonuc.seviye.color : MUTED}}>
+              Genel Profil Ortalaması{sonuc.seviye ? ` — ${sonuc.seviye.label}` : ""}
+            </div>
+            <div style={{fontSize:9.5, color:MUTED, marginTop:3}}>
+              (zekâ puanı değildir) · {sonuc.uygulananToplam}/{sonuc.toplamMadde} madde uygulandı
+            </div>
+          </div>
+
+          <div style={{display:"flex", flexDirection:"column", gap:8, marginBottom:12}}>
+            {BILPRO_ALANLAR.map(a => {
+              const as = sonuc.alanSonuclari[a.key];
+              return (
+                <div key={a.key}>
+                  <div style={{display:"flex", justifyContent:"space-between", alignItems:"baseline", fontSize:11, marginBottom:3}}>
+                    <span style={{fontWeight:700, color:TEXT}}>{a.ikon} {a.ad} <span style={{color:MUTED, fontWeight:500}}>({a.kod})</span></span>
+                    <span style={{fontWeight:800, color: as.yuzde === null ? MUTED : as.seviye.color}}>
+                      {as.yuzde === null ? "—" : `%${as.yuzde}`}
+                      {as.sapma !== null && Math.abs(as.sapma) >= BILPRO_IPSATIF_ESIK && (
+                        <span style={{fontSize:9, marginLeft:4}}>{as.sapma > 0 ? "▲ güçlü yön" : "▼ zayıf yön"}</span>
+                      )}
+                    </span>
+                  </div>
+                  <div style={{height:8, background:"#EFEFEF", borderRadius:6, overflow:"hidden"}}>
+                    <div style={{width:`${as.yuzde === null ? 0 : as.yuzde}%`, height:"100%", background: as.yuzde === null ? "#ddd" : a.renk, borderRadius:6}} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {sonuc.eksenFarki !== null && (
+            <div style={{display:"flex", gap:8, marginBottom:10}}>
+              <div style={{flex:1, textAlign:"center", background:"#F7F5F0", borderRadius:8, padding:"6px 4px", border:`1px solid ${BORDER}`}}>
+                <div style={{fontSize:9.5, color:MUTED, fontWeight:700}}>SÖZEL EKSEN</div>
+                <div style={{fontSize:15, fontWeight:900, color:TEXT}}>%{sonuc.sozelYuzde}</div>
+              </div>
+              <div style={{flex:1, textAlign:"center", background:"#F7F5F0", borderRadius:8, padding:"6px 4px", border:`1px solid ${BORDER}`}}>
+                <div style={{fontSize:9.5, color:MUTED, fontWeight:700}}>SÖZEL OLMAYAN EKSEN</div>
+                <div style={{fontSize:15, fontWeight:900, color:TEXT}}>%{sonuc.sozelOlmayanYuzde}</div>
+              </div>
+            </div>
+          )}
+
+          <div style={{background:"#FAFAF8", borderRadius:8, padding:"10px 12px", fontSize:11, color:TEXT, lineHeight:1.65}}>
+            <div style={{fontWeight:800, marginBottom:4, color:ACCENT}}>📝 Profil Yorumu</div>
+            <div style={{marginBottom:sonuc.alanYorumlari.length>0?8:0}}>{sonuc.genelYorum}</div>
+            {sonuc.eksenYorumu && <div style={{marginBottom:8}}><b>Sunum ekseni:</b> {sonuc.eksenYorumu}</div>}
+            {sonuc.alanYorumlari.map((y, i) => (
+              <div key={i} style={{marginBottom:8, paddingLeft:8, borderLeft:`3px solid ${y.tip==="guclu"?"#1A8C5B":"#C0392B"}`}}>
+                <div style={{fontWeight:700}}>{y.alan.ikon} {y.alan.ad}</div>
+                <div>{y.metin}</div>
+                {y.oneri && <div style={{marginTop:4, color:MUTED}}><b>Sınıf içi öneri:</b> {y.oneri}</div>}
+              </div>
+            ))}
+            {sonuc.sevkOnerileri.length > 0 && (
+              <div style={{marginTop:8, paddingTop:8, borderTop:`1px dashed ${BORDER}`}}>
+                <div style={{fontWeight:800, marginBottom:4, color:PURPLE}}>➡️ Sonraki Adım</div>
+                {sonuc.sevkOnerileri.map((s, i) => <div key={i} style={{marginBottom:4}}>• {s}</div>)}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:10}}>
+        {BILPRO_ALANLAR.map(a => (
+          <button key={a.key} onClick={() => setAktifAlan(a.key)} style={{
+            flex:"1 1 44%", minWidth:120, padding:"9px 6px", borderRadius:10, fontSize:11, fontWeight:800, cursor:"pointer",
+            border:`2px solid ${aktifAlan===a.key ? a.renk : BORDER}`,
+            background: aktifAlan===a.key ? `${a.renk}14` : CARD,
+            color: aktifAlan===a.key ? a.renk : MUTED,
+          }}>{a.ikon} {a.ad}</button>
+        ))}
+      </div>
+
+      <div style={{fontSize:10.5, color:MUTED, background:"#F7F5F0", border:`1px solid ${BORDER}`, borderRadius:8, padding:"7px 10px", marginBottom:12, lineHeight:1.6}}>
+        ℹ️ <b>{alan.ad} ({alan.kod}) ne ölçüyor?</b> {alan.olctugu}
+      </div>
+
+      {alan.altTestler.map(at => {
+        const ardisikYanlis = bilproArdisikYanlis(cevaplar, at);
+        const ats = sonuc.altTestSonuclari[at.key];
+        return (
+          <div key={at.key} style={{marginBottom:18}}>
+            <div style={{display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom:4}}>
+              <span style={{fontSize:12.5, fontWeight:800, color:alan.renk}}>{at.ad}</span>
+              <span style={{fontSize:9.5, fontWeight:700, padding:"2px 7px", borderRadius:10, background:"#EFEFEF", color:MUTED}}>
+                {at.sunum === "sozel" ? "sözel" : "sözel olmayan"}
+              </span>
+              {ats && ats.uygulanan > 0 && (
+                <span style={{fontSize:9.5, fontWeight:800, padding:"2px 8px", borderRadius:10, background:bilproSeviyeBandi(ats.yuzde).bg, color:bilproSeviyeBandi(ats.yuzde).color}}>
+                  {ats.dogru}/{ats.uygulanan} · %{ats.yuzde}{ats.tavan > 0 ? ` · tavan: ${ats.tavan}. düzey` : " · tavan yok"}
+                </span>
+              )}
+            </div>
+            <div style={{fontSize:10, color:MUTED, marginBottom:6, fontStyle:"italic"}}>{at.olctugu}</div>
+            <div style={{fontSize:10.5, color:"#5B3E8C", background:"#F8F5FD", border:"1px solid #ddd0f2", borderRadius:8, padding:"6px 9px", marginBottom:8, lineHeight:1.6}}>
+              🗣️ <b>Yönerge:</b> {at.yonerge}
+            </div>
+            {ardisikYanlis >= BILPRO_DURDURMA_KURALI && (
+              <div style={{fontSize:10.5, fontWeight:700, color:"#8B5A00", background:"#FDF6E3", border:"1px solid #e0c08a", borderRadius:8, padding:"6px 9px", marginBottom:8}}>
+                ⏹️ Durdurma kuralı: üst üste {ardisikYanlis} yanlış. Bu alt testi burada bitirebilirsin; kalan maddeleri "Uygulanmadı" bırak.
+              </div>
+            )}
+
+            {at.maddeler.map((m, i) => {
+              const key = `${at.key}_${i}`;
+              const secili = cevaplar[key];
+              return (
+                <div key={key} style={{marginBottom:12, background:CARD, border:`1px solid ${BORDER}`, borderRadius:10, padding:"10px 12px"}}>
+                  <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6}}>
+                    <span style={{fontSize:12, fontWeight:700, color:TEXT}}>{i + 1}. {m.soru}</span>
+                    <span style={{fontSize:9, fontWeight:700, padding:"1px 7px", borderRadius:9, background:"#EFEFEF", color:MUTED, whiteSpace:"nowrap", marginLeft:8}}>
+                      {m.zorluk}. düzey
+                    </span>
+                  </div>
+
+                  {m.izgara && (
+                    <div style={{
+                      display:"grid", gridTemplateColumns:`repeat(${m.sutun || 3}, minmax(0, 1fr))`, gap:4,
+                      maxWidth:(m.sutun || 3) * 56, margin:"0 auto 8px", background:"#fff",
+                      border:`1px solid ${BORDER}`, borderRadius:8, padding:6,
+                    }}>
+                      {m.izgara.map((h, hi) => {
+                        // Coklu sembollu hucrelerde (orn. "⭐⭐⭐") tasmayi onlemek
+                        // icin yazi boyutunu kucult. Varyasyon seciciyi (U+FE0F)
+                        // sayma, yoksa "⬆️⬆️⬆️" 6 karakter gorunur.
+                        const gorselUzunluk = [...h.replace(/️/g, "")].length;
+                        return (
+                          <div key={hi} style={{
+                            textAlign:"center", lineHeight:1.25, padding:"6px 2px",
+                            fontSize: gorselUzunluk >= 4 ? 10 : gorselUzunluk === 3 ? 12 : 16,
+                            whiteSpace:"normal", wordBreak:"break-word",
+                            background:h === "❓" ? "#FDF6E3" : "#FAFAF8", borderRadius:5,
+                            border:h === "❓" ? "1px dashed #B07D1A" : `1px solid ${BORDER}`,
+                          }}>{h}</div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <div style={{fontSize:11, color:MUTED, marginBottom:8, lineHeight:1.7}}>
+                    {m.secenekler.map((sec, si) => (
+                      <div key={si}>{String.fromCharCode(65 + si)}) {sec}</div>
+                    ))}
+                  </div>
+
+                  <div style={{display:"flex", gap:5}}>
+                    <button onClick={() => cevapVer(at.key, i, true)} style={{
+                      flex:1, padding:"7px 4px", borderRadius:8, fontSize:11, fontWeight:700, cursor:"pointer",
+                      border:`1.5px solid ${secili===true?"#1A8C5B":BORDER}`,
+                      background:secili===true?"#E6F5EE":"#fff",
+                      color:secili===true?"#1A8C5B":MUTED,
+                    }}>✓ Doğru</button>
+                    <button onClick={() => cevapVer(at.key, i, false)} style={{
+                      flex:1, padding:"7px 4px", borderRadius:8, fontSize:11, fontWeight:700, cursor:"pointer",
+                      border:`1.5px solid ${secili===false?"#C0392B":BORDER}`,
+                      background:secili===false?"#FDECEA":"#fff",
+                      color:secili===false?"#C0392B":MUTED,
+                    }}>✗ Yanlış</button>
+                    <button onClick={() => cevapVer(at.key, i, BILPRO_UYGULANMADI)} style={{
+                      flex:0.9, padding:"7px 4px", borderRadius:8, fontSize:9, fontWeight:700, cursor:"pointer",
+                      border:`1.5px dashed ${secili===BILPRO_UYGULANMADI?"#457B9D":BORDER}`,
+                      background:secili===BILPRO_UYGULANMADI?"#EEF2FF":"#fff",
+                      color:secili===BILPRO_UYGULANMADI?"#457B9D":MUTED,
+                    }}>🔍 Uygulanmadı</button>
+                  </div>
+                  <div style={{fontSize:9, color:MUTED, marginTop:5}}>
+                    Doğru cevap: {String.fromCharCode(65 + m.dogru)}) {m.secenekler[m.dogru]}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+
+      <button onClick={handleKaydet} style={{
+        width:"100%", padding:13, background:ACCENT, color:"#fff", border:"none", borderRadius:12,
+        fontSize:15, fontWeight:800, cursor:"pointer", marginTop:4
+      }}>{kaydedildi ? "✓ Kaydedildi" : "💾 Kaydet"}</button>
+      {mevcut && (
+        <button onClick={handleSil} style={{
+          width:"100%", padding:10, background:"transparent", color:"#C0392B", border:"1px solid #F5B7B1", borderRadius:12,
+          fontSize:12, fontWeight:700, cursor:"pointer", marginTop:8
+        }}>🗑️ Kaydı Sil</button>
+      )}
+    </div>
+  );
+}
+// ===== BILPRO BITIS =====
+
 // ── CAS Tarzı Bilişsel Süreçler PERFORMANS Testi (PASS Modeli) ────────────────
 // Yukarıdaki gözlem formundan farklı olarak burada ÖĞRENCİ ekranda doğrudan
 // görev uygular (gerçek CAS'taki gibi süreli/performans tabanlı). 4 orijinal
@@ -3395,6 +4010,12 @@ async function loadAkademikTaramalar() {
 }
 async function saveAkademikTaramalar(items) {
   try { await window.storage.set("pdr-akademik", JSON.stringify(items)); } catch(e) { console.warn(e); }
+}
+async function loadBilproDegerlendirmeler() {
+  try { const r = await window.storage.get("pdr-bilpro"); return r ? JSON.parse(r.value) : []; } catch { return []; }
+}
+async function saveBilproDegerlendirmeler(items) {
+  try { await window.storage.set("pdr-bilpro", JSON.stringify(items)); } catch(e) { console.warn(e); }
 }
 
 async function loadYillar() {
@@ -6229,8 +6850,8 @@ function raporCizgiGrafik(noktalar, { genislik = 460, yukseklik = 130, renk = "#
   );
 }
 
-function raporVerisiOlustur({ ogrenci, ogrenciSinif, profil1, profil2, gorusmeler, denemeler, mudahalePlan, riskListesi, sinavTuru, testKayitlari, kaynastirma, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, pasPerformanslar, akademikTaramalar, hazirlikNotlari, ilerlemeNotlari, sevkler, mudahaleOnerileri, uyumIzleme }) {
-  return { ogrenci, ogrenciSinif, profil1, profil2, gorusmeler, denemeler: denemeler || {}, mudahalePlan: mudahalePlan || {}, riskListesi: riskListesi || [], sinavTuru, testKayitlari: testKayitlari || [], kaynastirma: kaynastirma || [], bireyiTanima: bireyiTanima || [], bdtAnaliz: bdtAnaliz || [], sinavKaygisi: sinavKaygisi || {}, ogrenciler: ogrenciler || [], oogDegerlendirmeler: oogDegerlendirmeler || [], castDegerlendirmeler: castDegerlendirmeler || [], pasDegerlendirmeler: pasDegerlendirmeler || [], pasPerformanslar: pasPerformanslar || [], akademikTaramalar: akademikTaramalar || [], hazirlikNotlari: hazirlikNotlari || {}, ilerlemeNotlari: ilerlemeNotlari || {}, sevkler: sevkler || [], mudahaleOnerileri: mudahaleOnerileri || {}, uyumIzleme: uyumIzleme || [], tarih: new Date().toLocaleDateString("tr-TR") };
+function raporVerisiOlustur({ ogrenci, ogrenciSinif, profil1, profil2, gorusmeler, denemeler, mudahalePlan, riskListesi, sinavTuru, testKayitlari, kaynastirma, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, pasPerformanslar, akademikTaramalar, bilproDegerlendirmeler, hazirlikNotlari, ilerlemeNotlari, sevkler, mudahaleOnerileri, uyumIzleme }) {
+  return { ogrenci, ogrenciSinif, profil1, profil2, gorusmeler, denemeler: denemeler || {}, mudahalePlan: mudahalePlan || {}, riskListesi: riskListesi || [], sinavTuru, testKayitlari: testKayitlari || [], kaynastirma: kaynastirma || [], bireyiTanima: bireyiTanima || [], bdtAnaliz: bdtAnaliz || [], sinavKaygisi: sinavKaygisi || {}, ogrenciler: ogrenciler || [], oogDegerlendirmeler: oogDegerlendirmeler || [], castDegerlendirmeler: castDegerlendirmeler || [], pasDegerlendirmeler: pasDegerlendirmeler || [], pasPerformanslar: pasPerformanslar || [], akademikTaramalar: akademikTaramalar || [], bilproDegerlendirmeler: bilproDegerlendirmeler || [], hazirlikNotlari: hazirlikNotlari || {}, ilerlemeNotlari: ilerlemeNotlari || {}, sevkler: sevkler || [], mudahaleOnerileri: mudahaleOnerileri || {}, uyumIzleme: uyumIzleme || [], tarih: new Date().toLocaleDateString("tr-TR") };
 }
 
 // ── PDF Rapor Bileşeni ────────────────────────────────────────────────────────
@@ -6585,6 +7206,57 @@ function RaporModal({ rapor, onKapat }) {
                         </div>
                       );
                     })}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* BİLPRO — Bilişsel Profil Değerlendirmesi (CHC temelli). Zekâ puanı
+                DEĞİLDİR, tanı koymaz; yalnızca doldurulmuşsa gösterilir. */}
+            {(() => {
+              const bpKayit = (rapor.bilproDegerlendirmeler||[]).find(o => pdrAyniOgrenci(o.studentName, o.className, ogrenci, ogrenciSinif));
+              if (!bpKayit || !bpKayit.cevaplar || Object.keys(bpKayit.cevaplar).length === 0) return null;
+              const s = bpKayit.sonuc || bilproSonucHesapla(bpKayit.cevaplar);
+              if (!s || s.genelOrtalama === null) return null;
+              return (
+                <div style={{ marginTop:10, pageBreakInside:"avoid" }}>
+                  <div style={{ ...S.bolumBaslik2 }}><KaynakRozeti ikon="📋" ad="Profil" />Bilişsel Profil Taraması — BİLPRO (Zekâ Testi Değildir, Tanı Koymaz)</div>
+                  <div style={S.bolumIcerik2}>
+                    <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8, flexWrap:"wrap" }}>
+                      <span style={{ fontSize:16, fontWeight:900, color:s.seviye ? s.seviye.color : "#555" }}>%{s.genelOrtalama}</span>
+                      <span style={{ fontSize:10.5, fontWeight:700, color:s.seviye ? s.seviye.color : "#555", background:s.seviye ? s.seviye.bg : "#f5f5f5", borderRadius:8, padding:"2px 8px" }}>
+                        Genel Profil Ortalaması{s.seviye ? ` — ${s.seviye.label}` : ""}
+                      </span>
+                      <span style={{ fontSize:9, color:"#888" }}>({bpKayit.date})</span>
+                    </div>
+                    <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:8 }}>
+                      {BILPRO_ALANLAR.filter(a => s.alanSonuclari[a.key] && s.alanSonuclari[a.key].yuzde !== null).map(a => (
+                        <span key={a.key} style={{ fontSize:9.5, background:"#f5f5f5", borderRadius:4, padding:"2px 7px" }}>
+                          {a.ad} ({a.kod}): %{s.alanSonuclari[a.key].yuzde}
+                        </span>
+                      ))}
+                    </div>
+                    {s.eksenFarki !== null && (
+                      <div style={{ fontSize:9.5, color:"#666", marginBottom:6 }}>
+                        Sözel eksen: %{s.sozelYuzde} · Sözel olmayan eksen: %{s.sozelOlmayanYuzde}
+                      </div>
+                    )}
+                    <div style={{ fontSize:10, color:"#555", lineHeight:1.5 }}>{s.genelYorum}</div>
+                    {s.eksenYorumu && <div style={{ fontSize:10, color:"#555", lineHeight:1.5, marginTop:5 }}>{s.eksenYorumu}</div>}
+                    {(s.alanYorumlari||[]).map((y, i) => (
+                      <div key={i} style={{ fontSize:10, color:"#555", lineHeight:1.5, marginTop:5 }}>
+                        <b>{y.alan.ad}:</b> {y.metin}{y.oneri ? ` Sınıf içi öneri: ${y.oneri}` : ""}
+                      </div>
+                    ))}
+                    {(s.sevkOnerileri||[]).length > 0 && (
+                      <div style={{ marginTop:8, paddingTop:6, borderTop:"1px dashed #ddd" }}>
+                        <div style={{ fontSize:9.5, fontWeight:800, color:PURPLE, marginBottom:3 }}>Sonraki Adım</div>
+                        {s.sevkOnerileri.map((o, i) => <div key={i} style={{ fontSize:9.5, color:"#555", lineHeight:1.5 }}>• {o}</div>)}
+                      </div>
+                    )}
+                    <div style={{ fontSize:8.5, color:"#999", marginTop:6, fontStyle:"italic" }}>
+                      BİLPRO, CHC kuramı temelli özgün bir tarama aracıdır; IQ/standart puan üretmez, norm örneklemi yoktur ve resmî eğitsel tanılamanın yerine geçmez.
+                    </div>
                   </div>
                 </div>
               );
@@ -8318,7 +8990,7 @@ function D2Paneli({ seciliAd, seciliSinif, seciliNumara, profiles2, setProfiles2
   );
 }
 
-function TestlerEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, testKayitlari, setTestKayitlari, profiles2, setProfiles2, oogDegerlendirmeler, setOogDegerlendirmeler, castDegerlendirmeler, setCastDegerlendirmeler, pasDegerlendirmeler, setPasDegerlendirmeler, pasPerformanslar, setPasPerformanslar, akademikTaramalar, setAkademikTaramalar, mudahalePlan, setMudahalePlan, setTab, kademe }) {
+function TestlerEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, testKayitlari, setTestKayitlari, profiles2, setProfiles2, oogDegerlendirmeler, setOogDegerlendirmeler, castDegerlendirmeler, setCastDegerlendirmeler, pasDegerlendirmeler, setPasDegerlendirmeler, pasPerformanslar, setPasPerformanslar, akademikTaramalar, setAkademikTaramalar, bilproDegerlendirmeler, setBilproDegerlendirmeler, mudahalePlan, setMudahalePlan, setTab, kademe }) {
   const [seciliAd, setSeciliAd] = useState(aktifOgrenci?.name || "");
   const [ogrenciArama, setOgrenciArama] = useState("");
   const [kategori, setKategori] = useState(null); // "objektif" | "projektif" | null
@@ -8578,6 +9250,9 @@ SADECE aşağıdaki JSON formatında cevap ver, başka hiçbir açıklama/markdo
                   <div style={{ display:"flex", gap:8, marginTop:8 }}>
                     <button onClick={()=>setKategori("akademik")} style={{ flex:1, padding:"14px 8px", borderRadius:12, border:`2px solid #8B5A00`, background:"#FFF4E5", color:"#8B5A00", fontSize:13, fontWeight:800, cursor:"pointer" }}>📚 Akademik Düzey Taraması (5-8. Sınıf)</button>
                   </div>
+                  <div style={{ display:"flex", gap:8, marginTop:8 }}>
+                    <button onClick={()=>setKategori("bilpro")} style={{ flex:1, padding:"14px 8px", borderRadius:12, border:`2px solid #6A4C93`, background:"#F3EEFB", color:"#6A4C93", fontSize:13, fontWeight:800, cursor:"pointer" }}>🧠 BİLPRO — Bilişsel Profil Değerlendirmesi</button>
+                  </div>
                 </div>
               ) : kategori === "d2panel" ? (
                 <div>
@@ -8608,6 +9283,11 @@ SADECE aşağıdaki JSON formatında cevap ver, başka hiçbir açıklama/markdo
                 <div>
                   <button onClick={()=>setKategori(null)} style={{ background:"none", border:"none", color:MUTED, fontSize:12, cursor:"pointer", marginBottom:8, padding:0 }}>← Kategoriyi değiştir</button>
                   <AkademikTaramaPaneli seciliAd={seciliAd} seciliSinif={seciliSinif} seciliNumara={seciliNumara} akademikTaramalar={akademikTaramalar} setAkademikTaramalar={setAkademikTaramalar} />
+                </div>
+              ) : kategori === "bilpro" ? (
+                <div>
+                  <button onClick={()=>setKategori(null)} style={{ background:"none", border:"none", color:MUTED, fontSize:12, cursor:"pointer", marginBottom:8, padding:0 }}>← Kategoriyi değiştir</button>
+                  <BILPROPaneli seciliAd={seciliAd} seciliSinif={seciliSinif} seciliNumara={seciliNumara} bilproDegerlendirmeler={bilproDegerlendirmeler} setBilproDegerlendirmeler={setBilproDegerlendirmeler} />
                 </div>
               ) : (
                 <div>
@@ -20344,7 +21024,7 @@ function RecordCard({ rec, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz, bireyiTa
   );
 }
 
-function AyarlarEkrani({ ogrenciler, setOgrenciler, records, setRecords, profiles, setProfiles, profiles2, setProfiles2, oogDegerlendirmeler, setOogDegerlendirmeler, castDegerlendirmeler, setCastDegerlendirmeler, pasDegerlendirmeler, setPasDegerlendirmeler, pasPerformanslar, setPasPerformanslar, akademikTaramalar, setAkademikTaramalar, riskListesi, setRiskListesi, denemeler, setDenemeler, sevkler, setSevkler, mudahalePlan, setMudahalePlan, hazirlikNotlari, setHazirlikNotlari, ilerlemeNotlari, setIlerlemeNotlari, profNotlari, setProfNotlari, kutuphane, setKutuphane, yillar, setYillar, sinifListesi, setSinifListesi, aktifYil, setAktifYil, kademe, setKademe, sinavTuru, setSinavTuru, testKayitlari, setTestKayitlari, hatirlatmalar, setHatirlatmalar, netHaritasiKayitlari, setNetHaritasiKayitlari, konuHaritasiVerisi, setKonuHaritasiVerisi, bireyiTanima, setBireyiTanima, bdtAnaliz, setBdtAnaliz, sinavKaygisi, setSinavKaygisi, sosyometri, setSosyometri, uyumIzleme, setUyumIzleme, onTumOzellikler }) {
+function AyarlarEkrani({ ogrenciler, setOgrenciler, records, setRecords, profiles, setProfiles, profiles2, setProfiles2, oogDegerlendirmeler, setOogDegerlendirmeler, castDegerlendirmeler, setCastDegerlendirmeler, pasDegerlendirmeler, setPasDegerlendirmeler, pasPerformanslar, setPasPerformanslar, akademikTaramalar, setAkademikTaramalar, bilproDegerlendirmeler, setBilproDegerlendirmeler, riskListesi, setRiskListesi, denemeler, setDenemeler, sevkler, setSevkler, mudahalePlan, setMudahalePlan, hazirlikNotlari, setHazirlikNotlari, ilerlemeNotlari, setIlerlemeNotlari, profNotlari, setProfNotlari, kutuphane, setKutuphane, yillar, setYillar, sinifListesi, setSinifListesi, aktifYil, setAktifYil, kademe, setKademe, sinavTuru, setSinavTuru, testKayitlari, setTestKayitlari, hatirlatmalar, setHatirlatmalar, netHaritasiKayitlari, setNetHaritasiKayitlari, konuHaritasiVerisi, setKonuHaritasiVerisi, bireyiTanima, setBireyiTanima, bdtAnaliz, setBdtAnaliz, sinavKaygisi, setSinavKaygisi, sosyometri, setSosyometri, uyumIzleme, setUyumIzleme, onTumOzellikler }) {
   const [yedekIndiriliyor, setYedekIndiriliyor] = useState(false);
   const [geriYuklemeOnay, setGeriYuklemeOnay] = useState(null);
   const [geriYukleniyor, setGeriYukleniyor] = useState(false);
@@ -20409,6 +21089,7 @@ function AyarlarEkrani({ ogrenciler, setOgrenciler, records, setRecords, profile
     const yeniPas = diziGuncelle(pasDegerlendirmeler);
     const yeniPasPerf = diziGuncelle(pasPerformanslar);
     const yeniAkademik = diziGuncelle(akademikTaramalar);
+    const yeniBilpro = diziGuncelle(bilproDegerlendirmeler);
     const yeniNetHaritasi = diziGuncelle(netHaritasiKayitlari);
     const yeniHatirlatmalar = diziGuncelle(hatirlatmalar);
     const yeniBireyiTanima = diziGuncelle(bireyiTanima);
@@ -20483,6 +21164,7 @@ function AyarlarEkrani({ ogrenciler, setOgrenciler, records, setRecords, profile
     setPasDegerlendirmeler(yeniPas); await savePasDegerlendirmeler(yeniPas);
     setPasPerformanslar(yeniPasPerf); await savePasPerformanslar(yeniPasPerf);
     setAkademikTaramalar(yeniAkademik); await saveAkademikTaramalar(yeniAkademik);
+    setBilproDegerlendirmeler(yeniBilpro); await saveBilproDegerlendirmeler(yeniBilpro);
     setNetHaritasiKayitlari(yeniNetHaritasi); await saveNetHaritasi(yeniNetHaritasi);
     setHatirlatmalar(yeniHatirlatmalar); await saveHatirlatmalar(yeniHatirlatmalar);
     setBireyiTanima(yeniBireyiTanima); await saveBireyiTanima(yeniBireyiTanima);
@@ -20537,6 +21219,7 @@ function AyarlarEkrani({ ogrenciler, setOgrenciler, records, setRecords, profile
         ["pasDegerlendirmeler", setPasDegerlendirmeler, savePasDegerlendirmeler],
         ["pasPerformanslar", setPasPerformanslar, savePasPerformanslar],
         ["akademikTaramalar", setAkademikTaramalar, saveAkademikTaramalar],
+        ["bilproDegerlendirmeler", setBilproDegerlendirmeler, saveBilproDegerlendirmeler],
         ["riskListesi", setRiskListesi, saveRiskListesi],
         ["denemeler", setDenemeler, saveDenemeler],
         ["sevkler", setSevkler, saveSevkler],
@@ -20582,7 +21265,7 @@ function AyarlarEkrani({ ogrenciler, setOgrenciler, records, setRecords, profile
       const yedek = {
         yedekTarihi: new Date().toISOString(),
         aktifYil, yillar, sinifListesi,
-        ogrenciler, records, profiles, profiles2, oogDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, pasPerformanslar, akademikTaramalar,
+        ogrenciler, records, profiles, profiles2, oogDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, pasPerformanslar, akademikTaramalar, bilproDegerlendirmeler,
         riskListesi, denemeler, sevkler, mudahalePlan,
         hazirlikNotlari, ilerlemeNotlari, profNotlari, kutuphane,
         testKayitlari, hatirlatmalar, netHaritasiKayitlari, konuHaritasiVerisi, bireyiTanima, bdtAnaliz, sinavKaygisi,
@@ -20931,6 +21614,7 @@ export default function App() {
   const [pasDegerlendirmeler, setPasDegerlendirmeler] = useState([]);
   const [pasPerformanslar, setPasPerformanslar] = useState([]);
   const [akademikTaramalar, setAkademikTaramalar] = useState([]);
+  const [bilproDegerlendirmeler, setBilproDegerlendirmeler] = useState([]);
   const [tab, setTab] = useState(() => pdrBaslangicSekmesi() || "ogrenci");
   // 3B Görünüm'den gelindiğinde hash tüketildikten sonra temizlenir —
   // sayfa yenilenince aynı sekmeye tekrar tekrar zıplamasın diye.
@@ -21114,6 +21798,7 @@ export default function App() {
     loadPasDegerlendirmeler().then(setPasDegerlendirmeler);
     loadPasPerformanslar().then(setPasPerformanslar);
     loadAkademikTaramalar().then(setAkademikTaramalar);
+    loadBilproDegerlendirmeler().then(setBilproDegerlendirmeler);
     loadKutuphane().then(setKutuphane);
     loadRiskListesi().then(setRiskListesi);
     loadDenemeler().then(setDenemeler);
@@ -21169,6 +21854,7 @@ export default function App() {
       "pdr-pas": () => loadPasDegerlendirmeler().then(setPasDegerlendirmeler),
       "pdr-pasperf": () => loadPasPerformanslar().then(setPasPerformanslar),
       "pdr-akademik": () => loadAkademikTaramalar().then(setAkademikTaramalar),
+      "pdr-bilpro": () => loadBilproDegerlendirmeler().then(setBilproDegerlendirmeler),
       "pdr-kutuphane": () => loadKutuphane().then(setKutuphane),
       "pdr-risk": () => loadRiskListesi().then(setRiskListesi),
       "pdr-denemeler": () => loadDenemeler().then(setDenemeler),
@@ -21690,6 +22376,8 @@ export default function App() {
     setPasPerformanslar(updPasPerf); await savePasPerformanslar(updPasPerf);
     const updAkademik = akademikTaramalar.filter(o => !silinecekMi(o.studentName, o.className, o.numara));
     setAkademikTaramalar(updAkademik); await saveAkademikTaramalar(updAkademik);
+    const updBilpro = bilproDegerlendirmeler.filter(o => !silinecekMi(o.studentName, o.className, o.numara));
+    setBilproDegerlendirmeler(updBilpro); await saveBilproDegerlendirmeler(updBilpro);
 
     function pdrSozlukSinifTemizle(sozluk) {
       const yeni = { ...sozluk };
@@ -21748,7 +22436,7 @@ export default function App() {
         const parse = d => { const [g, ay, y] = (d||"").split("."); return new Date(`${y}-${ay}-${g}`); };
         return parse(a.date) - parse(b.date);
       });
-    setRaporVerisi(raporVerisiOlustur({ ogrenci: ogrenciAdi, ogrenciSinif: profil1.className, profil1, profil2, gorusmeler, denemeler: pdrSozlukOku(denemeler, ogrenciAdi, profil1.className, profil1.numara) || {}, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, pasPerformanslar, akademikTaramalar, hazirlikNotlari, ilerlemeNotlari, sevkler }));
+    setRaporVerisi(raporVerisiOlustur({ ogrenci: ogrenciAdi, ogrenciSinif: profil1.className, profil1, profil2, gorusmeler, denemeler: pdrSozlukOku(denemeler, ogrenciAdi, profil1.className, profil1.numara) || {}, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, pasPerformanslar, akademikTaramalar, bilproDegerlendirmeler, hazirlikNotlari, ilerlemeNotlari, sevkler }));
   }
 
   async function handleProf2Analiz() {
@@ -22219,6 +22907,8 @@ function pdrBaslangicSekmesi() {
     setPasPerformanslar(kalanPasPerf); await savePasPerformanslar(kalanPasPerf);
     const kalanAkademik = akademikTaramalar.filter(o => !silinecekMi(o.studentName, o.className, o.numara));
     setAkademikTaramalar(kalanAkademik); await saveAkademikTaramalar(kalanAkademik);
+    const kalanBilpro = bilproDegerlendirmeler.filter(o => !silinecekMi(o.studentName, o.className, o.numara));
+    setBilproDegerlendirmeler(kalanBilpro); await saveBilproDegerlendirmeler(kalanBilpro);
 
     // Grup çalışmaları öğrenciye değil doğrudan yıla bağlı — silinen
     // yılın kayıtları da temizlenmeli.
@@ -22779,6 +23469,8 @@ function pdrBaslangicSekmesi() {
             setPasPerformanslar={setPasPerformanslar}
             akademikTaramalar={akademikTaramalar}
             setAkademikTaramalar={setAkademikTaramalar}
+            bilproDegerlendirmeler={bilproDegerlendirmeler}
+            setBilproDegerlendirmeler={setBilproDegerlendirmeler}
             mudahalePlan={mudahalePlan}
             setMudahalePlan={setMudahalePlan}
             setTab={setTab}
@@ -22899,6 +23591,7 @@ function pdrBaslangicSekmesi() {
           pasDegerlendirmeler={pasDegerlendirmeler} setPasDegerlendirmeler={setPasDegerlendirmeler}
           pasPerformanslar={pasPerformanslar} setPasPerformanslar={setPasPerformanslar}
           akademikTaramalar={akademikTaramalar} setAkademikTaramalar={setAkademikTaramalar}
+          bilproDegerlendirmeler={bilproDegerlendirmeler} setBilproDegerlendirmeler={setBilproDegerlendirmeler}
           riskListesi={riskListesi} setRiskListesi={setRiskListesi}
           denemeler={denemeler} setDenemeler={setDenemeler}
           sevkler={sevkler} setSevkler={setSevkler}
@@ -22960,7 +23653,7 @@ function pdrBaslangicSekmesi() {
             records={records}
             kutuphane={kutuphane}
             sinavTuru={sinavTuru}
-            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, pasPerformanslar, akademikTaramalar, hazirlikNotlari, ilerlemeNotlari, sevkler, mudahaleOnerileri, uyumIzleme }))}
+            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, pasPerformanslar, akademikTaramalar, bilproDegerlendirmeler, hazirlikNotlari, ilerlemeNotlari, sevkler, mudahaleOnerileri, uyumIzleme }))}
             onDegerlendirmeAc={() => setDegerlendirmeAcik(true)}
           />
         )}
@@ -23038,7 +23731,7 @@ function pdrBaslangicSekmesi() {
             setOogDegerlendirmeler={setOogDegerlendirmeler}
             profNotlari={profNotlari}
             setProfNotlari={setProfNotlari}
-            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, pasPerformanslar, akademikTaramalar, hazirlikNotlari, ilerlemeNotlari, sevkler, mudahaleOnerileri, uyumIzleme }))}
+            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, pasPerformanslar, akademikTaramalar, bilproDegerlendirmeler, hazirlikNotlari, ilerlemeNotlari, sevkler, mudahaleOnerileri, uyumIzleme }))}
             onSinifGuncelle={async (eskiAd, eskiSinif, eskiNumara, yeniAd, yeniSinif) => {
               const ayniMi = (ad, sinif, no) => pdrAyniOgrenci(eskiAd, eskiSinif, ad, sinif, eskiNumara, no);
 
@@ -23165,6 +23858,9 @@ function pdrBaslangicSekmesi() {
 
               const yeniAkademik = akademikTaramalar.map(o => ayniMi(o.studentName, o.className, o.numara) ? { ...o, studentName: yeniAd, className: yeniSinif } : o);
               setAkademikTaramalar(yeniAkademik); await saveAkademikTaramalar(yeniAkademik);
+
+              const yeniBilpro = bilproDegerlendirmeler.map(o => ayniMi(o.studentName, o.className, o.numara) ? { ...o, studentName: yeniAd, className: yeniSinif } : o);
+              setBilproDegerlendirmeler(yeniBilpro); await saveBilproDegerlendirmeler(yeniBilpro);
             }}
             onOgrenciSil={async (studentName, className, numara) => {
               const silinecekMi = (ad, sinif, no) => pdrAyniOgrenci(studentName, className, ad, sinif, numara, no);
@@ -23206,6 +23902,9 @@ function pdrBaslangicSekmesi() {
 
               const updAkademik = akademikTaramalar.filter(o => !silinecekMi(o.studentName, o.className, o.numara));
               setAkademikTaramalar(updAkademik); await saveAkademikTaramalar(updAkademik);
+
+              const updBilpro = bilproDegerlendirmeler.filter(o => !silinecekMi(o.studentName, o.className, o.numara));
+              setBilproDegerlendirmeler(updBilpro); await saveBilproDegerlendirmeler(updBilpro);
 
               // Bireyi Tanıma notları ve BDT (bilişsel davranışçı terapi) analiz
               // maddeleri de öğrenciye özel diziler — daha önce silme işleminde
@@ -23361,7 +24060,7 @@ function pdrBaslangicSekmesi() {
             profiles2={profiles2}
             sosyometri={sosyometri}
             uyumIzleme={uyumIzleme}
-            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, pasPerformanslar, akademikTaramalar, hazirlikNotlari, ilerlemeNotlari, sevkler, mudahaleOnerileri, uyumIzleme }))}
+            onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, pasPerformanslar, akademikTaramalar, bilproDegerlendirmeler, hazirlikNotlari, ilerlemeNotlari, sevkler, mudahaleOnerileri, uyumIzleme }))}
           />
         )}
 

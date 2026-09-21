@@ -5040,13 +5040,23 @@ const PASPERF_ILERLEME_OLCEGI = [
 // Eğim ≈ 0  → puanlar yatay seyrediyor (stabil ama ilerlemiyor)
 // Eğim < 0  → puanlar oturum ilerledikçe düşüyor (gerileme/yorgunluk sinyali)
 // Formül: b = Σ((xi - x̄)(yi - ȳ)) / Σ((xi - x̄)²)  — klasik en küçük kareler eğimi.
-function pasperfGelisimHiziHesapla(puanliOturumlar) {
-  // puanliOturumlar: [{no, puan}, ...] — tamamlanmış ve puanlanmış oturumlar (sırayla değil, no'ya göre sıralanır)
-  const veri = (puanliOturumlar || [])
-    .filter(o => typeof o.puan === "number")
-    .sort((a, b) => a.no - b.no);
+// Eğim yorumu için gereken EN AZ puanlı oturum sayısı. İki noktadan geçen
+// doğru her zaman kusursuz uyar ama hiçbir şey söylemez; üç nokta da bir
+// kötü günün yönü çevirmesine yetecek kadar azdır. Bu eşiğin altında yön
+// bildirmiyoruz — "İvmeli gelişim" gibi kesin duran bir cümle, aslında
+// tesadüfü anlatmış olur.
+const PASPERF_GELISIM_MIN_OTURUM = 4;
+
+function pasperfPuanRenk(puan) {
+  return puan >= 4 ? "#1A8C5B" : puan >= 3 ? "#457B9D" : puan >= 2 ? "#B07D1A" : "#C0392B";
+}
+
+// Saf en küçük kareler eğimi — yorum üretmez, yalnızca doğruyu döndürür.
+// Ayrı durmasının sebebi: etkili oturum kontrolünde aynı hesabı tekrar
+// tekrar (her oturum çıkarılmış hâliyle) çalıştırmamız gerekiyor.
+function pasperfEgimHesapla(veri) {
   const n = veri.length;
-  if (n < 2) return null; // en az 2 nokta olmadan bir "hız/eğim" tanımlanamaz
+  if (n < 2) return null;
   const xOrt = veri.reduce((s, o) => s + o.no, 0) / n;
   const yOrt = veri.reduce((s, o) => s + o.puan, 0) / n;
   let pay = 0, payda = 0;
@@ -5055,14 +5065,99 @@ function pasperfGelisimHiziHesapla(puanliOturumlar) {
     payda += (o.no - xOrt) * (o.no - xOrt);
   });
   if (payda === 0) return null;
-  const egim = pay / payda; // oturum başına ortalama puan değişimi
-  const kesisim = yOrt - egim * xOrt; // y = egim*x + kesisim (doğrunun denklemi)
-  let yorum, renk;
-  if (egim >= 0.15) { yorum = "İvmeli gelişim"; renk = "#1A8C5B"; }
-  else if (egim >= 0.03) { yorum = "Yavaş ama istikrarlı gelişim"; renk = "#457B9D"; }
-  else if (egim > -0.03) { yorum = "Yatay seyir (platoda)"; renk = "#B07D1A"; }
-  else { yorum = "Gerileme sinyali"; renk = "#C0392B"; }
-  return { egim, kesisim, n, yorum, renk, ilkPuan: veri[0].puan, sonPuan: veri[n - 1].puan };
+  const egim = pay / payda;
+  return { egim, kesisim: yOrt - egim * xOrt };
+}
+
+function pasperfEgimYorum(egim) {
+  if (egim >= 0.15) return { yorum: "İvmeli gelişim", renk: "#1A8C5B" };
+  if (egim >= 0.03) return { yorum: "Yavaş ama istikrarlı gelişim", renk: "#457B9D" };
+  if (egim > -0.03) return { yorum: "Yatay seyir (platoda)", renk: "#B07D1A" };
+  return { yorum: "Gerileme sinyali", renk: "#C0392B" };
+}
+
+function pasperfGelisimHiziHesapla(puanliOturumlar) {
+  // puanliOturumlar: [{no, puan}, ...] — tamamlanmış ve puanlanmış oturumlar (no'ya göre sıralanır)
+  const veri = (puanliOturumlar || [])
+    .filter(o => typeof o.puan === "number")
+    .sort((a, b) => a.no - b.no);
+  const n = veri.length;
+  if (n < 2) return null;
+  // Az veri: noktalar çizilsin ama YÖN SÖYLENMESİN.
+  if (n < PASPERF_GELISIM_MIN_OTURUM) {
+    return { yetersiz: true, n, gereken: PASPERF_GELISIM_MIN_OTURUM, noktalar: veri };
+  }
+  const t = pasperfEgimHesapla(veri);
+  if (!t) return null;
+  const { yorum, renk } = pasperfEgimYorum(t.egim);
+
+  // ── Etkili oturum kontrolü (leave-one-out) ────────────────────────────
+  // Her oturumu tek tek çıkarıp eğimi yeniden hesaplarız. Yorum değişiyorsa
+  // sonuç TEK BİR OTURUMA bağlı demektir — çocuğun hasta olduğu ya da aç
+  // geldiği bir gün, bütün planı "gerileme" gibi gösterebilir.
+  let etkiliOturum = null;
+  for (let i = 0; i < n; i++) {
+    const eksik = veri.filter((_, k) => k !== i);
+    const t2 = pasperfEgimHesapla(eksik);
+    if (!t2) continue;
+    const y2 = pasperfEgimYorum(t2.egim).yorum;
+    if (y2 !== yorum) { etkiliOturum = { no: veri[i].no, puan: veri[i].puan, yeniYorum: y2 }; break; }
+  }
+
+  return {
+    egim: t.egim, kesisim: t.kesisim, n, yorum, renk,
+    ilkPuan: veri[0].puan, sonPuan: veri[n - 1].puan,
+    noktalar: veri, etkiliOturum,
+  };
+}
+
+// ── Gelişim seyri grafiği — oturum puanları (1-5) ve eğilim doğrusu ──────
+// Kütüphane kullanılmaz, saf SVG. Eskiden burada alanları birbirine karıştıran
+// yükseklikleri farklı küçük çubuklar vardı; o çubuklar ne ekseni ne de eğilimi
+// gösteriyordu. Bu grafik ALAN BAZINDA çizilir (eğim de öyle hesaplanıyor).
+function PasperfGelisimGrafigi({ sonuc, yukseklik = 104 }) {
+  const noktalar = (sonuc && sonuc.noktalar) || [];
+  if (noktalar.length < 2) return null;
+  const G = 300, sol = 20, sag = 10, ust = 10, alt = 20;
+  const gw = G - sol - sag, gh = yukseklik - ust - alt;
+  const nolar = noktalar.map(o => o.no);
+  const xMin = Math.min(...nolar), xMax = Math.max(...nolar);
+  const X = no => sol + (xMax === xMin ? gw / 2 : ((no - xMin) / (xMax - xMin)) * gw);
+  const Y = puan => ust + gh - ((Math.max(1, Math.min(5, puan)) - 1) / 4) * gh;
+  const etkiliNo = sonuc.etkiliOturum ? sonuc.etkiliOturum.no : null;
+  const cizgiVar = !sonuc.yetersiz && typeof sonuc.egim === "number";
+
+  return (
+    <svg viewBox={`0 0 ${G} ${yukseklik}`} width="100%" height={yukseklik}
+         style={{ display: "block", overflow: "visible" }} role="img"
+         aria-label="Oturum puanlarının seyri">
+      {[1, 2, 3, 4, 5].map(p => (
+        <g key={p}>
+          <line x1={sol} y1={Y(p)} x2={G - sag} y2={Y(p)}
+                stroke={p === 1 || p === 5 ? "#DDD" : "#EEE"} strokeWidth="1" />
+          {(p === 1 || p === 3 || p === 5) && (
+            <text x={sol - 5} y={Y(p) + 3} textAnchor="end" fontSize="8" fill="#999">{p}</text>
+          )}
+        </g>
+      ))}
+      <polyline fill="none" stroke="#C9C9C9" strokeWidth="1.2"
+                points={noktalar.map(o => `${X(o.no)},${Y(o.puan)}`).join(" ")} />
+      {cizgiVar && (
+        <line x1={X(xMin)} y1={Y(sonuc.kesisim + sonuc.egim * xMin)}
+              x2={X(xMax)} y2={Y(sonuc.kesisim + sonuc.egim * xMax)}
+              stroke={sonuc.renk} strokeWidth="2" strokeDasharray="5 3" />
+      )}
+      {noktalar.map(o => (
+        <g key={o.no}>
+          {o.no === etkiliNo && (
+            <circle cx={X(o.no)} cy={Y(o.puan)} r="7" fill="none" stroke="#B07D1A" strokeWidth="1.5" />
+          )}
+          <circle cx={X(o.no)} cy={Y(o.puan)} r="3.6" fill={pasperfPuanRenk(o.puan)} />
+          <text x={X(o.no)} y={yukseklik - 6} textAnchor="middle" fontSize="8" fill="#999">{o.no}</text>
+        </g>
+      ))}
+    </svg>
+  );
 }
 
 function pasperfMudahalePlaniOlustur(zayifAlanlar, kademe) {
@@ -11605,7 +11700,6 @@ ${kademe ? "Planı öğrencinin yaş/gelişim dönemine uygun şekilde oluştur.
                       const tamamlanan = p.oturumlar.filter(o=>o.tamamlandi).length;
                       const puanliOturumlar = p.oturumlar.filter(o=>o.tamamlandi && typeof o.puan === "number");
                       const ortPuan = puanliOturumlar.length > 0 ? (puanliOturumlar.reduce((s,o)=>s+o.puan,0)/puanliOturumlar.length) : null;
-                      const puanRenk = (puan) => puan >= 4 ? "#1A8C5B" : puan >= 3 ? "#457B9D" : puan >= 2 ? "#B07D1A" : "#C0392B";
                       // Bir plan birden fazla zayıf alanı (Dikkat, Planlama, ...) tek listede art arda
                       // numaralandırıp barındırabiliyor — gelişim hızını alanlar karışmasın diye HER ALAN
                       // İÇİN AYRI hesaplıyoruz (aynı planda tek alan varsa tek satır çıkar).
@@ -11627,29 +11721,45 @@ ${kademe ? "Planı öğrencinin yaş/gelişim dönemine uygun şekilde oluştur.
                           <div style={{height:6,background:BORDER,borderRadius:4,overflow:"hidden",marginBottom:8}}>
                             <div style={{height:"100%",width:`${Math.round(tamamlanan/p.oturumlar.length*100)}%`,background:"#B5651D"}} />
                           </div>
-                          {puanliOturumlar.length > 1 && (
-                            <div style={{display:"flex", alignItems:"flex-end", gap:3, marginBottom:8, padding:"4px 2px"}}>
-                              {puanliOturumlar.map(o => (
-                                <div key={o.no} title={`${o.no}. Oturum: ${o.puan}/5`} style={{
-                                  width:14, height: 8 + o.puan * 6, background: puanRenk(o.puan), borderRadius:2
-                                }} />
-                              ))}
-                              <span style={{fontSize:9.5, color:MUTED, marginLeft:4, marginBottom:1}}>oturum bazlı performans trendi</span>
-                            </div>
-                          )}
                           {gelisimHizlari.length > 0 && (
                             <div style={{display:"flex", flexDirection:"column", gap:5, marginBottom:8}}>
                               {gelisimHizlari.map(g => (
-                                <div key={g.anahtar} style={{display:"flex", alignItems:"center", gap:8, background:"#F7F7F7", border:`1px solid ${BORDER}`, borderRadius:8, padding:"6px 10px"}}>
-                                  <span style={{fontSize:15}}>{g.sonuc.egim >= 0.03 ? "📈" : g.sonuc.egim > -0.03 ? "➖" : "📉"}</span>
-                                  <span style={{flex:1, fontSize:10.5, color:TEXT}}>
-                                    <b style={{color:g.sonuc.renk}}>
-                                      {gelisimHizlari.length > 1 ? `${g.alanAd} — ` : ""}Gelişim Hızı: {g.sonuc.egim >= 0 ? "+" : ""}{g.sonuc.egim.toFixed(2)} puan/oturum
-                                    </b>
-                                    <span style={{display:"block", color:MUTED, marginTop:1}}>
-                                      {g.sonuc.yorum} · {g.sonuc.n} puanlı oturuma göre hesaplandı (ilk: {g.sonuc.ilkPuan}/5 → son: {g.sonuc.sonPuan}/5)
-                                    </span>
-                                  </span>
+                                <div key={g.anahtar} style={{background:"#F7F7F7", border:`1px solid ${BORDER}`, borderRadius:8, padding:"8px 10px"}}>
+                                  {gelisimHizlari.length > 1 && (
+                                    <div style={{fontSize:10.5, fontWeight:800, color:TEXT, marginBottom:4}}>{g.alanAd}</div>
+                                  )}
+                                  <PasperfGelisimGrafigi sonuc={g.sonuc} />
+                                  {g.sonuc.yetersiz ? (
+                                    <div style={{display:"flex", alignItems:"flex-start", gap:7, marginTop:4}}>
+                                      <span style={{fontSize:15}}>➖</span>
+                                      <span style={{flex:1, fontSize:10.5, color:MUTED, lineHeight:1.55}}>
+                                        <b style={{color:"#B07D1A"}}>Yön söylemek için henüz erken.</b>
+                                        <span style={{display:"block", marginTop:1}}>
+                                          Gelişim hızı için en az {g.sonuc.gereken} puanlı oturum gerekir; şu an {g.sonuc.n} tane var.
+                                          Bu kadar az oturumda çizilen eğilim, gelişmeyi değil tesadüfü gösterir.
+                                        </span>
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <div style={{display:"flex", alignItems:"flex-start", gap:7, marginTop:4}}>
+                                      <span style={{fontSize:15}}>{g.sonuc.egim >= 0.03 ? "📈" : g.sonuc.egim > -0.03 ? "➖" : "📉"}</span>
+                                      <span style={{flex:1, fontSize:10.5, color:TEXT, lineHeight:1.55}}>
+                                        <b style={{color:g.sonuc.renk}}>
+                                          Gelişim Hızı: {g.sonuc.egim >= 0 ? "+" : ""}{g.sonuc.egim.toFixed(2)} puan/oturum
+                                        </b>
+                                        <span style={{display:"block", color:MUTED, marginTop:1}}>
+                                          {g.sonuc.yorum} · {g.sonuc.n} puanlı oturuma göre hesaplandı (ilk: {g.sonuc.ilkPuan}/5 → son: {g.sonuc.sonPuan}/5)
+                                        </span>
+                                        {g.sonuc.etkiliOturum && (
+                                          <span style={{display:"block", marginTop:5, background:"#FDF6E3", border:"1px solid #E8D08A", borderRadius:6, padding:"5px 8px", color:"#8B5A00"}}>
+                                            <b>⚠️ Bu sonuç tek bir oturuma bağlı.</b> {g.sonuc.etkiliOturum.no}. oturum ({g.sonuc.etkiliOturum.puan}/5)
+                                            hesaptan çıkarılınca yorum "{g.sonuc.etkiliOturum.yeniYorum}" oluyor. O gün öğrencide özel bir
+                                            durum (hastalık, uykusuzluk, olay) var mıydı kontrol et; varsa bu eğilimi tek başına yorumlama.
+                                          </span>
+                                        )}
+                                      </span>
+                                    </div>
+                                  )}
                                 </div>
                               ))}
                             </div>

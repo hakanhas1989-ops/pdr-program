@@ -2030,9 +2030,13 @@ function pasSonucHesapla(cevaplar) {
 // kazanımlarına hakim göründüğünü kabaca belirlemektir (kademeli/basamaklı
 // tarama mantığı). Kesin akademik başarı ölçümü yerine geçmez.
 const AKADEMIK_DERSLER = [
-  { key: "turkce", label: "📖 Türkçe" },
-  { key: "matematik", label: "🔢 Matematik" },
-  { key: "fen", label: "🔬 Fen Bilimleri" },
+  { key: "turkce", label: "📖 Türkçe", kisa: "📖 Türkçe" },
+  { key: "matematik", label: "🔢 Matematik", kisa: "🔢 Matematik" },
+  { key: "fen", label: "🔬 Fen Bilimleri", kisa: "🔬 Fen" },
+  { key: "inkilap", label: "🏛️ İnkılap Tarihi / Sosyal Bilgiler", kisa: "🏛️ İnkılap",
+    aciklama: "5-7. sınıf soruları, İnkılap Tarihi'ne zemin hazırlayan Sosyal Bilgiler kazanımlarından (Kültür ve Miras, Etkin Vatandaşlık); 8. sınıf soruları T.C. İnkılap Tarihi ve Atatürkçülük dersinden seçilmiştir." },
+  { key: "din", label: "📗 Din Kültürü ve Ahlak Bilgisi", kisa: "📗 Din Kültürü",
+    aciklama: "Sorular MEB Din Kültürü ve Ahlak Bilgisi dersi kazanımlarına dayalıdır; bilgi düzeyini ve ahlaki kavramları anlamayı ölçer." },
 ];
 const AKADEMIK_SINIFLAR = [5, 6, 7, 8];
 const AKADEMIK_UYGULANMADI = "uygulanmadi";
@@ -2129,6 +2133,66 @@ const AKADEMIK_SORU_HAVUZU = {
       {"metin": "Bir öğrenci, elindeki çözeltiye kırmızı turnusol kâğıdı daldırdığında kâğıdın mavi renk aldığını gözlemlemiştir.", "soru": "Bu çözeltiyle ilgili aşağıdakilerden hangisi söylenebilir?", "secenekler": ["Asidik özellik gösterir.", "Bazik özellik gösterir.", "Nötrdür.", "Saf sudur."], "dogru": 1, "kazanim": "asit-baz"},
       {"metin": "Kuzey Yarım Küre'de yaz mevsimi yaşanırken Güney Yarım Küre'de kış mevsimi yaşanmaktadır.", "soru": "Mevsimlerin oluşmasının temel nedeni aşağıdakilerden hangisidir?", "secenekler": ["Dünya'nın Güneş'e olan uzaklığının büyük ölçüde değişmesi", "Dünya'nın eksen eğikliği ile Güneş çevresindeki dolanımı", "Güneş'in yaydığı ısının mevsimlere göre değişmesi", "Dünya'nın kendi ekseni etrafında dönmesi"], "dogru": 1, "kazanim": "mevsimlerin oluşumu"},
       {"metin": "Kapalı bir kapta 10 gram demir tozu ile 6 gram kükürt tozu ısıtılarak tepkimeye sokulmuş ve demir sülfür oluşmuştur.", "soru": "Kütlenin korunumu yasasına göre kapta oluşan ürünün kütlesi kaç gramdır?", "secenekler": ["4 g", "10 g", "16 g", "60 g"], "dogru": 2, "kazanim": "kütlenin korunumu"},
+    ],
+  },
+  inkilap: {
+    5: [
+      {"metin": "Bir sınıfta öğrenciler; okula gitmenin, sağlıklı beslenmenin ve oyun oynamanın her çocuğun sahip olduğu temel haklar arasında yer aldığını öğrenmiştir.", "soru": "Metinde söz edilen bu haklar aşağıdakilerden hangisiyle adlandırılır?", "secenekler": ["Çocuk hakları", "Trafik kuralları", "Görgü kuralları", "Okul yönetmeliği"], "dogru": 0, "kazanim": "Sosyal Bilgiler — birey ve toplum / çocuk hakları"},
+      {"metin": "Bir öğrenci Çorum yakınlarındaki Hattuşa'yı gezmiş; burada, başkenti Hattuşa olan ve Anadolu'da kurulan bir uygarlığın kalıntılarını görmüştür.", "soru": "Öğrencinin gezdiği kalıntılar hangi uygarlığa aittir?", "secenekler": ["Urartular", "Hititler", "Lidyalılar", "Frigler"], "dogru": 1, "kazanim": "Sosyal Bilgiler — Anadolu uygarlıkları"},
+      {"metin": "Bir öğrenci, ülkemizin kurtuluşu için verilen mücadeleyi yöneten ve Çanakkale'de askerlerine \"Ben size taarruzu değil, ölmeyi emrediyorum.\" diyen komutanı araştırmaktadır.", "soru": "Bu söz aşağıdakilerden hangisine aittir?", "secenekler": ["Mustafa Kemal Atatürk", "Fatih Sultan Mehmet", "Kanuni Sultan Süleyman", "Alparslan"], "dogru": 0, "kazanim": "Sosyal Bilgiler — millî mücadele kahramanları"},
+      {"metin": "Bir öğrenci, sınıftaki Türkiye haritasında şu bilgileri okumuştur:\nEdirne — ülkenin batısında   ·   Kars — ülkenin doğusunda   ·   Sinop — ülkenin kuzeyinde", "soru": "Bu bilgilere göre Sinop'tan Kars'a giden bir kişi ağırlıklı olarak hangi yöne doğru ilerler?", "secenekler": ["Batıya", "Doğuya", "Kuzeye", "Güneye"], "dogru": 1, "kazanim": "Sosyal Bilgiler — harita ve yön bilgisi"},
+      {"metin": "Ailesiyle birlikte yeni bir eve taşınan Ayşe'nin, adres bilgilerinin resmî kayıtlarda güncellenmesi gerekmektedir.", "soru": "Bu işlem için aşağıdaki kurumlardan hangisine başvurulmalıdır?", "secenekler": ["Nüfus Müdürlüğü", "Emniyet Müdürlüğü", "Millî Eğitim Müdürlüğü", "Belediye Zabıta Müdürlüğü"], "dogru": 0, "kazanim": "Sosyal Bilgiler — etkin vatandaşlık / kurumlar"},
+    ],
+    6: [
+      {"metin": "Bir öğrenci, Orta Asya'da kurulan ve tarihte \"Türk\" adını devlet adı olarak ilk kez kullanan devleti araştırmaktadır.", "soru": "Bu devlet aşağıdakilerden hangisidir?", "secenekler": ["Asya Hun Devleti", "Göktürk Devleti", "Uygur Devleti", "Avar Devleti"], "dogru": 1, "kazanim": "Sosyal Bilgiler — ilk Türk devletleri"},
+      {"metin": "Moğolistan'da bulunan ve Türk tarihinin ilk yazılı belgeleri kabul edilen taşlar, Göktürkler döneminden kalmıştır. Bu taşlarda hükümdarlar halka seslenmektedir.", "soru": "Metinde söz edilen bu taşlar aşağıdakilerden hangisidir?", "secenekler": ["Orhun (Göktürk) Yazıtları", "Kadeş Antlaşması", "Karum Tabletleri", "Lidya Paraları"], "dogru": 0, "kazanim": "Sosyal Bilgiler — kültür ve miras"},
+      {"metin": "Bir ülkede yöneticiler halk tarafından belirli sürelerle seçilmekte, herkes düşüncesini özgürce ifade edebilmekte ve kanunlar herkese eşit uygulanmaktadır.", "soru": "Bu ülkede uygulanan yönetim biçimi aşağıdakilerden hangisidir?", "secenekler": ["Monarşi", "Oligarşi", "Demokrasi", "Teokrasi"], "dogru": 2, "kazanim": "Sosyal Bilgiler — demokrasi"},
+      {"metin": "Bir ilçenin yıllara göre nüfusu:\n2010: 25.000   ·   2015: 32.000   ·   2020: 45.000   ·   2025: 44.000", "soru": "Bu verilere göre aşağıdakilerden hangisi doğrudur?", "secenekler": ["İlçe nüfusu her dönem artmıştır.", "En büyük nüfus artışı 2015-2020 arasında yaşanmıştır.", "2025'te nüfus, 2010'un iki katına ulaşmıştır.", "İlçe nüfusu hiç değişmemiştir."], "dogru": 1, "kazanim": "Sosyal Bilgiler — nüfus verisi yorumlama"},
+      {"metin": "751 yılında Araplarla Çinliler arasında yapılan bir savaşta Türkler Arapların yanında yer almış; bu savaştan sonra Türkler ile Müslümanlar arasındaki ilişkiler hızla gelişmiştir.", "soru": "Metinde söz edilen savaş aşağıdakilerden hangisidir?", "secenekler": ["Malazgirt Savaşı", "Talas Savaşı", "Dandanakan Savaşı", "Miryokefalon Savaşı"], "dogru": 1, "kazanim": "Sosyal Bilgiler — Türklerin İslamiyet'i kabulü"},
+    ],
+    7: [
+      {"metin": "Bir öğrenci, Osmanlı Devleti'nin 1299'da kurulduğunu ve devletin adını kurucusundan aldığını öğrenmiştir.", "soru": "Osmanlı Devleti'nin kurucusu kimdir?", "secenekler": ["Ertuğrul Gazi", "Osman Bey", "Orhan Bey", "I. Murat"], "dogru": 1, "kazanim": "Sosyal Bilgiler — Osmanlı'nın kuruluşu"},
+      {"metin": "1453'te İstanbul'un fethedilmesi yalnızca bir şehrin el değiştirmesi değildir; tarihçiler bu olayı bir çağın kapanıp yeni bir çağın açılması olarak kabul eder.", "soru": "Bu metne göre 1453 yılı hangi iki çağ arasında sınır kabul edilmiştir?", "secenekler": ["İlk Çağ - Orta Çağ", "Orta Çağ - Yeni Çağ", "Yeni Çağ - Yakın Çağ", "Yakın Çağ - Günümüz"], "dogru": 1, "kazanim": "Sosyal Bilgiler — İstanbul'un fethi ve çağ değişimi"},
+      {"metin": "Bir gazeteci, haber yaparken kişilerin evlerinde çekilmiş fotoğraflarını izinlerini almadan yayımlamıştır.", "soru": "Bu davranış öncelikle hangi hakkın ihlalidir?", "secenekler": ["Eğitim hakkı", "Özel hayatın gizliliği", "Seçme ve seçilme hakkı", "Mülkiyet hakkı"], "dogru": 1, "kazanim": "Sosyal Bilgiler — iletişim ve haklar"},
+      {"metin": "Türkiye Cumhuriyeti'nde kanun yapma görevi TBMM'ye, kanunları uygulama görevi yürütmeye, uyuşmazlıkları çözme görevi ise bağımsız mahkemelere verilmiştir.", "soru": "Bu düzenleme aşağıdakilerden hangisiyle adlandırılır?", "secenekler": ["Kuvvetler birliği", "Kuvvetler ayrılığı", "Tek partili yönetim", "Yerel yönetim"], "dogru": 1, "kazanim": "Sosyal Bilgiler — yaşayan demokrasi"},
+      {"metin": "Bir bölgede halkın büyük bölümü çay ve fındık üretimiyle geçimini sağlamakta, bölge yıl boyunca bol yağış almaktadır.", "soru": "Bu bilgilere göre söz edilen bölge aşağıdakilerden hangisidir?", "secenekler": ["Doğu Anadolu", "Karadeniz", "İç Anadolu", "Güneydoğu Anadolu"], "dogru": 1, "kazanim": "Sosyal Bilgiler — ekonomik faaliyetler"},
+    ],
+    8: [
+      {"metin": "30 Ekim 1918'de imzalanan bir ateşkes antlaşmasının ardından İtilaf Devletleri Anadolu'yu işgal etmeye başlamış; bölgelerini korumak isteyen halk kendi silahlı direniş birliklerini kurmuştur.", "soru": "Metinde söz edilen ateşkes antlaşması aşağıdakilerden hangisidir?", "secenekler": ["Mudanya Ateşkes Antlaşması", "Mondros Ateşkes Antlaşması", "Sevr Antlaşması", "Lozan Antlaşması"], "dogru": 1, "kazanim": "İnkılap Tarihi — millî uyanış"},
+      {"metin": "22 Haziran 1919'da yayımlanan bir genelgede şu ifade yer almıştır:\n\"Vatanın bütünlüğü, milletin bağımsızlığı tehlikededir. Milletin istiklalini yine milletin azim ve kararı kurtaracaktır.\"", "soru": "Bu ifadeyle öncelikle aşağıdakilerden hangisi vurgulanmıştır?", "secenekler": ["Kurtuluşun ancak manda ve himaye ile mümkün olduğu", "Kurtuluşun, milletin kendi kararı ve mücadelesiyle sağlanacağı", "Kararların yalnızca padişah tarafından verilmesi gerektiği", "İşgallerin kabul edilmesi gerektiği"], "dogru": 1, "kazanim": "İnkılap Tarihi — Amasya Genelgesi / millî egemenlik"},
+      {"metin": "23 Ağustos - 13 Eylül 1921 tarihleri arasında yirmi iki gün yirmi iki gece süren ve sonunda Türk ordusunun savunmadan taarruza geçtiği savaştan sonra Mustafa Kemal'e \"Gazi\" unvanı ve mareşallik rütbesi verilmiştir.", "soru": "Metinde anlatılan savaş aşağıdakilerden hangisidir?", "secenekler": ["I. İnönü Savaşı", "Kütahya-Eskişehir Savaşları", "Sakarya Meydan Muharebesi", "Büyük Taarruz"], "dogru": 2, "kazanim": "İnkılap Tarihi — Kurtuluş Savaşı cepheleri"},
+      {"metin": "1 Kasım 1928'de kabul edilen bir inkılapla Arap harfleri yerine Latin harfleri esas alınmış; böylece okuma yazma öğrenmek kolaylaşmış ve okuryazar oranı hızla artmıştır.", "soru": "Metinde söz edilen inkılap aşağıdakilerden hangisidir?", "secenekler": ["Harf İnkılabı", "Kılık Kıyafet İnkılabı", "Takvim ve Saat Değişikliği", "Tevhid-i Tedrisat Kanunu"], "dogru": 0, "kazanim": "İnkılap Tarihi — eğitim ve kültür alanındaki inkılaplar"},
+      {"metin": "1934 yılında kadınlara milletvekili seçme ve seçilme hakkı tanınmış; böylece toplumda ayrıcalıkların kaldırılması ve kanun önünde eşitlik güçlendirilmiştir.", "soru": "Bu gelişme Atatürk ilkelerinden hangisiyle doğrudan ilişkilidir?", "secenekler": ["Milliyetçilik", "Halkçılık", "Devletçilik", "Laiklik"], "dogru": 1, "kazanim": "İnkılap Tarihi — Atatürk ilkeleri"},
+    ],
+  },
+  din: {
+    5: [
+      {"metin": "Bir öğrenci; mevsimlerin belirli bir sırayla tekrarlandığını, gezegenlerin belirli yörüngelerde hareket ettiğini ve canlıların ihtiyaç duyduğu havanın dünyada bulunduğunu gözlemlemiştir.", "soru": "Din Kültürü dersinde bu gözlemler öncelikle aşağıdakilerden hangisine örnek verilir?", "secenekler": ["Evrendeki ölçü ve düzene", "İbadetlerin çeşitliliğine", "Peygamberlerin görevlerine", "Toplumsal kurallara"], "dogru": 0, "kazanim": "Allah inancı — evrendeki ölçü ve düzen"},
+      {"metin": "Ramazan ayında, imsak vaktinden iftar vaktine kadar yeme içmeden uzak durularak yerine getirilen bir ibadet vardır.", "soru": "Metinde tanımlanan ibadet aşağıdakilerden hangisidir?", "secenekler": ["Namaz", "Oruç", "Zekât", "Hac"], "dogru": 1, "kazanim": "Ramazan ve oruç ibadeti"},
+      {"metin": "Bir öğrenci, Kur'an-ı Kerim'in bölümlerden oluştuğunu; bu bölümlerin de kendi içinde daha küçük birimlerden meydana geldiğini öğrenmiştir.", "soru": "Kur'an-ı Kerim'in bölümlerine ve bu bölümleri oluşturan birimlere sırasıyla ne ad verilir?", "secenekler": ["Cüz - sayfa", "Sure - ayet", "Hadis - sünnet", "Dua - zikir"], "dogru": 1, "kazanim": "Kur'an'ı tanıyalım — sure ve ayet"},
+      {"metin": "Otobüste oturan Mehmet, yaşlı bir yolcunun ayakta kaldığını görünce hemen kalkıp yerini ona vermiştir.", "soru": "Mehmet'in davranışı hangi değerle en iyi açıklanır?", "secenekler": ["Büyüklere saygı ve yardımlaşma", "Cesaret", "Tutumluluk", "Sabır"], "dogru": 0, "kazanim": "adap ve nezaket / ahlaki davranışlar"},
+      {"metin": "Bir öğrenci, Hz. Muhammed'in Mekke'de doğduğunu ve babasını daha doğmadan kaybettiğini öğrenmiştir.", "soru": "Hz. Muhammed'in annesinin adı nedir?", "secenekler": ["Hatice", "Âmine", "Halime", "Fatıma"], "dogru": 1, "kazanim": "Hz. Muhammed'in hayatı — ailesi"},
+    ],
+    6: [
+      {"metin": "Din Kültürü dersinde öğrenciler, ilahi kitapların hangi peygamberlere gönderildiğini eşleştirmektedir.", "soru": "Tevrat hangi peygambere gönderilmiştir?", "secenekler": ["Hz. İsa", "Hz. Musa", "Hz. Davut", "Hz. Muhammed"], "dogru": 1, "kazanim": "peygamber ve ilahi kitap inancı"},
+      {"metin": "Bir öğrenci, günün belirli vakitlerinde kılınan ve İslam'ın şartlarından biri olan ibadetin vakitlerini öğrenmektedir.", "soru": "Günde kaç vakit farz namaz vardır?", "secenekler": ["Üç", "Dört", "Beş", "Altı"], "dogru": 2, "kazanim": "namaz ibadeti"},
+      {"metin": "Bir öğrenci; sigara, alkol ve madde kullanımının hem bedene hem de aileye ve topluma zarar verdiğini, dinimizin de bu konuda insanı koruyucu uyarılar içerdiğini öğrenmiştir.", "soru": "Bu bilgilere göre söz konusu alışkanlıklar için aşağıdakilerden hangisi söylenebilir?", "secenekler": ["Yalnızca kişinin kendisine zarar verir.", "Hem bireye hem topluma zarar verdiği için sakınılması öğütlenir.", "Sağlık üzerinde herhangi bir etkisi yoktur.", "Yalnızca ekonomik kayba yol açar."], "dogru": 1, "kazanim": "zararlı alışkanlıklar"},
+      {"metin": "Sınavda yanındaki arkadaşının kâğıdına bakma fırsatı olduğu hâlde Elif bunu yapmamış, yalnızca kendi bildiklerini yazmıştır.", "soru": "Elif'in davranışı hangi ahlaki değere örnektir?", "secenekler": ["Dürüstlük", "Cömertlik", "Merhamet", "Tutumluluk"], "dogru": 0, "kazanim": "temel değerler — dürüstlük"},
+      {"metin": "Hz. Muhammed, peygamberlik görevinden önce de Mekkeliler tarafından güvenilirliğiyle tanınırdı; insanlar değerli eşyalarını ona emanet ederdi.", "soru": "Bu özelliği nedeniyle Hz. Muhammed'e verilen unvan aşağıdakilerden hangisidir?", "secenekler": ["el-Emin", "el-Halim", "el-Kerim", "el-Hakim"], "dogru": 0, "kazanim": "Hz. Muhammed'in örnek ahlakı"},
+    ],
+    7: [
+      {"metin": "Bir öğrenci meleklerin görevlerini araştırmakta; peygamberlere vahiy getirmekle görevli meleğin adını öğrenmek istemektedir.", "soru": "Peygamberlere vahiy getirmekle görevli melek aşağıdakilerden hangisidir?", "secenekler": ["Mikail", "Cebrail", "İsrafil", "Azrail"], "dogru": 1, "kazanim": "melek inancı"},
+      {"metin": "Maddi ve bedenî imkânı yerinde olan bir Müslümanın, ömründe bir kez Kâbe'yi ziyaret ederek belirli zamanda yerine getirdiği bir ibadet vardır.", "soru": "Metinde tanımlanan ibadet aşağıdakilerden hangisidir?", "secenekler": ["Umre", "Hac", "Zekât", "İtikâf"], "dogru": 1, "kazanim": "hac ibadeti"},
+      {"metin": "Bir mahallede komşular, zor durumdaki bir aile için gıda ve kıyafet toplayarak yardımda bulunmuştur.", "soru": "Bu davranış öncelikle hangi değere örnektir?", "secenekler": ["Paylaşma ve yardımlaşma", "Sabır", "Tevekkül", "Temizlik"], "dogru": 0, "kazanim": "İslam'ın paylaşmaya verdiği önem"},
+      {"metin": "Din Kültürü dersinde öğrenciler, Kur'an'da insanın aklını kullanmaya, düşünmeye ve bilgiye dayalı hareket etmeye çağrıldığını öğrenmiştir.", "soru": "Bu bilgiye göre aşağıdakilerden hangisi söylenebilir?", "secenekler": ["Bilgi edinmek ve düşünmek teşvik edilmiştir.", "Duyduğuna sorgulamadan inanmak yeterlidir.", "Aklı kullanmak gereksiz görülmüştür.", "Araştırma yapmak uygun görülmemiştir."], "dogru": 0, "kazanim": "Kur'an'da akıl ve bilgi"},
+      {"metin": "Veda Hutbesi'nde şu ifade yer almıştır:\n\"Hiçbir Arap'ın Arap olmayana, Arap olmayanın da Arap'a; beyazın siyaha, siyahın beyaza üstünlüğü yoktur.\"", "soru": "Bu ifadeyle öncelikle aşağıdakilerden hangisi vurgulanmıştır?", "secenekler": ["İnsanlar arasında ırk ve renk üstünlüğü bulunmadığı", "Ticaretin önemi", "Şehirlerin nasıl yönetileceği", "Tarımın gerekliliği"], "dogru": 0, "kazanim": "Veda Hutbesi / insan onuru ve eşitlik"},
+    ],
+    8: [
+      {"metin": "\"Ders çalışmasam da sınavı kazanırım, kaderimde varsa olur.\" diyen arkadaşına bir öğrenci, insanın önce üzerine düşeni yapması, sonucu ise Allah'a bırakması gerektiğini söylemiştir.", "soru": "Öğrencinin anlattığı bu anlayış aşağıdakilerden hangisiyle adlandırılır?", "secenekler": ["Tevekkül", "Tembellik", "Kanaatkârlık", "İsraf"], "dogru": 0, "kazanim": "kader inancı — emek ve tevekkül"},
+      {"metin": "Belirli bir zenginlik ölçüsüne ulaşan Müslümanların, mallarının belirli bir bölümünü yılda bir kez ihtiyaç sahiplerine vermesi gereken bir ibadet vardır.", "soru": "Metinde tanımlanan ibadet aşağıdakilerden hangisidir?", "secenekler": ["Sadaka", "Zekât", "Kurban", "Fitre"], "dogru": 1, "kazanim": "zekât ve sadaka"},
+      {"metin": "Din Kültürü dersinde öğrenciler; ailede sevgi, saygı ve sorumlulukların paylaşılmasının huzurlu bir aile hayatının temeli olduğunu öğrenmiştir.", "soru": "Bu bilgiye göre huzurlu bir aile için aşağıdakilerden hangisi gereklidir?", "secenekler": ["Bireylerin birbirine karşı sorumluluklarını yerine getirmesi", "Ev işlerinin tek bir kişiye bırakılması", "Sorunların hiç konuşulmaması", "Her bireyin yalnızca kendini düşünmesi"], "dogru": 0, "kazanim": "din ve hayat — aile"},
+      {"metin": "İslam dininin inanç ve uygulamaya yönelik konularında, âlimlerin farklı yorumları sonucunda ortaya çıkan düşünce ekolleri bulunmaktadır.", "soru": "Metinde söz edilen bu düşünce ekolleri aşağıdakilerden hangisiyle adlandırılır?", "secenekler": ["Mezhep", "Ayet", "Hutbe", "Kıssa"], "dogru": 0, "kazanim": "İslam düşüncesinde yorumlar"},
+      {"metin": "Bir öğrenci; uzun süre hastalık ve zorluklarla sınandığı hâlde şikâyet etmeden dua eden, bu yönüyle sabrın sembolü olarak anlatılan peygamberi araştırmaktadır.", "soru": "Sabrıyla örnek gösterilen bu peygamber aşağıdakilerden hangisidir?", "secenekler": ["Hz. Eyyüb", "Hz. Yunus", "Hz. Nuh", "Hz. Yusuf"], "dogru": 0, "kazanim": "Kur'an'dan kıssalar — sabır"},
     ],
   },
 };
@@ -16128,7 +16192,7 @@ function AkademikTaramaPaneli({ seciliAd, seciliSinif, seciliNumara, akademikTar
   return (
     <div>
       <div style={{background:"#FFF4E5", border:`1px solid #e0c08a`, borderRadius:10, padding:"10px 12px", marginBottom:14, fontSize:11, color:"#8B5A00", lineHeight:1.6}}>
-        📚 Bu araç, görüşme sırasında öğrenciye sesli sorulan <b>Türkçe / Matematik / Fen Bilimleri</b> sorularıyla öğrencinin 5-8. sınıf kazanımları arasında <b>işlevsel olarak</b> hangi düzeyde olduğunu kabaca gösterir; <b>resmî bir akademik başarı ölçümü veya tanı aracı değildir</b>. Sorular <b>yeni nesil</b> (senaryo/çıkarım temelli) tarzdadır: her derste 4 kademe × 5 soru bulunur. Önce kısa metni, sonra soruyu ve şıkları öğrenciye oku; cevabına göre işaretle. 5 sorudan <b>en az 3'ünü</b> (%{AKADEMIK_ESIK_YUZDE}) doğru yanıtlarsa bir üst kademeye geç; başarısız olduğu kademede dur. Uygulamadığın kademeyi "Uygulanmadı" bırak.
+        📚 Bu araç, görüşme sırasında öğrenciye sesli sorulan <b>Türkçe / Matematik / Fen Bilimleri / İnkılap Tarihi / Din Kültürü</b> sorularıyla öğrencinin 5-8. sınıf kazanımları arasında <b>işlevsel olarak</b> hangi düzeyde olduğunu kabaca gösterir; <b>resmî bir akademik başarı ölçümü veya tanı aracı değildir</b>. Sorular <b>yeni nesil</b> (senaryo/çıkarım temelli) tarzdadır: her derste 4 kademe × 5 soru bulunur. Önce kısa metni, sonra soruyu ve şıkları öğrenciye oku; cevabına göre işaretle. 5 sorudan <b>en az 3'ünü</b> (%{AKADEMIK_ESIK_YUZDE}) doğru yanıtlarsa bir üst kademeye geç; başarısız olduğu kademede dur. Uygulamadığın kademeyi "Uygulanmadı" bırak.
       </div>
 
       {toplamCevaplanan > 0 && (
@@ -16158,16 +16222,26 @@ function AkademikTaramaPaneli({ seciliAd, seciliSinif, seciliNumara, akademikTar
         </div>
       )}
 
-      <div style={{display:"flex", gap:6, marginBottom:14}}>
+      <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:10}}>
         {AKADEMIK_DERSLER.map(ders => (
           <button key={ders.key} onClick={() => setAktifDers(ders.key)} style={{
-            flex:1, padding:"9px 6px", borderRadius:10, fontSize:11, fontWeight:800, cursor:"pointer",
+            flex:"1 1 28%", minWidth:92, padding:"9px 6px", borderRadius:10, fontSize:11, fontWeight:800, cursor:"pointer",
             border:`2px solid ${aktifDers===ders.key ? ACCENT : BORDER}`,
             background: aktifDers===ders.key ? ACCENT_LIGHT : CARD,
             color: aktifDers===ders.key ? ACCENT : MUTED,
-          }}>{ders.label}</button>
+          }}>{ders.kisa || ders.label}</button>
         ))}
       </div>
+
+      {(() => {
+        const d = AKADEMIK_DERSLER.find(x => x.key === aktifDers);
+        if (!d || !d.aciklama) return null;
+        return (
+          <div style={{fontSize:10.5, color:MUTED, background:"#F7F5F0", border:`1px solid ${BORDER}`, borderRadius:8, padding:"7px 10px", marginBottom:12, lineHeight:1.6}}>
+            ℹ️ <b>{d.label.replace(/^\S+\s/, "")}:</b> {d.aciklama}
+          </div>
+        );
+      })()}
 
       {AKADEMIK_SINIFLAR.map(sinif => {
         const sorular = (AKADEMIK_SORU_HAVUZU[aktifDers] && AKADEMIK_SORU_HAVUZU[aktifDers][sinif]) || [];

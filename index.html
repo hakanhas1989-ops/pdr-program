@@ -1078,7 +1078,7 @@ function MudahaleKutuphanesiEkrani({ kayitliListesi, records, aktifOgrenci, setA
     setAiOnerileri(null);
     try {
       const ogrGorusmeler = records.filter(r => pdrAyniOgrenci(r.studentName, r.className, seciliAd, seciliOgr?.className, r.numara, seciliOgr?.numara));
-      const gorusmeler = ogrGorusmeler.slice(0,8).map((r,i) => `Görüşme ${i+1} (${r.date}): ${r.summary}`).join("\n\n");
+      const gorusmeler = pdrGorusmeListesiMetni(ogrGorusmeler, { limit: 8 });
       if (!gorusmeler) { alert("Bu öğrenci için görüşme notu bulunamadı."); setAiLoading(false); return; }
       const havuzMetni = havuz.map(o => `- "${o.baslik}"${o.modul?` [${o.modul} modülü]`:""} — Program: ${o.programAdi} (Hedef kitle: ${o.hedefKitle}) — ${o.ozet}`).join("\n");
       const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
@@ -2826,23 +2826,48 @@ function ButunlesikPaneli({ seciliAd, seciliSinif, seciliNumara, kademe,
     akademikTaramalar, liseTaramalar, benlikOlcekleri, testKayitlari, profiles2,
   });
 
+  // İki programın AI mimarisi FARKLI:
+  //  • Kişisel program istemi istemci tarafında kurar ve doğrudan kendi
+  //    endpoint'ine gönderir.
+  //  • Rehber Pusula'da her çağrı PDR_AI_WORKER_URL'e, "action" adıyla ve
+  //    MÜŞTERİNİN KENDİ API anahtarıyla gider. Burada kişisel endpoint'i
+  //    çağırmak müşterinin AI maliyetini geliştiriciye yazar — bu yüzden
+  //    ortam, PDR_AI_WORKER_URL'in varlığıyla ayırt ediliyor.
+  const pusulaMi = typeof PDR_AI_WORKER_URL !== "undefined";
+
   async function handleAiYorum() {
     setAiYukleniyor(true); setAiHata("");
     try {
-      const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-6", max_tokens: 1600,
-          system: "Sen okul PDR danismanisin. Sana verilen sayilar programda hesaplanmistir; onlari degistirmez, yeni sayi uretmezsin. Tani koymaz, kesin yonlendirme yapmazsin. Turkce, sade, markdownsuz yazarsin.",
-          messages: [{ role: "user", content: butunlesikIstemOlustur(b, seciliAd, seciliSinif) }],
-        }),
-      });
+      const istem = butunlesikIstemOlustur(b, seciliAd, seciliSinif);
+      const sistem = "Sen okul PDR danismanisin. Sana verilen sayilar programda hesaplanmistir; onlari degistirmez, yeni sayi uretmezsin. Tani koymaz, kesin yonlendirme yapmazsin. Turkce, sade, markdownsuz yazarsin.";
+      let res;
+      if (pusulaMi) {
+        const apiKey = pdrGetApiKey();
+        if (!apiKey) throw new Error("API_KEY_MISSING");
+        res = await fetch(PDR_AI_WORKER_URL, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "butunlesik_yorum", apiKey, data: { istem, sistem } }),
+        });
+      } else {
+        res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "claude-sonnet-4-6", max_tokens: 1600,
+            system: sistem,
+            messages: [{ role: "user", content: istem }],
+          }),
+        });
+      }
       const data = await res.json();
+      if (data.error) throw new Error(data.error);
       const metin = data.content?.[0]?.text || "";
       if (!metin) throw new Error("Bos yanit");
       setAiYorum(metin);
     } catch (e) {
-      setAiHata("AI yorumu alınamadı. İnternet bağlantını kontrol edip tekrar dene.");
+      const m = String(e && e.message || "");
+      setAiHata(m === "API_KEY_MISSING"
+        ? "AI yorumu için Ayarlar'dan kendi API anahtarını girmen gerekiyor."
+        : "AI yorumu alınamadı. İnternet bağlantını kontrol edip tekrar dene. (Yukarıdaki tablo ve bulgular AI olmadan da geçerlidir.)");
     }
     setAiYukleniyor(false);
   }
@@ -2986,6 +3011,107 @@ function ButunlesikPaneli({ seciliAd, seciliSinif, seciliNumara, kademe,
   );
 }
 // ===== BUTUNLESIK BITIS =====
+
+// ===== GORUSME GECMIS BASLANGIC (otomatik uretildi) =====
+// ── Görüşme geçmişi: AI'a BAĞLAM olarak verilen önceki seanslar ──────────
+// Notlar ASLA birleştirilmez. Her görüşme kendi tarihiyle ayrı kayıt olarak
+// kalır; buradaki metin yalnızca AI'ın "bu kaçıncı görüşme, daha önce ne
+// konuşulmuştu" sorusunu yanıtlayabilmesi için üretilir ve hiçbir yere
+// kaydedilmez.
+//
+// Ham notlar DEĞİL, ÖZETLER gönderilir: hem istek başına giden hassas veri
+// miktarını düşürür hem de modelin işine yarayan bilgi zaten özette.
+const GORUSME_GECMIS_LIMIT = 3;
+
+function pdrGorusmeGecmisiMetni(records, ad, sinif, numara, haricId) {
+  const hepsi = (records || []).filter(r =>
+    pdrAyniOgrenci(r.studentName, r.className, ad, sinif, r.numara, numara) &&
+    (!haricId || r.id !== haricId));
+  if (hepsi.length === 0) return "";
+
+  // Tarihe göre eskiden yeniye sırala (gg.aa.yyyy karşılaştırılabilir değil).
+  const anahtar = t => {
+    const p = String(t || "").split(".");
+    return p.length === 3 ? `${p[2]}${p[1].padStart(2, "0")}${p[0].padStart(2, "0")}` : "";
+  };
+  const sirali = hepsi.slice().sort((a, b) => anahtar(a.date).localeCompare(anahtar(b.date)));
+  const toplam = sirali.length;
+  const son = sirali.slice(-GORUSME_GECMIS_LIMIT);
+
+  const satirlar = son.map((r, i) => {
+    const sira = toplam - son.length + i + 1;
+    const ozet = (r.summary || r.raw || "").trim();
+    const kisa = ozet.length > 600 ? ozet.slice(0, 600) + "…" : ozet;
+    return `${sira}. görüşme (${r.date}${r.meetingType ? ", " + r.meetingType : ""}${r.topic ? " — " + r.topic : ""}): ${kisa || "(not boş)"}`;
+  });
+
+  const atlanan = toplam - son.length;
+  return `ÖNCEKİ GÖRÜŞMELER (bağlam — bu öğrenciyle daha önce ${toplam} görüşme yapılmış${atlanan > 0 ? `, en son ${son.length} tanesi aşağıda` : ""}):
+${satirlar.join("\n")}
+
+DİKKAT: Yukarıdakiler yalnızca BAĞLAMDIR. Özetleyeceğin şey SADECE aşağıdaki güncel görüşme notudur. Önceki görüşmelerin içeriğini özetine taşıma; yalnızca güncel notu anlamlandırmak için (bu kaçıncı görüşme, konu tekrar mı ediyor, önceki plan tutmuş mu) kullan. Güncel notta olmayan bir şeyi yazma.`;
+}
+
+// Özetlenecek metni kurar. Geçmiş yoksa ham not aynen gider — yani tek
+// görüşmesi olan öğrencide davranış hiç değişmez.
+//
+// Bağlam, istemin İÇİNE gömülür (ayrı bir alan olarak değil): Rehber
+// Pusula'da özetleme istemi worker'da, sunucu tarafında duruyor; istemciden
+// yeni bir alan göndermek worker güncellemesi gerektirirdi. Bu biçimde iki
+// program da tek kod yoluyla, worker'a dokunmadan çalışıyor.
+function pdrOzetMetniKur(ham, gecmisMetni) {
+  const h = String(ham || "");
+  if (!gecmisMetni) return h;
+  return `${gecmisMetni}
+
+=== GÜNCEL GÖRÜŞME NOTU (ÖZETLENECEK OLAN BUDUR) ===
+${h}`;
+}
+
+// ── Seans kronolojisi (İlerleme Yazısı için) ─────────────────────────────
+// Eski hâli yalnızca "SEANS n (tarih): özet" yazıyordu. Konu, görüşme türü
+// ve İKİ SEANS ARASINDAKİ GÜN FARKI eklendi: bir öğrenciyle üç ay ara
+// verilmişse bu, sürecin en önemli bilgisidir ve modelin bunu görebilmesi
+// için veride yazıyor olması gerekir — istemde sormak yetmez.
+function pdrSeansKronolojisi(ogrRec) {
+  const gun = d => { const [g, ay, y] = String(d || "").split("."); return new Date(`${y}-${ay}-${g}`); };
+  const sirali = [...(ogrRec || [])].sort((a, b) => gun(a.date) - gun(b.date));
+  return sirali.map((r, i) => {
+    let ara = "";
+    if (i > 0) {
+      const fark = Math.round((gun(r.date) - gun(sirali[i - 1].date)) / 86400000);
+      if (!isNaN(fark)) ara = ` [önceki seanstan ${fark} gün sonra]`;
+    }
+    const bas = `SEANS ${i + 1} (${r.date}${pdrGunAdi(r.date) ? " " + pdrGunAdi(r.date) : ""}${r.meetingType ? ", " + r.meetingType : ""}${r.topic ? ", konu: " + r.topic : ""})${ara}`;
+    return `${bas}: ${(r.summary || r.raw || "").trim() || "(not boş)"}`;
+  }).join("\n\n");
+}
+
+// ── Görüşme listesi metni (AI'a gönderilen kronoloji) ────────────────────
+// records dizisi EN YENİ BAŞTA saklanır ([...yeni, ...records]). Bu yüzden
+// diziyi doğrudan map edip "Görüşme 1, 2, 3…" diye numaralamak kronolojiyi
+// TERS gösterir: modele en yeni görüşmeyi "1. görüşme" diye sunar ve süreç
+// yorumunu tam ters çıkarır (ilerleyen öğrenci gerileyor görünür).
+// Bu yardımcı ÖNCE tarihe göre eskiden yeniye sıralar, sonra numaralandırır.
+//
+// limit verilirse EN SON n görüşme alınır ama numaralar GERÇEK sırayı
+// korur: 9 görüşmenin son 3'ü "Görüşme 7, 8, 9" olur, "1, 2, 3" değil.
+function pdrGorusmeListesiMetni(liste, secenek) {
+  const o = secenek || {};
+  const etiket = o.etiket || "Görüşme";
+  const gun = d => { const [g, ay, y] = String(d || "").split("."); return new Date(`${y}-${ay}-${g}`); };
+  const sirali = [...(liste || [])].sort((a, b) => gun(a.date) - gun(b.date));
+  const toplam = sirali.length;
+  const secilen = o.limit ? sirali.slice(-o.limit) : sirali;
+  const baslangic = toplam - secilen.length;
+  return secilen.map((r, i) => {
+    const bilgi = [r.date];
+    if (o.tur) bilgi.push(r.meetingType || "Öğrenci");
+    if (o.konu && r.topic) bilgi.push(r.topic);
+    return `${etiket} ${baslangic + i + 1} (${bilgi.join(", ")}): ${(r.summary || "").trim()}`;
+  }).join(o.ayrac || "\n\n");
+}
+// ===== GORUSME GECMIS BITIS =====
 
 // ===== LISE TARAMA BASLANGIC (otomatik uretildi) =====
 // ── Lise Akademik Düzey Taraması (9-12. Sınıf) ───────────────────────────
@@ -6377,7 +6503,7 @@ function kademeBaglamMetni(kademe) {
 
 async function getRiskAnalizi(riskForm, gorusmeler, profil1, kutuphaneOzetleri = [], kademe = "", denemeOzet = null) {
   const gorusmeBolum = gorusmeler.length > 0
-    ? "GÖRÜŞME NOTLARI:\n" + gorusmeler.map((r,i)=>`Görüşme ${i+1} (${r.date}): ${r.summary}`).join("\n\n")
+    ? "GÖRÜŞME NOTLARI:\n" + pdrGorusmeListesiMetni(gorusmeler)
     : "Görüşme kaydı yok.";
   const profilBolum = profil1
     ? "PDR PROFİL PUANLARI:\n" + Object.entries(profil1.scores||{}).map(([k,v])=>`${k}: ${v}/5`).join(", ")
@@ -12701,7 +12827,7 @@ function MudahalePlanEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, mud
   async function handleAiPlan() {
     if (!seciliAd) return;
     setAiLoading(true);
-    const notlar = ogrRec.map((r,i) => `Görüşme ${i+1} (${r.date}): ${r.summary}`).join("\n\n");
+    const notlar = pdrGorusmeListesiMetni(ogrRec);
     const kutuphaneBaglam = pdrKutuphaneBaglam(kutuphane);
     const kademeMetni = kademeBaglamMetni(kademe);
     const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
@@ -15599,7 +15725,7 @@ function VeliMektubu({ kayitliListesi, aktifOgrenci, records }) {
   async function handleOlustur() {
     if (!seciliAd) return;
     setAiLoading(true);
-    const ozet = ogrRec.slice(0,3).map((r,i)=>`Görüşme ${i+1} (${r.date}): ${r.summary}`).join("\n\n");
+    const ozet = pdrGorusmeListesiMetni(ogrRec, { limit: 3 });
     const tipler = {
       bilgilendirme:"Veliye öğrencinin PDR görüşmeleri hakkında genel bilgilendirme mektubu",
       davet:"Velinin okula davet edilmesi için resmi davet mektubu",
@@ -15825,7 +15951,7 @@ function OzetKarti({ ogrenci, ogrenciSinif, ogrRec, ogrP1, ogrP2, ogrRisk, denem
     try {
       const etkinlikHavuzu = ogrenciEtkinlikHavuzu(ogrenciSinif, kademe);
       if (etkinlikHavuzu.length === 0) { alert("Bu öğrenci için sınıf düzeyine uygun etkinlik kütüphanesi bulunamadı."); setAiEtkinlikLoading(false); return; }
-      const gorusmeler = ogrRec.slice(0,8).map((r,i) => `Görüşme ${i+1} (${r.date}): ${r.summary}`).join("\n\n");
+      const gorusmeler = pdrGorusmeListesiMetni(ogrRec, { limit: 8 });
       if (!gorusmeler) { alert("Bu öğrenci için görüşme notu bulunamadı."); setAiEtkinlikLoading(false); return; }
       const etkinlikMetni = etkinlikHavuzu.map(e => `- [${e.sinif}. Sınıf] "${e.etkinlik}" (Alan: ${e.alan}, Yeterlik: ${e.yeterlik}) — Kazanım: ${e.kazanim}`).join("\n");
       const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
@@ -15898,9 +16024,7 @@ function OzetKarti({ ogrenci, ogrenciSinif, ogrRec, ogrP1, ogrP2, ogrRisk, denem
 
   async function handleHazirlikNotu() {
     setHazirlikAiLoading(true);
-    const gorusmeler = ogrRec.slice(0,8).map((r,i) =>
-      `Görüşme ${i+1} (${r.date}): ${r.summary}`
-    ).join("\n\n");
+    const gorusmeler = pdrGorusmeListesiMetni(ogrRec, { limit: 8 });
     const mudahaleBolum = ogrMudahale.length > 0
       ? "Aktif Müdahale Planı: " + ogrMudahale.map(p => p.hedef).join(", ")
       : "";
@@ -16403,13 +16527,7 @@ function IlerlemeYazisi({ ogrenci, ogrenciSinif, ogrRec, ogrP1, denemeGirilen, i
     setLoading(true);
 
     // Seans kronolojisi
-    const seanslar = [...ogrRec]
-      .sort((a,b) => {
-        const parse = d => { const [g,ay,y]=(d||"").split("."); return new Date(`${y}-${ay}-${g}`); };
-        return parse(a.date) - parse(b.date);
-      })
-      .map((r,i) => `SEANS ${i+1} (${r.date}): ${r.summary}`)
-      .join("\n\n");
+    const seanslar = pdrSeansKronolojisi(ogrRec);
 
     const profilBolum = ogrP1?.scores
       ? "PROFİL PUANLARI: " + DIMENSIONS.map(d => `${d.label}: ${ogrP1.scores[d.key]||0}/5`).join(", ")
@@ -16442,6 +16560,15 @@ OLUMLU GELİŞMELER:
 
 SEANS ARASI FARK:
 (İlk seanstan bu yana ne değişti, hangi konularda dönüşüm yaşandı)
+
+TEKRAR EDEN KONULAR:
+(Birden fazla seansta dönen konu, şikâyet ya da örüntü — kaçıncı seanslarda geçtiğini belirt. Tekrar eden bir konu ya çözülmemiştir ya da yanlış ele alınmıştır; hangisi olduğuna dair bir şey söyleyebiliyorsan söyle.)
+
+TAKİP EDİLMEMİŞ OLANLAR:
+(Bir seansta plan, söz ya da yönlendirme olarak geçip sonraki seanslarda hiç dönülmemiş şeyler. Yoksa "yok" yaz — bu bölüm doldurmak için uydurulmaz.)
+
+SEANS ARALIKLARI:
+(Seans tarihleri arasındaki boşluklara bak. Uzun bir ara varsa bunu ve sonrasında ne değiştiğini yorumla. Aralıklar düzenliyse bunu belirtip geç.)
 
 DEVAM EDEN ÇALIŞMA ALANLARI:
 (Hâlâ gelişim gerektiren, üzerinde çalışılmaya devam edilecek konular)
@@ -16502,7 +16629,8 @@ Sade, klinik ama sıcak bir dil kullan. Markdown kullanma.`}]
 function ProfDanismaEkrani({
   kayitliListesi, aktifOgrenci, records, profiles, profiles2,
   denemeler, riskListesi, mudahalePlan, sevkler,
-  hazirlikNotlari, ilerlemeNotlari, profNotlari, setProfNotlari, sinavTuru
+  hazirlikNotlari, ilerlemeNotlari, profNotlari, setProfNotlari, sinavTuru,
+  akademikTaramalar, liseTaramalar, benlikOlcekleri, testKayitlari
 }) {
   const [seciliAd, setSeciliAd] = useState(aktifOgrenci?.name || "");
   const [aramaMetni, setAramaMetni] = useState("");
@@ -16531,6 +16659,48 @@ function ProfDanismaEkrani({
     // satir ReferenceError firlatiyordu. Uygulamanin baska yerlerindeki gibi
     // aktif sinav turunun ders listesinden aliniyor.
     const dersler = aktifDersler(sinavTuru);
+
+    // ── Uygulanmis olcme araclari ────────────────────────────────────────
+    // Supervizore giden veri: her aracin KENDI hesapladigi sonuc. Burada
+    // yeniden yorum uretilmez; supervizorun yorumlamasi icin ham tablo verilir.
+    const ogrKademe = sinifKademesi(sinif) || null;
+    const bt = (ogrKademe === "ortaokul" || ogrKademe === "lise")
+      ? butunlesikHesapla({
+          kademe: ogrKademe, ad, sinif, numara: null,
+          akademikTaramalar, liseTaramalar, benlikOlcekleri,
+          testKayitlari, profiles2,
+        })
+      : null;
+
+    let olcumBolum = "";
+    if (bt && bt.eksikler.length < 3) {
+      const satir = bt.satirlar
+        .filter(r => r.olculen !== null || r.algi !== null)
+        .map(r => `${r.ad}: ölçülen ${r.olculen === null ? "—" : "%" + r.olculen}, benlik algısı ${r.algi === null ? "—" : "%" + r.algi}${r.fark === null ? "" : ` (fark ${r.fark > 0 ? "+" : ""}${r.fark})`}`)
+        .join("\n");
+      const celiski = [
+        ...bt.hedefAciklari.map(h => `Hedef–performans açığı (${h.harf}): ilgi duyduğu meslekler ${h.zayifDersler.map(z => `${z.ad} %${z.olculen}`).join(", ")} derslerine dayanıyor, ölçülen düzey eşiğin altında.`),
+        ...bt.gizliGucler.map(g => `Kapasitesini görmüyor (${g.ad}): ölçülen %${g.olculen}, algı %${g.algi}.${g.hedefDersi ? " Bu ders hedeflediği meslek grubunun temel dersi." : ""}`),
+      ].join("\n");
+      olcumBolum = `
+ÖLÇME ARAÇLARI — YAPABİLİYOR / İNANIYOR (geçme eşiği %${bt.perfEsik}):
+${satir || "Ders verisi yok"}
+${bt.meslek ? `\nMESLEKİ EĞİLİM (160 madde, ${bt.meslek.kayit.tarih}): ` + bt.meslek.sirali.filter(s => s.puan > 0).slice(0, 3).map(s => `${s.harf}=${s.puan}p`).join(", ") + (bt.meslek.liseOnerisi ? ` · Lise türü ipucu: ${bt.meslek.liseOnerisi.liseler.map(l => l.lise).join(", ")}` : "") : ""}
+${celiski ? `\nPROGRAMIN BULDUĞU ÇELİŞKİLER:\n${celiski}` : ""}
+${bt.eksikler.length ? `\nUygulanmamış: ${bt.eksikler.join(", ")} — bunlar hakkında yorum yapma.` : ""}
+
+NOT: Yukarıdaki sayılar tarama sonuçlarıdır; yetenek ölçümü ya da tanı değildir. "Ölçülen" performanstır, "benlik algısı" öz bildirimdir, "mesleki eğilim" ilgi beyanıdır — üçünün kanıt ağırlığı eşit değildir.`;
+    }
+
+    const digerTestler = (() => {
+      const kayitlar = butunlesikTestKayitlari(testKayitlari, ad, sinif, null) || [];
+      const liste = kayitlar.filter(k => k.tip !== "mesleki_egilim_160");
+      if (liste.length === 0) return "";
+      return "\nUYGULANMIŞ DİĞER TESTLER:\n" + liste
+        .map(k => `${k.tarih} — ${k.testAdi || k.tip}${k.not ? " (" + k.not + ")" : ""}`)
+        .join("\n");
+    })();
+
     const denemeGirilen = Object.entries(ogrDen).sort((a,b)=>a[0]-b[0]).map(([no,nets])=>({
       no:parseInt(no), nets,
       toplam: dersler.reduce((s,d)=>s+(parseFloat(nets[d.key])||0),0)
@@ -16542,7 +16712,7 @@ function ProfDanismaEkrani({
 ÖĞRENCİ: ${ad}
 
 GÖRÜŞME GEÇMİŞİ (${ogrRec.length} görüşme):
-${ogrRec.map((r,i)=>`Seans ${i+1} (${r.date}, ${r.meetingType||"Öğrenci"}): ${r.summary}`).join("\n") || "Yok"}
+${pdrGorusmeListesiMetni(ogrRec, { etiket: "Seans", tur: true, ayrac: "\n" }) || "Yok"}
 
 
 PROFİL 1 — PSİKOSOSYAL BOYUTLAR:
@@ -16570,6 +16740,9 @@ ${ogrMud.map(p=>`Hedef: ${p.hedef} | Süre: ${p.sure||"-"}`).join("\n") || "Yok"
 SEVK KAYITLARI:
 ${ogrSevk.map(s=>`${s.tarih} - ${s.sevkYeri}: ${s.sevkNedeni} [${s.sonucBekleniyor?"Bekliyor":"Tamamlandi"}]`).join("\n") || "Yok"}
 
+
+${olcumBolum}
+${digerTestler}
 
 DR. AYŞE KARA'NIN DEĞERLENDİRMELERİ:
 Seans Hazırlık Notu: ${ogrHazirlik || "Henüz oluşturulmamış"}
@@ -18187,7 +18360,7 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
                       return (
                         <div key={r.id} style={{marginBottom:14,position:"relative"}}>
                           <div style={{position:"absolute",left:-16,top:4,width:10,height:10,borderRadius:"50%",background:isVeli?ORANGE:ACCENT,border:"2px solid #fff",boxShadow:"0 0 0 2px "+(isVeli?ORANGE:ACCENT)}}/>
-                          <RecordCard rec={r} onDelete={handleGorusmeSil} onUpdate={handleGorusmeGuncelle} bdtAnaliz={bdtAnaliz} setBdtAnaliz={setBdtAnaliz} bireyiTanima={bireyiTanima} setBireyiTanima={setBireyiTanima} uyumIzleme={uyumIzleme} setUyumIzleme={setUyumIzleme} aktifYil={aktifYil} kayitliListesi={kayitliListesi} riskListesi={riskListesi} denemeler={denemeler} konuHaritasiVerisi={konuHaritasiVerisi} />
+                          <RecordCard rec={r} records={records} onDelete={handleGorusmeSil} onUpdate={handleGorusmeGuncelle} bdtAnaliz={bdtAnaliz} setBdtAnaliz={setBdtAnaliz} bireyiTanima={bireyiTanima} setBireyiTanima={setBireyiTanima} uyumIzleme={uyumIzleme} setUyumIzleme={setUyumIzleme} aktifYil={aktifYil} kayitliListesi={kayitliListesi} riskListesi={riskListesi} denemeler={denemeler} konuHaritasiVerisi={konuHaritasiVerisi} />
                         </div>
                       );
                     })}
@@ -21035,7 +21208,7 @@ function ProfilMerkez({
     }
 
     const notlar = [
-      recs.length > 0 ? "GÖRÜŞME NOTLARI:\n" + recs.map((r,i)=>`Görüşme ${i+1} (${r.date}): ${r.summary}`).join("\n\n") : "",
+      recs.length > 0 ? "GÖRÜŞME NOTLARI:\n" + pdrGorusmeListesiMetni(recs) : "",
       profForm.notes ? "DANIŞMAN NOTU:\n" + profForm.notes : "",
       degBilgi || "",
       mevcutP1?.analysis ? "ÖNCEKİ ANALİZ:\n" + mevcutP1.analysis : ""
@@ -21065,7 +21238,7 @@ function ProfilMerkez({
     setProfAiLoading(true);
     // Görüşme notlarını da dahil et
     const gorusmeBolum = ogrRec.length > 0
-      ? "GÖRÜŞME NOTLARI:\n" + ogrRec.map((r,i)=>`Görüşme ${i+1} (${r.date}${r.topic?", "+r.topic:""}): ${r.summary}`).join("\n\n")
+      ? "GÖRÜŞME NOTLARI:\n" + pdrGorusmeListesiMetni(ogrRec, { konu: true })
       : "";
     const denemeOzeti = denemeGirilen.length > 0
       ? "DENEME NETLERI: " + denemeGirilen.map(d=>`D${d.no}: ${d.toplam.toFixed(1)}`).join(", ")
@@ -21080,7 +21253,7 @@ function ProfilMerkez({
   async function handleP2Analiz() {
     setProf2AiLoading(true);
     const gorusmeBolum = ogrRec.length > 0
-      ? "GÖRÜŞME NOTLARI:\n" + ogrRec.map((r,i)=>`Görüşme ${i+1} (${r.date}): ${r.summary}`).join("\n\n")
+      ? "GÖRÜŞME NOTLARI:\n" + pdrGorusmeListesiMetni(ogrRec)
       : "";
     const analiz = await getP2Analiz({
       studentName: seciliAd, className: seciliSinif,
@@ -23844,7 +24017,7 @@ function StatBar({ label, value, max, color = ACCENT }) {
   );
 }
 
-function RecordCard({ rec, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz, bireyiTanima, setBireyiTanima, uyumIzleme, setUyumIzleme, aktifYil, kayitliListesi, riskListesi, denemeler, konuHaritasiVerisi }) {
+function RecordCard({ rec, records, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz, bireyiTanima, setBireyiTanima, uyumIzleme, setUyumIzleme, aktifYil, kayitliListesi, riskListesi, denemeler, konuHaritasiVerisi }) {
   const [open, setOpen] = useState(false);
   const [duzenle, setDuzenle] = useState(false);
   const [editForm, setEditForm] = useState({ summary: rec.summary, topic: rec.topic || "", raw: rec.raw || "" });
@@ -23878,7 +24051,8 @@ function RecordCard({ rec, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz, bireyiTa
   async function handleAiRewrite() {
     if (!editForm.raw.trim()) return;
     setAiLoading(true);
-    const tamCevap = await getAISummary(editForm.raw);
+    const tamCevap = await getAISummary(pdrOzetMetniKur(editForm.raw,
+      pdrGorusmeGecmisiMetni(records, rec.studentName, rec.className, rec.numara, rec.id)));
     const parcalar = tamCevap.split(/---HATIRLATMA---/i);
     const summary = parcalar[0].trim();
     const kalan = parcalar[1] || "";
@@ -25122,7 +25296,8 @@ export default function App() {
   async function handleSummarize() {
     if (!form.raw.trim()) return;
     setAiLoading(true);
-    const tamCevap = await getAISummary(form.raw);
+    const tamCevap = await getAISummary(pdrOzetMetniKur(form.raw,
+      pdrGorusmeGecmisiMetni(records, form.studentName, form.className, form.numara, null)));
     // AI cevabı, özetin sonuna "---HATIRLATMA---" ve "---BIREYI_TANIMA---"
     // ayraçlarıyla iki ayrı tespit ekliyor — özeti temizleyip, ikisini de
     // ayrı ayrı gösteriyoruz. İkisi de sadece ÖNERİ; danışman onaylamadan
@@ -26674,6 +26849,10 @@ function pdrBaslangicSekmesi() {
             profNotlari={profNotlari}
             setProfNotlari={setProfNotlari}
             sinavTuru={sinavTuru}
+            akademikTaramalar={akademikTaramalar}
+            liseTaramalar={liseTaramalar}
+            benlikOlcekleri={benlikOlcekleri}
+            testKayitlari={testKayitlari}
           />
         )}
 

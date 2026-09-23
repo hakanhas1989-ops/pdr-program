@@ -8295,6 +8295,17 @@ SADECE su formatta JSON dondur, baska hicbir sey yazma:
 }
 
 function UyumIzlemeEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, uyumIzleme, setUyumIzleme, records, aktifYil, setRiskForm, setTab }) {
+  // kayitliListesi elemanlari { name, className, numara } seklinde gelir;
+  // bu bilesenin geri kalani ise studentName bekliyor. Tek yerde, sinirda
+  // normalize ediliyor — yoksa ad aramasi hic eslesmez ve secilen ogrenci
+  // undefined adla kaydedilir.
+  const ogrenciListesi = useMemo(() => (kayitliListesi || []).map(o => ({
+    ...o,
+    studentName: o.studentName || o.name || "",
+    className: o.className || "",
+    numara: o.numara || "",
+  })), [kayitliListesi]);
+
   const [arama, setArama] = useState("");
   const [secili, setSecili] = useState(null);
   const [isaretli, setIsaretli] = useState([]);
@@ -8310,12 +8321,14 @@ function UyumIzlemeEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, uyumI
   // hiçbir öğrenci seçilmiyordu.
   useEffect(() => {
     if (!aktifOgrenci?.name) return;
-    const b = (kayitliListesi||[]).find(o => pdrAyniOgrenci(o.studentName, o.className, aktifOgrenci.name, aktifOgrenci.className, o.numara, aktifOgrenci.numara));
+    const b = ogrenciListesi.find(o => pdrAyniOgrenci(o.studentName, o.className, aktifOgrenci.name, aktifOgrenci.className, o.numara, aktifOgrenci.numara));
     setSecili(b || { studentName: aktifOgrenci.name, className: aktifOgrenci.className || "", numara: aktifOgrenci.numara || "" });
-  }, [aktifOgrenci?.name, aktifOgrenci?.className, aktifOgrenci?.numara, kayitliListesi]);
+  }, [aktifOgrenci?.name, aktifOgrenci?.className, aktifOgrenci?.numara, ogrenciListesi]);
 
   const sonuclar = (arama.trim().length >= 2)
-    ? (kayitliListesi||[]).filter(o => ((o.studentName||"").toLocaleLowerCase("tr").includes(arama.toLocaleLowerCase("tr")) || (o.numara||"").includes(arama))).slice(0,8)
+    ? ogrenciListesi.filter(o => (o.studentName.toLocaleLowerCase("tr").includes(arama.toLocaleLowerCase("tr"))
+        || (o.className||"").toLocaleLowerCase("tr").includes(arama.toLocaleLowerCase("tr"))
+        || o.numara.includes(arama))).slice(0,8)
     : [];
 
   const ogrTumu = secili

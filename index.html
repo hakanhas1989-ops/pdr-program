@@ -3144,6 +3144,361 @@ function pdrGorusmeListesiMetni(liste, secenek) {
 }
 // ===== GORUSME GECMIS BITIS =====
 
+// ===== DENEME ANALIZ BASLANGIC (otomatik uretildi) =====
+// ── Konu × Deneme matrisi ────────────────────────────────────────────────
+// Mevcut "Denemeye Göre Konu Analizi" her kazanımın TOPLAM doğru oranını
+// veriyordu: "12/20 doğru, 4 denemede çıktı". Hangi denemede ne olduğu
+// görünmüyordu — oysa asıl soru bu: konu düzeldi mi, yoksa hep aynı mı?
+// Burada her kazanım bir satır, her deneme bir sütun; hücrede o denemedeki
+// doğru/yanlış duruyor.
+//
+// Gruplama kazanım METNİNE göre yapılır (ders + "|||" + kazanım). Aynı
+// yayınevinin denemelerinde metin birebir aynı geldiği için bu çalışır;
+// farklı yayınevleri aynı konuyu başka kelimelerle yazarsa iki ayrı satır
+// olarak görünür. Metni normalleştirip "aynı konu" varsaymak, yanlış
+// birleştirme riski taşıdığı için bilinçli olarak yapılmıyor.
+function konuDenemeMatrisi(ogrKayitlar) {
+  const sirali = [...(ogrKayitlar || [])].sort((a, b) => pdrTarihMs(a.tarih) - pdrTarihMs(b.tarih));
+  const denemeler = sirali.map((k, i) => ({
+    id: k.id, sira: i + 1, tarih: k.tarih, ad: k.denemeAdi || "",
+  }));
+
+  const map = {};
+  sirali.forEach((kayit, di) => {
+    (kayit.dersler || []).forEach(ders => {
+      (ders.konular || []).forEach(k => {
+        const anahtar = ders.ders + "|||" + k.kazanim;
+        if (!map[anahtar]) {
+          map[anahtar] = {
+            ders: ders.ders, kazanim: k.kazanim, hucreler: {},
+            toplamSoru: 0, toplamDogru: 0, toplamYanlis: 0, cikisSayisi: 0,
+          };
+        }
+        const m = map[anahtar];
+        const soru = Number(k.soru) || 0;
+        const dogru = Number(k.dogru) || 0;
+        const yanlis = Number(k.yanlis) || 0;
+        // Aynı denemede aynı kazanım birden fazla satırda geçebiliyor
+        // (yayınevi bölerek yazmış olabilir) — üzerine yazmak yerine toplanır.
+        const onceki = m.hucreler[di];
+        m.hucreler[di] = onceki
+          ? { soru: onceki.soru + soru, dogru: onceki.dogru + dogru, yanlis: onceki.yanlis + yanlis }
+          : { soru, dogru, yanlis };
+        if (!onceki) m.cikisSayisi += 1;
+        m.toplamSoru += soru; m.toplamDogru += dogru; m.toplamYanlis += yanlis;
+      });
+    });
+  });
+
+  const dersMap = {};
+  Object.values(map).forEach(k => {
+    k.yuzde = k.toplamSoru > 0 ? Math.round((k.toplamDogru / k.toplamSoru) * 100) : null;
+    // Son çıktığı denemedeki durum — "hâlâ sorun mu" sorusunun cevabı.
+    const sonIndex = Object.keys(k.hucreler).map(Number).sort((a, b) => b - a)[0];
+    const sonHucre = k.hucreler[sonIndex];
+    k.sonDurum = sonHucre && sonHucre.soru > 0
+      ? { yanlisVar: sonHucre.yanlis > 0, denemeSira: sonIndex + 1 } : null;
+    (dersMap[k.ders] = dersMap[k.ders] || []).push(k);
+  });
+
+  const dersler = Object.keys(dersMap).sort().map(ders => ({
+    ders,
+    konular: dersMap[ders].sort((a, b) => (a.yuzde === null ? 101 : a.yuzde) - (b.yuzde === null ? 101 : b.yuzde)),
+    sorunlu: dersMap[ders].filter(k => k.toplamYanlis > 0).length,
+  }));
+
+  return { denemeler, dersler, konuSayisi: Object.values(map).length };
+}
+
+function konuMatrisRenk(h) {
+  if (!h || h.soru === 0) return { bg: "transparent", fg: "#C9C9C4" };
+  if (h.yanlis === 0) return { bg: "#E6F5EE", fg: "#1A8C5B" };
+  if (h.dogru === 0) return { bg: "#FDECEA", fg: "#C0392B" };
+  return { bg: "#FDF6E3", fg: "#8A6A1A" };
+}
+
+function KonuDenemeMatrisi({ ogrKayitlar }) {
+  const [sadeceSorunlu, setSadeceSorunlu] = useState(true);
+  const [acikDers, setAcikDers] = useState(null);
+  const m = konuDenemeMatrisi(ogrKayitlar);
+  if (m.denemeler.length === 0 || m.konuSayisi === 0) return null;
+
+  const dersler = m.dersler
+    .map(d => ({ ...d, konular: sadeceSorunlu ? d.konular.filter(k => k.toplamYanlis > 0) : d.konular }))
+    .filter(d => d.konular.length > 0);
+
+  return (
+    <div style={{ marginTop: 8, background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 10 }}>
+      <div style={{ fontSize: 10.5, color: MUTED, marginBottom: 8, lineHeight: 1.5 }}>
+        Her sütun bir deneme (eskiden yeniye), her hücrede o denemedeki <b>doğru/yanlış</b>.
+        Yeşil = o denemede hiç yanlış yok, sarı = kısmen, kırmızı = hepsi yanlış, boş = o denemede bu konudan soru çıkmamış.
+      </div>
+
+      <button onClick={() => setSadeceSorunlu(v => !v)} style={{
+        padding: "6px 11px", borderRadius: 9, fontSize: 10.5, fontWeight: 700, cursor: "pointer",
+        border: `1.5px solid ${sadeceSorunlu ? "#C0392B" : BORDER}`,
+        background: sadeceSorunlu ? "#FDECEA" : "#fff",
+        color: sadeceSorunlu ? "#C0392B" : MUTED, marginBottom: 10,
+      }}>{sadeceSorunlu ? "✓ Sadece yanlışı olan konular" : "Tüm konular"}</button>
+
+      {dersler.length === 0 ? (
+        <div style={{ fontSize: 11.5, color: "#1A8C5B", fontWeight: 700, padding: "8px 0" }}>
+          Hiçbir konuda yanlış yok — bütün kazanımlar tam.
+        </div>
+      ) : dersler.map(d => {
+        const acik = acikDers === d.ders;
+        return (
+          <div key={d.ders} style={{ marginBottom: 8 }}>
+            <button onClick={() => setAcikDers(acik ? null : d.ders)} style={{
+              width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center",
+              padding: "8px 10px", background: acik ? ACCENT : "#fff", color: acik ? "#fff" : TEXT,
+              border: `1px solid ${acik ? ACCENT : BORDER}`, borderRadius: 9,
+              fontSize: 11.5, fontWeight: 800, cursor: "pointer",
+            }}>
+              <span>{d.ders} <span style={{ fontWeight: 600, opacity: 0.75 }}>({d.konular.length} konu)</span></span>
+              <span>{acik ? "▲" : "▼"}</span>
+            </button>
+
+            {acik && (
+              <div style={{ marginTop: 6, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+                <table style={{ borderCollapse: "separate", borderSpacing: 0, minWidth: "100%" }}>
+                  <thead>
+                    <tr>
+                      <th style={{
+                        position: "sticky", left: 0, zIndex: 2, background: CARD,
+                        textAlign: "left", padding: "4px 8px 6px 2px", fontSize: 9.5,
+                        color: MUTED, fontWeight: 800, minWidth: 130, maxWidth: 190,
+                        borderBottom: `1.5px solid ${BORDER}`,
+                      }}>Kazanım</th>
+                      {m.denemeler.map(dn => (
+                        <th key={dn.id} title={`${dn.ad || "Deneme"} · ${dn.tarih}`} style={{
+                          padding: "4px 5px 6px", fontSize: 9.5, color: MUTED, fontWeight: 800,
+                          minWidth: 34, borderBottom: `1.5px solid ${BORDER}`,
+                        }}>D{dn.sira}</th>
+                      ))}
+                      <th style={{
+                        padding: "4px 5px 6px", fontSize: 9.5, color: TEXT, fontWeight: 800,
+                        minWidth: 42, borderBottom: `1.5px solid ${BORDER}`,
+                      }}>Genel</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {d.konular.map((k, i) => (
+                      <tr key={i}>
+                        <td style={{
+                          position: "sticky", left: 0, zIndex: 1, background: CARD,
+                          padding: "5px 8px 5px 2px", fontSize: 10, color: TEXT, lineHeight: 1.35,
+                          minWidth: 130, maxWidth: 190, borderBottom: `1px solid ${BORDER}`,
+                        }}>{k.kazanim}</td>
+                        {m.denemeler.map((dn, di) => {
+                          const h = k.hucreler[di];
+                          const r = konuMatrisRenk(h);
+                          return (
+                            <td key={dn.id} style={{
+                              textAlign: "center", padding: "5px 3px", fontSize: 10, fontWeight: 800,
+                              color: r.fg, background: r.bg, borderBottom: `1px solid ${BORDER}`,
+                            }}>{h && h.soru > 0 ? `${h.dogru}/${h.yanlis}` : "·"}</td>
+                          );
+                        })}
+                        <td style={{
+                          textAlign: "center", padding: "5px 3px", fontSize: 10.5, fontWeight: 900,
+                          color: k.yuzde === null ? MUTED : (k.yuzde < 50 ? "#C0392B" : k.yuzde < 75 ? "#B07D1A" : "#1A8C5B"),
+                          borderBottom: `1px solid ${BORDER}`,
+                        }}>{k.yuzde === null ? "—" : `%${k.yuzde}`}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      <div style={{ fontSize: 9, color: MUTED, marginTop: 6, lineHeight: 1.5, fontStyle: "italic" }}>
+        Konular kazanım metnine göre eşleştirilir. Farklı yayınevleri aynı konuyu başka kelimelerle
+        yazarsa ayrı satır olarak görünür — bu, yanlış birleştirmemek için bilinçli bir tercihtir.
+      </div>
+    </div>
+  );
+}
+
+// ── Sınıf deneme net tablosu ─────────────────────────────────────────────
+// Geçmiş dönem denemeleri ("7sinif" anahtarındaki G1..G9) ve bu yılın
+// denemeleri (D1..D10) tek tabloda, öğrenci satırlarıyla. İki veri kümesi
+// programda ayrı tutuluyor; burada yalnızca GÖSTERİM için yan yana geliyor,
+// hiçbir yere birleşik kaydedilmiyor.
+function sinifNetTablosuHesapla(ogrenciler, denemeler, sinavTuru) {
+  const dersler = aktifDersler(sinavTuru);
+  const satirlar = (ogrenciler || []).map(o => {
+    const d = pdrSozlukOku(denemeler, o.studentName, o.className, o.numara) || {};
+    const gecmis = {};
+    const g = d["7sinif"];
+    if (g && g.denemeler) {
+      Object.entries(g.denemeler).forEach(([no, v]) => {
+        const net = parseFloat(v && v.toplam_net);
+        if (!isNaN(net)) gecmis[parseInt(no, 10)] = Math.round(net * 10) / 10;
+      });
+    }
+    const buYil = {};
+    Object.entries(d).forEach(([no, nets]) => {
+      if (no === "7sinif") return;
+      const n = parseInt(no, 10);
+      if (isNaN(n)) return;
+      const net = pdrToplamNetHesapla(nets, dersler);
+      if (net !== null && net !== undefined && !isNaN(net)) buYil[n] = Math.round(net * 10) / 10;
+    });
+    const buYilDegerler = Object.values(buYil);
+    return {
+      ad: o.studentName, sinif: o.className, numara: o.numara,
+      gecmis, buYil,
+      gecmisOrt: g && g.ortalama !== undefined && g.ortalama !== null && g.ortalama !== ""
+        ? parseFloat(g.ortalama) : null,
+      buYilOrt: buYilDegerler.length
+        ? Math.round((buYilDegerler.reduce((a, b) => a + b, 0) / buYilDegerler.length) * 10) / 10
+        : null,
+    };
+  });
+
+  const gecmisNolar = [...new Set(satirlar.flatMap(s => Object.keys(s.gecmis).map(Number)))].sort((a, b) => a - b);
+  const buYilNolar = [...new Set(satirlar.flatMap(s => Object.keys(s.buYil).map(Number)))].sort((a, b) => a - b);
+
+  // Sütun ortalamaları — veri girilmiş öğrenciler üzerinden.
+  const ortala = (getir, nolar) => {
+    const out = {};
+    nolar.forEach(no => {
+      const v = satirlar.map(s => getir(s)[no]).filter(x => x !== undefined);
+      out[no] = v.length ? Math.round((v.reduce((a, b) => a + b, 0) / v.length) * 10) / 10 : null;
+    });
+    return out;
+  };
+
+  return {
+    satirlar, gecmisNolar, buYilNolar, maksNet: dersler.reduce((s, d) => s + d.maks, 0),
+    gecmisOrtSatiri: ortala(s => s.gecmis, gecmisNolar),
+    buYilOrtSatiri: ortala(s => s.buYil, buYilNolar),
+  };
+}
+
+function SinifNetTablosu({ ogrenciler, denemeler, sinavTuru }) {
+  const [acik, setAcik] = useState(false);
+  const t = sinifNetTablosuHesapla(ogrenciler, denemeler, sinavTuru);
+  const sutunVar = t.gecmisNolar.length + t.buYilNolar.length;
+  if (sutunVar === 0) return null;
+
+  const hucreRenk = net => {
+    if (net === undefined || net === null) return MUTED;
+    const oran = t.maksNet > 0 ? net / t.maksNet : 0;
+    return oran >= 0.7 ? "#1A8C5B" : oran >= 0.45 ? "#457B9D" : oran >= 0.3 ? "#B07D1A" : "#C0392B";
+  };
+
+  const Basliklar = ({ nolar, onEk, renk }) => nolar.map(no => (
+    <th key={onEk + no} style={{
+      padding: "4px 4px 6px", fontSize: 9.5, fontWeight: 800, color: renk,
+      minWidth: 32, borderBottom: `1.5px solid ${BORDER}`,
+    }}>{onEk}{no}</th>
+  ));
+
+  return (
+    <div style={{ background: CARD, border: `1px solid ${BORDER}`, boxShadow: "0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius: 12, padding: 14, marginBottom: 14 }}>
+      <button onClick={() => setAcik(v => !v)} style={{
+        width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center",
+        background: "none", border: "none", padding: 0, cursor: "pointer",
+      }}>
+        <span style={{ fontSize: 13, fontWeight: 800, color: TEXT }}>📋 Öğrenci Deneme Net Tablosu</span>
+        <span style={{ fontSize: 12, color: MUTED }}>{acik ? "▲" : "▼"}</span>
+      </button>
+      <div style={{ fontSize: 10.5, color: MUTED, marginTop: 4, lineHeight: 1.5 }}>
+        {t.gecmisNolar.length > 0 && <><b style={{ color: PURPLE }}>G1–G{t.gecmisNolar[t.gecmisNolar.length - 1]}</b> geçmiş dönem denemeleri, </>}
+        <b style={{ color: ACCENT }}>D1–D{t.buYilNolar.length ? t.buYilNolar[t.buYilNolar.length - 1] : 0}</b> bu yılın denemeleri.
+        Değerler toplam net (üst sınır {t.maksNet}).
+      </div>
+
+      {acik && (
+        <div style={{ marginTop: 10, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+          <table style={{ borderCollapse: "separate", borderSpacing: 0, minWidth: "100%" }}>
+            <thead>
+              <tr>
+                <th style={{
+                  position: "sticky", left: 0, zIndex: 2, background: CARD, textAlign: "left",
+                  padding: "4px 8px 6px 2px", fontSize: 9.5, color: MUTED, fontWeight: 800,
+                  minWidth: 104, borderBottom: `1.5px solid ${BORDER}`,
+                }}>Öğrenci</th>
+                <Basliklar nolar={t.gecmisNolar} onEk="G" renk={PURPLE} />
+                {t.gecmisNolar.length > 0 && t.buYilNolar.length > 0 && (
+                  <th style={{ borderBottom: `1.5px solid ${BORDER}`, borderLeft: `2px solid ${BORDER}`, width: 4 }} />
+                )}
+                <Basliklar nolar={t.buYilNolar} onEk="D" renk={ACCENT} />
+                <th style={{
+                  padding: "4px 5px 6px", fontSize: 9.5, fontWeight: 800, color: TEXT,
+                  minWidth: 38, borderBottom: `1.5px solid ${BORDER}`,
+                }}>Ort.</th>
+              </tr>
+            </thead>
+            <tbody>
+              {t.satirlar.map(s => (
+                <tr key={s.ad + s.numara}>
+                  <td style={{
+                    position: "sticky", left: 0, zIndex: 1, background: CARD,
+                    padding: "5px 8px 5px 2px", fontSize: 10, fontWeight: 700, color: TEXT,
+                    minWidth: 104, borderBottom: `1px solid ${BORDER}`, whiteSpace: "nowrap",
+                  }}>{s.ad}</td>
+                  {t.gecmisNolar.map(no => (
+                    <td key={"g" + no} style={{
+                      textAlign: "center", padding: "5px 3px", fontSize: 10, fontWeight: 700,
+                      color: hucreRenk(s.gecmis[no]), borderBottom: `1px solid ${BORDER}`,
+                    }}>{s.gecmis[no] === undefined ? "·" : s.gecmis[no]}</td>
+                  ))}
+                  {t.gecmisNolar.length > 0 && t.buYilNolar.length > 0 && (
+                    <td style={{ borderBottom: `1px solid ${BORDER}`, borderLeft: `2px solid ${BORDER}` }} />
+                  )}
+                  {t.buYilNolar.map(no => (
+                    <td key={"d" + no} style={{
+                      textAlign: "center", padding: "5px 3px", fontSize: 10, fontWeight: 700,
+                      color: hucreRenk(s.buYil[no]), borderBottom: `1px solid ${BORDER}`,
+                    }}>{s.buYil[no] === undefined ? "·" : s.buYil[no]}</td>
+                  ))}
+                  <td style={{
+                    textAlign: "center", padding: "5px 3px", fontSize: 10.5, fontWeight: 900,
+                    color: hucreRenk(s.buYilOrt), borderBottom: `1px solid ${BORDER}`,
+                  }}>{s.buYilOrt === null ? "—" : s.buYilOrt}</td>
+                </tr>
+              ))}
+              {/* Sınıf ortalaması — veri girilmiş öğrenciler üzerinden */}
+              <tr>
+                <td style={{
+                  position: "sticky", left: 0, zIndex: 1, background: "#F3F3EF",
+                  padding: "6px 8px 6px 2px", fontSize: 10, fontWeight: 900, color: TEXT,
+                  borderTop: `2px solid ${BORDER}`, whiteSpace: "nowrap",
+                }}>Sınıf ort.</td>
+                {t.gecmisNolar.map(no => (
+                  <td key={"go" + no} style={{ textAlign: "center", padding: "6px 3px", fontSize: 10, fontWeight: 900, background: "#F3F3EF", color: PURPLE, borderTop: `2px solid ${BORDER}` }}>
+                    {t.gecmisOrtSatiri[no] === null ? "·" : t.gecmisOrtSatiri[no]}
+                  </td>
+                ))}
+                {t.gecmisNolar.length > 0 && t.buYilNolar.length > 0 && (
+                  <td style={{ background: "#F3F3EF", borderTop: `2px solid ${BORDER}`, borderLeft: `2px solid ${BORDER}` }} />
+                )}
+                {t.buYilNolar.map(no => (
+                  <td key={"do" + no} style={{ textAlign: "center", padding: "6px 3px", fontSize: 10, fontWeight: 900, background: "#F3F3EF", color: ACCENT, borderTop: `2px solid ${BORDER}` }}>
+                    {t.buYilOrtSatiri[no] === null ? "·" : t.buYilOrtSatiri[no]}
+                  </td>
+                ))}
+                <td style={{ background: "#F3F3EF", borderTop: `2px solid ${BORDER}` }} />
+              </tr>
+            </tbody>
+          </table>
+          <div style={{ fontSize: 9, color: MUTED, marginTop: 6, lineHeight: 1.5 }}>
+            “·” o denemeye girilmemiş veri demektir, sıfır net değil. Sınıf ortalaması yalnızca
+            o denemede verisi olan öğrenciler üzerinden hesaplanır.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+// ===== DENEME ANALIZ BITIS =====
+
 // ===== LISE TARAMA BASLANGIC (otomatik uretildi) =====
 // ── Lise Akademik Düzey Taraması (9-12. Sınıf) ───────────────────────────
 // Ortaokul aracindan farki: dersler TYT/AYT mantigina gore ORTAK
@@ -15479,6 +15834,7 @@ Sade, somut, öğretmenin doğrudan kullanabileceği şekilde yaz. Markdown kull
                   );
                 })}
               </div>
+              <KonuDenemeMatrisi ogrKayitlar={ogrKayitlar} />
             </div>
           )}
         </div>
@@ -22008,6 +22364,10 @@ function SinifDenemeGrafigi({ ogrenciler, denemeler, sinavTuru, vurgulananAd }) 
   if (vurgulananAd && seriler.some(s=>s.ad===vurgulananAd) && !varsayilan.includes(vurgulananAd)) varsayilan.push(vurgulananAd);
   const gorunen = acikOgrenciler === null ? varsayilan : acikOgrenciler;
   const cizilecek = seriler.filter(s => gorunen.includes(s.ad));
+  // Ogrenci cizgileri kapatilinca sinif ortalamasi tek basina kalir ve
+  // okunabilir olur; sekiz cizginin arasinda kesikli gri bir cizgiyi
+  // takip etmek zor.
+  const [sadeceOrtalama, setSadeceOrtalama] = useState(false);
   const vurguVar = !!vurgulananAd && cizilecek.some(s => s.ad === vurgulananAd);
 
   if (seriler.length === 0) return null;
@@ -22028,8 +22388,14 @@ function SinifDenemeGrafigi({ ogrenciler, denemeler, sinavTuru, vurgulananAd }) 
   // Sınıf ortalaması — her deneme için
   const ortalamalar = tumNolar.map(no => {
     const vals = seriler.map(s => s.noktalar.find(p=>p.no===no)?.toplam).filter(v => v !== undefined);
-    return { no, ort: vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null };
+    return { no, ort: vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null, adet: vals.length };
   }).filter(o => o.ort !== null);
+  // Her denemeye sinifin tamami girmiyor. Ortalama yalnizca o denemeye giren
+  // ogrenciler uzerinden hesaplandigi icin, az kisinin girdigi bir deneme
+  // ortalamayi sertce asagi ya da yukari cekebilir — grafikte bu, sinifin
+  // gerilemesi ya da yukselmesi gibi gorunur. Eksik kapsamli denemeler yazilir.
+  const toplamOgrenci = (ogrenciler||[]).length;
+  const kapsamUyarisi = ortalamalar.filter(o => o.adet < toplamOgrenci);
 
   function cevir(ad) {
     const su = acikOgrenciler === null ? seriler.slice(0,8).map(s=>s.ad) : acikOgrenciler;
@@ -22077,10 +22443,25 @@ function SinifDenemeGrafigi({ ogrenciler, denemeler, sinavTuru, vurgulananAd }) 
         {/* Sınıf ortalaması — kesikli gri çizgi */}
         {ortalamalar.length > 1 && (
           <path d={ortalamalar.map((o,i)=>`${i===0?"M":"L"} ${nx(o.no).toFixed(1)} ${ny(o.ort).toFixed(1)}`).join(" ")}
-            fill="none" stroke="#7D9188" strokeWidth="1.6" strokeDasharray="5,4" opacity="0.8" />
+            fill="none" stroke={sadeceOrtalama ? ACCENT : "#7D9188"}
+            strokeWidth={sadeceOrtalama ? 3.2 : 1.6}
+            strokeDasharray={sadeceOrtalama ? undefined : "5,4"}
+            strokeLinejoin="round" strokeLinecap="round"
+            opacity={sadeceOrtalama ? 1 : 0.8} />
         )}
+        {/* Sadece ortalama modunda her denemenin degeri noktanin ustunde yazilir */}
+        {sadeceOrtalama && ortalamalar.map(o => {
+          const metin = String(Math.round(o.ort*10)/10);
+          return (
+            <g key={o.no}>
+              <circle cx={nx(o.no)} cy={ny(o.ort)} r="4.6" fill="#fff" stroke={ACCENT} strokeWidth="2.4" />
+              <text x={nx(o.no)} y={ny(o.ort)-9} textAnchor="middle" fontSize="8.5" fontWeight="800"
+                    stroke="#fff" strokeWidth="2.6" paintOrder="stroke" fill={ACCENT}>{metin}</text>
+            </g>
+          );
+        })}
         {/* Öğrenci çizgileri */}
-        {cizilecek.map((s) => {
+        {!sadeceOrtalama && cizilecek.map((s) => {
           const renk = SINIF_GRAFIK_RENKLERI[seriler.findIndex(x=>x.ad===s.ad) % SINIF_GRAFIK_RENKLERI.length];
           const d = s.noktalar.map((p,i)=>`${i===0?"M":"L"} ${nx(p.no).toFixed(1)} ${ny(p.toplam).toFixed(1)}`).join(" ");
           const bu = vurguVar && s.ad === vurgulananAd;
@@ -22113,7 +22494,25 @@ function SinifDenemeGrafigi({ ogrenciler, denemeler, sinavTuru, vurgulananAd }) 
         })}
       </svg>
 
-      <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:10}}>
+      <button onClick={()=>setSadeceOrtalama(v=>!v)} style={{
+        marginTop:10, padding:"7px 12px", borderRadius:9, fontSize:11, fontWeight:800, cursor:"pointer",
+        border:`1.5px solid ${sadeceOrtalama ? ACCENT : BORDER}`,
+        background: sadeceOrtalama ? ACCENT : "#fff",
+        color: sadeceOrtalama ? "#fff" : MUTED,
+      }}>{sadeceOrtalama ? "✓ Sadece sınıf ortalaması" : "📉 Sadece sınıf ortalamasını göster"}</button>
+
+      {sadeceOrtalama && kapsamUyarisi.length > 0 && (
+        <div style={{marginTop:8, background:"#FDF6E3", border:"1px solid #f0e0b0", borderRadius:9,
+                     padding:"8px 10px", fontSize:10, color:"#8A6A1A", lineHeight:1.55}}>
+          <b>Kapsam uyarısı:</b> Sınıfta {toplamOgrenci} öğrenci var ama{" "}
+          {kapsamUyarisi.map(o => `${etiket(o.no)} (${o.adet} öğrenci)`).join(", ")}{" "}
+          verisiyle hesaplandı. Bu denemelerdeki yükseliş ya da düşüş, sınıfın değil
+          eksik verinin sonucu olabilir.
+        </div>
+      )}
+
+      <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:10, opacity: sadeceOrtalama ? 0.35 : 1,
+                   pointerEvents: sadeceOrtalama ? "none" : "auto"}}>
         <span style={{display:"flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:10,background:BG,fontSize:9.5,color:MUTED,fontWeight:700}}>
           <span style={{width:14,height:0,borderTop:"2px dashed #7D9188",display:"inline-block"}} /> Sınıf ort.
         </span>
@@ -23407,6 +23806,8 @@ function SinifProfili({ ogrenciler, setOgrenciler, records, riskListesi, aktifYi
         )}
 
         <RiskOzetKartlari ogrenciler={st.ogr} kompakt baslik="📊 Geçmiş Dönem Deneme Risk Dağılımı" />
+
+        <SinifNetTablosu ogrenciler={st.ogr} denemeler={denemeler} sinavTuru={sinavTuru} />
 
         <SinifDenemeGrafigi ogrenciler={st.ogr} denemeler={denemeler} sinavTuru={sinavTuru} vurgulananAd={aktifOgrenci?.name} />
 

@@ -8433,11 +8433,16 @@ function UyumIzlemeEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, uyumI
   }
 
   // Bekleyen öneriyi forma taşır; danışman düzenleyip kaydeder.
-  function oneriyiFormaAl(k) {
+  async function oneriyiFormaAl(k) {
     setIsaretli(k.isaretli || []);
     setDayanaklar(k.dayanaklar || {});
     setAiMesaj("Öneri forma alındı. Gözden geçirip aşağıdan kaydet.");
     window.scrollTo({ top: 0, behavior: "smooth" });
+    // Öneri forma alındığı an bekleyenler listesinden çıkar — yoksa kayıt
+    // yapılıp yapılmadığına bakılmaksızın "onay bekliyor" olarak kalıcı
+    // şekilde takılı kalıyordu (aynı öneri hiç kaybolmuyordu).
+    const yeni = uyumIzleme.filter(x => x.id !== k.id);
+    setUyumIzleme(yeni); await saveUyumIzleme(yeni);
   }
   async function oneriyiSil(id) {
     const yeni = uyumIzleme.filter(k => k.id !== id);

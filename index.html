@@ -18384,7 +18384,7 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
                             return haftalar.map(h => (
                               <div key={h.haftaNo}>
                                 <div style={{ fontSize:10.5, fontWeight:700, color:MUTED, padding:"2px 2px 4px" }}>
-                                  {h.haftaNo}. Hafta <span style={{ fontWeight:400 }}>({h.ilkGun === h.sonGun ? `${h.ilkGun} ${ayAdiKisa}` : `${h.ilkGun}-${h.sonGun} ${ayAdiKisa}`})</span>
+                                  {h.haftaNo}. Hafta <span style={{ fontWeight:400 }}>({h.ilkGun === h.sonGun ? `${h.ilkGun} ${ayAdiKisa}` : `${h.ilkGun}-${h.sonGun} ${ayAdiKisa}`})</span> <span style={{ fontWeight:400, color:BLUE }}>· {h.kayitlar.length} görüşme</span>
                                 </div>
                                 <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
                                   {h.kayitlar.map(k => {
@@ -22414,7 +22414,7 @@ function GorusmeTakvimiEkrani({ records, aktifYil }) {
 // çizilir, gerisini danışman kendi seçer.
 const SINIF_GRAFIK_RENKLERI = ["#127C56","#9E78ED","#E67E22","#2980B9","#C0392B","#16A085","#8E44AD","#D4AC0D","#2C3E50","#E84393","#00A8A8","#6C5CE7"];
 
-function SinifDenemeGrafigi({ ogrenciler, denemeler, sinavTuru, vurgulananAd }) {
+function SinifDenemeGrafigi({ ogrenciler, denemeler, sinavTuru, vurgulananAd, disaridanSadeceOrtalama }) {
   const dersler = aktifDersler(sinavTuru);
   const maksNet = dersler.reduce((s,d)=>s+d.maks, 0);
 
@@ -22460,6 +22460,7 @@ function SinifDenemeGrafigi({ ogrenciler, denemeler, sinavTuru, vurgulananAd }) 
   // okunabilir olur; sekiz cizginin arasinda kesikli gri bir cizgiyi
   // takip etmek zor.
   const [sadeceOrtalama, setSadeceOrtalama] = useState(false);
+  const gosterilecekSadeceOrtalama = sadeceOrtalama || !!disaridanSadeceOrtalama;
   const vurguVar = !!vurgulananAd && cizilecek.some(s => s.ad === vurgulananAd);
 
   if (seriler.length === 0) return null;
@@ -22535,14 +22536,14 @@ function SinifDenemeGrafigi({ ogrenciler, denemeler, sinavTuru, vurgulananAd }) 
         {/* Sınıf ortalaması — kesikli gri çizgi */}
         {ortalamalar.length > 1 && (
           <path d={ortalamalar.map((o,i)=>`${i===0?"M":"L"} ${nx(o.no).toFixed(1)} ${ny(o.ort).toFixed(1)}`).join(" ")}
-            fill="none" stroke={sadeceOrtalama ? ACCENT : "#7D9188"}
-            strokeWidth={sadeceOrtalama ? 3.2 : 1.6}
-            strokeDasharray={sadeceOrtalama ? undefined : "5,4"}
+            fill="none" stroke={gosterilecekSadeceOrtalama ? ACCENT : "#7D9188"}
+            strokeWidth={gosterilecekSadeceOrtalama ? 3.2 : 1.6}
+            strokeDasharray={gosterilecekSadeceOrtalama ? undefined : "5,4"}
             strokeLinejoin="round" strokeLinecap="round"
-            opacity={sadeceOrtalama ? 1 : 0.8} />
+            opacity={gosterilecekSadeceOrtalama ? 1 : 0.8} />
         )}
         {/* Sadece ortalama modunda her denemenin degeri noktanin ustunde yazilir */}
-        {sadeceOrtalama && ortalamalar.map(o => {
+        {gosterilecekSadeceOrtalama && ortalamalar.map(o => {
           const metin = String(Math.round(o.ort*10)/10);
           return (
             <g key={o.no}>
@@ -22553,7 +22554,7 @@ function SinifDenemeGrafigi({ ogrenciler, denemeler, sinavTuru, vurgulananAd }) 
           );
         })}
         {/* Öğrenci çizgileri */}
-        {!sadeceOrtalama && cizilecek.map((s) => {
+        {!gosterilecekSadeceOrtalama && cizilecek.map((s) => {
           const renk = SINIF_GRAFIK_RENKLERI[seriler.findIndex(x=>x.ad===s.ad) % SINIF_GRAFIK_RENKLERI.length];
           const d = s.noktalar.map((p,i)=>`${i===0?"M":"L"} ${nx(p.no).toFixed(1)} ${ny(p.toplam).toFixed(1)}`).join(" ");
           const bu = vurguVar && s.ad === vurgulananAd;
@@ -22586,14 +22587,14 @@ function SinifDenemeGrafigi({ ogrenciler, denemeler, sinavTuru, vurgulananAd }) 
         })}
       </svg>
 
-      <button onClick={()=>setSadeceOrtalama(v=>!v)} style={{
+      <button className="noprint" onClick={()=>setSadeceOrtalama(v=>!v)} style={{
         marginTop:10, padding:"7px 12px", borderRadius:9, fontSize:11, fontWeight:800, cursor:"pointer",
         border:`1.5px solid ${sadeceOrtalama ? ACCENT : BORDER}`,
         background: sadeceOrtalama ? ACCENT : "#fff",
         color: sadeceOrtalama ? "#fff" : MUTED,
       }}>{sadeceOrtalama ? "✓ Sadece sınıf ortalaması" : "📉 Sadece sınıf ortalamasını göster"}</button>
 
-      {sadeceOrtalama && kapsamUyarisi.length > 0 && (
+      {gosterilecekSadeceOrtalama && kapsamUyarisi.length > 0 && (
         <div style={{marginTop:8, background:"#FDF6E3", border:"1px solid #f0e0b0", borderRadius:9,
                      padding:"8px 10px", fontSize:10, color:"#8A6A1A", lineHeight:1.55}}>
           <b>Kapsam uyarısı:</b> Sınıfta {toplamOgrenci} öğrenci var ama{" "}
@@ -22603,8 +22604,8 @@ function SinifDenemeGrafigi({ ogrenciler, denemeler, sinavTuru, vurgulananAd }) 
         </div>
       )}
 
-      <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:10, opacity: sadeceOrtalama ? 0.35 : 1,
-                   pointerEvents: sadeceOrtalama ? "none" : "auto"}}>
+      <div className="noprint" style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:10, opacity: gosterilecekSadeceOrtalama ? 0.35 : 1,
+                   pointerEvents: gosterilecekSadeceOrtalama ? "none" : "auto"}}>
         <span style={{display:"flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:10,background:BG,fontSize:9.5,color:MUTED,fontWeight:700}}>
           <span style={{width:14,height:0,borderTop:"2px dashed #7D9188",display:"inline-block"}} /> Sınıf ort.
         </span>
@@ -23918,7 +23919,7 @@ function SinifProfili({ ogrenciler, setOgrenciler, records, riskListesi, aktifYi
         <div id="sinif-net-yazdir-alani">
           <SinifNetTablosu ogrenciler={st.ogr} denemeler={denemeler} sinavTuru={sinavTuru} disaridanAcik={netYazdirHazir} />
 
-          <SinifDenemeGrafigi ogrenciler={st.ogr} denemeler={denemeler} sinavTuru={sinavTuru} vurgulananAd={aktifOgrenci?.name} />
+          <SinifDenemeGrafigi ogrenciler={st.ogr} denemeler={denemeler} sinavTuru={sinavTuru} vurgulananAd={aktifOgrenci?.name} disaridanSadeceOrtalama={netYazdirHazir} />
         </div>
 
 
@@ -26323,9 +26324,15 @@ export default function App() {
   // Sınıf bazlı görüşme istatistiği (tüm yıl): her sınıf için farklı öğrenci
   // sayısı VE toplam görüşme sayısı — sadece öğrenci görüşmeleri (veli hariç).
   const sinifGorusmeIstatistigi = studentRecs.reduce((acc, r) => {
-    const sinif = r.className || "Sınıf Belirtilmemiş";
+    // Kaydın kendi r.className'i, görüşmenin YAPILDIĞI andaki sınıf olabilir —
+    // öğrenci o tarihten bu yana sınıf değiştirmiş olabilir. Öğrencinin GÜNCEL
+    // sınıfını kullanıyoruz (Yıl Sonu Kapsam Takibi ile tutarlı olsun diye),
+    // yoksa aynı öğrenci iki farklı sınıf altında ayrı kişi gibi sayılıp bu
+    // ekranla Kapsam Takibi arasında sayı tutarsızlığı çıkıyordu.
+    const guncelOgr = ogrenciler.find(o => pdrAyniOgrenci(o.studentName, o.className, r.studentName, r.className, o.numara, r.numara));
+    const sinif = guncelOgr?.className || r.className || "Sınıf Belirtilmemiş";
     if (!acc[sinif]) acc[sinif] = { ogrenciSet: new Set(), toplam: 0 };
-    acc[sinif].ogrenciSet.add(pdrOgrAnahtar(r.studentName, r.className, r.numara));
+    acc[sinif].ogrenciSet.add(pdrOgrAnahtar(guncelOgr?.studentName || r.studentName, sinif, guncelOgr?.numara || r.numara));
     acc[sinif].toplam++;
     return acc;
   }, {});
@@ -26341,9 +26348,11 @@ export default function App() {
     const months = ["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"];
     const key = months[parseInt(parts[1]) - 1] + " " + parts[2];
     if (!acc[key]) acc[key] = { ogrenciSet: new Set(), sinifMap: {} };
-    const ogrKey = pdrOgrAnahtar(r.studentName, r.className, r.numara);
+    // Aynı gerekçeyle burada da öğrencinin güncel sınıfı kullanılıyor.
+    const guncelOgr = ogrenciler.find(o => pdrAyniOgrenci(o.studentName, o.className, r.studentName, r.className, o.numara, r.numara));
+    const sinif = guncelOgr?.className || r.className || "Belirtilmemiş";
+    const ogrKey = pdrOgrAnahtar(guncelOgr?.studentName || r.studentName, sinif, guncelOgr?.numara || r.numara);
     acc[key].ogrenciSet.add(ogrKey);
-    const sinif = r.className || "Belirtilmemiş";
     if (!acc[key].sinifMap[sinif]) acc[key].sinifMap[sinif] = new Set();
     acc[key].sinifMap[sinif].add(ogrKey);
     return acc;

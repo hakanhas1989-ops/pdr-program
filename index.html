@@ -3428,8 +3428,9 @@ function sinifNetTablosuHesapla(ogrenciler, denemeler, sinavTuru) {
   };
 }
 
-function SinifNetTablosu({ ogrenciler, denemeler, sinavTuru }) {
+function SinifNetTablosu({ ogrenciler, denemeler, sinavTuru, disaridanAcik }) {
   const [acik, setAcik] = useState(false);
+  const gosterilecekAcik = acik || !!disaridanAcik;
   const t = sinifNetTablosuHesapla(ogrenciler, denemeler, sinavTuru);
   const sutunVar = t.gecmisNolar.length + t.buYilNolar.length;
   if (sutunVar === 0) return null;
@@ -3462,7 +3463,7 @@ function SinifNetTablosu({ ogrenciler, denemeler, sinavTuru }) {
         Değerler toplam net (üst sınır {t.maksNet}).
       </div>
 
-      {acik && (
+      {gosterilecekAcik && (
         <div style={{ marginTop: 10, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
           <table style={{ borderCollapse: "separate", borderSpacing: 0, minWidth: "100%" }}>
             <thead>
@@ -23654,6 +23655,7 @@ function SinifProfili({ ogrenciler, setOgrenciler, records, riskListesi, aktifYi
   const [yeniSinifAdi, setYeniSinifAdi] = useState("");
   const [sinifSilOnay, setSinifSilOnay] = useState(null);
   const [kaynastirmaAcikId, setKaynastirmaAcikId] = useState(null);
+  const [netYazdirHazir, setNetYazdirHazir] = useState(false);
 
   // Yıl filtreli öğrenciler
   const yilOgrencileri = ogrenciler.filter(o => !o.yil || o.yil === aktifYil).filter(o => pdrKademeUyumlu(o.className, kademe));
@@ -23898,9 +23900,26 @@ function SinifProfili({ ogrenciler, setOgrenciler, records, riskListesi, aktifYi
 
         <RiskOzetKartlari ogrenciler={st.ogr} kompakt baslik="📊 Geçmiş Dönem Deneme Risk Dağılımı" />
 
-        <SinifNetTablosu ogrenciler={st.ogr} denemeler={denemeler} sinavTuru={sinavTuru} />
+        <button onClick={() => {
+          // Tablo normalde kapalı (accordion) başlıyor — yazdırmadan önce
+          // zorla açıyoruz, yoksa PDF/yazdırma çıktısında satırlar boş kalır.
+          // React'in bunu DOM'a yazmasını bekleyip ANCAK ONDAN SONRA
+          // raporIndir'i çağırıyoruz (innerHTML'i o anda okuyor).
+          setNetYazdirHazir(true);
+          setTimeout(() => {
+            raporIndir("sinif-net-yazdir-alani", "Sinif_Net_" + (seciliSinif||"Sinif").replace(/\s+/g,"_"));
+          }, 60);
+        }} style={{
+          width:"100%", padding:"9px", marginBottom:10, background:CARD, border:`1px solid ${ACCENT}`,
+          borderRadius:9, fontSize:12.5, fontWeight:700, color:ACCENT, cursor:"pointer",
+          display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+        }}>🖨️ Net Tablosu + Grafiği Yazdır / PDF</button>
 
-        <SinifDenemeGrafigi ogrenciler={st.ogr} denemeler={denemeler} sinavTuru={sinavTuru} vurgulananAd={aktifOgrenci?.name} />
+        <div id="sinif-net-yazdir-alani">
+          <SinifNetTablosu ogrenciler={st.ogr} denemeler={denemeler} sinavTuru={sinavTuru} disaridanAcik={netYazdirHazir} />
+
+          <SinifDenemeGrafigi ogrenciler={st.ogr} denemeler={denemeler} sinavTuru={sinavTuru} vurgulananAd={aktifOgrenci?.name} />
+        </div>
 
 
         {/* Görüşme Konuları */}

@@ -8385,7 +8385,16 @@ function UyumIzlemeEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, uyumI
         .sort((a,b) => pdrTarihMs(b.tarih) - pdrTarihMs(a.tarih))
     : [];
   // Görüşme özetinden gelen, henüz onaylanmamış öneriler ayrı gösterilir.
-  const bekleyenler = ogrTumu.filter(k => k.beklemede);
+  // Bunlar oluşturulduğu andaki sınıf/numara bilgisini taşır — öğrenci o
+  // tarihten beri sınıf değiştirmiş olabilir ya da o an formda farklı bir
+  // değer olabilir; bu yüzden sınıf/numara uyuşmasa bile SADECE isimle de
+  // eşleştiriyoruz, yoksa öneri İşçi Raporu'nda görünmeye devam eder ama bu
+  // sekmede hiç bulunamaz, "Yoksay" hiç görünmezdi.
+  const bekleyenler = secili
+    ? (uyumIzleme||[]).filter(k => k.beklemede &&
+        (k.studentName||"").toLocaleLowerCase("tr").trim() === (secili.studentName||"").toLocaleLowerCase("tr").trim())
+        .sort((a,b) => pdrTarihMs(b.tarih) - pdrTarihMs(a.tarih))
+    : [];
   const ogrKayitlari = ogrTumu.filter(k => !k.beklemede);
 
   const ogrGorusmeler = secili
@@ -25969,13 +25978,18 @@ export default function App() {
   async function handleUyumOnayaGonder() {
     if (!onerilenUyum || !form.studentName.trim()) return;
     const tumKatilimcilar = [{ name: form.studentName, className: form.className, numara: form.numara }, ...digerKatilimcilar];
-    const yeniKayitlar = tumKatilimcilar.map(k => ({
-      id: uid(), yil: aktifYil, tarih: form.tarih || today(),
-      studentName: k.name, className: k.className, numara: k.numara || "",
-      isaretli: onerilenUyum.map(o => o.kod),
-      dayanaklar: Object.fromEntries(onerilenUyum.map(o => [o.kod, o.dayanak])),
-      sonuc: "İzlemeye devam", not: "", beklemede: true,
-    }));
+    const yeniKayitlar = tumKatilimcilar.map(k => {
+      const guncelOgr = kayitliListesi?.find(o => o.name === k.name);
+      const guncelSinif = guncelOgr?.className || k.className;
+      const guncelNumara = guncelOgr?.numara || k.numara;
+      return {
+        id: uid(), yil: aktifYil, tarih: form.tarih || today(),
+        studentName: k.name, className: guncelSinif, numara: guncelNumara || "",
+        isaretli: onerilenUyum.map(o => o.kod),
+        dayanaklar: Object.fromEntries(onerilenUyum.map(o => [o.kod, o.dayanak])),
+        sonuc: "İzlemeye devam", not: "", beklemede: true,
+      };
+    });
     const guncel = [...(uyumIzleme||[]), ...yeniKayitlar];
     setUyumIzleme(guncel);
     await saveUyumIzleme(guncel);

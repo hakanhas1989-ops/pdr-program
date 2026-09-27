@@ -10183,7 +10183,16 @@ async function raporIndir(elementId, dosyaAdi) {
     <button onclick="try{window.close();}catch(e){} setTimeout(function(){ if(!window.closed){ if(window.history.length>1){ window.history.back(); } else { window.location.href='https://hakanhas1989-ops.github.io/pdr-program/'; } } }, 100);" style="background:rgba(255,255,255,0.2);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:14px;cursor:pointer;">✕</button>
   </div>
 </div>
-<div id="pdr-print-spacer" style="margin-top:60px;">${icerik}</div>
+<div id="pdr-print-spacer" style="margin-top:60px;">
+<div style="position:fixed;top:6mm;right:6mm;display:flex;align-items:center;gap:6px;z-index:1;">
+  <svg width="20" height="20" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="13" cy="13" r="12" fill="#127C56"/>
+    <path d="M13 4.5 L15.4 11.5 L13 21.5 L10.6 11.5 Z" fill="#fff"/>
+    <circle cx="13" cy="13" r="1.7" fill="#127C56"/>
+  </svg>
+  <span style="font-family:Arial,Helvetica,sans-serif;font-size:10.5px;font-weight:800;color:#127C56;letter-spacing:0.2px;">PDR Program</span>
+</div>
+${icerik}</div>
 </body>
 </html>`;
 

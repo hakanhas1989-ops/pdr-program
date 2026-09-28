@@ -3428,6 +3428,144 @@ function sinifNetTablosuHesapla(ogrenciler, denemeler, sinavTuru) {
   };
 }
 
+// Sınıfın "haritası": o sınıfta görüşülmüş her öğrenci için görüşme geçmişi
+// (tarih, ayın kaçıncı haftası, konu, görüşmeden öğrenilenler), Bireyi Tanıma
+// maddeleri, BDT ifadeleri, geçmiş yıl sonu not ortalamaları ve deneme
+// netlerini TEK yapıda toplar — sınıf raporunun temel veri kaynağı.
+// Görüşme kaydı öğrencinin o anki (kayıt zamanındaki) sınıfını taşıyabildiği
+// için eşleştirme her zaman pdrAyniOgrenci ile (güncel kimliğe göre) yapılır.
+function sinifHaritasiVerisi(sinifOgrencileri, records, bireyiTanima, bdtAnaliz, profiles2, denemeler, sinavTuru) {
+  const studentRecs = (records || []).filter(r => (r.meetingType || "Öğrenci") === "Öğrenci");
+  const netTablo = sinifNetTablosuHesapla(sinifOgrencileri, denemeler, sinavTuru);
+
+  const bloklar = (sinifOgrencileri || []).map(o => {
+    const gorusmeler = studentRecs
+      .filter(r => pdrAyniOgrenci(r.studentName, r.className, o.studentName, o.className, r.numara, o.numara))
+      .map(r => {
+        const t = pdrTarihParcala(r.date);
+        let haftaNo = null;
+        if (t) {
+          const h = ayHaftalariniHesapla(t.ay, t.yil).find(hh => t.gun >= hh.ilkGun && t.gun <= hh.sonGun);
+          haftaNo = h ? h.haftaNo : null;
+        }
+        return { ...r, haftaNo };
+      })
+      .sort((a, b) => pdrTarihMs(a.date) - pdrTarihMs(b.date));
+    if (gorusmeler.length === 0) return null; // haritada sadece görüşülenler yer alır
+
+    return {
+      ogrenci: o.studentName, sinif: o.className, numara: o.numara,
+      gorusmeler,
+      bireyiTanima: (bireyiTanima || []).filter(b => pdrAyniOgrenci(b.studentName, b.className, o.studentName, o.className, b.numara, o.numara)),
+      bdt: (bdtAnaliz || []).filter(b => pdrAyniOgrenci(b.studentName, b.className, o.studentName, o.className, b.numara, o.numara)),
+      netSatir: netTablo.satirlar.find(s => pdrAyniOgrenci(s.ad, s.sinif, o.studentName, o.className, s.numara, o.numara)),
+      gecmisYillar: (profiles2 || []).find(p => pdrAyniOgrenci(p.studentName, p.className, o.studentName, o.className, p.numara, o.numara))?.gecmisYillar || {},
+    };
+  }).filter(Boolean);
+
+  return { bloklar, netTablo, ayAdlari: ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"] };
+}
+
+// sinifHaritasiVerisi()'nin döndürdüğü veriyi yazdırılabilir bir rapora çevirir.
+function SinifHaritasiRaporu({ sinifAdi, veri }) {
+  if (veri.bloklar.length === 0) {
+    return <div style={{ textAlign:"center", color:"#888", padding:24, fontSize:12 }}>Bu sınıfta henüz görüşülmüş öğrenci yok.</div>;
+  }
+  return (
+    <div style={{ fontFamily:"Arial, Helvetica, sans-serif" }}>
+      <div style={{ borderBottom:"2px solid #127C56", paddingBottom:8, marginBottom:16 }}>
+        <div style={{ fontSize:10, color:"#127C56", fontWeight:700, letterSpacing:1, textTransform:"uppercase" }}>PDR Servisi — Sınıf Haritası</div>
+        <div style={{ fontSize:18, fontWeight:900, color:"#1a1a1a" }}>{sinifAdi} Sınıfı</div>
+        <div style={{ fontSize:11, color:"#666", marginTop:2 }}>{veri.bloklar.length} öğrenci görüşülmüş</div>
+        {(() => {
+          const tum = veri.bloklar.flatMap(b => b.gorusmeler);
+          const konu = {}, donem = {};
+          tum.forEach(g => {
+            const k = g.topic || "Belirtilmemiş";
+            konu[k] = (konu[k] || 0) + 1;
+            const ayNo = parseInt((g.date||"").split(".")[1], 10) - 1;
+            if (veri.ayAdlari[ayNo] && g.haftaNo) {
+              const anahtar = `${veri.ayAdlari[ayNo]} ${g.haftaNo}. hafta`;
+              donem[anahtar] = (donem[anahtar] || 0) + 1;
+            }
+          });
+          const chip = (t, i) => <span key={i} style={{ background:"#F0FAF4", border:"1px solid #B9D9C8", borderRadius:8, padding:"1px 8px", fontSize:9.5, color:"#127C56", marginRight:5, display:"inline-block", marginTop:4 }}>{t}</span>;
+          return (
+            <div style={{ marginTop:6 }}>
+              <div style={{ fontSize:10, color:"#444" }}><b>Toplam {tum.length} görüşme</b></div>
+              <div>{Object.entries(konu).sort((a,b)=>b[1]-a[1]).map(([k,n],i) => chip(`${k}: ${n}`, i))}</div>
+              <div>{Object.entries(donem).map(([d,n],i) => chip(`${d}: ${n}`, i))}</div>
+            </div>
+          );
+        })()}
+      </div>
+      {veri.bloklar.map(b => (
+        <div key={b.ogrenci + "||" + b.numara} style={{ marginBottom:20, pageBreakInside:"avoid" }}>
+          <div style={{ background:"linear-gradient(90deg, #127C56 0%, #2E7A6B 100%)", color:"#fff", padding:"6px 12px", borderRadius:"8px 8px 0 0", fontSize:13, fontWeight:800 }}>
+            {b.ogrenci} <span style={{ fontWeight:400, fontSize:11 }}>· {b.sinif}{b.numara ? ` · No: ${b.numara}` : ""}</span>
+          </div>
+          <div style={{ border:"1px solid #B9D9C8", borderTop:"none", borderRadius:"0 0 8px 8px", padding:10 }}>
+            <div style={{ fontSize:9, fontWeight:700, color:"#127C56", textTransform:"uppercase", marginBottom:5 }}>Görüşmeler ({b.gorusmeler.length})</div>
+            {b.gorusmeler.map((g, i) => {
+              const ayNo = parseInt((g.date||"").split(".")[1], 10) - 1;
+              return (
+                <div key={g.id || i} style={{ marginBottom:8, paddingBottom:8, borderBottom: i < b.gorusmeler.length-1 ? "1px solid #eee" : "none" }}>
+                  <div style={{ fontSize:10, color:"#555", marginBottom:3 }}>
+                    <b>{g.date}</b>
+                    {veri.ayAdlari[ayNo] && <span> — {veri.ayAdlari[ayNo]}{g.haftaNo ? `, ${g.haftaNo}. hafta` : ""}</span>}
+                    {g.topic && <span style={{ marginLeft:6, background:"#f0f0f0", borderRadius:8, padding:"1px 7px", fontSize:9 }}>{g.topic}</span>}
+                  </div>
+                  {(g.summary || g.raw) && <div style={{ fontSize:10.5, color:"#333", lineHeight:1.6 }}>{g.summary || g.raw}</div>}
+                </div>
+              );
+            })}
+
+            {b.bireyiTanima.length > 0 && (
+              <div style={{ marginTop:8 }}>
+                <div style={{ fontSize:9, fontWeight:700, color:"#6E5AAE", textTransform:"uppercase", marginBottom:4 }}>Bireyi Tanıma</div>
+                {b.bireyiTanima.map(m => <div key={m.id} style={{ fontSize:10, color:"#333", marginBottom:2 }}>• {m.metin}</div>)}
+              </div>
+            )}
+
+            {b.bdt.length > 0 && (
+              <div style={{ marginTop:8 }}>
+                <div style={{ fontSize:9, fontWeight:700, color:"#8E5B3C", textTransform:"uppercase", marginBottom:4 }}>BDT — Bilişsel Çarpıtma</div>
+                {b.bdt.map((m, i) => <div key={i} style={{ fontSize:10, color:"#555", marginBottom:2 }}>"{m.ifade}"</div>)}
+              </div>
+            )}
+
+            {(() => {
+              const gy = Object.entries(b.gecmisYillar || {}).filter(([,v]) => v!=="" && v!=null).sort((a,b2)=>a[0]-b2[0]);
+              const netVar = b.netSatir && (b.netSatir.buYilOrt !== null || b.netSatir.gecmisOrt !== null);
+              if (gy.length === 0 && !netVar) return null;
+              return (
+                <div style={{ marginTop:8, display:"flex", flexWrap:"wrap", gap:16 }}>
+                  {gy.length > 0 && (
+                    <div>
+                      <div style={{ fontSize:9, fontWeight:700, color:"#888", textTransform:"uppercase", marginBottom:2 }}>Geçmiş Yıl Sonu Ort.</div>
+                      <div style={{ fontSize:10, color:"#333" }}>{gy.map(([s,o]) => `${s}.Sınıf: ${o}`).join(" · ")}</div>
+                    </div>
+                  )}
+                  {netVar && (
+                    <div>
+                      <div style={{ fontSize:9, fontWeight:700, color:"#888", textTransform:"uppercase", marginBottom:2 }}>Deneme Net Ort.</div>
+                      <div style={{ fontSize:10, color:"#333" }}>
+                        {b.netSatir.gecmisOrt !== null && `Geçen yıl: ${b.netSatir.gecmisOrt}`}
+                        {b.netSatir.gecmisOrt !== null && b.netSatir.buYilOrt !== null && " · "}
+                        {b.netSatir.buYilOrt !== null && `Bu yıl: ${b.netSatir.buYilOrt}`}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function SinifNetTablosu({ ogrenciler, denemeler, sinavTuru, disaridanAcik }) {
   const [acik, setAcik] = useState(false);
   const gosterilecekAcik = acik || !!disaridanAcik;
@@ -23664,7 +23802,7 @@ function SinifSunumuEkrani({ ogrenciler, denemeler, sinavTuru, kademe, netHarita
 // "RISK_TURLERI is not defined" hatası veriyordu.
 const RISK_TURLERI = ["Davranış","Akademik","Aile","Akran / Zorbalık","Duygusal","Devamsızlık","Öz Zarar","Sağlık","Madde Kullanımı","Teknoloji / Ekran Bağımlılığı","Ekonomik Güçlük","Yas / Kayıp","Travma","Özel Öğrenme Güçlüğü","Göç / Uyum Süreci","Adli Süreç / Danışmanlık Tedbiri","Toplumsal Cinsiyet Temelli Şiddet","İhmal / İstismar","Diğer"];
 
-function SinifProfili({ ogrenciler, setOgrenciler, records, riskListesi, aktifYil, sinifListesi, setSinifListesi, denemeler, sinavTuru, onSinifSilTumVeri, kademe, setTab, setAktifOgrenci, aktifOgrenci, profiles, profiles2, onRaporAc, sosyometri, uyumIzleme }) {
+function SinifProfili({ ogrenciler, setOgrenciler, records, riskListesi, aktifYil, sinifListesi, setSinifListesi, denemeler, sinavTuru, onSinifSilTumVeri, kademe, setTab, setAktifOgrenci, aktifOgrenci, profiles, profiles2, onRaporAc, sosyometri, uyumIzleme, bireyiTanima, bdtAnaliz }) {
   const [seciliSinif, setSeciliSinif] = useState(null);
   const [cinsiyetDuzenleAcik, setCinsiyetDuzenleAcik] = useState(false);
   const [seciliSinifDuzeyi, setSeciliSinifDuzeyi] = useState(null);
@@ -23938,6 +24076,16 @@ function SinifProfili({ ogrenciler, setOgrenciler, records, riskListesi, aktifYi
           <SinifNetTablosu ogrenciler={st.ogr} denemeler={denemeler} sinavTuru={sinavTuru} disaridanAcik={netYazdirHazir} />
 
           <SinifDenemeGrafigi ogrenciler={st.ogr} denemeler={denemeler} sinavTuru={sinavTuru} vurgulananAd={aktifOgrenci?.name} disaridanSadeceOrtalama={netYazdirHazir} />
+        </div>
+
+        <button onClick={() => raporIndir("sinif-harita-yazdir-alani", "Sinif_Haritasi_" + (seciliSinif||"Sinif").replace(/\s+/g,"_"))} style={{
+          width:"100%", padding:"9px", marginTop:10, marginBottom:10, background:CARD, border:`1px solid ${PURPLE}`,
+          borderRadius:9, fontSize:12.5, fontWeight:700, color:PURPLE, cursor:"pointer",
+          display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+        }}>🗺️ Sınıf Haritası (Görüşülenler) Yazdır / PDF</button>
+
+        <div id="sinif-harita-yazdir-alani" style={{ display:"none" }}>
+          <SinifHaritasiRaporu sinifAdi={seciliSinif} veri={sinifHaritasiVerisi(st.ogr, records, bireyiTanima, bdtAnaliz, profiles2, denemeler, sinavTuru)} />
         </div>
 
 
@@ -27931,6 +28079,8 @@ function pdrBaslangicSekmesi() {
             profiles2={profiles2}
             sosyometri={sosyometri}
             uyumIzleme={uyumIzleme}
+            bireyiTanima={bireyiTanima}
+            bdtAnaliz={bdtAnaliz}
             onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, ogrenciProfilleri2: profiles2, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, pasPerformanslar, akademikTaramalar, ilkokulTaramalar, liseTaramalar, benlikOlcekleri, bilproDegerlendirmeler, kademe, hazirlikNotlari, ilerlemeNotlari, sevkler, mudahaleOnerileri, uyumIzleme }))}
           />
         )}

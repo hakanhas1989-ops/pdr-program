@@ -24095,6 +24095,11 @@ function SinifProfili({ ogrenciler, setOgrenciler, records, riskListesi, aktifYi
         }}>🖨️ Net Tablosu + Grafiği Yazdır / PDF</button>
 
         <div id="sinif-net-yazdir-alani">
+          <div style={{ borderBottom:"2px solid #127C56", paddingBottom:8, marginBottom:12, fontFamily:"Arial, Helvetica, sans-serif" }}>
+            <div style={{ fontSize:10, color:"#127C56", fontWeight:700, letterSpacing:1, textTransform:"uppercase" }}>PDR Servisi — Deneme Net Raporu</div>
+            <div style={{ fontSize:16, fontWeight:900, color:"#1a1a1a" }}>{seciliSinif} Sınıfı</div>
+          </div>
+
           <SinifNetTablosu ogrenciler={st.ogr} denemeler={denemeler} sinavTuru={sinavTuru} disaridanAcik={netYazdirHazir} />
 
           <SinifDenemeGrafigi ogrenciler={st.ogr} denemeler={denemeler} sinavTuru={sinavTuru} vurgulananAd={aktifOgrenci?.name} disaridanSadeceOrtalama={netYazdirHazir} />

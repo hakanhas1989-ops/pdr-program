@@ -3568,10 +3568,26 @@ function SinifHaritasiRaporu({ sinifAdi, veri }) {
 
 function SinifNetTablosu({ ogrenciler, denemeler, sinavTuru, disaridanAcik }) {
   const [acik, setAcik] = useState(false);
+  const [netSiraliMi, setNetSiraliMi] = useState(false);
   const gosterilecekAcik = acik || !!disaridanAcik;
   const t = sinifNetTablosuHesapla(ogrenciler, denemeler, sinavTuru);
   const sutunVar = t.gecmisNolar.length + t.buYilNolar.length;
   if (sutunVar === 0) return null;
+
+  // Sıralama ölçütü öğrenci bazında otomatik geçiş yapar: bu yılın denemesine
+  // verisi olan öğrenci bu yılki ortalamasına göre, henüz girilmemiş öğrenci
+  // geçmiş dönem ortalamasına göre sıralanır — bu yılın verisi arttıkça
+  // sıralama kendiliğinden bu yıla kayar, ayrı bir buton gerekmez.
+  const siralamaDegeri = s => s.buYilOrt !== null ? s.buYilOrt : s.gecmisOrt;
+  const gosterilecekSatirlar = netSiraliMi
+    ? [...t.satirlar].sort((a, b) => {
+        const av = siralamaDegeri(a), bv = siralamaDegeri(b);
+        if (av === null && bv === null) return 0;
+        if (av === null) return 1;
+        if (bv === null) return -1;
+        return bv - av;
+      })
+    : t.satirlar;
 
   const hucreRenk = net => {
     if (net === undefined || net === null) return MUTED;
@@ -3603,6 +3619,11 @@ function SinifNetTablosu({ ogrenciler, denemeler, sinavTuru, disaridanAcik }) {
 
       {gosterilecekAcik && (
         <div style={{ marginTop: 10, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+          <button className="noprint" onClick={() => setNetSiraliMi(v => !v)} style={{
+            display:"flex", alignItems:"center", gap:5, marginBottom:8, padding:"5px 10px",
+            background: netSiraliMi ? ACCENT_LIGHT : CARD, border:`1px solid ${netSiraliMi ? ACCENT : BORDER}`,
+            borderRadius:8, fontSize:10.5, fontWeight:700, color: netSiraliMi ? ACCENT : MUTED, cursor:"pointer",
+          }}>{netSiraliMi ? "✓ " : ""}🔽 Net Ortalamasına Göre Sırala</button>
           <table style={{ borderCollapse: "separate", borderSpacing: 0, minWidth: "100%" }}>
             <thead>
               <tr>
@@ -3623,7 +3644,7 @@ function SinifNetTablosu({ ogrenciler, denemeler, sinavTuru, disaridanAcik }) {
               </tr>
             </thead>
             <tbody>
-              {t.satirlar.map(s => (
+              {gosterilecekSatirlar.map(s => (
                 <tr key={s.ad + s.numara}>
                   <td style={{
                     position: "sticky", left: 0, zIndex: 1, background: CARD,

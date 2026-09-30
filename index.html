@@ -3466,6 +3466,22 @@ function sinifHaritasiVerisi(sinifOgrencileri, records, bireyiTanima, bdtAnaliz,
   return { bloklar, netTablo, ayAdlari: ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"] };
 }
 
+// Bir sınıf düzeyindeki (ör. "8. sınıf") TÜM şubelerin öğrencilerini tek
+// listede toplayıp, risk haritası maddelerinin her birinde kaç FARKLI
+// öğrencinin işaretli olduğunu (ve kimler olduğunu) çıkarır. Eşleştirme
+// güncel sınıf/numaraya göre (pdrAyniOgrenci) yapılır — risk kaydı eski bir
+// sınıf bilgisi taşısa bile öğrenci doğru sayılır.
+function riskHaritasiDuzeyOzeti(tumOgrenciler, riskHaritasi, aktifYil) {
+  return RISK_HARITASI_TUM_MADDELER.map(m => {
+    const eslesen = tumOgrenciler.filter(o => {
+      const kayit = (riskHaritasi || []).find(r => r.yil === aktifYil &&
+        pdrAyniOgrenci(r.studentName, r.className, o.studentName, o.className, r.numara, o.numara));
+      return !!kayit?.maddeler?.[m.key];
+    });
+    return { ...m, ogrenciler: eslesen };
+  });
+}
+
 // sinifHaritasiVerisi()'nin döndürdüğü veriyi yazdırılabilir bir rapora çevirir.
 function SinifHaritasiRaporu({ sinifAdi, veri }) {
   if (veri.bloklar.length === 0) {
@@ -3562,6 +3578,138 @@ function SinifHaritasiRaporu({ sinifAdi, veri }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// MEB "…SINIFI RİSK HARİTASI" (S.İ.4.a) formunun dijital hali. Öğrenci
+// satır, madde sütun — hücreye dokununca işaretlenir/kaldırılır, her
+// değişiklik anında kaydedilir. Sütunlar çok olduğu için kağıt formdaki gibi
+// dikey başlıklarla dar tutulur, ilk sütun (öğrenci adı) sabit kalır.
+function RiskHaritasiTablosu({ ogrenciler, riskHaritasi, setRiskHaritasi, aktifYil, disaridanAcik }) {
+  const [acik, setAcik] = useState(false);
+  const gosterilecekAcik = acik || !!disaridanAcik;
+
+  function kayitBul(o) {
+    return (riskHaritasi || []).find(r => r.yil === aktifYil &&
+      pdrAyniOgrenci(r.studentName, r.className, o.studentName, o.className, r.numara, o.numara));
+  }
+  async function toggleMadde(o, maddeKey) {
+    const mevcut = kayitBul(o);
+    const yeniMaddeler = { ...(mevcut?.maddeler || {}), [maddeKey]: !(mevcut?.maddeler?.[maddeKey]) };
+    const yeni = mevcut
+      ? riskHaritasi.map(r => r.id === mevcut.id ? { ...r, maddeler: yeniMaddeler, className: o.className, numara: o.numara } : r)
+      : [...(riskHaritasi || []), { id: uid(), studentName: o.studentName, className: o.className, numara: o.numara, yil: aktifYil, maddeler: yeniMaddeler, digerMetin: "" }];
+    setRiskHaritasi(yeni);
+    await saveRiskHaritasi(yeni);
+  }
+  async function digerMetniKaydet(o, metin) {
+    const mevcut = kayitBul(o);
+    const yeni = mevcut
+      ? riskHaritasi.map(r => r.id === mevcut.id ? { ...r, digerMetin: metin, className: o.className, numara: o.numara } : r)
+      : [...(riskHaritasi || []), { id: uid(), studentName: o.studentName, className: o.className, numara: o.numara, yil: aktifYil, maddeler: {}, digerMetin: metin }];
+    setRiskHaritasi(yeni);
+    await saveRiskHaritasi(yeni);
+  }
+
+  const HUCRE_W = 25, AD_W = 118;
+  return (
+    <div style={{ background: CARD, border: `1px solid ${BORDER}`, boxShadow: "0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius: 12, padding: 12, marginTop: 10 }}>
+      <div onClick={() => setAcik(v => !v)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
+        <span style={{ fontSize: 13, fontWeight: 800, color: TEXT }}>🗂️ Sınıf Risk Haritası (MEB formu)</span>
+        <span style={{ fontSize: 12, color: MUTED }}>{gosterilecekAcik ? "▲" : "▼"}</span>
+      </div>
+      {gosterilecekAcik && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ fontSize: 10.5, color: MUTED, marginBottom: 8 }}>Hücreye dokunarak işaretleyin, otomatik kaydedilir. Sağa kaydırarak tüm maddeleri görebilirsiniz.</div>
+          <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+            <table style={{ borderCollapse: "separate", borderSpacing: 0 }}>
+              <thead>
+                <tr>
+                  <th style={{ position: "sticky", left: 0, zIndex: 3, background: CARD, minWidth: AD_W, maxWidth: AD_W, textAlign: "left", padding: "2px 6px 4px 2px", fontSize: 9.5, color: MUTED, fontWeight: 800, borderBottom: `1.5px solid ${BORDER}` }}>Öğrenci</th>
+                  {RISK_HARITASI_GRUPLARI.flatMap(g => g.maddeler.map((m, mi) => (
+                    <th key={m.key} style={{ minWidth: HUCRE_W, maxWidth: HUCRE_W, padding: "2px 1px", borderBottom: `1.5px solid ${BORDER}`, borderLeft: mi === 0 ? `2px solid ${g.renk}` : "none", verticalAlign: "bottom" }}>
+                      <div style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", fontSize: 8, fontWeight: 700, color: g.renk, height: 150, whiteSpace: "nowrap", margin: "0 auto" }} title={m.label}>{m.label}</div>
+                    </th>
+                  )))}
+                  <th style={{ minWidth: 90, padding: "2px 4px", borderBottom: `1.5px solid ${BORDER}`, verticalAlign: "bottom" }}>
+                    <div style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", fontSize: 8, fontWeight: 700, color: MUTED, height: 150, margin: "0 auto" }}>Diğer</div>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {ogrenciler.map(o => {
+                  const kayit = kayitBul(o);
+                  const toplam = RISK_HARITASI_TUM_MADDELER.filter(m => kayit?.maddeler?.[m.key]).length;
+                  return (
+                    <tr key={o.studentName + "||" + o.numara}>
+                      <td style={{ position: "sticky", left: 0, zIndex: 2, background: CARD, minWidth: AD_W, maxWidth: AD_W, padding: "3px 6px 3px 2px", fontSize: 10, color: TEXT, borderBottom: `1px solid ${BORDER}`, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {o.studentName}
+                        {toplam > 0 && <span style={{ marginLeft: 4, fontSize: 8.5, fontWeight: 800, color: toplam >= 3 ? "#C0392B" : "#B5651D" }}>({toplam})</span>}
+                      </td>
+                      {RISK_HARITASI_GRUPLARI.flatMap(g => g.maddeler.map((m, mi) => {
+                        const isaretli = !!kayit?.maddeler?.[m.key];
+                        return (
+                          <td key={m.key} onClick={() => toggleMadde(o, m.key)} style={{
+                            minWidth: HUCRE_W, maxWidth: HUCRE_W, textAlign: "center", padding: "3px 0", cursor: "pointer",
+                            borderBottom: `1px solid ${BORDER}`, borderLeft: mi === 0 ? `2px solid ${g.renk}` : "none",
+                            background: isaretli ? g.renk : "transparent", color: isaretli ? "#fff" : "transparent",
+                            fontSize: 11, fontWeight: 900, userSelect: "none",
+                          }}>{isaretli ? "✓" : "·"}</td>
+                        );
+                      }))}
+                      <td style={{ minWidth: 90, padding: "1px 3px", borderBottom: `1px solid ${BORDER}` }}>
+                        <input defaultValue={kayit?.digerMetin || ""} onBlur={e => digerMetniKaydet(o, e.target.value)}
+                          style={{ width: "100%", border: "none", background: "transparent", fontSize: 9.5, color: TEXT, outline: "none" }} placeholder="—" />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Bir sınıf düzeyi (ör. "8. sınıf") için tüm şubeler birleştirilmiş risk
+// haritası özeti — her madde için kaç öğrenci işaretli, tıklanınca kimler
+// olduğu açılır.
+function RiskHaritasiDuzeyOzeti({ duzey, ozet, toplamOgrenci }) {
+  const [acik, setAcik] = useState(false);
+  const [acikMadde, setAcikMadde] = useState(null);
+  const doluMaddeler = ozet.filter(m => m.ogrenciler.length > 0).sort((a, b) => b.ogrenciler.length - a.ogrenciler.length);
+  return (
+    <div style={{ background: CARD, border: `1px solid ${BORDER}`, boxShadow: "0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius: 12, padding: 12, marginTop: 10 }}>
+      <div onClick={() => setAcik(v => !v)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
+        <span style={{ fontSize: 13, fontWeight: 800, color: TEXT }}>📊 Tüm {duzey}. Sınıf Risk Haritası Özeti</span>
+        <span style={{ fontSize: 12, color: MUTED }}>{acik ? "▲" : "▼"}</span>
+      </div>
+      {acik && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ fontSize: 10.5, color: MUTED, marginBottom: 8 }}>{toplamOgrenci} öğrenci taranıyor. Bir maddeye dokunarak kimlerde olduğunu görebilirsiniz.</div>
+          {doluMaddeler.length === 0 && <div style={{ fontSize: 11, color: MUTED, textAlign: "center", padding: 10 }}>Bu düzeyde henüz işaretlenmiş madde yok.</div>}
+          {doluMaddeler.map(m => (
+            <div key={m.key} style={{ borderBottom: `1px solid ${BORDER}`, padding: "7px 2px" }}>
+              <div onClick={() => setAcikMadde(v => v === m.key ? null : m.key)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", gap: 8 }}>
+                <span style={{ fontSize: 11, color: TEXT, flex: 1 }}>{m.label}</span>
+                <span style={{ fontSize: 10.5, fontWeight: 800, color: "#fff", background: m.ogrenciler.length >= 5 ? "#C0392B" : ACCENT, borderRadius: 10, padding: "1px 8px", flexShrink: 0 }}>{m.ogrenciler.length}</span>
+              </div>
+              {acikMadde === m.key && (
+                <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 5 }}>
+                  {m.ogrenciler.map(o => (
+                    <span key={o.studentName + "||" + o.numara} style={{ fontSize: 9.5, background: BG, border: `1px solid ${BORDER}`, borderRadius: 8, padding: "2px 7px", color: TEXT }}>
+                      {o.studentName} <span style={{ color: MUTED }}>· {o.className}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -8184,6 +8332,63 @@ async function loadSosyometri() {
 }
 async function saveSosyometri(items) {
   try { await window.storage.set("pdr-sosyometri", JSON.stringify(items)); } catch(e) { console.warn(e); }
+}
+
+// ── Sınıf Risk Haritası (MEB S.İ.4.a formu) ─────────────────────────────────
+// Resmi "…SINIFI RİSK HARİTASI" formundaki 34 madde + "Diğer" serbest metin.
+// Her öğrenci için bir kayıt: { id, studentName, className, numara, yil,
+// maddeler: { <key>: true/false, ... }, digerMetin }. Gruplar, kağıttaki
+// başlıklara karşılık gelir (form üzerinde ayrı renkli blok yok ama okunurluk
+// icin burada 3 mantıksal gruba ayrıldı).
+const RISK_HARITASI_GRUPLARI = [
+  { baslik: "Aile Yapısı", renk: "#9E78ED", maddeler: [
+    { key: "anne_ilkokul", label: "Anne en fazla ilkokul mezunu" },
+    { key: "baba_ilkokul", label: "Baba en fazla ilkokul mezunu" },
+    { key: "tek_cocuk", label: "Tek çocuk olan" },
+    { key: "bes_ustu_kardes", label: "5 ve üstü kardeşi olan" },
+    { key: "anne_baba_ayri", label: "Anne ve babası ayrı yaşayan" },
+    { key: "anne_baba_bosanmis", label: "Anne ve babası boşanmış olan" },
+    { key: "yalnizca_anne", label: "Yalnızca annesi ile yaşayan" },
+    { key: "yalnizca_baba", label: "Yalnızca babası ile yaşayan" },
+    { key: "annesi_hayatta_degil", label: "Annesi hayatta olmayan" },
+    { key: "babasi_hayatta_degil", label: "Babası hayatta olmayan" },
+    { key: "anne_baba_hayatta_degil", label: "Anne ve babası hayatta olmayan" },
+    { key: "sehit_cocugu", label: "Şehit çocuğu" },
+    { key: "buyukanne_buyukbaba", label: "Yalnızca büyükanne/büyükbabasıyla yaşayan" },
+    { key: "diger_akraba", label: "Yalnızca diğer akrabalarıyla yaşayan" },
+    { key: "koruyucu_aile", label: "Koruyucu aile gözetiminde olan" },
+    { key: "sevgi_evleri", label: "Sevgi Evlerinde kalan" },
+    { key: "shcek", label: "Sosyal Hizmetler Çocuk Esirgeme Kurumunda kalan" },
+  ]},
+  { baslik: "Ailede Görülen Riskler", renk: "#E76F51", maddeler: [
+    { key: "ailede_sureğen_hastalik", label: "Ailesinde süreğen hastalığı olan" },
+    { key: "ailede_ruhsal_hastalik", label: "Ailesinde ruhsal hastalığı olan" },
+    { key: "ailede_bagimli_birey", label: "Ailesinde bağımlı bireyler bulunan (alkol/madde)" },
+    { key: "ailede_cezai_hukum", label: "Ailesinde cezai hükmü bulunan" },
+    { key: "mevsimlik_isci", label: "Ailesi mevsimlik işçi olan" },
+    { key: "aile_ici_siddet", label: "Aile içi şiddete maruz kalan" },
+  ]},
+  { baslik: "Öğrenciye Ait Riskler", renk: "#127C56", maddeler: [
+    { key: "ozel_yetenekli", label: "Özel Yetenekli tanısı olan" },
+    { key: "yetersizlik_ozel_egitim", label: "Yetersizlik alanında özel eğitim raporu olan" },
+    { key: "ogrenci_sureğen_hastalik", label: "Süreğen hastalığı olan" },
+    { key: "ogrenci_ruhsal_hastalik", label: "Ruhsal hastalığı olan" },
+    { key: "danismanlik_tedbir", label: "Danışmanlık Tedbir Kararı Olan" },
+    { key: "egitim_tedbir", label: "Eğitim Tedbir Kararı Olan" },
+    { key: "maddi_sikinti", label: "Maddi Sıkıntı Yaşayan" },
+    { key: "surekli_devamsiz", label: "Sürekli Devamsız olan" },
+    { key: "bir_iste_calisan", label: "Bir işte çalışan" },
+    { key: "akademik_basari_dusuk", label: "Akademik Başarısı Düşük" },
+    { key: "riskli_akran", label: "Riskli akran grubuna dahil olan" },
+  ]},
+];
+const RISK_HARITASI_TUM_MADDELER = RISK_HARITASI_GRUPLARI.flatMap(g => g.maddeler);
+
+async function loadRiskHaritasi() {
+  try { const r = await window.storage.get("pdr-risk-haritasi"); return r ? JSON.parse(r.value) : []; } catch { return []; }
+}
+async function saveRiskHaritasi(items) {
+  try { await window.storage.set("pdr-risk-haritasi", JSON.stringify(items)); } catch(e) { console.warn(e); }
 }
 
 function SosyometriEkrani({ sosyometri, setSosyometri, ogrenciler, aktifYil, siniflar, setRiskForm, setTab }) {
@@ -23824,7 +24029,7 @@ function SinifSunumuEkrani({ ogrenciler, denemeler, sinavTuru, kademe, netHarita
 // "RISK_TURLERI is not defined" hatası veriyordu.
 const RISK_TURLERI = ["Davranış","Akademik","Aile","Akran / Zorbalık","Duygusal","Devamsızlık","Öz Zarar","Sağlık","Madde Kullanımı","Teknoloji / Ekran Bağımlılığı","Ekonomik Güçlük","Yas / Kayıp","Travma","Özel Öğrenme Güçlüğü","Göç / Uyum Süreci","Adli Süreç / Danışmanlık Tedbiri","Toplumsal Cinsiyet Temelli Şiddet","İhmal / İstismar","Diğer"];
 
-function SinifProfili({ ogrenciler, setOgrenciler, records, riskListesi, aktifYil, sinifListesi, setSinifListesi, denemeler, sinavTuru, onSinifSilTumVeri, kademe, setTab, setAktifOgrenci, aktifOgrenci, profiles, profiles2, onRaporAc, sosyometri, uyumIzleme, bireyiTanima, bdtAnaliz }) {
+function SinifProfili({ ogrenciler, setOgrenciler, records, riskListesi, aktifYil, sinifListesi, setSinifListesi, denemeler, sinavTuru, onSinifSilTumVeri, kademe, setTab, setAktifOgrenci, aktifOgrenci, profiles, profiles2, onRaporAc, sosyometri, uyumIzleme, bireyiTanima, bdtAnaliz, riskHaritasi, setRiskHaritasi }) {
   const [seciliSinif, setSeciliSinif] = useState(null);
   const [cinsiyetDuzenleAcik, setCinsiyetDuzenleAcik] = useState(false);
   const [seciliSinifDuzeyi, setSeciliSinifDuzeyi] = useState(null);
@@ -24115,6 +24320,15 @@ function SinifProfili({ ogrenciler, setOgrenciler, records, riskListesi, aktifYi
           <SinifHaritasiRaporu sinifAdi={seciliSinif} veri={sinifHaritasiVerisi(st.ogr, records, bireyiTanima, bdtAnaliz, profiles2, denemeler, sinavTuru)} />
         </div>
 
+        <RiskHaritasiTablosu ogrenciler={st.ogr} riskHaritasi={riskHaritasi} setRiskHaritasi={setRiskHaritasi} aktifYil={aktifYil} />
+
+        {(() => {
+          const duzey = (seciliSinif.match(/\d+/) || [])[0];
+          if (!duzey) return null;
+          const duzeyOgrencileri = subelerDuzeyde(duzey).flatMap(sube => subeIstatistik(sube).ogr);
+          const duzeyOzet = riskHaritasiDuzeyOzeti(duzeyOgrencileri, riskHaritasi, aktifYil);
+          return <RiskHaritasiDuzeyOzeti duzey={duzey} ozet={duzeyOzet} toplamOgrenci={duzeyOgrencileri.length} />;
+        })()}
 
         {/* Görüşme Konuları */}
         {st.konuSirali.length > 0 && (
@@ -25849,6 +26063,7 @@ export default function App() {
   const [krizKayitlari, setKrizKayitlari] = useState([]);
   const [sosyometri, setSosyometri] = useState([]);
   const [uyumIzleme, setUyumIzleme] = useState([]);
+  const [riskHaritasi, setRiskHaritasi] = useState([]);
   const [hatirlatmalar, setHatirlatmalar] = useState([]);
   // Yıl Sonu Kapsam Takibi'nde hangi sınıfın hiç görüşülmemiş öğrencileri
   // açık — tıklanan sınıf tekrar tıklanırsa kapanır (null'a döner).
@@ -25896,6 +26111,7 @@ export default function App() {
     loadKrizKayitlari().then(setKrizKayitlari);
     loadSosyometri().then(setSosyometri);
     loadUyumIzleme().then(setUyumIzleme);
+    loadRiskHaritasi().then(setRiskHaritasi);
     loadHatirlatmalar().then(setHatirlatmalar);
     loadNetHaritasi().then(setNetHaritasiKayitlari);
     loadKonuHaritasi().then(setKonuHaritasiVerisi);
@@ -25954,6 +26170,7 @@ export default function App() {
       "pdr-kriz-kayitlari": () => loadKrizKayitlari().then(setKrizKayitlari),
       "pdr-sosyometri": () => loadSosyometri().then(setSosyometri),
       "pdr-uyum-izleme": () => loadUyumIzleme().then(setUyumIzleme),
+      "pdr-risk-haritasi": () => loadRiskHaritasi().then(setRiskHaritasi),
       "pdr-hatirlatmalar": () => loadHatirlatmalar().then(setHatirlatmalar),
       "pdr-net-haritasi": () => loadNetHaritasi().then(setNetHaritasiKayitlari),
       "pdr-konu-haritasi": () => loadKonuHaritasi().then(setKonuHaritasiVerisi),
@@ -25976,6 +26193,7 @@ export default function App() {
       "pdr-ogrenciler": "Öğrenci listesi", "pdr-risk": "Risk kayıtları", "pdr-denemeler": "Deneme verileri",
       "pdr-hatirlatmalar": "Hatırlatmalar", "pdr-sosyometri": "Sosyometri", "pdr-uyum-izleme": "Uyum izleme",
       "pdr-kriz-kayitlari": "Kriz kayıtları", "pdr-grup-calismalari": "Grup çalışmaları", "pdr-mudahale": "Müdahale planı",
+      "pdr-risk-haritasi": "Sınıf risk haritası",
       "pdr-records": "Görüşme notları", "pdr-profiles": "Profil (P1)", "pdr-profiles2": "Profil (P2)",
       "pdr-net-haritasi": "Net haritası", "pdr-konu-haritasi": "Konu haritası", "pdr-test-kayitlari": "Test kayıtları",
       "pdr-sevkler": "Sevk kayıtları",
@@ -28108,6 +28326,8 @@ function pdrBaslangicSekmesi() {
             uyumIzleme={uyumIzleme}
             bireyiTanima={bireyiTanima}
             bdtAnaliz={bdtAnaliz}
+            riskHaritasi={riskHaritasi}
+            setRiskHaritasi={setRiskHaritasi}
             onRaporAc={(data) => setRaporVerisi(raporVerisiOlustur({ ...data, ogrenciProfilleri2: profiles2, mudahalePlan, riskListesi, sinavTuru, testKayitlari, bireyiTanima, bdtAnaliz, sinavKaygisi, ogrenciler, oogDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, pasPerformanslar, akademikTaramalar, ilkokulTaramalar, liseTaramalar, benlikOlcekleri, bilproDegerlendirmeler, kademe, hazirlikNotlari, ilerlemeNotlari, sevkler, mudahaleOnerileri, uyumIzleme }))}
           />
         )}

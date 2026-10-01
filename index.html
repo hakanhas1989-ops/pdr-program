@@ -3666,6 +3666,22 @@ function RiskHaritasiTablosu({ ogrenciler, riskHaritasi, setRiskHaritasi, aktifY
                   );
                 })}
               </tbody>
+              <tfoot>
+                <tr>
+                  <td style={{ position: "sticky", left: 0, zIndex: 2, background: ACCENT_LIGHT, minWidth: AD_W, maxWidth: AD_W, padding: "4px 6px", fontSize: 10, fontWeight: 900, color: ACCENT, borderTop: `2px solid ${ACCENT}` }}>TOPLAM</td>
+                  {RISK_HARITASI_GRUPLARI.flatMap(g => g.maddeler.map((m, mi) => {
+                    const sayi = ogrenciler.filter(o => !!kayitBul(o)?.maddeler?.[m.key]).length;
+                    return (
+                      <td key={m.key} style={{
+                        minWidth: HUCRE_W, maxWidth: HUCRE_W, textAlign: "center", padding: "4px 0",
+                        borderTop: `2px solid ${ACCENT}`, borderLeft: mi === 0 ? `2px solid ${g.renk}` : "none",
+                        background: ACCENT_LIGHT, fontSize: 10.5, fontWeight: 900, color: sayi > 0 ? ACCENT : "transparent",
+                      }}>{sayi > 0 ? sayi : "·"}</td>
+                    );
+                  }))}
+                  <td style={{ minWidth: 90, borderTop: `2px solid ${ACCENT}`, background: ACCENT_LIGHT }} />
+                </tr>
+              </tfoot>
             </table>
           </div>
         </div>
@@ -24292,6 +24308,10 @@ function SinifProfili({ ogrenciler, setOgrenciler, records, riskListesi, aktifYi
           setNetYazdirHazir(true);
           setTimeout(() => {
             raporIndir("sinif-net-yazdir-alani", "Sinif_Net_" + (seciliSinif||"Sinif").replace(/\s+/g,"_"));
+            // Zorla-açık durumu kalıcı bırakılırsa tablo/grafikteki normal
+            // aç/kapa butonu bir daha hiç işe yaramaz hale geliyordu (hep
+            // açık görünüyordu) — yazdırma tetiklendikten hemen sonra sıfırla.
+            setNetYazdirHazir(false);
           }, 60);
         }} style={{
           width:"100%", padding:"9px", marginBottom:10, background:CARD, border:`1px solid ${ACCENT}`,

@@ -3586,9 +3586,19 @@ function SinifHaritasiRaporu({ sinifAdi, veri }) {
 // satır, madde sütun — hücreye dokununca işaretlenir/kaldırılır, her
 // değişiklik anında kaydedilir. Sütunlar çok olduğu için kağıt formdaki gibi
 // dikey başlıklarla dar tutulur, ilk sütun (öğrenci adı) sabit kalır.
-function RiskHaritasiTablosu({ ogrenciler, riskHaritasi, setRiskHaritasi, aktifYil, disaridanAcik }) {
+function RiskHaritasiTablosu({ ogrenciler, riskHaritasi, setRiskHaritasi, aktifYil, disaridanAcik, sinifAdi }) {
   const [acik, setAcik] = useState(false);
-  const gosterilecekAcik = acik || !!disaridanAcik;
+  const [yazdirHazir, setYazdirHazir] = useState(false);
+  const gosterilecekAcik = acik || !!disaridanAcik || yazdirHazir;
+  function handleYazdir() {
+    // Tablo kapalıysa içerik boş çıkar — yazdırmadan önce zorla açıp, React
+    // bunu DOM'a yazdıktan SONRA raporIndir'i çağırıyoruz.
+    setYazdirHazir(true);
+    setTimeout(() => {
+      raporIndir("risk-haritasi-yazdir-alani", "Risk_Haritasi_" + (sinifAdi||"Sinif").replace(/\s+/g,"_"));
+      setYazdirHazir(false);
+    }, 60);
+  }
 
   function kayitBul(o) {
     return (riskHaritasi || []).find(r => r.yil === aktifYil &&
@@ -3622,6 +3632,15 @@ function RiskHaritasiTablosu({ ogrenciler, riskHaritasi, setRiskHaritasi, aktifY
       {gosterilecekAcik && (
         <div style={{ marginTop: 10 }}>
           <div style={{ fontSize: 10.5, color: MUTED, marginBottom: 8 }}>Hücreye dokunarak işaretleyin, otomatik kaydedilir. Sağa kaydırarak tüm maddeleri görebilirsiniz.</div>
+          <button className="noprint" onClick={handleYazdir} style={{
+            display:"flex", alignItems:"center", gap:5, marginBottom:8, padding:"6px 10px",
+            background: CARD, border:`1px solid ${ACCENT}`, borderRadius:8, fontSize:11, fontWeight:700, color:ACCENT, cursor:"pointer",
+          }}>🖨️ Risk Haritasını Yazdır / PDF</button>
+          <div id="risk-haritasi-yazdir-alani">
+          <div style={{ borderBottom:"2px solid #127C56", paddingBottom:8, marginBottom:10, fontFamily:"Arial, Helvetica, sans-serif" }}>
+            <div style={{ fontSize:10, color:"#127C56", fontWeight:700, letterSpacing:1, textTransform:"uppercase" }}>PDR Servisi — Sınıf Risk Haritası (MEB S.İ.4.a)</div>
+            <div style={{ fontSize:16, fontWeight:900, color:"#1a1a1a" }}>{sinifAdi} Sınıfı</div>
+          </div>
           <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
             <table style={{ borderCollapse: "separate", borderSpacing: 0 }}>
               <thead>
@@ -3683,6 +3702,7 @@ function RiskHaritasiTablosu({ ogrenciler, riskHaritasi, setRiskHaritasi, aktifY
                 </tr>
               </tfoot>
             </table>
+          </div>
           </div>
         </div>
       )}
@@ -14317,8 +14337,19 @@ function pdrMetindenTarihCikar(metin) {
   const sayiPattern = `(\\d+|${sayiAdlari})`;
   let gm = t.match(new RegExp(`${sayiPattern}\\s*hafta\\s*sonra\\s*(${gunAdlari})`));
   if (gm) { const n = pdrSayiCoz(gm[1]); if (n) return pdrGunOffsetTarih(PDR_GUNLER[gm[2]], n); }
-  gm = t.match(new RegExp(`(gelecek|önümüzdeki|haftaya)\\s*hafta?\\s*(${gunAdlari})`));
+  // "hafta" kelimesi burada OPSİYONEL: "haftaya çarşamba" (hafta kelimesi hiç
+  // geçmiyor) ve "gelecek hafta çarşamba" (geçiyor) ikisi de gün adını doğru
+  // yakalamalı — önceden "hafta?" yazımı sadece sondaki "a"yı opsiyonel
+  // yapıyordu (regex'te ? bir önceki TEK karaktere uygulanır), "haft" kısmı
+  // zorunlu kalıyordu; bu yüzden "haftaya çarşamba" hiç eşleşmiyordu.
+  gm = t.match(new RegExp(`(gelecek|önümüzdeki|haftaya)\\s*(?:hafta\\s*)?(${gunAdlari})`));
   if (gm) return pdrGunOffsetTarih(PDR_GUNLER[gm[2]], 1);
+  // Gün adı hiç belirtilmeden tek başına "haftaya" / "gelecek hafta" /
+  // "önümüzdeki hafta" yazılırsa (en yaygın kullanım biçimlerinden biri),
+  // bugünün tarihinden tam 7 gün sonrasını hesapla.
+  if (/(haftaya|gelecek\s*hafta|önümüzdeki\s*hafta)/.test(t)) {
+    const d = new Date(); d.setDate(d.getDate()+7); return pdrTarihFormatla(d);
+  }
   gm = t.match(new RegExp(`bu\\s*hafta\\s*(${gunAdlari})`));
   if (gm) return pdrGunOffsetTarih(PDR_GUNLER[gm[1]], 0);
   gm = t.match(new RegExp(`(${gunAdlari})\\s*günü`)) || t.match(new RegExp(`\\b(${gunAdlari})\\b`));
@@ -24353,7 +24384,7 @@ function SinifProfili({ ogrenciler, setOgrenciler, records, riskListesi, aktifYi
           <SinifHaritasiRaporu sinifAdi={seciliSinif} veri={sinifHaritasiVerisi(st.ogr, records, bireyiTanima, bdtAnaliz, profiles2, denemeler, sinavTuru)} />
         </div>
 
-        <RiskHaritasiTablosu ogrenciler={st.ogr} riskHaritasi={riskHaritasi} setRiskHaritasi={setRiskHaritasi} aktifYil={aktifYil} />
+        <RiskHaritasiTablosu ogrenciler={st.ogr} riskHaritasi={riskHaritasi} setRiskHaritasi={setRiskHaritasi} aktifYil={aktifYil} sinifAdi={seciliSinif} />
 
         {(() => {
           const duzey = (seciliSinif.match(/\d+/) || [])[0];

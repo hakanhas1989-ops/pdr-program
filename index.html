@@ -3625,17 +3625,19 @@ function RiskHaritasiTablosu({ ogrenciler, riskHaritasi, setRiskHaritasi, aktifY
   const HUCRE_W = 25, AD_W = 118;
   return (
     <div style={{ background: CARD, border: `1px solid ${BORDER}`, boxShadow: "0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius: 12, padding: 12, marginTop: 10 }}>
-      <div onClick={() => setAcik(v => !v)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
-        <span style={{ fontSize: 13, fontWeight: 800, color: TEXT }}>🗂️ Sınıf Risk Haritası (MEB formu)</span>
-        <span style={{ fontSize: 12, color: MUTED }}>{gosterilecekAcik ? "▲" : "▼"}</span>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <div onClick={() => setAcik(v => !v)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", flex: 1 }}>
+          <span style={{ fontSize: 13, fontWeight: 800, color: TEXT }}>🗂️ Sınıf Risk Haritası (MEB formu)</span>
+          <span style={{ fontSize: 12, color: MUTED, marginLeft: 6 }}>{gosterilecekAcik ? "▲" : "▼"}</span>
+        </div>
+        <button className="noprint" onClick={handleYazdir} style={{
+          flexShrink: 0, display:"flex", alignItems:"center", gap:4, padding:"5px 9px",
+          background: CARD, border:`1px solid ${ACCENT}`, borderRadius:8, fontSize:10.5, fontWeight:700, color:ACCENT, cursor:"pointer",
+        }}>🖨️ Yazdır</button>
       </div>
       {gosterilecekAcik && (
         <div style={{ marginTop: 10 }}>
           <div style={{ fontSize: 10.5, color: MUTED, marginBottom: 8 }}>Hücreye dokunarak işaretleyin, otomatik kaydedilir. Sağa kaydırarak tüm maddeleri görebilirsiniz.</div>
-          <button className="noprint" onClick={handleYazdir} style={{
-            display:"flex", alignItems:"center", gap:5, marginBottom:8, padding:"6px 10px",
-            background: CARD, border:`1px solid ${ACCENT}`, borderRadius:8, fontSize:11, fontWeight:700, color:ACCENT, cursor:"pointer",
-          }}>🖨️ Risk Haritasını Yazdır / PDF</button>
           <div id="risk-haritasi-yazdir-alani">
           <div style={{ borderBottom:"2px solid #127C56", paddingBottom:8, marginBottom:10, fontFamily:"Arial, Helvetica, sans-serif" }}>
             <div style={{ fontSize:10, color:"#127C56", fontWeight:700, letterSpacing:1, textTransform:"uppercase" }}>PDR Servisi — Sınıf Risk Haritası (MEB S.İ.4.a)</div>
@@ -18763,7 +18765,7 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
                 .map(r => {
                   const ogr = tumOgrenciler.find(o => pdrAyniOgrenci(o.studentName, o.className, r.studentName, r.className));
                   return {
-                    id: r.id, date: r.date, studentName: r.studentName, meetingType: r.meetingType || "Öğrenci",
+                    id: r.id, date: r.date, studentName: r.studentName, meetingType: r.meetingType || "Öğrenci", topic: r.topic || "",
                     className: r.className || ogr?.className || "", numara: ogr?.numara || "",
                   };
                 })
@@ -18838,9 +18840,12 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
                                       <span style={{ display:"block", fontSize:10.5, color:MUTED }}>{k.date}</span>
                                       <span style={{ display:"block", fontSize:8.5, color:MUTED, opacity:0.75 }}>{pdrGunAdi(k.date)}</span>
                                     </span>
-                                    <span style={{ flex:1, minWidth:0, fontSize:12, fontWeight:700, color:TEXT, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", display:"flex", alignItems:"center", gap:5 }}>
-                                      {k.studentName}
-                                      {k.meetingType==="Veli" && <span style={{ flexShrink:0, background:"#FDEBD0", color:"#E76F51", borderRadius:10, padding:"1px 7px", fontSize:9, fontWeight:700 }}>Veli</span>}
+                                    <span style={{ flex:1, minWidth:0 }}>
+                                      <span style={{ fontSize:12, fontWeight:700, color:TEXT, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", display:"flex", alignItems:"center", gap:5 }}>
+                                        <span style={{ overflow:"hidden", textOverflow:"ellipsis" }}>{k.studentName}</span>
+                                        {k.meetingType==="Veli" && <span style={{ flexShrink:0, background:"#FDEBD0", color:"#E76F51", borderRadius:10, padding:"1px 7px", fontSize:9, fontWeight:700 }}>Veli</span>}
+                                      </span>
+                                      {k.topic && <span style={{ display:"block", fontSize:9.5, color:MUTED, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{k.topic}</span>}
                                     </span>
                                     <span style={{ flexShrink:0, lineHeight:1.2, textAlign:"right" }}>
                                       <span style={{ display:"block", fontSize:10.5, color:MUTED }}>{k.className}{k.numara ? ` · No: ${k.numara}` : ""}</span>

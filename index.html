@@ -31629,6 +31629,9 @@ function pdrBaslangicSekmesi() {
               const yeniUyumIzleme = (uyumIzleme||[]).map(u => ayniMi(u.studentName, u.className, u.numara) ? { ...u, studentName: yeniAd, className: yeniSinif } : u);
               setUyumIzleme(yeniUyumIzleme); await saveUyumIzleme(yeniUyumIzleme);
 
+              const yeniRiskHaritasi = (riskHaritasi||[]).map(k => ayniMi(k.studentName, k.className, k.numara) ? { ...k, studentName: yeniAd, className: yeniSinif } : k);
+              setRiskHaritasi(yeniRiskHaritasi); await saveRiskHaritasi(yeniRiskHaritasi);
+
               const yeniTestKayitlari = pdrSozlukTasi(testKayitlari);
               setTestKayitlari(yeniTestKayitlari); await saveTestKayitlari(yeniTestKayitlari);
 
@@ -31784,6 +31787,12 @@ function pdrBaslangicSekmesi() {
               // silme kapsamına dahil değildi.
               const updTestKayitlari = pdrSozlukOgrenciTemizle(testKayitlari);
               setTestKayitlari(updTestKayitlari); await saveTestKayitlari(updTestKayitlari);
+
+              // Uyum izleme ve risk haritası kayıtları da silinen öğrenciyle birlikte kaldırılır
+              const updUyum = (uyumIzleme||[]).filter(u => !silinecekMi(u.studentName, u.className, u.numara));
+              setUyumIzleme(updUyum); await saveUyumIzleme(updUyum);
+              const updRiskHaritasi = (riskHaritasi||[]).filter(k => !silinecekMi(k.studentName, k.className, k.numara));
+              setRiskHaritasi(updRiskHaritasi); await saveRiskHaritasi(updRiskHaritasi);
 
               const updKonuHaritasi = pdrSozlukOgrenciTemizle(konuHaritasiVerisi);
               setKonuHaritasiVerisi(updKonuHaritasi); await saveKonuHaritasi(updKonuHaritasi);

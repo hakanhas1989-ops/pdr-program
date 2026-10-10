@@ -511,7 +511,9 @@ function pdrClearLocalCache() {
 const PDR_SIFRE_META = "pdr-sifreleme-meta";
 const PDR_SIFRE_MUAF = new Set([PDR_SIFRE_META, "pdr-hatirlatmalar", "fcmTokens"]);
 const PDR_SIFRE_TUR = 310000;
-const PDR_SIFRE = { anahtar: null, acik: false, hatali: new Set(), uid: null };
+const PDR_SIFRE = { anahtar: null, acik: false, hatali: new Set(), uid: null, metaKesin: false };
+// true ise şifrelemesi olmayan hesap, girişte parola belirlemeden devam edemez
+const PDR_SIFRE_ZORUNLU = false;
 
 function pdrB64(buf) { const b = new Uint8Array(buf); let s = ""; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(s); }
 function pdrB64Coz(s) { const b = atob(s); const u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
@@ -550,7 +552,9 @@ function pdrSifreUygulanir(key) { return !!(PDR_SIFRE.acik && PDR_SIFRE.anahtar 
 // HATA fırlatır (çağıran yerel kopyaya düşer) ve o anahtara yazmayı kilitler.
 async function pdrSifreliDegeriAc(key, ham) {
   if (typeof ham !== "string" || !ham.startsWith("ENC1:")) return ham;
-  if (!PDR_SIFRE.anahtar) { PDR_SIFRE.hatali.add(key); pdrSifreUyariGoster(); throw new Error("SIFRE_ANAHTARI_YOK"); }
+  // Şifreli belge görüldü ama anahtar yok (ör. şifreleme bilgisi okunamadı):
+  // hesap şifreli demektir — tüm yazmalar kilitlenir, veri ezilmez.
+  if (!PDR_SIFRE.anahtar) { PDR_SIFRE.acik = true; PDR_SIFRE.hatali.add(key); pdrSifreUyariGoster(); throw new Error("SIFRE_ANAHTARI_YOK"); }
   try { return await pdrSifreCoz(ham); }
   catch (e) { PDR_SIFRE.hatali.add(key); pdrSifreUyariGoster(); throw new Error("SIFRE_COZULEMEDI"); }
 }
@@ -585,9 +589,13 @@ async function pdrSifreMetaOku(uid) {
       new Promise((_, rej) => setTimeout(() => rej(new Error("zaman aşımı")), 8000)),
     ]);
     const v = snap.exists ? snap.data().value : null;
-    try { if (v) localStorage.setItem("pdr_sifre_meta_" + uid, v); else localStorage.removeItem("pdr_sifre_meta_" + uid); } catch (e) {}
+    // Önbellekten gelen "yok" bilgisi kesin değildir (çevrimdışı olabilir)
+    PDR_SIFRE.metaKesin = !(snap.metadata && snap.metadata.fromCache);
+    try { if (v) localStorage.setItem("pdr_sifre_meta_" + uid, v); else if (PDR_SIFRE.metaKesin) localStorage.removeItem("pdr_sifre_meta_" + uid); } catch (e) {}
+    if (!v && !PDR_SIFRE.metaKesin) { const yerel = localStorage.getItem("pdr_sifre_meta_" + uid); return yerel ? JSON.parse(yerel) : null; }
     return v ? JSON.parse(v) : null;
   } catch (e) {
+    PDR_SIFRE.metaKesin = false;
     const yerel = localStorage.getItem("pdr_sifre_meta_" + uid);
     return yerel ? JSON.parse(yerel) : null;
   }
@@ -597,12 +605,64 @@ async function pdrSifreMetaOku(uid) {
 async function pdrSifrelemeHazirla(uid) {
   PDR_SIFRE.uid = uid; PDR_SIFRE.anahtar = null; PDR_SIFRE.acik = false; PDR_SIFRE.meta = null;
   const meta = await pdrSifreMetaOku(uid);
-  if (!meta) return;
+  if (!meta) {
+    // Yalnızca sunucu "şifreleme yok" dediyse kurulum istenir — çevrimdışı/
+    // belirsiz durumda yeni anahtar üretmek mevcut şifreli veriyi kilitleyebilirdi.
+    if (PDR_SIFRE_ZORUNLU && PDR_SIFRE.metaKesin && pdrSifreDestekleniyor()) {
+      const sonuc = await pdrZorunluSifreKur(uid);
+      if (sonuc === "zaten-var") return pdrSifrelemeHazirla(uid);
+    }
+    return;
+  }
   PDR_SIFRE.acik = true; PDR_SIFRE.meta = meta;
   if (!pdrSifreDestekleniyor()) { alert("Verilerin şifreli ama bu tarayıcı şifre çözmeyi desteklemiyor. Güncel bir tarayıcı (Chrome, Safari, Edge) kullan."); return; }
   const kayitli = await pdrAnahtarGetir(uid);
   if (kayitli) { PDR_SIFRE.anahtar = kayitli; return; }
   PDR_SIFRE.anahtar = await pdrParolaSor(meta, uid);
+}
+// Zorunlu şifreleme kurulumu (ilk girişte, şifrelemesi olmayan hesap için)
+function pdrZorunluSifreKur(uid) {
+  return new Promise((resolve) => {
+    if (window.pdrSplashGizle) window.pdrSplashGizle();
+    const ort = document.createElement("div");
+    ort.id = "pdr-sifre-kur-ekrani";
+    ort.style.cssText = "position:fixed;inset:0;z-index:99999;background:linear-gradient(160deg,#0F3D2E,#1F1638);display:flex;align-items:center;justify-content:center;padding:16px;font-family:system-ui,-apple-system,Segoe UI,sans-serif;overflow-y:auto";
+    ort.innerHTML = '<div style="background:#fff;border-radius:18px;max-width:400px;width:100%;padding:22px;box-shadow:0 20px 50px rgba(0,0,0,.35);margin:auto">' +
+      '<div style="font-size:30px;text-align:center">🔒</div>' +
+      '<div style="font-size:18px;font-weight:800;text-align:center;color:#1a1a1a;margin:6px 0 6px">Verilerini şifrele</div>' +
+      '<div style="font-size:13px;color:#444;line-height:1.55;margin-bottom:10px">Öğrenci verilerinin gizliliği için tüm kayıtların, sunucuya gitmeden önce <b>bu cihazda, senin belirleyeceğin parolayla</b> şifrelenir. Sunucuda yalnızca okunamaz metin durur; Rehber Pusula dahil kimse okuyamaz.</div>' +
+      '<ul style="font-size:12.5px;color:#444;line-height:1.55;margin:0 0 12px 18px;padding:0">' +
+      '<li>Bu parola giriş şifrenden ayrıdır; yeni bir cihazda bir kez sorulur.</li>' +
+      '<li><b>Parolayı unutursan verilerin kurtarılamaz.</b> Parola hiçbir yere kaydedilmez.</li>' +
+      '<li>Parolanı bir yere yaz ve güvenli sakla. Programda düzenli olarak "Yedeği İndir"i kullan.</li></ul>' +
+      '<input id="pdr-kur-p1" type="password" autocomplete="new-password" placeholder="Şifreleme parolası (en az 8 karakter)" style="width:100%;box-sizing:border-box;padding:11px;border:1.5px solid #ccc;border-radius:10px;font-size:15px;margin-bottom:8px">' +
+      '<input id="pdr-kur-p2" type="password" autocomplete="new-password" placeholder="Parola (tekrar)" style="width:100%;box-sizing:border-box;padding:11px;border:1.5px solid #ccc;border-radius:10px;font-size:15px;margin-bottom:8px">' +
+      '<label style="display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:#333;line-height:1.45;margin-bottom:8px"><input id="pdr-kur-onay" type="checkbox" style="margin-top:3px"> Parolamı güvenli bir yere yazdım. Unutursam verilerimin kurtarılamayacağını anladım.</label>' +
+      '<div id="pdr-kur-hata" style="color:#B91C1C;font-size:12.5px;font-weight:700;min-height:18px"></div>' +
+      '<button id="pdr-kur-btn" style="width:100%;padding:12px;border:none;border-radius:10px;background:#127C56;color:#fff;font-size:15px;font-weight:800;margin-top:4px;cursor:pointer">Şifrele ve devam et</button>' +
+      '<button id="pdr-kur-cikis" style="width:100%;padding:9px;border:1px solid #ddd;border-radius:10px;background:#fff;color:#555;font-size:13px;margin-top:10px;cursor:pointer">Çıkış yap</button></div>';
+    document.body.appendChild(ort);
+    const $ = (id) => ort.querySelector("#" + id);
+    $("pdr-kur-btn").onclick = async () => {
+      const p1 = $("pdr-kur-p1").value, p2 = $("pdr-kur-p2").value, hata = $("pdr-kur-hata"), btn = $("pdr-kur-btn");
+      hata.textContent = "";
+      if (p1.length < 8) { hata.textContent = "Parola en az 8 karakter olmalı."; return; }
+      if (p1 !== p2) { hata.textContent = "İki parola aynı değil."; return; }
+      if (!$("pdr-kur-onay").checked) { hata.textContent = "Devam etmek için kutucuğu işaretle."; return; }
+      btn.disabled = true; btn.textContent = "Şifreleniyor…";
+      try {
+        const r = await window.pdrSifrelemeyiAc(p1, (i, n) => { btn.textContent = `Şifreleniyor… ${i}/${n}`; });
+        if (r && r.hatalar && r.hatalar.length) console.warn("Bazı belgeler şifrelenemedi, açılışta yeniden denenecek:", r.hatalar);
+        ort.remove(); resolve("tamam");
+      } catch (e) {
+        if (/zaten açık/.test(e.message)) { ort.remove(); resolve("zaten-var"); return; }
+        hata.textContent = "Şifreleme başlatılamadı (" + e.message + "). İnternet bağlantını kontrol edip tekrar dene; verilerinde değişiklik yapılmadı.";
+        btn.disabled = false; btn.textContent = "Şifrele ve devam et";
+      }
+    };
+    $("pdr-kur-cikis").onclick = async () => { await pdrAuth.signOut(); location.reload(); };
+    setTimeout(() => $("pdr-kur-p1").focus(), 50);
+  });
 }
 // Basit, bağımsız (React'tan önce çalışan) parola ekranı
 function pdrParolaSor(meta, uid) {
@@ -646,14 +706,18 @@ window.pdrSifreDurum = () => ({ destek: pdrSifreDestekleniyor(), acik: PDR_SIFRE
 window.pdrSifrelemeyiAc = async (parola, ilerleme) => {
   const user = pdrAuth.currentUser; if (!user) throw new Error("Giriş yapılmamış");
   if (!pdrSifreDestekleniyor()) throw new Error("Bu tarayıcı şifrelemeyi desteklemiyor");
-  if (await pdrSifreMetaOku(user.uid)) throw new Error("Şifreleme zaten açık");
   const ham = crypto.getRandomValues(new Uint8Array(32));
   const meta = await pdrMetaUret(ham, parola);
   const anahtar = await crypto.subtle.importKey("raw", ham, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
   ham.fill(0);
   // Doğrulama: meta parolayla gerçekten açılabiliyor mu?
   await pdrVeriAnahtariAc(meta, parola);
-  await pdrDb.collection("users").doc(user.uid).collection("data").doc(PDR_SIFRE_META).set({ value: JSON.stringify(meta), chunked: false, updatedAt: Date.now() });
+  const metaRef = pdrDb.collection("users").doc(user.uid).collection("data").doc(PDR_SIFRE_META);
+  await pdrDb.runTransaction(async (t) => {
+    const mevcut = await t.get(metaRef);
+    if (mevcut.exists) throw new Error("Şifreleme zaten açık");
+    t.set(metaRef, { value: JSON.stringify(meta), chunked: false, updatedAt: Date.now() });
+  });
   try { localStorage.setItem("pdr_sifre_meta_" + user.uid, JSON.stringify(meta)); } catch (e) {}
   PDR_SIFRE.anahtar = anahtar; PDR_SIFRE.acik = true; PDR_SIFRE.meta = meta;
   await pdrAnahtarSakla(user.uid, anahtar);

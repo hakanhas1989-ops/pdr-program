@@ -12348,6 +12348,23 @@ function RaporModalIc({ rapor, onKapat }) {
           );
         })()}
 
+        {/* Bir İnsan Çiz Testi değerlendirme raporu */}
+        {(() => {
+          const iczKayitlari = (pdrSozlukOku(raporTestler, ogrenci, ogrenciSinif, ogrNo) || []).filter(k => k.tip === "insan_ciz").sort((a, b) => pdrTarihMs(b.tarih) - pdrTarihMs(a.tarih));
+          if (iczKayitlari.length === 0) return null;
+          return (
+            <div style={{ marginTop: 12 }}>
+              <div data-bolum="1" style={{ ...S.bolumBaslik2, pageBreakAfter: "avoid", breakAfter: "avoid" }}><KaynakRozeti ikon="🧪" ad="Testler" />Bir İnsan Çiz Testi Değerlendirmesi</div>
+              <div style={{ ...S.bolumIcerik2 }}>
+                {iczKayitlari.map(k => (
+                  <div key={k.id} style={{ marginBottom: 8, zoom: 0.8 }}
+                    dangerouslySetInnerHTML={{ __html: iczRaporHtml(k.veri || {}, { ogrenci, sinif: ogrenciSinif, tarih: k.tarih }) }} />
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Çeldiricili Dikkat Testi (ÇDT) sonuç raporu */}
         {(() => {
           const cdtKayitlari = (pdrSozlukOku(raporTestler, ogrenci, ogrenciSinif, ogrNo) || []).filter(k => k.tip === "dikkat_cdt").sort((a, b) => pdrTarihMs(b.tarih) - pdrTarihMs(a.tarih));
@@ -15960,6 +15977,663 @@ function DGPaneli({ seciliAd, seciliSinif, seciliNumara, testKayitlari, setTestK
 // ===== DG BİTİŞ =====
 
 
+// ===== İNSAN ÇİZ BAŞLANGIÇ =====
+// ── Bir İnsan Çiz Testi (Koppitz İnsan Figürü Çizimi) ──
+// Dayanak: Koppitz (1968) "Psychological Evaluation of Children's Human
+// Figure Drawings" — 30 gelişimsel madde + 30 duygusal gösterge (DG) ve her
+// göstergenin geçerli sayıldığı en küçük yaş (cinsiyete göre); Koppitz &
+// de Moreau (1968, Interamerican J. Psychology) tanımları.
+// BİLİNÇLİ TASARIM KARARLARI:
+//  • Program IQ / zihinsel düzey bandı ÜRETMEZ. Koppitz'in beklenen/istisnai
+//    madde tablosunun 7-12 yaş sütunları doğrulanamadı ve Özer (2009) bu
+//    tablonun Türk çocuklarında yetenek tahmini için uygun olmadığını, yerel
+//    norm gerektiğini gösterdi. Yanlış bir "zekâ düzeyi" çocuğa zarar verir.
+//  • Gelişimsel bölümde yalnızca yaşa göre DOĞRULANMIŞ beklenen maddeler
+//    kullanılır (ICZ_BEKLENEN); diğerleri betimsel olarak raporlanır.
+//  • Duygusal göstergeler Koppitz'in yaş kurallarıyla sayılır; 2 ve üzeri
+//    gösterge "ileri değerlendirme önerilir" eşiğidir (Koppitz) — tanı değil.
+//  • AI yalnızca resimde neyin GÖRÜNDÜĞÜNÜ işaretler; danışman her maddeyi
+//    onaylar/düzeltir; sayım ve eşikler yerelde hesaplanır.
+const ICZ_SURUM = 1;
+const ICZ_A4_CM = { dikey: 29.7, yatay: 21.0 };
+
+const ICZ_GELISIM = [
+  { id: "bas", ad: "Baş", tanim: "Belirgin dış çizgisi olan herhangi bir baş" },
+  { id: "goz", ad: "Gözler", tanim: "Herhangi bir göz gösterimi" },
+  { id: "gozbebek", ad: "Göz bebekleri", tanim: "Gözlerin içinde ayrı nokta ya da daire" },
+  { id: "kas", ad: "Kaş veya kirpik", tanim: "Kaş ya da kirpik ya da ikisi" },
+  { id: "burun", ad: "Burun", tanim: "Herhangi bir burun gösterimi" },
+  { id: "burundelik", ad: "Burun delikleri", tanim: "Buruna eklenmiş delikler/noktalar" },
+  { id: "agiz", ad: "Ağız", tanim: "Herhangi bir ağız gösterimi" },
+  { id: "dudak", ad: "İki dudak", tanim: "Bir çizgiyle ayrılmış alt ve üst dudak (diş sırası sayılmaz)" },
+  { id: "kulak", ad: "Kulaklar", tanim: "Herhangi bir kulak gösterimi" },
+  { id: "sac", ad: "Saç", tanim: "Saç ya da başı örten şapka" },
+  { id: "boyun", ad: "Boyun", tanim: "Baş ile gövde arasında belirgin ayrım" },
+  { id: "govde", ad: "Gövde", tanim: "Belirgin dış çizgisi olan gövde" },
+  { id: "kol", ad: "Kollar", tanim: "Herhangi bir kol gösterimi" },
+  { id: "kol2b", ad: "Kollar iki boyutlu", tanim: "Kollar tek çizgi değil, kalınlığı olacak şekilde çizilmiş" },
+  { id: "kolasagi", ad: "Kollar aşağı yönlü", tanim: "Kollar yataydan en az 30° aşağıda ya da bir etkinlik için kaldırılmış" },
+  { id: "kolomuz", ad: "Kollar omuzdan bağlı", tanim: "Omuz belirgin ve kol omuza düzgün bağlı" },
+  { id: "dirsek", ad: "Dirsek", tanim: "Kolda belirgin açı (yuvarlak kıvrım sayılmaz)" },
+  { id: "el", ad: "Eller", tanim: "Kol ve el ayrışmış (genişleme, kol ağzı ya da bilezikle)" },
+  { id: "parmak", ad: "Parmaklar", tanim: "Herhangi bir parmak gösterimi" },
+  { id: "besparmak", ad: "Doğru parmak sayısı", tanim: "Her elde beş parmak" },
+  { id: "bacak", ad: "Bacaklar", tanim: "Herhangi bir bacak gösterimi" },
+  { id: "bacak2b", ad: "Bacaklar iki boyutlu", tanim: "Bacaklar kalınlığı olacak şekilde çizilmiş" },
+  { id: "diz", ad: "Diz", tanim: "Bacakta açı (yandan) ya da diz kapağı (önden)" },
+  { id: "ayak", ad: "Ayaklar", tanim: "Herhangi bir ayak gösterimi" },
+  { id: "ayak2b", ad: "Ayaklar iki boyutlu", tanim: "Topuktan parmak ucuna uzanan, boyu eninden uzun ya da perspektifli ayak" },
+  { id: "profil", ad: "Profil", tanim: "Baş yandan (profilden) çizilmiş" },
+  { id: "giysi1", ad: "Giysi: yok ya da 1 parça", tanim: "Hiç giysi yok ya da tek bir giysi parçası" },
+  { id: "giysi2", ad: "Giysi: 2-3 parça", tanim: "İki ya da üç giysi parçası" },
+  { id: "giysi4", ad: "Giysi: 4 ve daha fazla", tanim: "Dört ya da daha fazla giysi parçası" },
+  { id: "oranti", ad: "İyi orantı", tanim: "Figür bütün olarak orantılı, 'doğru' görünüyor" },
+];
+// Gelişim olgunluğuna işaret eden "ileri düzey" ayrıntılar (Koppitz'in
+// istisnai maddeleri arasında yer alanlar). Yaşa göre istisnai sayılıp
+// sayılmadıkları doğrulanamadığından yalnızca betimsel raporlanır.
+const ICZ_ILERI = ["diz", "profil", "dirsek", "dudak", "burundelik", "oranti", "kolomuz", "giysi4", "ayak2b", "besparmak", "gozbebek"];
+// Yaşa göre BEKLENEN maddeler — yalnızca doğrulanabilen kısım (yaşıtların
+// %86+'sının çizdiği maddeler). Cinsiyet bilinmiyorsa geç olan (erkek) eşiği
+// kullanılır; eksik madde yanlışlıkla "beklenmedik" sayılmasın.
+function iczBeklenenler(yas, cinsiyet) {
+  const y = Number(yas) || 0, kiz = cinsiyet === "Kız";
+  const l = ["bas", "goz", "burun", "agiz", "govde", "bacak"];
+  if (kiz || y >= 6) l.push("kol");
+  if (y >= (kiz ? 6 : 7)) l.push("ayak");
+  if (kiz && y >= 6) l.push("sac");
+  if (y >= (kiz ? 9 : 10)) l.push("boyun");
+  return l;
+}
+
+// 30 duygusal gösterge — minYas: [erkek, kız]; kume: Koppitz'in 5'li gruplaması
+const ICZ_KUMELER = {
+  durtusellik: { ad: "Dürtüsellik", renk: "#D97706" },
+  guvensizlik: { ad: "Güvensizlik / Yetersizlik duygusu", renk: "#7C3AED" },
+  kaygi: { ad: "Kaygı", renk: "#DC2626" },
+  cekingenlik: { ad: "Utangaçlık / Çekingenlik", renk: "#0E7490" },
+  ofke: { ad: "Öfke / Saldırganlık", renk: "#B91C1C" },
+};
+const ICZ_DUYGUSAL = [
+  { id: "butunlesme", ad: "Parçaların zayıf bütünleşmesi", tanim: "Bir ya da daha fazla parça gövdeden kopuk ya da ona ancak değiyor", minYas: [7, 6], kume: "durtusellik", anlam: "dürtüsellik, dengesizlik, zayıf koordinasyon" },
+  { id: "yuzgolge", ad: "Yüzün gölgelenmesi", tanim: "Yüzün tamamının ya da bir bölümünün bilinçli gölgelenmesi (çiller dahil; hafif, eşit ten rengi sayılmaz)", minYas: [5, 5], kume: "kaygi", anlam: "kaygı, olumsuz benlik algısı" },
+  { id: "govdegolge", ad: "Gövde ve/veya kolların-bacakların gölgelenmesi", tanim: "Gövde, kollar ya da bacaklarda gölgelendirme", minYas: [9, 8], kume: "kaygi", anlam: "beden kaygısı" },
+  { id: "elgolge", ad: "Ellerin ve/veya boynun gölgelenmesi", tanim: "Eller ya da boyun gölgelenmiş", minYas: [8, 7], kume: "kaygi", anlam: "kendi davranışlarına ilişkin kaygı" },
+  { id: "asimetri", ad: "Kol-bacaklarda belirgin asimetri", tanim: "Bir kol/bacak diğerinden biçim olarak belirgin farklı (yalnızca boy farkı sayılmaz)", minYas: [5, 5], kume: "durtusellik", anlam: "dürtüsellik, koordinasyon güçlüğü" },
+  { id: "egik", ad: "Eğik figür", tanim: "Figürün dikey ekseni 15° ya da daha fazla eğik", minYas: [5, 5], kume: "guvensizlik", anlam: "denge eksikliği, güvensizlik" },
+  { id: "kucukfigur", ad: "Çok küçük figür", tanim: "Figür boyu 5 cm ya da daha kısa", minYas: [5, 5], kume: "cekingenlik", anlam: "güvensizlik, içe kapanma, çökkünlük" },
+  { id: "buyukfigur", ad: "Çok büyük figür", tanim: "Figür boyu 23 cm ya da daha uzun", minYas: [8, 8], kume: "durtusellik", anlam: "dışa taşkınlık, zayıf iç denetim" },
+  { id: "saydam", ad: "Saydamlık", tanim: "Gövdenin ya da kol-bacakların büyük bölümü 'içi görünür' çizilmiş (tek çizgi geçişi sayılmaz)", minYas: [5, 5], kume: "durtusellik", anlam: "olgunlaşmamışlık, dürtüsellik" },
+  { id: "kucukbas", ad: "Çok küçük baş", tanim: "Baş, figür boyunun 1/10'undan küçük", minYas: [5, 5], kume: "guvensizlik", anlam: "zihinsel yetersizlik duygusu" },
+  { id: "sasigoz", ad: "Şaşı gözler", tanim: "İki göz de içe ya da dışa dönük (yana bakış sayılmaz)", minYas: [5, 5], kume: "ofke", anlam: "öfke, isyankârlık" },
+  { id: "dis", ad: "Dişler", tanim: "Herhangi bir diş gösterimi", minYas: [5, 5], kume: "ofke", anlam: "saldırganlık" },
+  { id: "kisakol", ad: "Kısa kollar", tanim: "Kollar bele ulaşmıyor", minYas: [5, 5], kume: "cekingenlik", anlam: "dışarıya uzanmada güçlük, ketlenme" },
+  { id: "uzunkol", ad: "Uzun kollar", tanim: "Kollar dizin altına uzanıyor", minYas: [5, 5], kume: "ofke", anlam: "dış dünyaya uzanma ihtiyacı, saldırganlık" },
+  { id: "yapisikkol", ad: "Gövdeye yapışık kollar", tanim: "Kollar ile gövde arasında boşluk yok", minYas: [5, 5], kume: "cekingenlik", anlam: "katı denetim, ilişki kurmada güçlük" },
+  { id: "buyukel", ad: "Büyük eller", tanim: "Eller yüz kadar ya da yüzden büyük", minYas: [5, 5], kume: "ofke", anlam: "eyleme dökme, saldırganlık" },
+  { id: "elyok", ad: "Kesik eller", tanim: "Kollar var ama el ve parmak yok (arkada/cepte saklanan eller sayılmaz)", minYas: [5, 5], kume: "guvensizlik", anlam: "yetersizlik, suçluluk duygusu" },
+  { id: "bitisikbacak", ad: "Bitişik bacaklar", tanim: "Bacaklar arasında boşluk yok; profilde tek bacak", minYas: [5, 5], kume: "kaygi", anlam: "gerginlik, cinselliğe ilişkin kaygı" },
+  { id: "genital", ad: "Cinsel organlar", tanim: "Gerçekçi ya da açıkça simgesel cinsel organ çizimi", minYas: [5, 5], kume: "ofke", anlam: "cinsel kaygı/ilgi; ayrıca dikkatle değerlendirilmeli" },
+  { id: "canavar", ad: "Canavar ya da garip figür", tanim: "Bilinçli olarak insan dışı, aşağılanmış ya da gülünç figür (beceriksiz çizim tek başına sayılmaz)", minYas: [5, 5], kume: "guvensizlik", anlam: "farklılık/aşağılanmışlık duygusu" },
+  { id: "ucfigur", ad: "Üç ya da daha fazla figür", tanim: "Tek insan istenmişken kendiliğinden çizilen, birbiriyle ilgisiz figürler (çift/aile sayılmaz)", minYas: [5, 5], kume: null, anlam: "okul başarısızlığı, görevi sürdürmede güçlük" },
+  { id: "bulut", ad: "Bulut, yağmur, kar, uçan kuşlar", tanim: "Bulut, yağmur, kar ya da uçan kuş çizilmiş", minYas: [5, 5], kume: "kaygi", anlam: "kaygı, üzerinde baskı hissetme" },
+  { id: "gozyok", ad: "Gözlerin olmaması", tanim: "Gözler tamamen yok (kapalı ya da boş gözler sayılmaz)", minYas: [5, 5], kume: "kaygi", anlam: "sosyal yalıtılmışlık, kaçınma" },
+  { id: "burunyok", ad: "Burnun olmaması", tanim: "Burun yok", minYas: [6, 5], kume: "cekingenlik", anlam: "utangaçlık, ketlenme" },
+  { id: "agizyok", ad: "Ağzın olmaması", tanim: "Ağız yok", minYas: [5, 5], kume: "cekingenlik", anlam: "kaygı, çaresizlik, iletişim güçlüğü" },
+  { id: "govdeyok", ad: "Gövdenin olmaması", tanim: "Gövde yok", minYas: [5, 5], kume: null, anlam: "ciddi güçlük ya da nörolojik sorun olasılığı — mutlaka ileri değerlendirme" },
+  { id: "kolyok", ad: "Kolların olmaması", tanim: "Kollar yok", minYas: [6, 5], kume: "guvensizlik", anlam: "kendi davranışına ilişkin kaygı ya da suçluluk" },
+  { id: "bacakyok", ad: "Bacakların olmaması", tanim: "Bacaklar yok (uzun etek bacakları örtüyorsa sayılmaz)", minYas: [5, 5], kume: "guvensizlik", anlam: "güvensizlik, desteksiz hissetme" },
+  { id: "ayakyok", ad: "Ayakların olmaması", tanim: "Ayaklar yok", minYas: [9, 7], kume: "guvensizlik", anlam: "güvensizlik, çaresizlik" },
+  { id: "boyunyok", ad: "Boynun olmaması", tanim: "Boyun yok", minYas: [10, 9], kume: "durtusellik", anlam: "dürtüsellik, zayıf iç denetim" },
+];
+const ICZ_ICINDEN = {
+  konum: ["Ortada", "Üst kısımda", "Alt kısımda", "Solda", "Sağda", "Köşede", "Sayfaya sığmamış"],
+  cizgi: ["Hafif / silik", "Normal", "Sert / bastırılmış", "Kesik kesik"],
+  silme: ["Yok", "Az", "Çok"],
+  cizimTuru: ["Tam insan", "Çöp adam", "Karikatür / çizgi film", "Diğer"],
+};
+// Çizim sonrası sorular (yaygın klinik uygulama; yanıtlar nitel bilgi verir)
+const ICZ_SORULAR = [
+  "Bu kim? Kaç yaşında?",
+  "Ne yapıyor?",
+  "Şu an ne hissediyor / ne düşünüyor?",
+  "En çok neyi sever? Neyden hoşlanmaz?",
+  "Onu ne üzer ya da korkutur?",
+  "Bir dileği olsa ne dilerdi?",
+];
+
+function iczYasKurali(d, yas, cinsiyet) {
+  const y = Number(yas) || 0;
+  if (!y) return true; // yaş yoksa kural uygulanamaz — göster ama uyar
+  const min = cinsiyet === "Kız" ? d.minYas[1] : cinsiyet === "Erkek" ? d.minYas[0] : Math.max(d.minYas[0], d.minYas[1]);
+  return y >= min;
+}
+// Tüm hesaplar burada, AI'dan bağımsız ve deterministik
+function iczPuanla(v) {
+  const yas = Number(v && v.yas) || null, cins = (v && v.cinsiyet) || "";
+  const g = (v && v.gelisim) || {}, d = (v && v.duygusal) || {};
+  const varOlan = ICZ_GELISIM.filter(m => g[m.id]).map(m => m.id);
+  const beklenen = yas ? iczBeklenenler(yas, cins) : [];
+  const eksikBeklenen = beklenen.filter(id => !g[id]);
+  const ileri = ICZ_ILERI.filter(id => g[id]);
+  const dgVar = ICZ_DUYGUSAL.filter(x => d[x.id]);
+  const gecerli = dgVar.filter(x => iczYasKurali(x, yas, cins));
+  const yasAlti = dgVar.filter(x => !iczYasKurali(x, yas, cins));
+  const kumeSay = {};
+  Object.keys(ICZ_KUMELER).forEach(k => { kumeSay[k] = gecerli.filter(x => x.kume === k).length; });
+  const n = gecerli.length;
+  const duzey = n === 0 ? { no: 0, ad: "Duygusal gösterge yok", renk: "#15803D", metin: "Çizimde, yaşına göre geçerli sayılan duygusal göstergelerden hiçbiri görülmedi." }
+    : n === 1 ? { no: 1, ad: "Tek gösterge — eğilim", renk: "#B45309", metin: "Tek bir gösterge var. Koppitz'e göre tek gösterge bir duygusal sorunun işareti sayılmaz; yalnızca bir eğilime işaret edebilir." }
+    : n === 2 ? { no: 2, ad: "2 gösterge — ileri değerlendirme önerilir", renk: "#C2410C", metin: "İki gösterge var. Koppitz'e göre iki ve üzeri gösterge duygusal güçlük olasılığına işaret eder; görüşme, gözlem ve başka araçlarla desteklenmeden yorumlanmamalıdır." }
+    : { no: 3, ad: `${n} gösterge — ileri değerlendirme önerilir`, renk: "#B91C1C", metin: `${n} gösterge var. Duygusal güçlük olasılığı belirgindir; görüşme, aile ve öğretmen bilgisi ve gerekirse uzman yönlendirmesiyle değerlendirilmelidir.` };
+  const ozelUyari = [];
+  if (gecerli.some(x => x.id === "govdeyok")) ozelUyari.push("Gövdenin olmaması Koppitz'e göre ciddi güçlük ya da nörolojik bir sorunun işareti olabilir — ileri değerlendirme önerilir.");
+  if (gecerli.some(x => x.id === "genital")) ozelUyari.push("Cinsel organ çizimi tek başına bir kanıt değildir; ancak çocuğun güvenliği açısından dikkatle, yönlendirmeden yapılan bir görüşme ve gerekirse okul yönetimi/uzmanla iş birliği gerektirir.");
+  const yasUyari = !yas ? "Yaş girilmediği için göstergelerin yaş kuralları uygulanamadı."
+    : yas < 5 ? "Koppitz normları 5-12 yaş içindir; 5 yaş altında yorum yapılmamalıdır."
+    : yas > 12 ? `Koppitz normları 5-12 yaş içindir. ${yas} yaşında göstergeler 12 yaş kurallarıyla sayıldı; sonuç yalnızca nitel ipucu olarak kullanılmalıdır.` : "";
+  return { yas, cinsiyet: cins, varOlanSayi: varOlan.length, beklenen, eksikBeklenen, ileri, gecerli, yasAlti, kumeSay, duzey, ozelUyari, yasUyari };
+}
+function iczKisaOzet(v) {
+  const s = iczPuanla(v);
+  return `${s.varOlanSayi}/30 gelişimsel ayrıntı · ${s.gecerli.length} duygusal gösterge${s.eksikBeklenen.length ? ` · ${s.eksikBeklenen.length} beklenen ayrıntı eksik` : ""}`;
+}
+
+// Fotoğrafı tarayıcıda küçültür (AI'a gidecek ve kayda girecek boyut) ve
+// gerekirse 90° döndürür. EXIF yönünü modern tarayıcılar <img> çiziminde
+// zaten uygular.
+function iczResimHazirla(kaynak, maksKenar, kalite, donus) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const d = ((donus || 0) % 360 + 360) % 360;
+      const oran = Math.min(1, maksKenar / Math.max(img.naturalWidth, img.naturalHeight));
+      const w = Math.round(img.naturalWidth * oran), h = Math.round(img.naturalHeight * oran);
+      const c = document.createElement("canvas");
+      const yan = d === 90 || d === 270;
+      c.width = yan ? h : w; c.height = yan ? w : h;
+      const ctx = c.getContext("2d");
+      ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
+      ctx.translate(c.width / 2, c.height / 2); ctx.rotate(d * Math.PI / 180);
+      ctx.drawImage(img, -w / 2, -h / 2, w, h);
+      resolve(c.toDataURL("image/jpeg", kalite));
+    };
+    img.onerror = () => reject(new Error("Resim açılamadı"));
+    img.src = kaynak;
+  });
+}
+function iczDosyaOku(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = e => resolve(e.target.result);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+function iczJsonAyikla(metin) {
+  const t = String(metin || "").replace(/```json|```/g, "").trim();
+  const bas = t.indexOf("{"), son = t.lastIndexOf("}");
+  return JSON.parse(bas >= 0 ? t.slice(bas, son + 1) : t);
+}
+async function iczAiCagir(system, content, maxTokens) {
+  const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: maxTokens, system, messages: [{ role: "user", content }] }),
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(typeof data.error === "string" ? data.error : (data.error.message || "AI hatası"));
+  const metin = data.content?.[0]?.text || "";
+  if (!metin) throw new Error("Boş yanıt");
+  return metin;
+}
+// 1. aşama: AI resimde neyin GÖRÜNDÜĞÜNÜ işaretler. Öğrencinin adı gönderilmez.
+async function iczAiAnaliz(resimDataUrl, yas, cinsiyet) {
+  const gel = ICZ_GELISIM.map(m => `- ${m.id}: ${m.ad} — ${m.tanim}`).join("\n");
+  const dg = ICZ_DUYGUSAL.map(m => `- ${m.id}: ${m.ad} — ${m.tanim}`).join("\n");
+  const system = `Sen çocuk çizimlerini Koppitz İnsan Figürü Çizimi (HFD) sistemine göre işaretleyen titiz bir değerlendiricisin. Sana bir çocuğun "bir insan çiz" yönergesiyle yaptığı çizimin fotoğrafı verilecek. Görevin YORUM YAPMAK DEĞİL, yalnızca çizimde neyin bulunduğunu tanımlara harfiyen uyarak işaretlemektir. Danışman her maddeyi sonradan kontrol edecek.
+
+GELİŞİMSEL MADDELER (var=true/false):
+${gel}
+
+DUYGUSAL GÖSTERGELER (var=true/false, guven=yuksek|orta|dusuk):
+${dg}
+
+ÖLÇÜMLER:
+- kagitGorunuyor: kâğıdın dört kenarı fotoğrafta görünüyor mu (true/false)
+- kagitYonu: "dikey" ya da "yatay" (kâğıdın çizim sırasındaki yönü)
+- figurBoyOrani: ana insan figürünün (başın tepesinden ayak ucuna) yüksekliğinin kâğıt yüksekliğine oranı, 0-1 arası
+- basOrani: başın yüksekliğinin figürün toplam boyuna oranı, 0-1 arası
+- egimDerece: figürün dikey ekseninin dikeyden sapması, derece (0 = dik)
+
+NİTEL GÖZLEM (verilen seçeneklerden birini aynen yaz):
+- konum: ${ICZ_ICINDEN.konum.join(" | ")}
+- cizgi: ${ICZ_ICINDEN.cizgi.join(" | ")}
+- silme: ${ICZ_ICINDEN.silme.join(" | ")} (silgi izleri)
+- cizimTuru: ${ICZ_ICINDEN.cizimTuru.join(" | ")}
+- figurCinsiyeti: "Kadın/kız" | "Erkek/oğlan" | "Belirsiz"
+- figurSayisi: çizimdeki insan figürü sayısı
+
+KURALLAR:
+- Tanımın şartını açıkça görmüyorsan var=false yaz; emin değilsen guven="dusuk" yaz ve aciklama'da nedenini belirt.
+- Giysi maddelerinden (giysi1, giysi2, giysi4) yalnızca BİRİ true olabilir.
+- Fotoğraf bir insan çizimi değilse ya da okunamıyorsa "okunabilir": false yaz.
+- "notlar" alanına danışmanın kontrol etmesi gereken belirsiz noktaları kısa maddeler halinde yaz.
+- SADECE şu JSON'u döndür, başka metin yazma:
+{"okunabilir":true,"gelisim":{"bas":true,...},"duygusal":{"butunlesme":{"var":false,"guven":"yuksek","aciklama":""},...},"olcum":{"kagitGorunuyor":true,"kagitYonu":"dikey","figurBoyOrani":0.6,"basOrani":0.18,"egimDerece":3},"nitel":{"konum":"Ortada","cizgi":"Normal","silme":"Az","cizimTuru":"Tam insan","figurCinsiyeti":"Kadın/kız","figurSayisi":1},"notlar":["..."]}`;
+  const veri = resimDataUrl.split(",")[1];
+  const metin = await iczAiCagir(system, [
+    { type: "image", source: { type: "base64", media_type: "image/jpeg", data: veri } },
+    { type: "text", text: `Çocuğun yaşı: ${yas || "bilinmiyor"}, cinsiyeti: ${cinsiyet || "bilinmiyor"}. Çizimi talimata göre işaretle; SADECE JSON döndür.` },
+  ], 3000);
+  return iczJsonAyikla(metin);
+}
+// AI çıktısını forma çevirir; ölçüme dayalı göstergeleri ölçümden türetir.
+function iczAiSonucuFormaUygula(ai, onceki) {
+  const gelisim = {}, duygusal = {}, aiIsaret = { gelisim: {}, duygusal: {} };
+  ICZ_GELISIM.forEach(m => { const v = !!(ai.gelisim && ai.gelisim[m.id]); gelisim[m.id] = v; aiIsaret.gelisim[m.id] = v; });
+  const giysi = ["giysi4", "giysi2", "giysi1"].find(k => gelisim[k]);
+  ["giysi1", "giysi2", "giysi4"].forEach(k => { gelisim[k] = k === giysi; });
+  ICZ_DUYGUSAL.forEach(m => {
+    const x = ai.duygusal && ai.duygusal[m.id];
+    const v = !!(x && (x.var === true || x === true));
+    duygusal[m.id] = v;
+    aiIsaret.duygusal[m.id] = { var: v, guven: (x && x.guven) || "orta", aciklama: (x && x.aciklama) || "" };
+  });
+  const o = ai.olcum || {};
+  const yon = o.kagitYonu === "yatay" ? "yatay" : "dikey";
+  const boyCm = typeof o.figurBoyOrani === "number" && o.kagitGorunuyor !== false ? Math.round(o.figurBoyOrani * ICZ_A4_CM[yon] * 10) / 10 : null;
+  const olcum = {
+    kagitYonu: yon,
+    boyCm,
+    basOrani: typeof o.basOrani === "number" ? Math.round(o.basOrani * 100) / 100 : null,
+    egimDerece: typeof o.egimDerece === "number" ? Math.round(o.egimDerece) : null,
+    kagitGorunuyor: o.kagitGorunuyor !== false,
+  };
+  const n = ai.nitel || {};
+  const sec = (liste, d) => liste.includes(d) ? d : "";
+  const nitel = {
+    konum: sec(ICZ_ICINDEN.konum, n.konum), cizgi: sec(ICZ_ICINDEN.cizgi, n.cizgi), silme: sec(ICZ_ICINDEN.silme, n.silme),
+    cizimTuru: sec(ICZ_ICINDEN.cizimTuru, n.cizimTuru), figurCinsiyeti: n.figurCinsiyeti || "", figurSayisi: Number(n.figurSayisi) || 1,
+  };
+  const f = { ...onceki, gelisim, duygusal, olcum, nitel: { ...(onceki.nitel || {}), ...nitel } };
+  return { form: iczOlcumdenGostergeler(f), aiIsaret, notlar: Array.isArray(ai.notlar) ? ai.notlar.slice(0, 8) : [] };
+}
+// Ölçüm girildiyse boyut/eğim/baş göstergeleri ölçümle belirlenir
+// (danışman cetvelle ölçüp değiştirirse göstergeler de güncellenir).
+function iczOlcumdenGostergeler(f) {
+  const o = f.olcum || {}, d = { ...(f.duygusal || {}) };
+  if (o.boyCm != null && o.boyCm !== "") { d.kucukfigur = +o.boyCm <= 5; d.buyukfigur = +o.boyCm >= 23; }
+  if (o.basOrani != null && o.basOrani !== "") d.kucukbas = +o.basOrani < 0.1;
+  if (o.egimDerece != null && o.egimDerece !== "") d.egik = Math.abs(+o.egimDerece) >= 15;
+  return { ...f, duygusal: d };
+}
+// 2. aşama: danışmanın ONAYLADIĞI veriden temkinli yorum. Ad gönderilmez.
+async function iczAiYorum(v, kucukResim) {
+  const s = iczPuanla(v);
+  const ad = id => (ICZ_GELISIM.find(m => m.id === id) || {}).ad;
+  const sorular = ICZ_SORULAR.map((q, i) => (v.sorular && v.sorular[i] ? `- ${q} → ${v.sorular[i]}` : "")).filter(Boolean).join("\n");
+  const veri = [
+    `Yaş: ${s.yas || "bilinmiyor"} · Cinsiyet: ${s.cinsiyet || "bilinmiyor"}`,
+    `Gelişimsel ayrıntı: ${s.varOlanSayi}/30. Yaşına göre beklenip eksik olanlar: ${s.eksikBeklenen.map(ad).join(", ") || "yok"}. İleri düzey ayrıntılar: ${s.ileri.map(ad).join(", ") || "yok"}.`,
+    `Yaşına göre geçerli duygusal göstergeler (${s.gecerli.length}): ${s.gecerli.map(x => `${x.ad} [${x.anlam}]`).join("; ") || "yok"}.`,
+    s.yasAlti.length ? `Çizimde olan ama bu yaş için gösterge sayılmayanlar: ${s.yasAlti.map(x => x.ad).join(", ")}.` : "",
+    `Ölçümler: figür boyu ${v.olcum?.boyCm ?? "?"} cm, eğim ${v.olcum?.egimDerece ?? "?"}°, baş/figür oranı ${v.olcum?.basOrani ?? "?"}.`,
+    `Nitel gözlem: konum ${v.nitel?.konum || "?"}, çizgi ${v.nitel?.cizgi || "?"}, silme ${v.nitel?.silme || "?"}, çizim türü ${v.nitel?.cizimTuru || "?"}, figürün cinsiyeti ${v.nitel?.figurCinsiyeti || "?"}.`,
+    sorular ? `Çizim sonrası sorulara çocuğun yanıtları:\n${sorular}` : "Çizim sonrası soru yanıtı girilmedi.",
+    v.not ? `Danışmanın uygulama notu: ${v.not}` : "",
+  ].filter(Boolean).join("\n");
+  const system = `Sen okul psikolojik danışmanına destek veren, çocuk çizimleri konusunda deneyimli bir uzmansın. Koppitz İnsan Figürü Çizimi bulgularını ve danışmanın gözlemlerini kullanarak TEMKİNLİ bir değerlendirme yazarsın.
+KESİN KURALLAR:
+- Tanı koymazsın, zekâ/IQ düzeyi söylemezsin, yeni sayı üretmezsin; sana verilen sayıları değiştirmezsin.
+- Her yorumu "olabilir / düşündürebilir / görüşmede araştırılabilir" diliyle, hipotez olarak yazarsın. Tek bir çizimden kesin sonuç çıkarılamayacağını, Türk çocukları için yerel norm bulunmadığını aklında tutarsın.
+- Duygusal göstergeleri yalnızca sana verilen (danışmanın onayladığı) listeden konuşursun; resimde başka şey görsen de liste dışı gösterge eklemezsin, ama genel izlenimi (ayrıntı zenginliği, figürün ifadesi, bütünlük) kısaca betimleyebilirsin.
+- Çocuğun kendi anlattıkları (sorulara yanıtları) en değerli bilgidir; yorumlarını mümkünse onlarla ilişkilendir.
+- Türkçe, sade, markdown kullanmadan (yıldız, diyez yok), en fazla ~350 kelime yaz.
+BÖLÜMLER (başlıkları aynen kullan, her biri ayrı paragraf):
+Genel izlenim:
+Gelişimsel açıdan:
+Duygusal göstergeler açısından:
+Görüşmede açılabilecek konular:
+Öneriler:`;
+  const content = [];
+  if (kucukResim) content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: kucukResim.split(",")[1] } });
+  content.push({ type: "text", text: veri });
+  return (await iczAiCagir(system, content, 1500)).replace(/\*\*|##+ ?/g, "").trim();
+}
+
+function iczRaporHtml(v, b) {
+  const s = iczPuanla(v), esc = cdtEsc, bilgi = b || {};
+  const ad = id => (ICZ_GELISIM.find(m => m.id === id) || {}).ad || id;
+  const baslik = t => `<div style="background:#7C2D12;color:#fff;font-size:12.5px;font-weight:700;padding:6px 11px;border-radius:6px;margin:14px 0 7px;page-break-after:avoid">${t}</div>`;
+  const cip = (t, renk, zemin) => `<span style="display:inline-block;margin:0 4px 4px 0;padding:2px 8px;border-radius:10px;font-size:11px;color:${renk};background:${zemin}">${esc(t)}</span>`;
+  const gelTablo = `<table style="width:100%;border-collapse:collapse;font-size:11px">
+    <tr>${[0, 1, 2].map(sut => `<td style="vertical-align:top;width:33%;padding:0 4px">${ICZ_GELISIM.slice(sut * 10, sut * 10 + 10).map(m => {
+      const var_ = !!(v.gelisim && v.gelisim[m.id]);
+      const bek = s.beklenen.includes(m.id), ileri = ICZ_ILERI.includes(m.id);
+      return `<div style="padding:2px 0;color:${var_ ? "#111" : bek ? "#B91C1C" : "#9CA3AF"}">${var_ ? "✓" : bek ? "✗" : "·"} ${esc(m.ad)}${ileri && var_ ? ' <span style="color:#7C3AED;font-size:9.5px">(ileri)</span>' : ""}${bek && !var_ ? ' <span style="font-size:9.5px">(beklenen)</span>' : ""}</div>`;
+    }).join("")}</td>`).join("")}</tr></table>`;
+  const dgSatir = x => `<tr><td style="padding:5px 7px;border-bottom:1px solid #EEE;font-weight:700">${esc(x.ad)}</td><td style="padding:5px 7px;border-bottom:1px solid #EEE;color:#555">${esc(x.tanim)}</td><td style="padding:5px 7px;border-bottom:1px solid #EEE">${x.kume ? `<span style="color:${ICZ_KUMELER[x.kume].renk};font-weight:700">${ICZ_KUMELER[x.kume].ad}</span><br>` : ""}<span style="color:#444">${esc(x.anlam)}</span></td></tr>`;
+  const kumeCubuk = Object.entries(ICZ_KUMELER).map(([k, c]) => `<div style="display:flex;align-items:center;gap:6px;margin:3px 0;font-size:11px"><div style="width:190px">${c.ad}</div><div style="display:flex;gap:3px">${Array.from({ length: Math.max(3, s.kumeSay[k]) }, (_, i) => `<span style="display:inline-block;width:16px;height:10px;border-radius:3px;background:${i < s.kumeSay[k] ? c.renk : "#EEE"}"></span>`).join("")}</div><b style="color:${s.kumeSay[k] ? c.renk : "#9CA3AF"}">${s.kumeSay[k]}</b></div>`).join("");
+  const n = v.nitel || {}, o = v.olcum || {};
+  const sorular = ICZ_SORULAR.map((q, i) => v.sorular && v.sorular[i] ? `<div style="margin-bottom:3px"><b>${esc(q)}</b> ${esc(v.sorular[i])}</div>` : "").join("");
+  return `<div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:12px">
+    <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;border-bottom:2px solid #7C2D12;padding-bottom:8px">
+      <div><div style="font-size:18px;font-weight:700;color:#7C2D12">Bir İnsan Çiz Testi — Değerlendirme Raporu</div>
+      <div style="font-size:11px;color:#666;margin-top:2px">Koppitz İnsan Figürü Çizimi: 30 gelişimsel madde · 30 duygusal gösterge</div></div>
+      <div style="font-size:11.5px;text-align:right;line-height:1.55"><b>${esc(bilgi.ogrenci || "")}</b>${bilgi.sinif ? " · " + esc(bilgi.sinif) : ""}<br>Yaş: ${s.yas || "—"} · ${esc(s.cinsiyet || "cinsiyet belirtilmedi")}<br>Tarih: ${esc(bilgi.tarih || "")}</div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:10px;align-items:flex-start">
+      ${v.kucukResim ? `<div style="flex:0 0 210px;text-align:center"><img src="${v.kucukResim}" style="max-width:210px;max-height:290px;border:1px solid #DDD;border-radius:6px"/><div style="font-size:9.5px;color:#888;margin-top:2px">Çizimin küçültülmüş kopyası</div></div>` : ""}
+      <div style="flex:1 1 300px;min-width:260px">
+        <div style="border-radius:10px;padding:10px 12px;background:${s.duzey.renk}14;border:1px solid ${s.duzey.renk}55">
+          <div style="font-size:15px;font-weight:700;color:${s.duzey.renk}">${esc(s.duzey.ad)}</div>
+          <div style="font-size:11.5px;color:#333;margin-top:4px;line-height:1.5">${esc(s.duzey.metin)}</div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+          <div style="flex:1 1 120px;border:1px solid #E5E7EB;border-radius:8px;padding:7px;text-align:center"><div style="font-size:20px;font-weight:700;color:#7C2D12">${s.varOlanSayi}<span style="font-size:12px;color:#888">/30</span></div><div style="font-size:10.5px;color:#555">gelişimsel ayrıntı</div></div>
+          <div style="flex:1 1 120px;border:1px solid #E5E7EB;border-radius:8px;padding:7px;text-align:center"><div style="font-size:20px;font-weight:700;color:${s.eksikBeklenen.length ? "#B91C1C" : "#15803D"}">${s.eksikBeklenen.length}</div><div style="font-size:10.5px;color:#555">yaşına göre beklenip eksik</div></div>
+          <div style="flex:1 1 120px;border:1px solid #E5E7EB;border-radius:8px;padding:7px;text-align:center"><div style="font-size:20px;font-weight:700;color:${s.gecerli.length >= 2 ? "#B91C1C" : "#333"}">${s.gecerli.length}</div><div style="font-size:10.5px;color:#555">duygusal gösterge</div></div>
+        </div>
+        ${s.yasUyari ? `<div style="font-size:10.5px;color:#92400E;background:#FFFBEB;border-radius:6px;padding:5px 8px;margin-top:6px">⚠ ${esc(s.yasUyari)}</div>` : ""}
+        ${s.ozelUyari.map(u => `<div style="font-size:11px;color:#991B1B;background:#FEF2F2;border-radius:6px;padding:5px 8px;margin-top:6px;font-weight:700">⚠ ${esc(u)}</div>`).join("")}
+      </div>
+    </div>
+    ${baslik("Gelişimsel Maddeler")}
+    ${gelTablo}
+    <div style="font-size:11px;color:#333;margin-top:6px;line-height:1.55">
+      ${s.eksikBeklenen.length ? `<b style="color:#B91C1C">Yaşıtlarının büyük çoğunluğunun (%86+) çizdiği ama bu çizimde olmayan:</b> ${s.eksikBeklenen.map(ad).map(esc).join(", ")}. Beklenen bir ayrıntının eksikliği gelişimsel olgunluk, dikkat ya da isteksizlik açısından değerlendirilmelidir.` : "Yaşına göre beklenen temel ayrıntıların hepsi çizilmiş."}
+      ${s.ileri.length ? `<br><b style="color:#7C3AED">İleri düzey ayrıntılar:</b> ${s.ileri.map(ad).map(esc).join(", ")} — yaşıtlarının daha az çizdiği, gelişimsel olgunluğa işaret edebilen ayrıntılar.` : ""}
+      <div style="font-size:10px;color:#777;margin-top:3px">✓ var · ✗ yaşına göre beklenen ama yok · · yok (bu yaşta beklenmiyor). Program zekâ/IQ düzeyi hesaplamaz.</div>
+    </div>
+    ${baslik("Duygusal Göstergeler (yaşına göre geçerli olanlar)")}
+    ${s.gecerli.length ? `<table style="width:100%;border-collapse:collapse;font-size:11px"><tr style="background:#FAFAFA;color:#555"><th style="text-align:left;padding:5px 7px">Gösterge</th><th style="text-align:left;padding:5px 7px">Tanım</th><th style="text-align:left;padding:5px 7px">Literatürde ilişkilendirildiği alan</th></tr>${s.gecerli.map(dgSatir).join("")}</table>` : `<div style="font-size:11.5px;color:#15803D">Yaşına göre geçerli duygusal gösterge görülmedi.</div>`}
+    ${s.yasAlti.length ? `<div style="font-size:10.5px;color:#666;margin-top:5px">Çizimde görülen ama bu yaş/cinsiyet için gösterge sayılmayan (yaşıtlarında olağan): ${s.yasAlti.map(x => esc(x.ad)).join(", ")}.</div>` : ""}
+    <div style="margin-top:8px;page-break-inside:avoid"><div style="font-size:11px;font-weight:700;color:#555;margin-bottom:3px">Koppitz gruplarına göre dağılım</div>${kumeCubuk}</div>
+    ${baslik("Uygulama Gözlemleri")}
+    <table style="width:100%;border-collapse:collapse;font-size:11px">
+      <tr><td style="padding:3px 6px;color:#666;width:22%">Figür boyu</td><td style="padding:3px 6px">${o.boyCm != null && o.boyCm !== "" ? esc(o.boyCm) + " cm" : "—"}</td><td style="padding:3px 6px;color:#666;width:22%">Eğim</td><td style="padding:3px 6px">${o.egimDerece != null && o.egimDerece !== "" ? esc(o.egimDerece) + "°" : "—"}</td></tr>
+      <tr><td style="padding:3px 6px;color:#666">Baş / figür oranı</td><td style="padding:3px 6px">${o.basOrani != null && o.basOrani !== "" ? esc(o.basOrani) : "—"}</td><td style="padding:3px 6px;color:#666">Sayfadaki konum</td><td style="padding:3px 6px">${esc(n.konum || "—")}</td></tr>
+      <tr><td style="padding:3px 6px;color:#666">Çizgi</td><td style="padding:3px 6px">${esc(n.cizgi || "—")}</td><td style="padding:3px 6px;color:#666">Silme</td><td style="padding:3px 6px">${esc(n.silme || "—")}</td></tr>
+      <tr><td style="padding:3px 6px;color:#666">Çizim türü</td><td style="padding:3px 6px">${esc(n.cizimTuru || "—")}</td><td style="padding:3px 6px;color:#666">Figürün cinsiyeti</td><td style="padding:3px 6px">${esc(n.figurCinsiyeti || "—")}</td></tr>
+      ${n.sure ? `<tr><td style="padding:3px 6px;color:#666">Süre</td><td style="padding:3px 6px" colspan="3">${esc(n.sure)}</td></tr>` : ""}
+    </table>
+    ${sorular ? `<div style="margin-top:8px;font-size:11.5px;line-height:1.5;background:#F8FAFC;border-radius:8px;padding:8px 10px;page-break-inside:avoid"><div style="font-weight:700;color:#7C2D12;margin-bottom:4px">Çizim sonrası sorular — çocuğun yanıtları</div>${sorular}</div>` : ""}
+    ${v.not ? `<div style="margin-top:8px;font-size:11.5px;line-height:1.5"><b>Danışman notu:</b> ${esc(v.not)}</div>` : ""}
+    ${v.aiYorum ? `${baslik("Değerlendirme Yorumu (AI destekli, danışman onaylı veriden)")}<div style="font-size:11.5px;line-height:1.6;white-space:pre-wrap">${esc(v.aiYorum)}</div>` : ""}
+    <div style="margin-top:12px;font-size:9.5px;color:#666;line-height:1.5;border-top:1px solid #E5E7EB;padding-top:6px">
+      <b>Yorumlama sınırları:</b> Bu araç tanı koymaz ve zekâ düzeyi belirlemez. Koppitz normları 5-12 yaş ABD örnekleminden elde edilmiştir; Türk çocukları için yayımlanmış norm yoktur ve Türkiye'deki çalışmalar (Özer, 2009, 2010) gelişimsel tablonun ve bazı göstergelerin yerel çocuklarda farklı dağıldığını göstermiştir. Duygusal göstergeler tek başına güvenilir bir tarama aracı değildir (Motta, Little ve Tobin, 1993); bulgular hipotez olarak görülmeli, görüşme, gözlem, aile/öğretmen bilgisi ve başka ölçme araçlarıyla birlikte değerlendirilmelidir. Çizim becerisi, motor gelişim ve o günkü durum sonucu etkileyebilir.
+      <br><b>Kaynaklar:</b> Koppitz, E. M. (1968). Psychological Evaluation of Children's Human Figure Drawings. · Koppitz & de Moreau (1968), Interamerican Journal of Psychology. · Özer, S. (2009). Turkish children's human figure drawings: Can we borrow norms? Educational Psychology, 29(6).
+    </div>
+  </div>`;
+}
+function iczPdfIndir(kayit, ogrenci, sinif) {
+  const tmpId = "icz-rapor-" + kayit.id;
+  let tmp = document.getElementById(tmpId);
+  if (!tmp) {
+    tmp = document.createElement("div"); tmp.id = tmpId;
+    Object.assign(tmp.style, { position: "absolute", left: "-9999px", top: "0", width: "800px", fontFamily: "Arial, sans-serif", padding: "18px" });
+    tmp.innerHTML = iczRaporHtml(kayit.veri || {}, { ogrenci, sinif, tarih: kayit.tarih });
+    document.body.appendChild(tmp);
+  }
+  raporIndir(tmpId, "Bir_Insan_Ciz_" + String(ogrenci || "").replace(/\s+/g, "_") + "_" + String(kayit.tarih || "").replace(/\./g, "-"));
+  setTimeout(() => { const el = document.getElementById(tmpId); if (el) el.remove(); }, 8000);
+}
+
+// ── Bir İnsan Çiz paneli (Testler sekmesi) ──
+function IczPaneli({ seciliAd, seciliSinif, seciliNumara, seciliCinsiyet, testKayitlari, setTestKayitlari }) {
+  const bosForm = () => ({ yas: cdtYasTahmin(seciliSinif), cinsiyet: seciliCinsiyet === "Kız" || seciliCinsiyet === "Erkek" ? seciliCinsiyet : "", gelisim: {}, duygusal: {}, olcum: { kagitYonu: "dikey", boyCm: "", basOrani: "", egimDerece: "" }, nitel: {}, sorular: [], not: "" });
+  const [ham, setHam] = useState(null);          // yüklenen fotoğraf (orijinal)
+  const [donus, setDonus] = useState(0);
+  const [resim, setResim] = useState(null);      // AI'a giden (1600 px)
+  const [form, setForm] = useState(bosForm);
+  const [aiIsaret, setAiIsaret] = useState(null);
+  const [aiNotlar, setAiNotlar] = useState([]);
+  const [asama, setAsama] = useState("yukle");   // yukle | inceleme
+  const [yukleniyor, setYukleniyor] = useState("");
+  const [hata, setHata] = useState("");
+  const [aiYorum, setAiYorum] = useState("");
+  const [durum, setDurum] = useState("");
+  const [yonergeAcik, setYonergeAcik] = useState(false);
+  const [resimKaydet, setResimKaydet] = useState(true);
+  useEffect(() => { setHam(null); setResim(null); setForm(bosForm()); setAiIsaret(null); setAiNotlar([]); setAsama("yukle"); setHata(""); setAiYorum(""); setDonus(0); }, [seciliAd, seciliSinif]);
+  useEffect(() => {
+    if (!ham) { setResim(null); return; }
+    let iptal = false;
+    iczResimHazirla(ham, 1600, 0.85, donus).then(r => { if (!iptal) setResim(r); }).catch(() => setHata("Fotoğraf açılamadı. Başka bir fotoğraf dene."));
+    return () => { iptal = true; };
+  }, [ham, donus]);
+
+  if (!seciliAd) return <div style={{ fontSize: 12.5, color: MUTED, padding: 10 }}>Önce yukarıdan bir öğrenci seçin.</div>;
+  const s = iczPuanla(form);
+  const kart = { background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 14, marginBottom: 12, boxShadow: "0 4px 12px rgba(20,40,32,0.10)" };
+  const btn = (renk, dolu) => ({ padding: "9px 13px", borderRadius: 9, border: dolu ? "none" : `1px solid ${renk}66`, background: dolu ? renk : "#fff", color: dolu ? "#fff" : renk, fontSize: 12.5, fontWeight: 800, cursor: "pointer" });
+  const lbl = { fontSize: 10.5, fontWeight: 800, color: MUTED, display: "block", marginBottom: 3, textTransform: "uppercase" };
+  const inp = { width: "100%", padding: "8px 9px", border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 13, boxSizing: "border-box", background: "#fff" };
+  const RENK = "#9A3412";
+
+  async function dosyaSec(file) {
+    if (!file) return;
+    if (!/^image\//.test(file.type || "") && !/\.(jpe?g|png|heic|webp)$/i.test(file.name || "")) { setHata("Lütfen bir fotoğraf (JPG/PNG) seç."); return; }
+    setHata(""); setDonus(0); setAiIsaret(null); setAiNotlar([]); setAiYorum("");
+    try { setHam(await iczDosyaOku(file)); } catch (e) { setHata("Fotoğraf okunamadı."); }
+  }
+  async function aiIleDegerlendir() {
+    if (!resim) return;
+    setYukleniyor("analiz"); setHata("");
+    try {
+      const ai = await iczAiAnaliz(resim, form.yas, form.cinsiyet);
+      if (ai.okunabilir === false) throw new Error("OKUNAMADI");
+      const r = iczAiSonucuFormaUygula(ai, form);
+      setForm(r.form); setAiIsaret(r.aiIsaret); setAiNotlar(r.notlar); setAsama("inceleme");
+    } catch (e) {
+      setHata(e && e.message === "OKUNAMADI"
+        ? "AI fotoğrafta bir insan çizimi seçemedi. Kâğıdın tamamı görünecek şekilde, iyi ışıkta yeniden çekmeyi dene ya da 'Elle işaretle' ile devam et."
+        : "AI değerlendirmesi alınamadı (bağlantı ya da sunucu). 'Elle işaretle' ile devam edebilirsin.");
+    }
+    setYukleniyor("");
+  }
+  function elleIsaretle() { setAiIsaret(null); setAsama("inceleme"); }
+  const setGel = (id, deger) => setForm(f => {
+    const g = { ...f.gelisim, [id]: deger };
+    if (deger && /^giysi/.test(id)) ["giysi1", "giysi2", "giysi4"].forEach(k => { if (k !== id) g[k] = false; });
+    return { ...f, gelisim: g };
+  });
+  const setDg = (id, deger) => setForm(f => ({ ...f, duygusal: { ...f.duygusal, [id]: deger } }));
+  const setOlcum = (k, deger) => setForm(f => iczOlcumdenGostergeler({ ...f, olcum: { ...f.olcum, [k]: deger } }));
+  const setNitel = (k, deger) => setForm(f => ({ ...f, nitel: { ...f.nitel, [k]: deger } }));
+  const setSoru = (i, deger) => setForm(f => { const l = [...(f.sorular || [])]; l[i] = deger; return { ...f, sorular: l }; });
+
+  async function kucukResimUret() { return resim && resimKaydet ? await iczResimHazirla(resim, 700, 0.62, 0) : null; }
+  async function yorumYaz() {
+    setYukleniyor("yorum"); setHata("");
+    try { setAiYorum(await iczAiYorum(form, resim ? await iczResimHazirla(resim, 900, 0.7, 0) : null)); }
+    catch (e) { setHata("AI yorumu alınamadı. Bağlantını kontrol et; yorum olmadan da kaydedebilirsin."); }
+    setYukleniyor("");
+  }
+  async function kaydet() {
+    setYukleniyor("kayit");
+    try {
+      const kucukResim = await kucukResimUret();
+      const veri = { surum: ICZ_SURUM, ...form, yas: form.yas ? Number(form.yas) : "", kucukResim, aiYorum: aiYorum.trim(), aiKullanildi: !!aiIsaret };
+      const tum = pdrSozlukOku(testKayitlari, seciliAd, seciliSinif, seciliNumara) || [];
+      const yeni = { id: uid(), kategori: "projektif", testAdi: "Bir İnsan Çiz Testi (Koppitz)", tip: "insan_ciz", tarih: today(), not: "", veri };
+      const guncel = pdrSozlukYaz(testKayitlari, seciliAd, seciliSinif, [yeni, ...tum], seciliNumara);
+      setTestKayitlari(guncel);
+      await saveTestKayitlari(guncel);
+      setDurum("✓ Kaydedildi — aşağıdaki geçmiş test kayıtlarında raporu açabilirsin.");
+      setHam(null); setForm(bosForm()); setAiIsaret(null); setAiNotlar([]); setAiYorum(""); setAsama("yukle");
+    } catch (e) { setHata("Kaydedilirken sorun oluştu — bağlantını kontrol et."); }
+    setYukleniyor("");
+    setTimeout(() => setDurum(""), 5000);
+  }
+
+  const ust = (
+    <div style={{ ...kart, background: "linear-gradient(135deg,#FFF7ED 0%,#FFFFFF 70%)", border: "1px solid #FED7AA" }}>
+      <div style={{ fontSize: 15, fontWeight: 900, color: RENK }}>✏️ Bir İnsan Çiz Testi (Koppitz)</div>
+      <div style={{ fontSize: 11.5, color: MUTED, marginTop: 3, lineHeight: 1.5 }}>Çizimin fotoğrafını yükle → AI ön işaretleme yapar → sen kontrol edip düzeltirsin → program yaşa göre puanlar, rapor hazırlar. 5-12 yaş için normludur; zekâ düzeyi hesaplamaz.</div>
+      <button onClick={() => setYonergeAcik(!yonergeAcik)} style={{ ...btn(RENK), marginTop: 8, padding: "6px 10px", fontSize: 11.5 }}>{yonergeAcik ? "▲ Uygulama yönergesini gizle" : "▼ Uygulama yönergesi"}</button>
+      {yonergeAcik && (
+        <div style={{ fontSize: 12, color: TEXT, lineHeight: 1.6, marginTop: 8, background: "#fff", borderRadius: 8, padding: "9px 11px", border: "1px solid #FED7AA" }}>
+          <b>Malzeme:</b> Çizgisiz beyaz A4 kâğıt (dikey verilir), kurşun kalem, silgi. Boya kalemi verilmez. Süre sınırı yoktur; bireysel uygulanması önerilir.<br />
+          <b>Yönerge:</b> "Bu kâğıda bir insan çizmeni istiyorum. Bütün bir insan olsun; çöp adam ya da çizgi film karakteri olmasın. İstediğin kişiyi çizebilirsin." Başka yönlendirme yapılmaz; "Nasıl çizeyim?" sorusuna "Nasıl istersen" denir.<br />
+          <b>Gözlem:</b> Süreyi, silmeleri, çizime nereden başladığını ve yaptığı yorumları not et.<br />
+          <b>Bittiğinde:</b> Aşağıdaki çizim sonrası soruları sor, yanıtlarını yaz.<br />
+          <b>Fotoğraf:</b> Kâğıdın dört kenarı da görünsün, tepeden ve düz çek, gölge düşmesin, iyi ışık olsun.
+        </div>
+      )}
+    </div>
+  );
+
+  if (asama === "yukle") {
+    return (
+      <div>
+        {ust}
+        <div style={kart}>
+          <label style={lbl}>Çizimin fotoğrafı</label>
+          <input type="file" accept="image/*" onChange={e => { dosyaSec(e.target.files && e.target.files[0]); e.target.value = ""; }} style={{ fontSize: 13, marginBottom: 8 }} />
+          {resim && (
+            <div style={{ textAlign: "center", marginTop: 6 }}>
+              <img src={resim} alt="çizim" style={{ maxWidth: "100%", maxHeight: 380, border: `1px solid ${BORDER}`, borderRadius: 8 }} />
+              <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 8, flexWrap: "wrap" }}>
+                <button onClick={() => setDonus(d => (d + 270) % 360)} style={btn("#64748B")}>↺ Sola döndür</button>
+                <button onClick={() => setDonus(d => (d + 90) % 360)} style={btn("#64748B")}>↻ Sağa döndür</button>
+              </div>
+            </div>
+          )}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
+            <div><label style={lbl}>Yaş</label><input type="number" min="3" max="18" value={form.yas} onChange={e => setForm(f => ({ ...f, yas: e.target.value }))} style={inp} /></div>
+            <div><label style={lbl}>Cinsiyet</label><select value={form.cinsiyet} onChange={e => setForm(f => ({ ...f, cinsiyet: e.target.value }))} style={inp}><option value="">Seçiniz</option><option>Kız</option><option>Erkek</option></select></div>
+          </div>
+          <div style={{ fontSize: 10.5, color: MUTED, marginTop: 4 }}>Yaş sınıftan tahmin edildi; tam yaşı yaz. Göstergelerin geçerli olduğu yaşlar cinsiyete göre değişir.</div>
+          {hata && <div style={{ fontSize: 12, color: "#B91C1C", marginTop: 8, lineHeight: 1.5 }}>{hata}</div>}
+          <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+            <button onClick={aiIleDegerlendir} disabled={!resim || !!yukleniyor} style={{ ...btn(RENK, true), opacity: !resim || yukleniyor ? 0.55 : 1, padding: "11px 16px", fontSize: 13.5 }}>{yukleniyor === "analiz" ? "⏳ Çizim inceleniyor…" : "🔍 AI ile Ön Değerlendir"}</button>
+            <button onClick={elleIsaretle} style={btn(RENK)}>✍️ Elle işaretle</button>
+          </div>
+          {durum && <div style={{ fontSize: 12, fontWeight: 700, color: "#15803D", marginTop: 8 }}>{durum}</div>}
+        </div>
+      </div>
+    );
+  }
+
+  const aiRozet = (tur, id, deger) => {
+    if (!aiIsaret) return null;
+    const a = tur === "g" ? aiIsaret.gelisim[id] : aiIsaret.duygusal[id] && aiIsaret.duygusal[id].var;
+    const guven = tur === "d" && aiIsaret.duygusal[id] ? aiIsaret.duygusal[id].guven : "";
+    if (a === deger && guven !== "dusuk") return null;
+    return <span title={tur === "d" && aiIsaret.duygusal[id] ? aiIsaret.duygusal[id].aciklama : ""} style={{ fontSize: 9.5, fontWeight: 800, color: a !== deger ? "#7C3AED" : "#B45309", background: a !== deger ? "#F3E8FF" : "#FEF3C7", borderRadius: 6, padding: "1px 5px", marginLeft: 4 }}>{a !== deger ? "düzeltildi" : "AI emin değil"}</span>;
+  };
+  const kutu = (aktif, renk) => ({ display: "flex", alignItems: "flex-start", gap: 7, padding: "6px 8px", borderRadius: 8, border: `1px solid ${aktif ? renk + "88" : BORDER}`, background: aktif ? renk + "10" : "#fff", cursor: "pointer", fontSize: 12, lineHeight: 1.35 });
+
+  return (
+    <div>
+      {ust}
+      <div style={{ ...kart, position: "sticky", top: 0, zIndex: 5, padding: 10, background: s.duzey.renk + "12", border: `1px solid ${s.duzey.renk}66` }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ fontSize: 13.5, fontWeight: 900, color: s.duzey.renk, flex: "1 1 200px" }}>{s.duzey.ad}</div>
+          <div style={{ fontSize: 12, color: TEXT }}><b>{s.varOlanSayi}</b>/30 ayrıntı · <b style={{ color: s.eksikBeklenen.length ? "#B91C1C" : "#15803D" }}>{s.eksikBeklenen.length}</b> beklenen eksik · <b>{s.gecerli.length}</b> gösterge</div>
+        </div>
+      </div>
+
+      <div style={kart}>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          {resim && <img src={resim} alt="çizim" style={{ width: 160, maxHeight: 230, objectFit: "contain", border: `1px solid ${BORDER}`, borderRadius: 8, background: "#fff" }} />}
+          <div style={{ flex: "1 1 220px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <div><label style={lbl}>Yaş</label><input type="number" min="3" max="18" value={form.yas} onChange={e => setForm(f => ({ ...f, yas: e.target.value }))} style={inp} /></div>
+              <div><label style={lbl}>Cinsiyet</label><select value={form.cinsiyet} onChange={e => setForm(f => ({ ...f, cinsiyet: e.target.value }))} style={inp}><option value="">Seçiniz</option><option>Kız</option><option>Erkek</option></select></div>
+              <div><label style={lbl}>Figür boyu (cm)</label><input type="number" step="0.5" value={form.olcum.boyCm ?? ""} onChange={e => setOlcum("boyCm", e.target.value)} style={inp} /></div>
+              <div><label style={lbl}>Eğim (derece)</label><input type="number" value={form.olcum.egimDerece ?? ""} onChange={e => setOlcum("egimDerece", e.target.value)} style={inp} /></div>
+              <div><label style={lbl}>Baş / figür oranı</label><input type="number" step="0.01" value={form.olcum.basOrani ?? ""} onChange={e => setOlcum("basOrani", e.target.value)} style={inp} /></div>
+              <div><label style={lbl}>Süre</label><input value={form.nitel.sure || ""} onChange={e => setNitel("sure", e.target.value)} placeholder="örn. 6 dk" style={inp} /></div>
+            </div>
+            <div style={{ fontSize: 10.5, color: MUTED, marginTop: 5, lineHeight: 1.45 }}>{aiIsaret ? "Ölçümler fotoğraftan tahmin edildi (A4 varsayımıyla). Kâğıt elindeyse cetvelle ölçüp düzelt; " : ""}Figür boyu ≤5 cm "çok küçük", ≥23 cm "çok büyük"; eğim ≥15° "eğik"; baş oranı &lt;0,10 "çok küçük baş" göstergesini otomatik işaretler.</div>
+          </div>
+        </div>
+        {aiNotlar.length > 0 && (
+          <div style={{ marginTop: 10, fontSize: 11.5, color: "#92400E", background: "#FFFBEB", borderRadius: 8, padding: "7px 10px", lineHeight: 1.5 }}>
+            <b>AI'ın kontrol etmeni istediği noktalar:</b>
+            <ul style={{ margin: "3px 0 0 16px", padding: 0 }}>{aiNotlar.map((x, i) => <li key={i}>{String(x)}</li>)}</ul>
+          </div>
+        )}
+        {s.yasUyari && <div style={{ marginTop: 8, fontSize: 11.5, color: "#92400E" }}>⚠ {s.yasUyari}</div>}
+      </div>
+
+      <div style={kart}>
+        <div style={{ fontSize: 13, fontWeight: 900, color: TEXT, marginBottom: 4 }}>1. Gelişimsel maddeler</div>
+        <div style={{ fontSize: 11, color: MUTED, marginBottom: 8 }}>Çizimde olanları işaretle. <b style={{ color: "#B91C1C" }}>Kırmızı çerçeve</b> = bu yaşta beklenen madde; <b style={{ color: "#7C3AED" }}>mor</b> = ileri düzey ayrıntı.</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(210px,1fr))", gap: 6 }}>
+          {ICZ_GELISIM.map(m => {
+            const v = !!form.gelisim[m.id], bek = s.beklenen.includes(m.id), ileri = ICZ_ILERI.includes(m.id);
+            const renk = bek ? "#B91C1C" : ileri ? "#7C3AED" : "#15803D";
+            return (
+              <label key={m.id} title={m.tanim} style={{ ...kutu(v, "#15803D"), border: `1px solid ${bek && !v ? "#FCA5A5" : v ? "#86EFAC" : BORDER}` }}>
+                <input type="checkbox" checked={v} onChange={e => setGel(m.id, e.target.checked)} style={{ marginTop: 2 }} />
+                <span><b style={{ color: v ? TEXT : bek ? "#B91C1C" : TEXT }}>{m.ad}</b>{ileri && <span style={{ fontSize: 9.5, color: renk, fontWeight: 800 }}> ileri</span>}{aiRozet("g", m.id, v)}<br /><span style={{ fontSize: 10.5, color: MUTED }}>{m.tanim}</span></span>
+              </label>
+            );
+          })}
+        </div>
+      </div>
+
+      <div style={kart}>
+        <div style={{ fontSize: 13, fontWeight: 900, color: TEXT, marginBottom: 4 }}>2. Duygusal göstergeler</div>
+        <div style={{ fontSize: 11, color: MUTED, marginBottom: 8 }}>Tanıma tam uyanları işaretle. Bu yaş/cinsiyette gösterge sayılmayanlar soluk görünür ve sayıma girmez.</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(230px,1fr))", gap: 6 }}>
+          {ICZ_DUYGUSAL.map(m => {
+            const v = !!form.duygusal[m.id], gecerli = iczYasKurali(m, form.yas, form.cinsiyet);
+            const renk = m.kume ? ICZ_KUMELER[m.kume].renk : "#475569";
+            return (
+              <label key={m.id} title={m.tanim} style={{ ...kutu(v && gecerli, renk), opacity: gecerli ? 1 : 0.55 }}>
+                <input type="checkbox" checked={v} onChange={e => setDg(m.id, e.target.checked)} style={{ marginTop: 2 }} />
+                <span><b>{m.ad}</b>{aiRozet("d", m.id, v)}{!gecerli && <span style={{ fontSize: 9.5, color: MUTED }}> (bu yaşta sayılmaz)</span>}<br /><span style={{ fontSize: 10.5, color: MUTED }}>{m.tanim}</span></span>
+              </label>
+            );
+          })}
+        </div>
+      </div>
+
+      <div style={kart}>
+        <div style={{ fontSize: 13, fontWeight: 900, color: TEXT, marginBottom: 8 }}>3. Gözlem ve çizim sonrası sorular</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 8, marginBottom: 10 }}>
+          {[["konum", "Sayfadaki konum"], ["cizgi", "Çizgi"], ["silme", "Silme"], ["cizimTuru", "Çizim türü"]].map(([k, a]) => (
+            <div key={k}><label style={lbl}>{a}</label><select value={form.nitel[k] || ""} onChange={e => setNitel(k, e.target.value)} style={inp}><option value="">—</option>{ICZ_ICINDEN[k].map(x => <option key={x}>{x}</option>)}</select></div>
+          ))}
+          <div><label style={lbl}>Figürün cinsiyeti</label><select value={form.nitel.figurCinsiyeti || ""} onChange={e => setNitel("figurCinsiyeti", e.target.value)} style={inp}><option value="">—</option>{["Kadın/kız", "Erkek/oğlan", "Belirsiz"].map(x => <option key={x}>{x}</option>)}</select></div>
+        </div>
+        {ICZ_SORULAR.map((q, i) => (
+          <div key={i} style={{ marginBottom: 6 }}><label style={{ ...lbl, textTransform: "none", fontSize: 11.5, color: TEXT }}>{q}</label><input value={(form.sorular || [])[i] || ""} onChange={e => setSoru(i, e.target.value)} style={inp} placeholder="Çocuğun yanıtı" /></div>
+        ))}
+        <label style={{ ...lbl, marginTop: 8 }}>Uygulama notu</label>
+        <textarea value={form.not} onChange={e => setForm(f => ({ ...f, not: e.target.value }))} rows={3} style={{ ...inp, resize: "vertical" }} placeholder="Çizime nereden başladı, neler söyledi, tutumu…" />
+      </div>
+
+      <div style={kart}>
+        <div style={{ fontSize: 13, fontWeight: 900, color: TEXT, marginBottom: 6 }}>4. Değerlendirme</div>
+        <div style={{ fontSize: 12, color: TEXT, lineHeight: 1.6 }}>
+          <div style={{ color: s.duzey.renk, fontWeight: 800 }}>{s.duzey.metin}</div>
+          {s.gecerli.length > 0 && <div style={{ marginTop: 4 }}>{s.gecerli.map(x => <span key={x.id} style={{ display: "inline-block", margin: "0 5px 5px 0", padding: "2px 8px", borderRadius: 10, fontSize: 11, background: (x.kume ? ICZ_KUMELER[x.kume].renk : "#475569") + "18", color: x.kume ? ICZ_KUMELER[x.kume].renk : "#475569", fontWeight: 700 }}>{x.ad}</span>)}</div>}
+          {s.eksikBeklenen.length > 0 && <div style={{ marginTop: 4 }}>Yaşına göre beklenip eksik: <b style={{ color: "#B91C1C" }}>{s.eksikBeklenen.map(id => ICZ_GELISIM.find(m => m.id === id).ad).join(", ")}</b></div>}
+          {s.ozelUyari.map((u, i) => <div key={i} style={{ marginTop: 5, color: "#991B1B", fontWeight: 700 }}>⚠ {u}</div>)}
+        </div>
+        <div style={{ marginTop: 10 }}>
+          <button onClick={yorumYaz} disabled={!!yukleniyor} style={{ ...btn("#4F46E5", true), opacity: yukleniyor ? 0.6 : 1 }}>{yukleniyor === "yorum" ? "⏳ Yorum yazılıyor…" : aiYorum ? "↻ Yorumu yeniden yaz" : "✦ AI ile yorum yaz (isteğe bağlı)"}</button>
+          <div style={{ fontSize: 10.5, color: MUTED, marginTop: 4 }}>AI yalnızca senin onayladığın işaretlerden ve yazdığın yanıtlardan yorum yazar; ad gönderilmez. Yorumu düzenleyebilirsin.</div>
+          {aiYorum && <textarea value={aiYorum} onChange={e => setAiYorum(e.target.value)} rows={12} style={{ ...inp, marginTop: 8, lineHeight: 1.55, resize: "vertical" }} />}
+        </div>
+        {hata && <div style={{ fontSize: 12, color: "#B91C1C", marginTop: 8 }}>{hata}</div>}
+        <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 11.5, color: MUTED, marginTop: 10 }}><input type="checkbox" checked={resimKaydet} onChange={e => setResimKaydet(e.target.checked)} /> Çizimin küçük bir kopyasını kayda ve rapora ekle</label>
+        <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+          <button onClick={kaydet} disabled={!!yukleniyor} style={{ ...btn("#15803D", true), padding: "11px 16px", fontSize: 13.5, opacity: yukleniyor ? 0.6 : 1 }}>{yukleniyor === "kayit" ? "Kaydediliyor…" : "💾 Kaydet"}</button>
+          <button onClick={() => { if (window.confirm("İşaretlemeler silinsin ve baştan başlansın mı?")) { setHam(null); setForm(bosForm()); setAiIsaret(null); setAiNotlar([]); setAiYorum(""); setAsama("yukle"); } }} style={btn("#64748B")}>Vazgeç</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+// ===== İNSAN ÇİZ BİTİŞ =====
+
+
 // Bir test kaydının kısa özet metnini üretir — liste ve rapor görünümünde
 // kullanılır, testin tipine göre farklı alanlardan oluşturulur.
 function testSonucOzeti(k) {
@@ -15991,6 +16665,7 @@ function testSonucOzeti(k) {
     }
     case "dikkat_cdt": return cdtKisaOzet(v);
     case "dikkat_egitim": return dgKisaOzet(v);
+    case "insan_ciz": return iczKisaOzet(v);
     case "scas_cocuk": {
       const cevaplar = v.cevaplar || [];
       const cevaplanan = cevaplar.filter(c => c.puan !== undefined && c.puan !== null).length;
@@ -16659,6 +17334,9 @@ KURALLAR:
                     <button onClick={()=>setKategori("cdt")} style={{ flex:1, padding:"14px 8px", borderRadius:12, border:`2px solid #5B4BD6`, background:"linear-gradient(135deg,#F4F1FF,#FFFFFF)", color:"#3B2E8F", fontSize:13, fontWeight:800, cursor:"pointer" }}>🎯 Çeldiricili Dikkat Testi (ÇDT) — dokunmatik</button>
                   </div>
                   <div style={{ display:"flex", gap:8, marginTop:8 }}>
+                    <button onClick={()=>setKategori("icz")} style={{ flex:1, padding:"14px 8px", borderRadius:12, border:`2px solid #C2410C`, background:"linear-gradient(135deg,#FFF7ED,#FFFFFF)", color:"#9A3412", fontSize:13, fontWeight:800, cursor:"pointer" }}>✏️ Bir İnsan Çiz Testi — fotoğrafla değerlendirme</button>
+                  </div>
+                  <div style={{ display:"flex", gap:8, marginTop:8 }}>
                     <button onClick={()=>setKategori("dg")} style={{ flex:1, padding:"14px 8px", borderRadius:12, border:`2px solid #4F46E5`, background:"linear-gradient(135deg,#EEF2FF,#FFFFFF)", color:"#312E81", fontSize:13, fontWeight:800, cursor:"pointer" }}>🦉 Dikkat Güçlendirme Programı</button>
                   </div>
                   <div style={{ display:"flex", gap:8, marginTop:8 }}>
@@ -16701,6 +17379,11 @@ KURALLAR:
                 <div>
                   <button onClick={()=>setKategori(null)} style={{ background:"none", border:"none", color:MUTED, fontSize:12, cursor:"pointer", marginBottom:8, padding:0 }}>← Kategoriyi değiştir</button>
                   <DGPaneli seciliAd={seciliAd} seciliSinif={seciliSinif} seciliNumara={seciliNumara} testKayitlari={testKayitlari} setTestKayitlari={setTestKayitlari} />
+                </div>
+              ) : kategori === "icz" ? (
+                <div>
+                  <button onClick={()=>setKategori(null)} style={{ background:"none", border:"none", color:MUTED, fontSize:12, cursor:"pointer", marginBottom:8, padding:0 }}>← Kategoriyi değiştir</button>
+                  <IczPaneli seciliAd={seciliAd} seciliSinif={seciliSinif} seciliNumara={seciliNumara} seciliCinsiyet={seciliOgr?.cinsiyet || ""} testKayitlari={testKayitlari} setTestKayitlari={setTestKayitlari} />
                 </div>
               ) : kategori === "cdt" ? (
                 <div>
@@ -17106,7 +17789,8 @@ KURALLAR:
                   const beierMi = k.tip === "beier_form_a";
                   const scasMi = k.tip === "scas_cocuk";
                   const cdtMi = k.tip === "dikkat_cdt";
-                  const genisletilebilir = mesEgilimMi || beierMi || scasMi || cdtMi;
+                  const iczMi = k.tip === "insan_ciz";
+                  const genisletilebilir = mesEgilimMi || beierMi || scasMi || cdtMi || iczMi;
                   const detayAcik = acikTestId === k.id;
                   return (
                   <div key={k.id} style={{ background:CARD, border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius:10, padding:"10px 12px" }}>
@@ -17187,6 +17871,12 @@ KURALLAR:
                         <div style={{ overflowX:"auto" }} dangerouslySetInnerHTML={{ __html: cdtRaporHtmlOlustur(cdtPuanla(k.veri), { ogrenci: seciliAd, sinif: seciliSinif, tarih: k.tarih, ilac: k.veri?.ilac, yerelNorm: cdtYerelNormHesapla(testKayitlari, k.veri?.yas, k.id) }) }} />
                         <button onClick={()=>cdtPdfIndir(k, seciliAd, seciliSinif, testKayitlari)} style={{ marginTop:8, padding:"7px 16px", background:"#1a1a2e", color:"#fff", border:"none", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer" }}>🖨 Sonuç Raporu (PDF)</button>
                         <button onClick={()=>veliDikkatRaporuIndir({ ogrenci: seciliAd, sinif: seciliSinif, cdtKayit: k, tumKayitlar: kayitlar })} style={{ marginTop:8, marginLeft:6, padding:"7px 16px", background:"#ECFDF5", color:"#047857", border:"1px solid #A7F3D0", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer" }}>👪 Veli Bilgilendirme (PDF)</button>
+                      </div>
+                    )}
+                    {iczMi && detayAcik && (
+                      <div style={{ marginTop:10, borderTop:`1px solid ${BORDER}`, paddingTop:10 }}>
+                        <div style={{ overflowX:"auto" }} dangerouslySetInnerHTML={{ __html: iczRaporHtml(k.veri || {}, { ogrenci: seciliAd, sinif: seciliSinif, tarih: k.tarih }) }} />
+                        <button onClick={()=>iczPdfIndir(k, seciliAd, seciliSinif)} style={{ marginTop:8, padding:"7px 16px", background:"#9A3412", color:"#fff", border:"none", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer" }}>🖨 Değerlendirme Raporu (PDF)</button>
                       </div>
                     )}
                     {scasMi && detayAcik && (() => {
@@ -29584,7 +30274,7 @@ const REHBER_ADIMLARI = [
   { ikon: "🏫", baslik: "Sınıflarını oluştur", metin: "Sınıf sekmesinden sınıf ekle, ya da doğrudan deneme Excel'ini / sınıf listesini yükleyerek öğrencilerini otomatik oluştur." },
   { ikon: "📝", baslik: "Görüşme notu kaydet", metin: "\"Görüşme Notu\" sekmesinden ilk kaydını gir — AI otomatik özetlesin, öğrenci profiline işlensin. Aynı anda birden fazla öğrenciyle görüştüysen (örn. aralarındaki bir çatışma için) \"Grup Görüşmesi\" ile diğer katılımcıları da ekleyebilirsin — her birine kendi kaydı açılır." },
   { ikon: "⚠️", baslik: "Risk, Müdahale ve Ani Değişim", metin: "Riskli gördüğün öğrencileri Risk sekmesinden işaretle, AI destekli müdahale planı oluştur. Program ayrıca devamsızlık, deneme, görüşme sıklığı gibi verilerde ani değişim olursa öğrenci listesinde seni otomatik uyarır." },
-  { ikon: "🧪", baslik: "Test sonuçlarını kaydet", metin: "Uyguladığın standart testlerin (D2, Beck, Frostig, Conners ve daha fazlası) sonucunu Testler sekmesinden gir — rapora otomatik eklenir." },
+  { ikon: "🧪", baslik: "Test sonuçlarını kaydet", metin: "Testler sekmesinden standart test sonuçlarını gir ya da programdaki araçları uygula (Bir İnsan Çiz, ÇDT dikkat testi, SCAS, BEİER ve daha fazlası) — sonuçlar rapora otomatik eklenir." },
   { ikon: "📚", baslik: "Kütüphaneyi besle", metin: "İlgili yönetmelik ya da makaleleri yükle — AI önerilerinde otomatik referans olarak kullanılsın." },
   { ikon: "🗂️", baslik: "Dikkat: bazı sekmelerin içinde alt sekmeler var", metin: "Üst menüdeki \"🎯 Müdahale\", \"📊 Akademik\", \"📅 Zaman\", \"📑 Kayıtlar\" ve \"🏫 Okul Çapı\" sekmelerinin her biri, açılınca hemen altında beliren küçük mor bir şeritle 2-3 alt bölüme ayrılır (örn. Akademik → Deneme, Net Haritası, Konu Haritası; Okul Çapı → Grup Çalışmaları, Kriz Müdahale, Sosyometri). Bir sekmeye ilk girdiğinde program bunu sana ayrıca hatırlatır. Aradığın bir özelliği bulamıyorsan aşağıdaki \"📖 Tüm Özellikler\"e bak." },
   { ikon: "🔍", baslik: "Diğer yardımcı sekmeler", metin: "\"🔍 Uyum İzleme\" öğrencinin zaman içindeki uyumunu, \"🤖 İşçi Raporu\" günlük öncelik özetini, \"🎓 Prof. Hakan\" ise mesleki danışma alanını sunar — hiçbiri zorunlu değildir, ihtiyaç oldukça kullanılır." },
@@ -29685,6 +30375,38 @@ const SEMA_DALLARI = [
     ] },
 ];
 
+// Her sekmenin içindeki başlıca özellikler — Şema'da yaprakların altında
+// gösterilir. Yeni bir özellik eklendiğinde buraya da bir satır eklenmeli.
+// yeni: true olanlar "YENİ" rozetiyle görünür.
+const SEMA_ICERIK = {
+  ogrenciler: [["Öğrenci ekle, sınıf listesi / Excel yükle"], ["Soyadı otomatik maskeleme"], ["Akademik yıl seçimi"], ["Yıl sonu toplu sınıf atlatma", true]],
+  profil_merkez: [["Profil 1 ve Profil 2"], ["Geçmiş yıl ortalamaları"], ["Düzenlenebilir PDR profil raporu (PDF)"]],
+  sinif_profili: [["Sınıf listesi ve genel durum"], ["Öncelik Listesi"], ["Risk Haritası (MEB formu)"], ["Net Tablosu + Grafiği yazdır"], ["Sınıf Haritası (görüşülenler)"], ["Kaynaştırma tablosu"]],
+  devamsizlik: [["Devamsızlık kaydı, 12 neden kategorisi"], ["Ani artış uyarısı"]],
+  yeni: [["AI özetli görüşme notu"], ["Grup görüşmesi"], ["Konu + alt konu"], ["BDT / Bireyi Tanıma / Uyum otomatik tespiti"]],
+  hatirlatici: [["Metinden tarih algılama (\"haftaya çarşamba\")"], ["Sabah ve öğleden sonra telefon bildirimi"]],
+  gorusme_takvimi: [["Ay / hafta görünümü"]],
+  mudahale: [["AI destekli bireysel plan"], ["Oturum takibi ve Gelişim Hızı"]],
+  belgeler: [["Sevk yazısı, dönem raporu, veli mektubu"]],
+  net_haritasi: [["Net gelişimi"], ["Hata tipi ve boş bırakma analizi"], ["Kazanım trendi"], ["Deneme Değerlendirme Raporu"]],
+  konu_haritasi: [["LGS konu bazlı çalışma takibi"]],
+  deneme: [["Deneme sonuçları, toplu Excel"], ["Geçmiş dönem ortalaması"], ["Yüzdelik dilim tahmini"]],
+  kazanimlar: [["Etkinlik kartından ilgili PDF sayfasına git"]],
+  testler: [["Bir İnsan Çiz Testi (fotoğrafla, AI destekli)", true], ["Çeldiricili Dikkat Testi (ÇDT)"], ["Dikkat Güçlendirme Programı"], ["Veli bilgilendirme raporu (dikkat)", true], ["D2, SCAS-Çocuk, BEİER, Mesleki Eğilim"], ["BİLPRO, CAS, Otizm taraması, ÖÖG ön-tarama"], ["Düzey taramaları, Benlik, Bütünleşik"]],
+  risk: [["Risk listesi ve vaka adımları"], ["Birleşik Sinyal, Takip Boşluğu, Veli Görüşülmedi"], ["AI / Manuel sonuç değerlendirmesi"]],
+  uyum_izleme: [["Uyum taraması (6 gösterge, 37 madde)"], ["Görüşme notundan otomatik öneri"]],
+  kutuphane: [["Yönetmelik / makale yükle — AI referansı"]],
+  mudahale_kutuphane: [["Hazır müdahale programları"]],
+  prof_danisma: [["Süpervizyon soru-cevap"]],
+  grup_calismalari: [["Sınıf / okul grup etkinlikleri"]],
+  kriz: [["Kriz müdahale kayıtları"]],
+  sosyometri: [["3 kriterli sosyometri"], ["Kâğıt form PDF ve hızlı giriş"]],
+  sinif_sunumu: [["Sınıfa / veliye gösterilebilir net sunumu"], ["Tam ekran sunum"]],
+  istatistik: [["Görüşme ve kapsam istatistikleri"], ["Aylara göre kırılım"]],
+  isci_raporu: [["Günlük öncelikler"], ["Veri Bekçisi"], ["Akademik uyarılar"]],
+  ayarlar: [["Kademe ve sınav türü"], ["Yedek al / geri yükle"], ["Yedek hatırlatma (30 gün)", true], ["Bildirim ayarları"]],
+};
+
 function SemaEkrani({ setTab, tab, kademe }) {
   const [acikDal, setAcikDal] = useState(null);
   const TRUNK_X = 13;      // gövde çizgisinin Dallar kabındaki x konumu
@@ -29699,7 +30421,7 @@ function SemaEkrani({ setTab, tab, kademe }) {
   return (
     <div>
       <div style={{ background: "#EEF2FF", borderRadius: 10, padding: "10px 14px", marginBottom: 12, fontSize: 13, color: BLUE, fontWeight: 600, lineHeight: 1.5 }}>
-        🧭 Programın zihin haritası — bir dala dokun, altındaki sekmeleri gör; bir sekmeye dokun, doğrudan oraya git.
+        🧭 Programın zihin haritası — bir dala dokun, altındaki sekmeleri ve içlerindeki özellikleri gör; bir sekmeye dokun, doğrudan oraya git.
       </div>
 
       {/* Merkez düğüm */}
@@ -29744,15 +30466,27 @@ function SemaEkrani({ setTab, tab, kademe }) {
                 <div style={{ marginTop: 8, marginLeft: 16, position: "relative", paddingLeft: 16 }}>
                   <div style={{ position: "absolute", left: 0, top: 0, bottom: 14, width: 2, background: `${dal.renk}55` }} />
                   <div style={{ fontSize: 11, color: MUTED, marginBottom: 8, lineHeight: 1.5 }}>{dal.aciklama}</div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
                     {dal.yapraklar.map(y => {
                       const seciliMi = tab === y.tab;
+                      const icerik = SEMA_ICERIK[y.tab] || [];
                       return (
-                        <button key={y.tab} onClick={() => setTab(y.tab)} style={{
-                          background: seciliMi ? dal.renk : `${dal.renk}18`, color: seciliMi ? "#fff" : dal.renk,
-                          border: `1.5px solid ${dal.renk}`, borderRadius: 20, padding: "6px 12px",
-                          fontSize: 12, fontWeight: 700, cursor: "pointer"
-                        }}>{y.label}</button>
+                        <div key={y.tab}>
+                          <button onClick={() => setTab(y.tab)} style={{
+                            background: seciliMi ? dal.renk : `${dal.renk}18`, color: seciliMi ? "#fff" : dal.renk,
+                            border: `1.5px solid ${dal.renk}`, borderRadius: 20, padding: "6px 12px",
+                            fontSize: 12, fontWeight: 700, cursor: "pointer"
+                          }}>{y.label}{icerik.some(x => x[1]) && <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 900, background: "#F59E0B", color: "#fff", borderRadius: 8, padding: "1px 5px" }}>YENİ</span>}</button>
+                          {icerik.length > 0 && (
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: "3px 10px", marginTop: 4, paddingLeft: 6 }}>
+                              {icerik.map(([ad, yeni]) => (
+                                <span key={ad} style={{ fontSize: 11, color: TEXT, lineHeight: 1.45 }}>
+                                  <span style={{ color: dal.renk }}>•</span> {ad}{yeni && <b style={{ fontSize: 9, color: "#B45309", marginLeft: 3 }}>YENİ</b>}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       );
                     })}
                   </div>
@@ -30805,18 +31539,18 @@ const TABS_TUMU = [
 // balonunda kullanılır. Kapsamlı ama kısa tutulmalı; burada anlatılamayacak
 // kadar ayrıntılı bir şey varsa o ekranın kendi içinde zaten açıklanıyordur.
 const SEKME_ACIKLAMALARI = {
-  ogrenciler: "Tüm öğrenci ve sınıf listeni yönet — ekle, sınıf değiştir, sil ya da toplu Excel ile içe aktar.",
+  ogrenciler: "Tüm öğrenci ve sınıf listeni yönet — ekle, sınıf değiştir, sil ya da toplu Excel ile içe aktar. Yıl seçim ekranında yıl sonu toplu sınıf atlatma da var.",
   yeni: "Yeni görüşme notu gir; AI otomatik özetler ve öğrenci profiline işler. Aynı anda birden fazla öğrenciyle görüştüysen \"Grup Görüşmesi\" ile ekleyebilirsin.",
   profil_merkez: "Öğrencinin akademik/gelişimsel profili (Profil 1 ve Profil 2) — geçmiş yıl not ortalamaları da buradan girilir.",
   mudahale: "Seçili öğrenci için AI destekli, bireysel müdahale planı oluşturur.",
   mudahale_kutuphane: "Daha önce oluşturduğun/kaydettiğin müdahale programlarının kütüphanesi — tekrar kullanmak için.",
-  sinif_profili: "Sınıf bazında genel görünüm: sınıf ekle/sil, sınıfın öğrenci listesi ve genel durumu.",
+  sinif_profili: "Sınıf bazında genel görünüm: öğrenci listesi, Öncelik Listesi, Risk Haritası, net tablosu/grafiği ve Sınıf Haritası yazdırma.",
   devamsizlik: "Öğrencilerin devamsızlık günlerini kaydet, ani artışları takip et.",
   risk: "Riskli gördüğün öğrencileri işaretle, önceliklendir ve takip et.",
   deneme: "Deneme (D1, D2, …) sonuçlarını gir; toplu Excel yükleme de burada.",
   net_haritasi: "Öğrencinin net gelişimini görsel takip et; ayrıntılı deneme sonucu girildiyse konu bazlı tamamlanma analizini de burada görürsün.",
   konu_haritasi: "Öğrencinin hangi konuları tamamladığını / tekrar etmesi gerektiğini kaydet.",
-  testler: "D2, Beck, Frostig, Conners gibi standart test sonuçlarını gir — rapora otomatik eklenir.",
+  testler: "Standart test sonuçlarını gir ve programdaki araçları uygula: Bir İnsan Çiz (fotoğrafla), ÇDT dikkat testi, Dikkat Güçlendirme Programı, SCAS, BEİER, Mesleki Eğilim, BİLPRO, düzey taramaları — hepsi rapora otomatik eklenir.",
   sinif_sunumu: "Sınıfın geneline dair sunum ve kurum raporu hazırlar (Deneme Net Trendi dahil).",
   hatirlatici: "Kendine bıraktığın hatırlatma / yapılacaklar listesi.",
   gorusme_takvimi: "Planlanan ve geçmiş görüşmeleri takvim görünümünde gösterir.",
@@ -30830,8 +31564,8 @@ const SEKME_ACIKLAMALARI = {
   isci_raporu: "Günlük öncelik özetini ve dikkat gerektiren noktaları otomatik gösterir.",
   istatistik: "Görüşme, risk ve kapsam istatistiklerini genel ve sınıf bazında gösterir.",
   prof_danisma: "Süpervizyon amaçlı mesleki soru-cevap ve danışma alanı.",
-  ayarlar: "Okul kademesi, yıl yönetimi, yedekleme gibi genel ayarlar.",
-  sema: "Öğrenci ilişkilerinin görsel haritası (3B görünüm).",
+  ayarlar: "Okul kademesi, sınav türü, yedek alma/geri yükleme (30 günde bir hatırlatır) ve bildirim ayarları.",
+  sema: "Programın zihin haritası — tüm sekmeler ve içlerindeki özellikler tek ekranda; dokununca o sekmeye gider.",
 };
 
 function OzellikRehberiModal({ onKapat }) {

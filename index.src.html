@@ -25564,6 +25564,11 @@ function AsistanEkrani({
 
       {/* Yazma alanı — sağ alttaki sabit düğmelerin altında kalmasın diye yapışkan değil, altında boşluk var */}
       <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 8 }}>
+        {S.gorunen.length > 0 && !S.calisiyor && (
+          <div style={{ display: "flex", gap: 6, overflowX: "auto", marginBottom: 6, paddingBottom: 2 }}>
+            {PDR_ASISTAN_ORNEKLER.map(o => <button key={o} onClick={() => gonder(o)} style={{ flex: "0 0 auto", padding: "5px 9px", borderRadius: 14, border: `1px solid ${BORDER}`, background: "#fff", color: TEXT, fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }}>{o}</button>)}
+          </div>
+        )}
         <textarea value={girdi} onChange={e => setGirdi(e.target.value)} rows={3} disabled={S.calisiyor}
           onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent || "")) { e.preventDefault(); gonder(); } }}
           placeholder={S.calisiyor ? "Asistan çalışıyor…" : "Ne yapayım? Örn: Ali için yarınki görüşmeye hazırlık yap"} style={{ ...inp, resize: "vertical", marginBottom: 6 }} />

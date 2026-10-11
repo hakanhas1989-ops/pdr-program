@@ -10156,7 +10156,7 @@ const PDR_ASISTAN_MODELLER = {
   claude: [
     { id: "claude-haiku-5-5", ad: "Claude Haiku 5.5 — hızlı, en ucuz (önerilen)", fiyat: [0.10, 0.50] },
     { id: "claude-sonnet-5-5", ad: "Claude Sonnet 5.5 — daha güçlü, daha pahalı", fiyat: [2, 10] },
-    { id: "claude-sonnet-4-6", ad: "Claude Sonnet 4.6 — programın diğer AI özelliklerinin modeli", fiyat: null },
+    { id: "claude-sonnet-4-6", ad: "Claude Sonnet 4.6 — programın diğer AI özelliklerinin modeli", fiyat: [3, 15] },
   ],
   ucretsiz: [
     { id: "@cf/google/gemma-4-26b-a4b-it", ad: "Gemma 4 26B (Google) — çok dilli (önerilen)" },
@@ -10463,8 +10463,9 @@ async function ksAsistanModelCagir(ayar, sistem, mesajlar) {
   };
   let r = await istek(claudeMi ? ayar.claudeModel : ayar.ucretsizModel);
   let yedek = false;
-  // Seçilen Claude modeli sunucuda tanımlı değilse programın bilinen modeliyle bir kez daha dene
-  if (claudeMi && (!r.res.ok || !r.data || r.data.error) && [400, 403, 404, 422].includes(r.res.status) && r.model !== PDR_ASISTAN_YEDEK_CLAUDE) {
+  // Seçilen Claude modeli sunucuda tanımlı değilse ya da boş yanıt verdiyse programın bilinen modeliyle bir kez daha dene
+  const hatali = (x) => !x.res.ok || !x.data || x.data.error;
+  if (claudeMi && r.model !== PDR_ASISTAN_YEDEK_CLAUDE && ((hatali(r) && [400, 403, 404, 422].includes(r.res.status)) || (!hatali(r) && !ksAsistanMetinCikar(r.data).trim()))) {
     r = await istek(PDR_ASISTAN_YEDEK_CLAUDE); yedek = true;
   }
   const { res, data, ham, giden, model } = r;
@@ -10472,12 +10473,26 @@ async function ksAsistanModelCagir(ayar, sistem, mesajlar) {
     const m = data && data.error ? (data.error.message || data.error) : ham.slice(0, 200);
     throw new Error(`Model yanıt vermedi (${res.status}): ${typeof m === "string" ? m : JSON.stringify(m)}`);
   }
-  let metin = (data.content && data.content[0] && data.content[0].text) || data.response || (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "";
-  metin = String(metin).replace(/<think>[\s\S]*?<\/think>/g, "").trim(); // bazı modellerin "düşünme" bölümü gösterilmez
+  let metin = ksAsistanMetinCikar(data);
+  if (!metin.trim()) {
+    const bloklar = Array.isArray(data.content) ? data.content.map(b => b && b.type).join(", ") : typeof data.content;
+    throw new Error(`Model boş yanıt döndürdü (model: ${model}; bitiş: ${data.stop_reason || "?"}; içerik: ${bloklar || "yok"}). Bu ekranın görüntüsünü geliştiriciye iletebilirsin.`);
+  }
   const u = data.usage || {};
   const giris = u.input_tokens ?? u.prompt_tokens ?? Math.round((sistem.length + JSON.stringify(mesajlar).length) / 3.5);
   const cikis = u.output_tokens ?? u.completion_tokens ?? Math.round(metin.length / 3.5);
   return { metin: String(metin), giris, cikis, giden, tahmini: !data.usage, model, yedek };
+}
+// Yanıttaki metni çıkarır: Anthropic (birden çok blok olabilir; yalnızca "text" blokları),
+// Workers AI ("response") ve OpenAI biçimi ("choices")
+function ksAsistanMetinCikar(data) {
+  if (!data) return "";
+  let t = "";
+  if (Array.isArray(data.content)) t = data.content.filter(b => b && b.type === "text" && typeof b.text === "string").map(b => b.text).join("\n");
+  else if (typeof data.content === "string") t = data.content;
+  if (!t && typeof data.response === "string") t = data.response;
+  if (!t && data.choices && data.choices[0] && data.choices[0].message) t = String(data.choices[0].message.content || "");
+  return String(t).replace(/<think>[\s\S]*?<\/think>/g, "").trim(); // bazı modellerin "düşünme" bölümü gösterilmez
 }
 function ksAsistanMaliyet(model, giris, cikis) {
   const m = PDR_ASISTAN_MODELLER.claude.find(x => x.id === model);

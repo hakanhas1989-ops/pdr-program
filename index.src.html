@@ -3546,7 +3546,7 @@ function ButunlesikPaneli({ seciliAd, seciliSinif, seciliNumara, kademe,
 
           <button onClick={() => { setAiHata(""); setAiYorum(pdrKapaliButunlesikYorum(butunlesikVeriOlustur(b, seciliAd, seciliSinif))); }} disabled={aiYukleniyor} title="Yapay zekâ kullanmadan, cihazda ve ücretsiz" style={{
             width:"100%", padding:"10px", background:"linear-gradient(135deg, #1F7A5A 0%, #0F4D38 100%)", color:"#fff", border:"none", borderRadius:10, fontSize:13, fontWeight:700, cursor:"pointer", marginBottom:8
-          }}>🔒 Kapalı Sistemle Yorumla <span style={{fontWeight:500,fontSize:11}}>(ücretsiz)</span></button>
+          }}>🔒 Kapalı Sistemle Yorumla</button>
           <button onClick={handleAiYorum} disabled={aiYukleniyor} style={{
             width:"100%", padding:12, background: aiYukleniyor ? BORDER : PURPLE,
             color: aiYukleniyor ? "#666" : "#fff", border:"none", borderRadius:12,
@@ -8488,7 +8488,7 @@ function pdrKapaliRiskAnalizi(riskForm, gorusmeler = [], profil1 = null, kademe 
     `GEREKÇE: ${tonGerekce}`,
     ...(dayanak.length ? [``, `DAYANAK İFADELER (değerlendirmenin dayandığı notlar):`, ...dayanak] : []),
     ``,
-    `— Kapalı Sistem değerlendirmesidir: yapay zekâ kullanılmadan, cihazda üretildi; hiçbir veri dışarı gönderilmedi. Kayıtlardaki ifadelere dayanır, mesleki yargının yerini tutmaz.`,
+    `— 🔒 Kapalı Sistem · mesleki yargının yerini tutmaz.`,
   ].join("\n");
 
   const oncelik = { "YÜKSEK": "Yüksek", "ORTA": "Orta", "HAFİF": "Düşük" }[duzey];
@@ -8674,7 +8674,7 @@ function pdrKapaliProfilAnalizi(scores, gorusmeler, danismanNotu, kademe, deneme
   else risk = "Belirgin risk faktörü gözlemlenmedi.";
   if (c.aileFaktor.length) risk += ` Ailede dikkat edilmesi gereken durum: ${c.aileFaktor.join(", ")}.`;
   satir.push("RİSK NOTU: " + risk);
-  satir.push("\n— Kapalı Sistem değerlendirmesidir: yapay zekâ kullanılmadan, cihazda üretildi; hiçbir veri dışarı gönderilmedi.");
+  satir.push("\n— 🔒 Kapalı Sistem");
   return satir.join("\n");
 }
 
@@ -8852,7 +8852,7 @@ function pdrKapaliP2Analizi({ sinavlar = {}, d2 = {}, gecmisYillar = {}, ilgiler
     : "Psikolojik destek: Motivasyonu sürdürmek için kısa vadeli, ulaşılabilir hedefler belirle ve ilerlemeyi birlikte izleyin.";
   const o3 = aile_notu ? `Aile/çevre: Aile notu dikkate alınarak (${aile_notu.length > 70 ? aile_notu.slice(0, 68) + "…" : aile_notu}) veliyle görüş; evde çalışma ortamı, beklentiler ve destek biçimini konuşun.` : "Aile/çevre: Veliyle görüşerek evde düzenli ve dikkat dağıtıcılardan uzak bir çalışma ortamı sağlanmasını, başarıdan çok çabanın takdir edilmesini öner.";
   satir.push("ÖNERİLER:\n1. " + o1 + "\n2. " + o2 + "\n3. " + o3);
-  satir.push("\n— Kapalı Sistem değerlendirmesidir: yapay zekâ kullanılmadan, cihazda üretildi; hiçbir veri dışarı gönderilmedi.");
+  satir.push("\n— 🔒 Kapalı Sistem");
   return satir.join("\n");
 }
 // ===== KAPALI SİSTEM: PROFİL BİTİŞ =====
@@ -9197,7 +9197,7 @@ function pdrKapaliMudahalePlani({ gorusmeler = [], kademe = "", profil1 = null, 
     `SÜRE: ${plan.sure}`,
     `KONTROL KRİTERİ: ${plan.kontrol}`,
     ``,
-    `${gerekce} Kapalı Sistem ile üretildi: yapay zekâ kullanılmadı, veri dışarı gönderilmedi.`,
+    `${gerekce} — 🔒 Kapalı Sistem`,
   ].join("\n");
 }
 
@@ -9354,7 +9354,7 @@ function pdrKapaliSeansHazirlik({ gorusmeler = [], mudahaleler = [], riskler = [
     }
     satir.push("ÖNERİLEN SINIF REHBERLİK ETKİNLİĞİ:\n" + (secim.length ? secim.join("\n") : "Uygun bir etkinlik bulunamadı."));
   }
-  satir.push("\n— Kapalı Sistem hazırlık notudur: yapay zekâ kullanılmadan, cihazda üretildi; hiçbir veri dışarı gönderilmedi.");
+  satir.push("\n— 🔒 Kapalı Sistem");
   return satir.join("\n");
 }
 
@@ -9386,7 +9386,7 @@ function ksSayiEk(n) {
   return n + "'" + ek;
 }
 function ksDersler(liste, ek) { return liste.join(", ") + (liste.length > 1 ? " ders" + ({ inde: "lerinde", ine: "lerine" }[ek] || "leri") : " ders" + ({ inde: "inde", ine: "ine" }[ek] || "i")); }
-const KS_ALT = "\n— Kapalı Sistem: yapay zekâ kullanılmadan, cihazda üretildi; hiçbir veri dışarı gönderilmedi.";
+const KS_ALT = "\n— 🔒 Kapalı Sistem";
 
 // Basit doğrusal eğilim (deneme başına net değişimi)
 function ksEgim(dizi) {
@@ -9628,7 +9628,7 @@ function pdrKapaliVeliMektubu({ ogrenciAd = "", sinif = "", tip = "bilgilendirme
     "                                                        Okul Müdürü",
   ].join("\n");
   const ust = uyarilar.length ? "⚠ DANIŞMAN İÇİN UYARI (mektuba dahil değildir — göndermeden önce silin):\n" + uyarilar.map(u => "- " + u).join("\n") + "\n\n────────────────────────\n\n" : "";
-  return ust + metin + "\n\n(Kapalı Sistem taslağı: noktalı yerleri doldurup gözden geçirdikten sonra kullanın. Mektuba öğrenciye ait hassas ayrıntılar bilinçli olarak yazılmamıştır.)";
+  return ust + metin + "\n\n(🔒 Kapalı Sistem taslağı: noktalı yerleri doldurup gözden geçirerek kullanın.)";
 }
 
 // ── 4) Bütünleşik yorum ──────────────────────────────────────────────────────
@@ -10081,7 +10081,7 @@ function pdrKapaliSoruYanitla(soruId, girdi) {
     }
     default: ekle("Bu soru için yanıt bulunamadı.");
   }
-  return satir.join("\n") + "\n\n(Kapalı Sistem yanıtı: kayıtlardaki ifadelerden kural tabanlı olarak üretildi; yapay zekâ kullanılmadı, veri dışarı gönderilmedi.)";
+  return satir.join("\n") + "\n\n— 🔒 Kapalı Sistem";
 }
 // ===== KAPALI SİSTEM: SÜPERVİZYON BİTİŞ =====
 
@@ -21001,7 +21001,7 @@ ${kademe ? "Planı öğrencinin yaş/gelişim dönemine uygun şekilde oluştur.
             </div>
 
             <button onClick={handleKapaliPlan} disabled={aiLoading || !seciliAd} title="Yapay zekâ kullanmadan, cihazda ve ücretsiz" style={{width:"100%",padding:"10px",background:'linear-gradient(135deg, #1F7A5A 0%, #0F4D38 100%)',color:"#fff",border:"none",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer",marginBottom:8}}>
-              🔒 Kapalı Sistemle Müdahale Planı <span style={{fontWeight:500,fontSize:11}}>(ücretsiz · veri dışarı çıkmaz)</span>
+              🔒 Kapalı Sistemle Müdahale Planı
             </button>
             <button onClick={handleAiPlan} disabled={aiLoading} style={{width:"100%",padding:"10px",background:aiLoading?BORDER:PURPLE,color:aiLoading?"#666":"#fff",border:"none",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer",marginBottom:12}}>
               {aiLoading?"⏳ AI plan oluşturuyor...":"✦ AI Müdahale Planı Oluştur"}
@@ -23678,7 +23678,7 @@ Resmi dil kullan, Markdown kullanma.`}]
               sevkSayisi: sevkler.length, tamamlananSevk, bekleyenSevk, topKonular, riskTurleri, kayitliOgrenci: (kayitliListesi || []).length,
               kapananRisk: riskListesi.filter(r => r.kapandi).length }))} disabled={aiLoading} title="Yapay zekâ kullanmadan, cihazda ve ücretsiz"
               style={{width:"100%",padding:"11px",background:"linear-gradient(135deg, #1F7A5A 0%, #0F4D38 100%)",color:"#fff",border:"none",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer",marginBottom:8}}>
-              🔒 Kapalı Sistemle Dönem Raporu <span style={{fontWeight:500,fontSize:11}}>(ücretsiz · veri dışarı çıkmaz)</span>
+              🔒 Kapalı Sistemle Dönem Raporu
             </button>
             <button onClick={handleAiRapor} disabled={aiLoading} style={{width:"100%",padding:"12px",background:aiLoading?BORDER:ACCENT,color:aiLoading?"#666":"#fff",border:"none",borderRadius:12,fontSize:14,fontWeight:800,cursor:"pointer",marginBottom:12}}>
         {aiLoading?"⏳ MEB raporu hazırlanıyor...":"📑 AI ile MEB Raporu Oluştur"}
@@ -23773,7 +23773,7 @@ MEB resmi yazı formatında veli mektubu yaz. T.C. başlığı, tarih, konu, say
       </div>
 
       <button onClick={() => setMektup(pdrKapaliVeliMektubu({ ogrenciAd: seciliAd, sinif: seciliSinif, tip: mektupTipi, gorusmeler: ogrRec, kademe: ksKademeTahmin(seciliSinif) }))} disabled={!seciliAd||aiLoading} title="Yapay zekâ kullanmadan, cihazda ve ücretsiz" style={{width:"100%",padding:"11px",background:seciliAd&&!aiLoading?"linear-gradient(135deg, #1F7A5A 0%, #0F4D38 100%)":BORDER,color:seciliAd&&!aiLoading?"#fff":MUTED,border:"none",borderRadius:10,fontSize:14,fontWeight:800,cursor:"pointer",marginBottom:8}}>
-        🔒 Kapalı Sistemle Mektup Taslağı <span style={{fontWeight:500,fontSize:11}}>(ücretsiz · veri dışarı çıkmaz)</span>
+        🔒 Kapalı Sistemle Mektup Taslağı
       </button>
       <button onClick={handleOlustur} disabled={!seciliAd||aiLoading} style={{width:"100%",padding:"11px",background:seciliAd&&!aiLoading?PURPLE:BORDER,color:seciliAd&&!aiLoading?"#fff":MUTED,border:"none",borderRadius:10,fontSize:14,fontWeight:800,cursor:"pointer",marginBottom:12}}>
         {aiLoading?"⏳ Mektup hazırlanıyor...":"✦ AI ile Mektup Oluştur"}
@@ -24402,7 +24402,7 @@ Kısa ve pratik yaz, Markdown kullanma.`}]
           <button onClick={handleHazirlikKapali} disabled={hazirlikAiLoading} title="Yapay zekâ kullanmadan, cihazda ve ücretsiz" style={{
             width:"100%", padding:"12px", marginBottom:8, background:'linear-gradient(135deg, #1F7A5A 0%, #0F4D38 100%)',
             color:"#fff", border:"none", borderRadius:10, fontSize:14, fontWeight:800, cursor:"pointer"
-          }}>🔒 Kapalı Sistemle Hazırlık Notu <span style={{fontWeight:500,fontSize:11}}>(ücretsiz · veri dışarı çıkmaz)</span></button>
+          }}>🔒 Kapalı Sistemle Hazırlık Notu</button>
           <button onClick={handleHazirlikNotu} disabled={hazirlikAiLoading||ogrRec.length===0} style={{
             width:"100%", padding:"12px", marginBottom:12,
             background:hazirlikAiLoading||ogrRec.length===0?BORDER:PURPLE,
@@ -25016,7 +25016,7 @@ Bu soruyu tüm verileri ve Dr. Ayşe Kara'nın değerlendirmelerini göz önünd
             <button onClick={handleGenelKapali} disabled={loading} title="Yapay zekâ kullanmadan, cihazda ve ücretsiz" style={{
               width:"100%", padding:"12px", marginBottom:8, background:"linear-gradient(135deg, #1F7A5A 0%, #0F4D38 100%)",
               color:"#fff", border:"none", borderRadius:12, fontSize:14, fontWeight:800, cursor:"pointer"
-            }}>🔒 Kapalı Sistemle Süpervizyon Raporu <span style={{fontWeight:500,fontSize:11}}>(ücretsiz · veri dışarı çıkmaz)</span></button>
+            }}>🔒 Kapalı Sistemle Süpervizyon Raporu</button>
           )}
           {mod === "genel" && (
             <button onClick={handleGenel} disabled={loading} style={{
@@ -25031,7 +25031,7 @@ Bu soruyu tüm verileri ve Dr. Ayşe Kara'nın değerlendirmelerini göz önünd
           {/* Soru sor */}
           {mod === "soru" && (
             <div style={{marginBottom:14, background:"#EEF7F2", border:"1px solid #BFE3D0", borderRadius:12, padding:12}}>
-              <div style={{fontSize:12, fontWeight:800, color:"#0F4D38", marginBottom:6}}>🔒 Hazır sorular — Kapalı Sistem (ücretsiz · veri dışarı çıkmaz)</div>
+              <div style={{fontSize:12, fontWeight:800, color:"#0F4D38", marginBottom:6}}>🔒 Hazır sorular — Kapalı Sistem</div>
               <select value={kapaliSoru} onChange={e=>setKapaliSoru(e.target.value)} style={{...inp, marginBottom:8}}>
                 <option value="">Bir soru seç…</option>
                 {[...new Set(KS_SORU_MENUSU.map(x => x.grup))].map(g => (
@@ -27811,7 +27811,7 @@ function DenemeTabip({ denemeler, setDenemeler, kayitliListesi, aktifOgrenci, se
                   {/* AI Analiz Butonu */}
                   <button onClick={() => handleDenemeAnaliz(seciliOgrenci, seciliOgrenciSinif, seciliOgrenciNumara, "kapali")} disabled={denemeAiLoading} title="Yapay zekâ kullanmadan, cihazda ve ücretsiz"
                     style={{ width:"100%", padding:"11px", background:"linear-gradient(135deg, #1F7A5A 0%, #0F4D38 100%)", color:"#fff", border:"none", borderRadius:10, fontSize:13, fontWeight:700, cursor:"pointer", marginBottom:8 }}>
-                    🔒 Kapalı Sistemle Deneme Analizi <span style={{fontWeight:500,fontSize:11}}>(ücretsiz · veri dışarı çıkmaz)</span>
+                    🔒 Kapalı Sistemle Deneme Analizi
                   </button>
                   <button onClick={() => handleDenemeAnaliz(seciliOgrenci, seciliOgrenciSinif, seciliOgrenciNumara)} disabled={denemeAiLoading}
                     style={{ width:"100%", padding:"11px", background: denemeAiLoading ? BORDER : PURPLE, color: denemeAiLoading ? MUTED : "#fff", border:"none", borderRadius:10, fontSize:13, fontWeight:700, cursor:"pointer", marginBottom: pdrSozlukOku(denemeAnaliz, seciliOgrenci, seciliOgrenciSinif, seciliOgrenciNumara) ? 12 : 0 }}>
@@ -29710,7 +29710,7 @@ function ProfilMerkez({
                   <button onClick={handleP1Kapali} disabled={profAiLoading} title="Yapay zekâ kullanmadan, cihazda ve ücretsiz" style={{
                     width:"100%",padding:"10px",background:'linear-gradient(135deg, #1F7A5A 0%, #0F4D38 100%)',
                     color:"#fff",border:"none",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer",marginBottom:8
-                  }}>🔒 Kapalı Sistemle PDR Analizi <span style={{fontWeight:500,fontSize:11}}>(ücretsiz · veri dışarı çıkmaz)</span></button>
+                  }}>🔒 Kapalı Sistemle PDR Analizi</button>
                   <button onClick={handleP1Analiz} disabled={profAiLoading} style={{
                     width:"100%",padding:"10px",background:profAiLoading?BORDER:PURPLE,
                     color:profAiLoading?"#666":"#fff",border:"none",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer",marginBottom:10
@@ -29824,7 +29824,7 @@ function ProfilMerkez({
                   <button onClick={handleP2Kapali} disabled={prof2AiLoading} title="Yapay zekâ kullanmadan, cihazda ve ücretsiz" style={{
                     width:"100%",padding:"10px",background:'linear-gradient(135deg, #1F7A5A 0%, #0F4D38 100%)',
                     color:"#fff",border:"none",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer",marginBottom:8
-                  }}>🔒 Kapalı Sistemle Akademik & D2 Analizi <span style={{fontWeight:500,fontSize:11}}>(ücretsiz)</span></button>
+                  }}>🔒 Kapalı Sistemle Akademik & D2 Analizi</button>
                   <button onClick={handleP2Analiz} disabled={prof2AiLoading} style={{
                     width:"100%",padding:"10px",background:prof2AiLoading?BORDER:PURPLE,
                     color:prof2AiLoading?"#666":"#fff",border:"none",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer",marginBottom:10
@@ -36206,12 +36206,12 @@ function pdrBaslangicSekmesi() {
                 <input value={riskForm.tarih} onChange={e => setRiskForm(f=>({...f, tarih:e.target.value}))} placeholder="GG.AA.YYYY" style={inputStyle} />
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button onClick={() => handleRiskEkle("kapali")} disabled={!riskForm.studentName.trim() || riskAiLoading} title="Yapay zekâ kullanmadan, cihazda ve ücretsiz analiz — hiçbir veri dışarı gönderilmez" style={{
+                <button onClick={() => handleRiskEkle("kapali")} disabled={!riskForm.studentName.trim() || riskAiLoading} title="Yapay zekâ kullanmadan, cihazda analiz" style={{
                   flex: "1 1 100%", padding: "13px",
                   background: (!riskForm.studentName.trim() || riskAiLoading) ? BORDER : "linear-gradient(135deg, #1F7A5A 0%, #0F4D38 100%)",
                   color: (!riskForm.studentName.trim() || riskAiLoading) ? MUTED : "#fff",
                   border: "none", borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: "pointer"
-                }}>🔒 Kapalı Sistemle Analiz Et ve Kaydet <span style={{ fontWeight: 600, fontSize: 11.5, opacity: 0.9 }}>(ücretsiz · veri dışarı çıkmaz)</span></button>
+                }}>🔒 Kapalı Sistemle Analiz Et ve Kaydet</button>
                 <button onClick={handleRiskManuelKaydet} disabled={!riskForm.studentName.trim() || !riskForm.riskTuru || riskAiLoading} style={{
                   flex: 1, padding: "13px",
                   background: (!riskForm.studentName.trim() || !riskForm.riskTuru) ? BORDER : CARD,

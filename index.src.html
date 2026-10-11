@@ -10429,6 +10429,9 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - Öğrenciyi "ogrenci" alanında adıyla/koduyla belirt; aynı adda birden çok öğrenci varsa "sinif" ekle.
 - Bir iş için gereken araçları aynı yanıtta birlikte çağırabilirsin.
 - Danışman tarihi "yarın", "cuma" gibi söylerse bugünün tarihine göre GG.AA.YYYY olarak hesapla.
+- "Bugün kimlerle ilgilenmeliyim", "öncelikler" gibi sorularda şu dört listeye birlikte bak: riskli, hatirlatmalar (gecikmişler önce), gorusulmeyen ve son_gorusmeler. Öncelik sırası: kriz/yüksek risk → gecikmiş hatırlatma → uzun süredir görüşülmeyen riskli öğrenci → yeni takip gerektirenler.
+- Kodları her zaman eksiksiz yaz: "Öğrenci-11, Öğrenci-12" gibi; "11, 12 ve 13" diye kısaltma (kısaltılan kod danışmanın ekranında gerçek ada çevrilemez).
+- "Bugün kimlerle ilgilenmeliyim", "öncelikli kim var" gibi sorularda bu dört listenin HEPSİNE bak: liste tur=riskli, liste tur=gorusulmeyen, liste tur=hatirlatmalar (gecikmiş olanlar önce), liste tur=son_gorusmeler. Sonra kriz > gecikmiş hatırlatma > uzun süredir görüşülmeyen riskli > son görüşmelerde takip gerektiren sırasıyla öner. Bir liste boşsa diğerlerine bakmadan "kimse yok" deme.
 
 DEĞİŞTİRİLEMEZ KURALLAR
 1. [ONAY GEREKİR] işaretli araçlar danışmanın onayından geçer. Bunları yalnızca danışman istediğinde ya da açıkça kabul ettiğinde çağır.
@@ -25537,7 +25540,7 @@ function AsistanEkrani({
             {m.hata && <div style={{ fontSize: 11, color: MUTED, marginTop: 6 }}>{!claudeMi ? "Ücretsiz model kurulu değilse ⚙️ Ayarlar > kurulum adımlarına bak ya da 🧠 Claude'a geç." : "Tekrar deneyebilirsin."}</div>}
             {!m.hata && (
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, marginTop: 8, paddingTop: 6, borderTop: `1px solid ${BORDER}`, fontSize: 10.5, color: MUTED, flexWrap: "wrap" }}>
-                <span>{modelAd(m.model)}{m.yedek ? " (yedek)" : ""} · {m.ucretsiz ? `ücretsiz · ${m.giris + m.cikis} token` : `≈ ${dolarYaz(m.dolar)}`}</span>
+                <span>{modelAd(m.model)}{m.yedek ? " (yedek)" : ""} · {m.ucretsiz ? `ücretsiz · ${m.giris + m.cikis} token` : `≈ ${dolarYaz(m.dolar)} · ${m.giris + m.cikis} token`}</span>
                 <span style={{ display: "flex", gap: 10 }}>
                   <button onClick={() => { try { navigator.clipboard.writeText(temizMetin(m.metin)); } catch (e) {} }} style={{ background: "none", border: "none", color: ACCENT, fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: 0 }}>📋 Kopyala</button>
                   <button onClick={() => ac("g" + i)} style={{ background: "none", border: "none", color: ACCENT, fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: 0 }}>🔍 Modele ne gitti? {acik["g" + i] ? "▲" : "▼"}</button>

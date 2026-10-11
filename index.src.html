@@ -1108,7 +1108,7 @@ const XLSX = window.XLSX;
 // çevrilir. Böylece ad AI şirketine hiç gitmez, ekranda yine ad görünür.
 // Kodlar her istek için yeniden verilir (okul numarası bile gönderilmez).
 // Sınırı: fotoğraf/PDF'in İÇİNDE yazılı olan ad ayıklanamaz.
-const PDR_KALKAN_HEDEFLER = ["pdr-api.hakanhas1989.workers.dev", "rehber-pusula-ai.hakanhas1989.workers.dev"];
+const PDR_KALKAN_HEDEFLER = ["pdr-api.hakanhas1989.workers.dev", "rehber-pusula-ai.hakanhas1989.workers.dev", "pdr-asistan.hakanhas1989.workers.dev"];
 // Küçük harfle yazıldığında sıradan bir kelime de olan adlar — bunlar yalnızca
 // büyük harfle başladığında ad sayılır (metin bozulmasın diye).
 const PDR_KALKAN_KELIME_ADLAR = new Set(["can", "umut", "deniz", "ay", "su", "nur", "gül", "bahar", "yağmur", "barış", "ekin", "ilke", "onur", "doğa", "güneş", "yaz", "kar", "şafak", "sevgi", "sevinç", "mutlu", "ümit", "özgür", "başak", "çiçek", "yıldız", "inci", "ela", "duru", "kaya", "demir", "tuna", "derya", "ırmak", "pınar", "simge", "rüya", "hayal", "sevda", "bulut", "toprak", "çınar", "orman", "aslan", "kartal", "ateş", "bora", "poyraz", "mert", "berk", "ece", "efe", "eren", "arda", "ada", "lale", "melek", "bilge", "akın", "erdem", "cesur", "sarp", "tan", "gök", "ozan", "kutay", "hilal", "dilek", "nazlı", "sabah", "aydın", "kurt", "polat", "çelik", "kılıç", "yılmaz", "öztürk", "şahin", "doğan", "yalçın", "güler", "keskin", "kara", "ak", "uçar", "tekin", "özer", "gündüz", "işık", "ışık"]);
@@ -1159,7 +1159,7 @@ const PDR_KALKAN_NUMARA_ANAHTARLARI = ["numara", "ogrenciNo", "okulNo", "ogrenci
 
 // Tek bir istek için kod tablosu
 function pdrKalkanOturum() {
-  return { kod: new Map(), geri: new Map(), sayac: 0, ek: { TC: 0, TELEFON: 0, EPOSTA: 0, N: 0 }, sinif: new Map(), numara: new Map(), buIstekteTam: new Set() };
+  return { kod: new Map(), geri: new Map(), sayac: 0, ek: { TC: 0, TELEFON: 0, EPOSTA: 0, N: 0, "KİŞİ": 0, OKUL: 0, YER: 0 }, sinif: new Map(), numara: new Map(), buIstekteTam: new Set(), genis: false, genisKod: new Map() };
 }
 function pdrKalkanKodVer(o, anahtar, gorunen) {
   if (!o.kod.has(anahtar)) { o.sayac += 1; const k = "Öğrenci-" + o.sayac; o.kod.set(anahtar, k); o.geri.set(k, gorunen); }
@@ -1201,6 +1201,51 @@ function pdrKalkanMetin(s, o) {
   t = t.replace(/(^|\D)([1-9]\d{10})(?!\d)/g, (m, on, v) => on + etiket("TC", v));
   t = t.replace(/(^|[^\d+])((?:\+?90[\s-]?)?0?5\d{2}[\s-]?\d{3}[\s-]?\d{2}[\s-]?\d{2})(?!\d)/g, (m, on, v) => on + etiket("TELEFON", v));
   t = t.replace(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g, v => etiket("EPOSTA", v));
+  if (o.genis) t = pdrKalkanGenisMetin(t, o);
+  return t;
+}
+// Geniş kalkan (Asistan istekleri): öğrenci dışındaki kişi (veli, öğretmen,
+// yakın), okul ve yer adlarını da "[KİŞİ-1]", "[OKUL-1]", "[YER-1]" yapar.
+// Aynı istekte aynı ad hep aynı kodu alır; yanıtta cihazda geri çevrilir.
+const PDR_KALKAN_AD_DEGIL = new Set(["öğrenci", "öğrencisi", "matematik", "türkçe", "fen", "sosyal", "ingilizce", "almanca", "arapça", "din", "beden", "müzik", "resim", "görsel", "rehber", "rehberlik", "psikolojik", "danışman", "sınıf", "branş", "okul", "müdür", "müdürü", "yardımcısı", "bilişim", "teknoloji", "tarih", "coğrafya", "fizik", "kimya", "biyoloji", "edebiyat", "felsefe", "hayat", "bilgisi", "bilimleri", "nöbetçi", "özel", "eğitim", "inkılap", "sayın", "prof", "dr", "doç", "uzm", "bu", "şu", "o", "bir", "ve", "ama", "ancak", "veli", "anne", "baba", "kardeş", "ders", "dersi", "pazartesi", "salı", "çarşamba", "perşembe", "cuma", "cumartesi", "pazar", "ocak", "şubat", "mart", "nisan", "mayıs", "haziran", "temmuz", "ağustos", "eylül", "ekim", "kasım", "aralık", "bugün", "dün", "yarın", "geçen", "sonra", "önce", "kendisi", "kendi", "ayrıca", "fakat", "çünkü", "evet", "hayır", "tüm", "her", "hiç", "çok", "daha", "en", "ile", "için", "gibi", "lgs", "yks", "ram", "bep", "türkiye", "türk", "allah"]);
+const PDR_KALKAN_ILISKI = /^(?:üvey|anneanne|babaanne|anne|baba|abla|abi|ağabey|kız|erkek|kardeş|teyze|dayı|amca|hala|dede|nine|eş|veli|vasi|arkadaş|sevgili|komşu|kuzen|yeğen|enişte|yenge)(?:si|sı|i|ı|leri|ları)?(?:nin|nın|nun|nün|ne|na|ye|ya|yle|yla|le|la)?$/;
+function pdrKalkanAdDegil(k) { const w = pdrKalkanKucukHarf(k.replace(/['’].*$/, "")); return PDR_KALKAN_AD_DEGIL.has(w) || PDR_KALKAN_ILISKI.test(w); }
+function pdrKalkanGenisKod(o, tur, deger) {
+  const anahtar = tur + "|" + pdrKalkanKucukHarf(deger);
+  if (!o.genisKod.has(anahtar)) { o.ek[tur] += 1; const k = `[${tur}-${o.ek[tur]}]`; o.genisKod.set(anahtar, k); o.geri.set(k, deger); }
+  return o.genisKod.get(anahtar);
+}
+const PDR_KALKAN_BH = "A-ZÇĞİÖŞÜÂÎÛ", PDR_KALKAN_KH = "a-zçğıöşüâîû";
+const PDR_KALKAN_AD = `[${PDR_KALKAN_BH}][${PDR_KALKAN_KH}]+`;
+const PDR_KALKAN_RE_UNVAN = new RegExp(`(?<![\\p{L}\\p{N}\\-\\[])(${PDR_KALKAN_AD}(?:\\s+${PDR_KALKAN_AD})?)(\\s+)(Hanım|Bey|Hoca|Öğretmen)(?=[^\\p{L}]|[${PDR_KALKAN_KH}]|$)`, "gu");
+const PDR_KALKAN_RE_YAKIN = new RegExp(`(?<![\\p{L}])((?:üvey\\s+)?(?:anneanne|babaanne|anne|baba|abla|abi|ağabey|kız\\s+kardeş|erkek\\s+kardeş|kardeş|teyze|dayı|amca|hala|dede|nine|eş|veli|vasi|arkadaş|sevgili|komşu|kuzen|yeğen|enişte|yenge)(?:si|sı|i|ı|leri|ları)?(?:nin|nın|nun|nün)?(?:\\s*[:(]\\s*|\\s+))(${PDR_KALKAN_AD}(?:\\s+${PDR_KALKAN_AD})?)(?![\\p{L}\\-])`, "giu");
+const PDR_KALKAN_RE_OKUL = new RegExp(`(?<![\\p{L}\\p{N}\\-\\[])((?:(?:[${PDR_KALKAN_BH}][\\p{L}]*|\\d{1,3}\\.?)\\s+){1,5})((?:İlkokul|Ortaokul|Okul|Anaokul)u|Lisesi|Koleji)([\\p{L}'’]*)`, "gu");
+const PDR_KALKAN_RE_YER = new RegExp(`(?<![\\p{L}\\p{N}\\-\\[])((?:(?:[${PDR_KALKAN_BH}][\\p{L}]*|\\d{1,4}\\.?)\\s+){1,4})(Mahallesi|Mahalle|Mah\\.|Sokağı|Sokak|Caddesi|Cad\\.|Bulvarı|Sitesi|Apartmanı|Köyü)([\\p{L}'’]*)`, "gu");
+function pdrKalkanGenisMetin(t, o) {
+  // okul ve yer önce (içlerindeki adlar kişi sanılmasın)
+  const zincir = (tur) => (m, on, ek, ekSon) => {
+    const kelimeler = on.trim().split(/\s+/);
+    let i = 0; while (i < kelimeler.length && pdrKalkanAdDegil(kelimeler[i])) i++;
+    if (i === kelimeler.length) return m;
+    const onEk = kelimeler.slice(0, i).join(" ");
+    return (onEk ? onEk + " " : "") + pdrKalkanGenisKod(o, tur, kelimeler.slice(i).join(" ") + " " + ek) + ekSon;
+  };
+  t = t.replace(PDR_KALKAN_RE_OKUL, zincir("OKUL"));
+  t = t.replace(PDR_KALKAN_RE_YER, zincir("YER"));
+  t = t.replace(PDR_KALKAN_RE_UNVAN, (m, ad, bosluk, unvan, konum, butun) => {
+    if (/(Prof|Dr|Doç|Uzm|Av)\.\s*$/.test(butun.slice(Math.max(0, konum - 8), konum))) return m;
+    const k = ad.split(/\s+/).filter(w => !pdrKalkanAdDegil(w));
+    if (!k.length) return m;
+    const temiz = k.join(" ");
+    const i = ad.indexOf(temiz);
+    return ad.slice(0, i) + pdrKalkanGenisKod(o, "KİŞİ", temiz) + ad.slice(i + temiz.length) + bosluk + unvan;
+  });
+  t = t.replace(PDR_KALKAN_RE_YAKIN, (m, iliski, ad) => {
+    const k = ad.split(/\s+/);
+    if (!/^[A-ZÇĞİÖŞÜÂÎÛ]/.test(k[0]) || pdrKalkanAdDegil(k[0])) return m;
+    const al = (k.length > 1 && !pdrKalkanAdDegil(k[1]) && /^[A-ZÇĞİÖŞÜÂÎÛ]/.test(k[1])) ? k.join(" ") : k[0];
+    return iliski + pdrKalkanGenisKod(o, "KİŞİ", al) + ad.slice(al.length);
+  });
   return t;
 }
 function pdrKalkanNumara(o, v) {
@@ -1225,7 +1270,8 @@ function pdrKalkanGez(x, o, anahtar) {
 function pdrKalkanGeriCevir(x, o) {
   if (typeof x === "string") {
     let t = x.replace(/Öğrenci-(\d+)/giu, (m, n) => o.geri.get("Öğrenci-" + n) || m);
-    t = t.replace(/\[(TC|TELEFON|EPOSTA|N)-(\d+)\]/g, m => o.geri.get(m) || m);
+    t = t.replace(/\[(TC|TELEFON|EPOSTA|N|KİŞİ|OKUL|YER)-(\d+)\]/gu, m => o.geri.get(m) || m);
+    t = t.replace(/(?<![\[\p{L}])(KİŞİ|OKUL|YER)-(\d+)(?!\])/gu, (m, a, n) => o.geri.get(`[${a}-${n}]`) || m);
     t = t.replace(/\d{0,2}-Ş\d+/gu, m => o.geri.get(m) || m);
     return t;
   }
@@ -1243,8 +1289,10 @@ function pdrKalkanGeriCevir(x, o) {
     let govde;
     try { govde = JSON.parse(ayar.body); } catch (e) { return asil(girdi, ayar); }
     const o = pdrKalkanOturum();
+    if (govde && govde.__kalkanGenis) { o.genis = true; delete govde.__kalkanGenis; }
     const temiz = pdrKalkanGez(govde, o);
     window.__pdrKalkanSon = { kod: o.sayac, ek: { ...o.ek } }; // test/denetim için: kaç ad gizlendi
+    window.__pdrKalkanSonGiden = JSON.stringify(temiz); // "Modele ne gitti?" görünümü için
     const yanit = await asil(girdi, { ...ayar, body: JSON.stringify(temiz) });
     if (o.geri.size === 0) return yanit;
     const metin = await yanit.text();
@@ -10084,6 +10132,454 @@ function pdrKapaliSoruYanitla(soruId, girdi) {
   return satir.join("\n") + "\n\n— 🔒 Kapalı Sistem";
 }
 // ===== KAPALI SİSTEM: SÜPERVİZYON BİTİŞ =====
+
+// ===== PDR ASİSTANI (AGENT) ÇEKİRDEĞİ BAŞLANGIÇ =====
+// Danışmanın düz cümleyle verdiği işi, programdaki araçları (çoğu Kapalı Sistem
+// işlevi) çalıştırarak yapan asistan. "Beyin" (dil modeli) değiştirilebilir:
+//   A) Claude — mevcut pdr-api worker'ı üzerinden
+//   B) Ücretsiz model — Cloudflare Workers AI (ayrı "pdr-asistan" worker'ı)
+// İki modelde de aynı yöntem kullanılır: model, çalıştırmak istediği aracı
+// <arac>{...}</arac> bloğu olarak yazar; program aracı cihazda çalıştırıp sonucu
+// <sonuc> bloğu olarak geri verir. Böylece hiçbir worker'ın özel "araç" desteğine
+// ihtiyaç duyulmaz. Giden her istek AI gizlilik kalkanından geçer (adlar kodlanır).
+// Kayıt oluşturan araçlar danışman onayı olmadan çalışmaz; silme aracı yoktur.
+
+const PDR_ASISTAN_VARSAYILAN_AYAR = {
+  saglayici: "claude",                       // "claude" | "ucretsiz"
+  claudeModel: "claude-haiku-5-5",
+  ucretsizModel: "@cf/google/gemma-4-26b-a4b-it",
+  ucretsizUrl: "https://pdr-asistan.hakanhas1989.workers.dev",
+  kurallar: "",
+};
+const PDR_ASISTAN_CLAUDE_URL = "https://pdr-api.hakanhas1989.workers.dev";
+const PDR_ASISTAN_MODELLER = {
+  claude: [
+    { id: "claude-haiku-5-5", ad: "Claude Haiku 5.5 — hızlı, en ucuz (önerilen)", fiyat: [0.10, 0.50] },
+    { id: "claude-sonnet-5-5", ad: "Claude Sonnet 5.5 — daha güçlü, daha pahalı", fiyat: [2, 10] },
+    { id: "claude-sonnet-4-6", ad: "Claude Sonnet 4.6 — programın diğer AI özelliklerinin modeli", fiyat: null },
+  ],
+  ucretsiz: [
+    { id: "@cf/google/gemma-4-26b-a4b-it", ad: "Gemma 4 26B (Google) — çok dilli (önerilen)" },
+    { id: "@cf/qwen/qwen3-30b-a3b-fp8", ad: "Qwen3 30B — çok dilli" },
+    { id: "@cf/meta/llama-3.3-70b-instruct-fp8-fast", ad: "Llama 3.3 70B" },
+  ],
+};
+function pdrAsistanAyarOku() {
+  try { return { ...PDR_ASISTAN_VARSAYILAN_AYAR, ...(JSON.parse(localStorage.getItem("pdr_asistan_ayar") || "{}")) }; }
+  catch (e) { return { ...PDR_ASISTAN_VARSAYILAN_AYAR }; }
+}
+function pdrAsistanAyarYaz(ayar) {
+  try { localStorage.setItem("pdr_asistan_ayar", JSON.stringify(ayar)); } catch (e) {}
+}
+// Ücretsiz modelin worker adresi de gizlilik kalkanının kapsamına alınır
+function pdrAsistanKalkanaEkle(url) {
+  try { const h = new URL(url).host; if (h && !PDR_KALKAN_HEDEFLER.includes(h)) PDR_KALKAN_HEDEFLER.push(h); } catch (e) {}
+}
+
+// ── Öğrenci bulma ─────────────────────────────────────────────────────────────
+function ksAsistanOgrenciBul(ctx, ad, sinif) {
+  const liste = ctx.ogrenciListesi || [];
+  const q = ksSade(String(ad || "").replace(/\*/g, "").trim());
+  if (!q) return { yok: true };
+  const s = ksSade(String(sinif || "").trim());
+  const sinifUyar = (o) => !s || ksSade(o.className || "") === s || ksSade(o.className || "").replace(/[^a-z0-9]/g, "") === s.replace(/[^a-z0-9]/g, "");
+  const ad2 = (o) => ksSade(String(o.name || "").replace(/\*/g, "").trim());
+  let aday = liste.filter(o => ad2(o) === q && sinifUyar(o));
+  if (!aday.length) aday = liste.filter(o => ad2(o).startsWith(q) && sinifUyar(o));
+  if (!aday.length) aday = liste.filter(o => ad2(o).includes(q) && sinifUyar(o));
+  if (!aday.length) { const ilk = q.split(" ")[0]; if (ilk.length >= 3) aday = liste.filter(o => ad2(o).split(" ").includes(ilk) && sinifUyar(o)); }
+  if (aday.length === 1) return { tek: aday[0] };
+  if (aday.length > 1) return { aday: aday.slice(0, 10) };
+  return { yok: true };
+}
+function ksAsistanEtiket(o) { return `${o.name}${o.className ? " (" + o.className + ")" : ""}`; }
+
+// Bir öğrencinin tüm kapalı sistem girdileri (Prof. Hakan ekranıyla aynı kaynaklar)
+function ksAsistanGirdi(ctx, o) {
+  const ad = o.name, sinif = o.className;
+  const ayni = (x) => pdrAyniOgrenci(x.studentName, x.className, ad, sinif);
+  const gorusmeler = (ctx.records || []).filter(ayni);
+  const ogrDen = pdrSozlukOku(ctx.denemeler, ad, sinif) || {};
+  const dersler = aktifDersler(ctx.sinavTuru);
+  const denemeGirilen = Object.entries(ogrDen).filter(([k]) => k !== "7sinif").sort((a, b) => a[0] - b[0])
+    .map(([no, nets]) => ({ no: parseInt(no), nets, toplam: dersler.reduce((t, d) => t + (parseFloat(nets[d.key]) || 0), 0) }));
+  const ogrKademe = (typeof sinifKademesi === "function" ? sinifKademesi(sinif) : null) || null;
+  let butunlesik = null;
+  try {
+    if ((ogrKademe === "ortaokul" || ogrKademe === "lise") && typeof butunlesikHesapla === "function") {
+      const bt = butunlesikHesapla({ kademe: ogrKademe, ad, sinif, numara: null, akademikTaramalar: ctx.akademikTaramalar, liseTaramalar: ctx.liseTaramalar, benlikOlcekleri: ctx.benlikOlcekleri, testKayitlari: ctx.testKayitlari, profiles2: ctx.profiles2 });
+      if (bt && bt.eksikler.length < 3) butunlesik = butunlesikVeriOlustur(bt, ad, sinif);
+    }
+  } catch (e) { butunlesik = null; }
+  return {
+    gorusmeler,
+    profil1: (ctx.profiles || []).find(ayni) || null,
+    profil2: (ctx.profiles2 || []).find(ayni) || null,
+    denemeGirilen, dersListesi: dersler, sinavTuru: ctx.sinavTuru || "lgs",
+    riskler: (ctx.riskListesi || []).filter(x => ayni(x) && !x.kapandi),
+    mudahaleler: (pdrSozlukOku(ctx.mudahalePlan, ad, sinif) || []).filter(p => p.durum === "Devam Ediyor"),
+    sevkler: (ctx.sevkler || []).filter(ayni),
+    butunlesik,
+    kademe: ksKademeTahmin(sinif, ogrKademe),
+  };
+}
+function ksAsistanGunFarki(tarih) {
+  const a = ksTarihAnahtar(tarih); if (a === "00000000") return null;
+  const d = new Date(+a.slice(0, 4), +a.slice(4, 6) - 1, +a.slice(6, 8));
+  return Math.round((Date.now() - d.getTime()) / 86400000);
+}
+function ksAsistanTarihNormal(t) {
+  const s = String(t || "").trim();
+  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s); if (m) return `${m[3].padStart(2, "0")}.${m[2].padStart(2, "0")}.${m[1]}`;
+  m = /^(\d{1,2})[./](\d{1,2})[./](\d{4})$/.exec(s); if (m) return `${m[1].padStart(2, "0")}.${m[2].padStart(2, "0")}.${m[3]}`;
+  return null;
+}
+function ksAsistanKisalt(s, n) { s = String(s || ""); return s.length > n ? s.slice(0, n - 1) + "…" : s; }
+
+// ── Araçlar ──────────────────────────────────────────────────────────────────
+// her araç: aciklama, girdi (modelin göreceği tanım), yazma (onay gerekir mi),
+// calistir(girdi, ctx) → metin, onayOzeti(girdi, ctx) → danışmana gösterilecek özet
+const KS_ASISTAN_ARACLAR = {
+  ogrenci_ara: {
+    aciklama: "Ada, soyada ya da sınıfa göre kayıtlı öğrenci arar.", girdi: '{"sorgu": "ad ya da sınıf"}',
+    calistir: (g, ctx) => {
+      const q = ksSade(String(g.sorgu || "").replace(/\*/g, ""));
+      const l = (ctx.ogrenciListesi || []).filter(o => ksSade(String(o.name || "").replace(/\*/g, "")).includes(q) || ksSade(o.className || "") === q).slice(0, 20);
+      return l.length ? `${l.length} öğrenci bulundu:\n` + l.map(ksAsistanEtiket).join("\n") : "Eşleşen öğrenci bulunamadı.";
+    },
+  },
+  ogrenci_ozeti: {
+    aciklama: "Bir öğrencinin genel durumunu özetler: görüşmeler, öne çıkan temalar, risk, müdahale, profil, deneme, hatırlatmalar.", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
+    calistir: (g, ctx, o) => {
+      const G = ksAsistanGirdi(ctx, o);
+      const X = ksSupBaglam(G);
+      const s = [`Öğrenci: ${ksAsistanEtiket(o)}`];
+      const son = X.notlar[X.notlar.length - 1];
+      s.push(`Görüşme: ${X.notlar.length} kayıt${son ? `; son görüşme ${son.date}${son.topic ? " (" + son.topic + ")" : ""}${X.sonGun !== null ? `, ${X.sonGun} gün önce` : ""}` : ""}.`);
+      if (X.notlar.length) s.push(`Notlara göre öne çıkan alan: ${X.r.tur}${X.alt ? " (" + KS_ALT_AD[X.alt] + ")" : ""}; risk düzeyi ${X.r.duzey}${X.r.islev.length ? "; etkilenen işlevler: " + X.r.islev.map(a => KS_ISLEV_AD[a]).join(", ") : ""}.`);
+      if (X.c.kritikTurler.length) s.push(`⚠ KRİTİK: ${X.c.kritikTurler.join(", ")} ile ilgili ifadeler var.`);
+      s.push(`Aktif risk kaydı: ${G.riskler.length ? G.riskler.map(r => `${r.riskTuru} (${r.oncelik})`).join(", ") : "yok"}.`);
+      s.push(`Aktif müdahale planı: ${G.mudahaleler.length ? G.mudahaleler.map(m => ksAsistanKisalt(m.hedef, 120)).join(" | ") : "yok"}.`);
+      if (G.profil1 && G.profil1.scores) s.push(`Profil 1: ${KS_BOYUTLAR.map(b => `${KS_BOYUT_BILGI[b].ad} ${G.profil1.scores[b] || "-"}`).join(", ")}.`);
+      if (X.denemeOzet) s.push(`Deneme: ${G.denemeGirilen.length} deneme, ortalama ${X.denemeOzet.ortalama}/${X.denemeOzet.toplam}${X.toplamlar.length >= 2 ? `, eğilim deneme başına ${X.denemeEgim >= 0 ? "+" : ""}${X.denemeEgim.toFixed(1)} net` : ""}.`);
+      if (G.profil2 && G.profil2.kariyer_hedef) s.push(`Kariyer hedefi: ${G.profil2.kariyer_hedef}.`);
+      const hat = (ctx.hatirlatmalar || []).filter(h => !h.tamamlandi && pdrAyniOgrenci(h.studentName, h.className, o.name, o.className));
+      if (hat.length) s.push(`Açık hatırlatmalar: ${hat.map(h => `${h.tarih} ${ksAsistanKisalt(h.metin, 60)}`).join(" | ")}.`);
+      const bek = G.sevkler.filter(x => x.sonucBekleniyor);
+      if (G.sevkler.length) s.push(`Sevk: ${G.sevkler.length} kayıt${bek.length ? `, ${bek.length} sonuç bekliyor` : ""}.`);
+      if (X.c.koruyucu.length) s.push(`Koruyucu etkenler: ${X.c.koruyucu.slice(0, 4).join(", ")}.`);
+      return s.join("\n");
+    },
+  },
+  gorusme_notlari: {
+    aciklama: "Bir öğrencinin son görüşme notlarını (tarih, konu, özet) getirir. Yalnızca gerektiğinde kullan; çoğu iş için ogrenci_ozeti yeterlidir.", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "adet": 5}', ogrenciIster: true,
+    calistir: (g, ctx, o) => {
+      const n = Math.max(1, Math.min(10, parseInt(g.adet) || 5));
+      const l = (ctx.records || []).filter(x => pdrAyniOgrenci(x.studentName, x.className, o.name, o.className)).sort((a, b) => ksTarihSirala(b, a)).slice(0, n);
+      return l.length ? l.map(x => `• ${x.date}${x.topic ? " · " + x.topic : ""}${x.meetingType && x.meetingType !== "Öğrenci" ? " · " + x.meetingType + " görüşmesi" : ""}: ${ksAsistanKisalt(x.summary || x.raw, 600)}`).join("\n") : "Bu öğrenci için görüşme notu yok.";
+    },
+  },
+  risk_analizi: { aciklama: "Kapalı sistemle risk analizi yapar (kaydetmez).", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
+    calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); const r = pdrKapaliRiskAnalizi({ riskTuru: "", oncelik: "Orta", aciklama: "" }, G.gorusmeler, G.profil1, G.kademe, ksDenemeOzetHesapla(G.denemeGirilen, G.sinavTuru)); return (r.acil ? "⚠ KRİTİK — acil müdahale gerekiyor.\n" : "") + r.metin; } },
+  seans_hazirlik: { aciklama: "Bir sonraki görüşme için kapalı sistemle hazırlık notu çıkarır.", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
+    calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); return pdrKapaliSeansHazirlik({ gorusmeler: G.gorusmeler, mudahaleler: G.mudahaleler, riskler: G.riskler, denemeAvg: G.denemeGirilen.length ? (G.denemeGirilen.reduce((t, d) => t + d.toplam, 0) / G.denemeGirilen.length).toFixed(1) : null, etkinlikHavuzu: typeof ogrenciEtkinlikHavuzu === "function" ? ogrenciEtkinlikHavuzu(o.className, G.kademe) : [], kademe: G.kademe, profil1: G.profil1 }); } },
+  mudahale_plani: { aciklama: "Kapalı sistemle müdahale planı önerir (kaydetmez).", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
+    calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); return pdrKapaliMudahalePlani({ gorusmeler: G.gorusmeler, kademe: G.kademe, profil1: G.profil1, programlar: typeof MUDAHALE_PROGRAMLARI !== "undefined" ? MUDAHALE_PROGRAMLARI : null }); } },
+  deneme_analizi: { aciklama: "Kapalı sistemle deneme sonuçlarını analiz eder.", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
+    calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); return pdrKapaliDenemeAnalizi({ gorusmeler: G.gorusmeler, girilen: G.denemeGirilen, dersListesi: G.dersListesi, sinavTuru: G.sinavTuru, kademe: G.kademe }); } },
+  profil_analizi: { aciklama: "Notlardan 8 boyutlu profil puanı çıkarır ve kapalı sistemle profil analizi yapar (kaydetmez).", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
+    calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); const dOz = ksDenemeOzetHesapla(G.denemeGirilen, G.sinavTuru); const p = (G.profil1 && G.profil1.scores) ? G.profil1.scores : pdrKapaliProfilPuani(G.gorusmeler, "", dOz).puan; return `Puanlar (${G.profil1 && G.profil1.scores ? "kayıtlı profil" : "notlardan hesaplandı"}): ${KS_BOYUTLAR.map(b => `${KS_BOYUT_BILGI[b].ad} ${p[b]}`).join(", ")}\n` + pdrKapaliProfilAnalizi(p, G.gorusmeler, "", G.kademe, dOz); } },
+  supervizyon: { aciklama: "Bütün verilerden kapalı sistemle süpervizyon raporu (5P vaka formülasyonu, hipotezler, süreç denetimi) çıkarır.", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
+    calistir: (g, ctx, o) => pdrKapaliSupervizyon(ksAsistanGirdi(ctx, o)) },
+  veli_mektubu: { aciklama: "Veliye resmî yazı taslağı hazırlar. tip: bilgilendirme | davet | bildirim | tesekkur", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "tip": "davet"}', ogrenciIster: true,
+    calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); const tip = ["bilgilendirme", "davet", "bildirim", "tesekkur"].includes(g.tip) ? g.tip : "bilgilendirme"; return pdrKapaliVeliMektubu({ ogrenciAd: o.name, sinif: o.className, tip, gorusmeler: G.gorusmeler, kademe: G.kademe }); } },
+  liste: {
+    aciklama: "Okul geneli listeler. tur: riskli (aktif risk kayıtları) | gorusulmeyen (aktif riskli olup 'gun' gündür görüşülmeyenler; hepsi:true ise tüm öğrenciler) | sinif (bir sınıfın öğrencileri) | hatirlatmalar (açık hatırlatmalar) | son_gorusmeler (son yapılan görüşmeler)",
+    girdi: '{"tur": "riskli", "sinif": "isteğe bağlı", "gun": 21, "hepsi": false, "adet": 15}',
+    calistir: (g, ctx) => {
+      const tur = g.tur || "riskli", sinifQ = ksSade(String(g.sinif || "")), adet = Math.max(1, Math.min(40, parseInt(g.adet) || 15));
+      const sinifOk = (c) => !sinifQ || ksSade(c || "") === sinifQ;
+      const sonGorusme = (o) => (ctx.records || []).filter(x => pdrAyniOgrenci(x.studentName, x.className, o.name || o.studentName, o.className)).sort((a, b) => ksTarihSirala(b, a))[0];
+      if (tur === "riskli") {
+        const sira = { "Yüksek": 0, "Orta": 1, "Düşük": 2 };
+        const l = (ctx.riskListesi || []).filter(r => !r.kapandi && sinifOk(r.className)).sort((a, b) => (sira[a.oncelik] ?? 3) - (sira[b.oncelik] ?? 3)).slice(0, adet);
+        return l.length ? `Aktif risk kayıtları (${l.length}):\n` + l.map(r => `• ${r.studentName}${r.className ? " (" + r.className + ")" : ""} — ${r.riskTuru || "?"}, ${r.oncelik}${r.tarih ? ", " + r.tarih : ""}`).join("\n") : "Aktif risk kaydı yok.";
+      }
+      if (tur === "gorusulmeyen") {
+        const gun = Math.max(1, parseInt(g.gun) || 21);
+        const havuz = g.hepsi ? (ctx.ogrenciListesi || []).map(o => ({ name: o.name, className: o.className })) : (ctx.riskListesi || []).filter(r => !r.kapandi).map(r => ({ name: r.studentName, className: r.className, risk: `${r.riskTuru}, ${r.oncelik}` }));
+        const tekil = []; const gor = new Set();
+        havuz.forEach(o => { const k = ksSade(o.name) + "|" + ksSade(o.className || ""); if (!gor.has(k) && sinifOk(o.className)) { gor.add(k); tekil.push(o); } });
+        const l = tekil.map(o => { const s = sonGorusme(o); return { ...o, son: s ? s.date : null, gun: s ? ksAsistanGunFarki(s.date) : null }; })
+          .filter(o => o.gun === null || o.gun >= gun).sort((a, b) => (b.gun ?? 9999) - (a.gun ?? 9999)).slice(0, adet);
+        return l.length ? `${gun}+ gündür görüşülmeyen${g.hepsi ? "" : " riskli"} öğrenciler (${l.length}):\n` + l.map(o => `• ${ksAsistanEtiket(o)} — ${o.son ? `son görüşme ${o.son} (${o.gun} gün)` : "hiç görüşme yok"}${o.risk ? " · " + o.risk : ""}`).join("\n") : `${gun} günden uzun süredir görüşülmeyen ${g.hepsi ? "" : "riskli "}öğrenci yok.`;
+      }
+      if (tur === "sinif") {
+        const l = (ctx.ogrenciListesi || []).filter(o => sinifOk(o.className));
+        if (!sinifQ) return "Sınıf belirtilmeli (örn. 8-B).";
+        return l.length ? `${g.sinif} — ${l.length} öğrenci:\n` + l.slice(0, 60).map(o => { const n = (ctx.records || []).filter(x => pdrAyniOgrenci(x.studentName, x.className, o.name, o.className)).length; const r = (ctx.riskListesi || []).some(x => !x.kapandi && pdrAyniOgrenci(x.studentName, x.className, o.name, o.className)); return `• ${o.name} — ${n} görüşme${r ? " · aktif risk" : ""}`; }).join("\n") : "Bu sınıfta kayıtlı öğrenci bulunamadı.";
+      }
+      if (tur === "hatirlatmalar") {
+        const l = (ctx.hatirlatmalar || []).filter(h => !h.tamamlandi).sort(ksTarihSiralaAlan("tarih")).slice(0, adet);
+        return l.length ? "Açık hatırlatmalar:\n" + l.map(h => { const d = ksAsistanGunFarki(h.tarih); return `• ${h.tarih}${d !== null && d > 0 ? " (gecikmiş)" : ""} — ${h.studentName ? h.studentName + ": " : ""}${ksAsistanKisalt(h.metin, 90)}`; }).join("\n") : "Açık hatırlatma yok.";
+      }
+      if (tur === "son_gorusmeler") {
+        const l = (ctx.records || []).filter(x => sinifOk(x.className)).slice().sort((a, b) => ksTarihSirala(b, a)).slice(0, adet);
+        return l.length ? "Son görüşmeler:\n" + l.map(x => `• ${x.date} — ${x.studentName}${x.className ? " (" + x.className + ")" : ""}${x.topic ? ": " + x.topic : ""}`).join("\n") : "Görüşme kaydı yok.";
+      }
+      return "Bilinmeyen liste türü. Kullanılabilir: riskli, gorusulmeyen, sinif, hatirlatmalar, son_gorusmeler.";
+    },
+  },
+  meb_raporu: { aciklama: "Dönem sonu MEB rehberlik faaliyet raporu taslağı hazırlar.", girdi: '{"donem": "1. Dönem"}',
+    calistir: (g, ctx) => {
+      const r = ctx.records || [], rl = ctx.riskListesi || [], sv = ctx.sevkler || [];
+      const konular = {}; r.forEach(x => { const k = x.topic || "Genel"; konular[k] = (konular[k] || 0) + 1; });
+      const riskTurleri = {}; rl.forEach(x => { riskTurleri[x.riskTuru || "Diğer"] = (riskTurleri[x.riskTuru || "Diğer"] || 0) + 1; });
+      return pdrKapaliMebRaporu({ donem: g.donem || "1. Dönem", yil: ctx.aktifYil || String(new Date().getFullYear()), toplamGorusme: r.length,
+        ogrenciGorusme: r.filter(x => (x.meetingType || "Öğrenci") === "Öğrenci").length, veliGorusme: r.filter(x => x.meetingType === "Veli").length,
+        benzersizOgrenci: new Set(r.map(x => ksSade(x.studentName || ""))).size, aktifRisk: rl.filter(x => !x.kapandi).length,
+        sevkSayisi: sv.length, tamamlananSevk: sv.filter(x => !x.sonucBekleniyor).length, bekleyenSevk: sv.filter(x => x.sonucBekleniyor).length,
+        topKonular: Object.entries(konular).sort((a, b) => b[1] - a[1]).slice(0, 5), riskTurleri, kayitliOgrenci: (ctx.ogrenciListesi || []).length, kapananRisk: rl.filter(x => x.kapandi).length });
+    } },
+  // ── Kayıt oluşturan araçlar (danışman onayı gerekir) ──
+  gorusme_kaydet: {
+    aciklama: "Danışmanın anlattığı görüşmeyi kaydeder (ONAY GEREKİR). tur: Öğrenci | Veli | Öğretmen. tarih GG.AA.YYYY (boşsa bugün).", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "konu": "kısa konu", "ozet": "görüşme özeti", "tarih": "GG.AA.YYYY", "tur": "Öğrenci"}', ogrenciIster: true, yazma: true,
+    onayOzeti: (g, ctx, o) => `📝 Görüşme kaydı\nÖğrenci: ${ksAsistanEtiket(o)}\nTarih: ${ksAsistanTarihNormal(g.tarih) || today()} · Tür: ${g.tur || "Öğrenci"}${g.konu ? " · Konu: " + g.konu : ""}\nÖzet: ${g.ozet || "—"}`,
+    calistir: async (g, ctx, o) => {
+      if (!String(g.ozet || "").trim()) return "Özet boş olduğu için kaydedilmedi.";
+      const yeni = { id: uid(), date: ksAsistanTarihNormal(g.tarih) || today(), saat: new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }),
+        meetingType: ["Öğrenci", "Veli", "Öğretmen"].includes(g.tur) ? g.tur : "Öğrenci", topic: g.konu || "", altKonu: "", raw: g.ozet, summary: g.ozet,
+        studentName: o.name, className: o.className, numara: o.numara || "", kaynak: "asistan" };
+      const guncel = [yeni, ...(ctx.records || [])];
+      ctx.records = guncel; await ctx.kaydet.records(guncel);
+      return `Görüşme kaydedildi (${yeni.date}).`;
+    },
+  },
+  hatirlatma_ekle: {
+    aciklama: "Hatırlatma ekler (ONAY GEREKİR). Metin kısa ve nötr olmalı, hassas ayrıntı içermemeli. tarih GG.AA.YYYY.", girdi: '{"metin": "kısa metin", "tarih": "GG.AA.YYYY", "ogrenci": "isteğe bağlı", "sinif": "isteğe bağlı"}', yazma: true,
+    onayOzeti: (g, ctx, o) => `${ksAsistanHassasMi(g.metin) ? "⚠ Metin hassas ifade içeriyor, onaylasan da kaydedilmeyecek.\n" : ""}🔔 Hatırlatma\nTarih: ${ksAsistanTarihNormal(g.tarih) || "(geçersiz tarih)"}${o ? "\nÖğrenci: " + ksAsistanEtiket(o) : ""}\nMetin: ${g.metin || "—"}`,
+    calistir: async (g, ctx, o) => {
+      const t = ksAsistanTarihNormal(g.tarih);
+      if (!t) return "Tarih anlaşılamadığı için hatırlatma eklenmedi; tarihi GG.AA.YYYY biçiminde ver.";
+      if (ksAsistanHassasMi(g.metin)) return "Hatırlatma metni hassas ifade içerdiği için eklenmedi (hatırlatmalar şifrelenmeden saklanır). Metni nötr yazıp tekrar dene, örn. \"Veli görüşmesi\" ya da \"Takip görüşmesi\".";
+      const yeni = { id: uid(), studentName: o ? o.name : "", className: o ? o.className : "", numara: o ? (o.numara || "") : "", metin: String(g.metin || "Hatırlatma").slice(0, 200),
+        tarih: t, tur: "genel", ramTarihi: "", kaynak: "asistan", olusturmaTarihi: today(), tamamlandi: false };
+      const guncel = [yeni, ...(ctx.hatirlatmalar || [])];
+      ctx.hatirlatmalar = guncel; await ctx.kaydet.hatirlatmalar(guncel);
+      return `Hatırlatma eklendi (${t}).`;
+    },
+  },
+  risk_kaydet: {
+    aciklama: "Kapalı sistem risk analizini yapıp risk listesine kaydeder (ONAY GEREKİR).", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true, yazma: true,
+    onayOzeti: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); const r = pdrKapaliRiskAnalizi({ riskTuru: "", oncelik: "Orta", aciklama: "" }, G.gorusmeler, G.profil1, G.kademe, ksDenemeOzetHesapla(G.denemeGirilen, G.sinavTuru)); return `⚠ Risk kaydı\nÖğrenci: ${ksAsistanEtiket(o)}\nTür: ${r.tur} · Düzey: ${r.duzey}${r.acil ? " · ACİL" : ""}`; },
+    calistir: async (g, ctx, o) => {
+      const G = ksAsistanGirdi(ctx, o);
+      const ks = pdrKapaliRiskAnalizi({ riskTuru: "", oncelik: "Orta", aciklama: "" }, G.gorusmeler, G.profil1, G.kademe, ksDenemeOzetHesapla(G.denemeGirilen, G.sinavTuru));
+      const s = ks.tur.replace(/-/g, " / ");
+      const turAd = ["Akran / Zorbalık", "Teknoloji / Ekran Bağımlılığı", "Yas / Kayıp", "Göç / Uyum Süreci", "Adli Süreç / Danışmanlık Tedbiri", "İhmal / İstismar"].includes(s) ? s : ks.tur;
+      const item = { id: uid(), tarih: today(), studentName: o.name, className: o.className, numara: o.numara || "", riskTuru: turAd, aciklama: "Asistan aracılığıyla kapalı sistemle eklendi.", oncelik: ks.oncelik,
+        aiAnaliz: ks.metin, analizYontem: "kapali", analizDuzey: ks.duzey, kapandi: false, teknolojiBagimliligi: ks.teknolojiBagimliligi, teknolojiGerekce: ks.teknolojiGerekce, kaynak: "Kapalı" };
+      const guncel = [item, ...(ctx.riskListesi || [])];
+      ctx.riskListesi = guncel; await ctx.kaydet.riskListesi(guncel);
+      return `Risk listesine kaydedildi: ${ks.tur}, düzey ${ks.duzey}.`;
+    },
+  },
+  mudahale_kaydet: {
+    aciklama: "Kapalı sistem müdahale planını öğrencinin planlarına kaydeder (ONAY GEREKİR).", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true, yazma: true,
+    onayOzeti: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); const p = pdrKapaliMudahalePlani({ gorusmeler: G.gorusmeler, kademe: G.kademe, profil1: G.profil1 }); return `🎯 Müdahale planı\nÖğrenci: ${ksAsistanEtiket(o)}\n${(p.match(/HEDEF:\s*(.+)/) || [, ""])[1]}`; },
+    calistir: async (g, ctx, o) => {
+      const G = ksAsistanGirdi(ctx, o);
+      const p = pdrKapaliMudahalePlani({ gorusmeler: G.gorusmeler, kademe: G.kademe, profil1: G.profil1, programlar: typeof MUDAHALE_PROGRAMLARI !== "undefined" ? MUDAHALE_PROGRAMLARI : null });
+      const hedef = (p.match(/HEDEF:\s*(.+)/) || [, ""])[1].trim(), adimlar = ((p.match(/MÜDAHALE ADIMLARI:\s*([\s\S]+?)SÜRE:/) || [, ""])[1] || "").trim(), sure = (p.match(/SÜRE:\s*(.+)/) || [, ""])[1].trim();
+      const baslangicPuan = typeof pdrSonProfilPuani === "function" ? pdrSonProfilPuani(ctx.profiles, o.name, o.className) : null;
+      const yeni = { id: uid(), tarih: today(), ogrenci: o.name, ogrenciSinif: o.className, hedef, adimlar, sorumlu: "pdr", sure, oncelik: "Orta", durum: "Devam Ediyor", baslangicPuan, baslangicTarih: baslangicPuan ? today() : null, kaynak: "asistan" };
+      const mevcut = pdrSozlukOku(ctx.mudahalePlan, o.name, o.className) || [];
+      const guncel = pdrSozlukYaz(ctx.mudahalePlan, o.name, o.className, [yeni, ...mevcut]);
+      ctx.mudahalePlan = guncel; await ctx.kaydet.mudahalePlan(guncel);
+      return `Müdahale planı kaydedildi. Hedef: ${hedef}`;
+    },
+  },
+};
+// Hatırlatmalar şifresiz saklandığı için metinde hassas ifade olmamalı
+function ksAsistanHassasMi(metin) {
+  const t = String(metin || "").toLocaleLowerCase("tr");
+  return /intihar|kendine zarar|kendini kes|kesik|jilet|ölmek iste|istismar|taciz|tecavüz|cinsel|şiddet|dayak|darp|uyuşturucu|madde kullan|alkol|bağımlı|depresyon|psikiyatri|ilaç|gebe|hamile|boşan|cezaevi|hapis|polis|savcı|mahkeme|koruma kararı|ihmal/.test(t);
+}
+function ksTarihSiralaAlan(alan) { return (a, b) => ksTarihAnahtar(a[alan]).localeCompare(ksTarihAnahtar(b[alan])); }
+
+// ── Sistem talimatı ──────────────────────────────────────────────────────────
+const PDR_ASISTAN_VARSAYILAN_KURALLAR = "Bana meslektaşın gibi, sade ve kısa yanıt ver.\nÖnerilerinde önce öğrencinin güçlü yönlerini gözet.\nEmin olmadığın bir konuda bunu açıkça söyle.";
+function ksAsistanSistem(ayar) {
+  const gunler = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
+  const araclar = Object.entries(KS_ASISTAN_ARACLAR).map(([ad, a]) => `- ${ad}${a.yazma ? " [ONAY GEREKİR]" : ""}: ${a.aciklama} Girdi: ${a.girdi}`).join("\n");
+  const ek = String(ayar.kurallar || "").trim() || PDR_ASISTAN_VARSAYILAN_KURALLAR;
+  return `Sen "PDR Asistanı"sın: bir okul psikolojik danışmanının (rehber öğretmen) öğrenci takip programının içinde çalışan yardımcısısın. Danışmanla meslektaş gibi, doğru Türkçe imlayla konuşursun.
+
+VERİ VE GİZLİLİK
+- Öğrenci adları sana "Öğrenci-1" gibi kodlarla, sınıflar "8-Ş1" gibi, diğer kişi/okul/yer adları "[KİŞİ-1]", "[OKUL-1]", "[YER-1]" gibi gelir. Kodları aynen kullan; gerçek adları tahmin etmeye çalışma. Danışman ekranında kodları gerçek adlarla görür.
+- Öğrencilerle ilgili bilgiyi yalnızca araçlardan al. Araç sonucunda olmayan bilgiyi uydurma; gerekirse araç çağır ya da bilmediğini söyle.
+
+ARAÇLAR
+${araclar}
+
+ARAÇ ÇAĞIRMA BİÇİMİ
+Araç çalıştırmak istediğinde yanıtına YALNIZCA bir ya da birkaç blok yaz:
+<arac>{"ad": "araç_adı", "girdi": {...}}</arac>
+Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç çağır ya da danışmana nihai yanıtını düz metin olarak yaz (nihai yanıtta <arac> bloğu kullanma).
+- Öğrenciyi "ogrenci" alanında adıyla/koduyla belirt; aynı adda birden çok öğrenci varsa "sinif" ekle.
+- Bir iş için gereken araçları aynı yanıtta birlikte çağırabilirsin.
+- Danışman tarihi "yarın", "cuma" gibi söylerse bugünün tarihine göre GG.AA.YYYY olarak hesapla.
+
+DEĞİŞTİRİLEMEZ KURALLAR
+1. [ONAY GEREKİR] işaretli araçlar danışmanın onayından geçer. Bunları yalnızca danışman istediğinde ya da açıkça kabul ettiğinde çağır.
+2. Kayıt silemezsin, kimseye mesaj gönderemezsin; mektuplar ve yazılar yalnızca taslaktır.
+3. Tanı koyma; "olabilir", "değerlendirilmeli" gibi temkinli bir dil kullan. Yönlendirme kararını danışmana bırak.
+4. Bir araç sonucunda "⚠ KRİTİK" ya da kendine zarar, intihar, istismar, şiddet belirtisi varsa yanıtına bununla başla ve güvenlik adımlarını (aynı gün değerlendirme, okul yönetimi, veli ya da yasal bildirim, uzman yönlendirmesi) öner.
+5. Hatırlatma metinlerine hassas ayrıntı yazma; kısa ve nötr yaz (örn. "Veli görüşmesi").
+6. Yanıtların kısa ve uygulanabilir olsun. Uzun araç çıktısını olduğu gibi kopyalama; özetle, önemli noktaları ve sonraki adımı belirt. Markdown başlığı ve tablo kullanma; gerekirse kısa maddeler kullan.
+
+DANIŞMANIN KURALLARI
+${ek}
+
+Bugün: ${today()} ${gunler[new Date().getDay()]}.`;
+}
+
+// ── Model çağrısı (A: Claude, B: Cloudflare) ─────────────────────────────────
+const PDR_ASISTAN_YEDEK_CLAUDE = "claude-sonnet-4-6"; // programın diğer AI özelliklerinin kullandığı model
+async function ksAsistanModelCagir(ayar, sistem, mesajlar) {
+  const claudeMi = ayar.saglayici !== "ucretsiz";
+  const url = claudeMi ? PDR_ASISTAN_CLAUDE_URL : ayar.ucretsizUrl;
+  if (!claudeMi) pdrAsistanKalkanaEkle(url);
+  const istek = async (model) => {
+    // __kalkanGenis: gizlilik kalkanı bu istekte veli/öğretmen/okul/yer adlarını da kodlar (sunucuya gitmeden silinir)
+    const govde = { model, max_tokens: 1800, system: sistem, messages: mesajlar, __kalkanGenis: true };
+    let res;
+    try { res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(govde) }); }
+    catch (e) { throw new Error(claudeMi ? "Sunucuya ulaşılamadı. İnternet bağlantını kontrol et." : "Ücretsiz model sunucusuna ulaşılamadı. Cloudflare'de 'pdr-asistan' worker'ı kurulu mu? (Asistan ayarlarındaki kurulum adımlarına bak.)"); }
+    const giden = typeof window !== "undefined" ? window.__pdrKalkanSonGiden || "" : "";
+    const ham = await res.text();
+    let data; try { data = JSON.parse(ham); } catch (e) { data = null; }
+    return { res, data, ham, giden, model };
+  };
+  let r = await istek(claudeMi ? ayar.claudeModel : ayar.ucretsizModel);
+  let yedek = false;
+  // Seçilen Claude modeli sunucuda tanımlı değilse programın bilinen modeliyle bir kez daha dene
+  if (claudeMi && (!r.res.ok || !r.data || r.data.error) && [400, 403, 404, 422].includes(r.res.status) && r.model !== PDR_ASISTAN_YEDEK_CLAUDE) {
+    r = await istek(PDR_ASISTAN_YEDEK_CLAUDE); yedek = true;
+  }
+  const { res, data, ham, giden, model } = r;
+  if (!res.ok || !data || data.error) {
+    const m = data && data.error ? (data.error.message || data.error) : ham.slice(0, 200);
+    throw new Error(`Model yanıt vermedi (${res.status}): ${typeof m === "string" ? m : JSON.stringify(m)}`);
+  }
+  let metin = (data.content && data.content[0] && data.content[0].text) || data.response || (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "";
+  metin = String(metin).replace(/<think>[\s\S]*?<\/think>/g, "").trim(); // bazı modellerin "düşünme" bölümü gösterilmez
+  const u = data.usage || {};
+  const giris = u.input_tokens ?? u.prompt_tokens ?? Math.round((sistem.length + JSON.stringify(mesajlar).length) / 3.5);
+  const cikis = u.output_tokens ?? u.completion_tokens ?? Math.round(metin.length / 3.5);
+  return { metin: String(metin), giris, cikis, giden, tahmini: !data.usage, model, yedek };
+}
+function ksAsistanMaliyet(model, giris, cikis) {
+  const m = PDR_ASISTAN_MODELLER.claude.find(x => x.id === model);
+  if (!m || !m.fiyat) return null;
+  return (giris * m.fiyat[0] + cikis * m.fiyat[1]) / 1e6; // dolar
+}
+
+// ── Araç çağrılarını ayrıştırma ───────────────────────────────────────────────
+function ksAsistanAyristir(metin) {
+  const cagrilar = [], hatalar = [];
+  const re = /<arac>\s*([\s\S]*?)\s*<\/arac>/g; let m;
+  while ((m = re.exec(metin)) !== null) {
+    let ic = m[1].trim().replace(/^```(?:json)?\s*|\s*```$/g, "");
+    try { const j = JSON.parse(ic); if (j && j.ad) cagrilar.push({ ad: String(j.ad), girdi: j.girdi || {} }); else hatalar.push(ic); }
+    catch (e) { hatalar.push(ic); }
+  }
+  // Model etiketsiz düz JSON yazdıysa ({"ad": ...}) onu da kabul et
+  if (!cagrilar.length && !hatalar.length) {
+    const j = /^\s*(?:```(?:json)?\s*)?(\{[\s\S]*"ad"\s*:[\s\S]*\})\s*(?:```)?\s*$/.exec(metin);
+    if (j) { try { const o = JSON.parse(j[1]); if (o.ad && KS_ASISTAN_ARACLAR[o.ad]) cagrilar.push({ ad: o.ad, girdi: o.girdi || {} }); } catch (e) {} }
+  }
+  const disMetin = metin.replace(/<arac>[\s\S]*?<\/arac>/g, "").trim();
+  return { cagrilar, hatalar, disMetin };
+}
+
+// ── Agent döngüsü ────────────────────────────────────────────────────────────
+// gecmis: [{role:"user"|"assistant", content}] — model sohbet geçmişi (dolaylı)
+// olay(o): ekrana adım bildirir; onayIste(ozet) → Promise<boolean>
+// Sohbet geçmişini modele uygun hâle getirir: ardışık aynı roldeki mesajları
+// birleştirir, eski araç sonuçlarını kısaltır (veri azaltma + maliyet).
+function ksAsistanGecmisDuzenle(gecmis) {
+  const d = [];
+  gecmis.forEach(m => {
+    if (!m || !m.content) return;
+    const son = d[d.length - 1];
+    if (son && son.role === m.role) son.content += "\n\n" + m.content; else d.push({ role: m.role, content: m.content });
+  });
+  while (d.length && d[0].role !== "user") d.shift();
+  const sonKullanici = (() => { for (let i = d.length - 1; i >= 0; i--) if (d[i].role === "user" && !d[i].content.startsWith("<sonuc")) return i; return -1; })();
+  d.forEach((m, i) => {
+    if (i < sonKullanici && m.role === "user" && m.content.startsWith("<sonuc")) {
+      m.content = m.content.replace(/(<sonuc ad="[^"]*">\n?)([\s\S]*?)(\n?<\/sonuc>)/g, (x, a, ic, b) => a + ksAsistanKisalt(ic, 500) + b);
+    }
+  });
+  const kes = Math.max(0, d.length - 24); // en fazla son 24 mesaj
+  let sonuc = d.slice(kes);
+  while (sonuc.length && (sonuc[0].role !== "user" || sonuc[0].content.startsWith("<sonuc"))) sonuc = sonuc.slice(1);
+  gecmis.length = 0; sonuc.forEach(m => gecmis.push(m));
+  return gecmis;
+}
+async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTur = 8 }) {
+  const sistem = ksAsistanSistem(ayar);
+  ksAsistanGecmisDuzenle(gecmis);
+  let toplamGiris = 0, toplamCikis = 0, sonGiden = "", model = "", yedek = false, kritik = false;
+  for (let tur = 0; tur < enFazlaTur; tur++) {
+    olay({ tip: "dusunuyor" });
+    const y = await ksAsistanModelCagir(ayar, sistem, gecmis);
+    toplamGiris += y.giris; toplamCikis += y.cikis; sonGiden = y.giden; model = y.model; yedek = yedek || y.yedek;
+    gecmis.push({ role: "assistant", content: y.metin || "(boş yanıt)" });
+    const { cagrilar, hatalar, disMetin } = ksAsistanAyristir(y.metin || "");
+    if (!cagrilar.length && !hatalar.length) {
+      return { yanit: disMetin || y.metin || "(Model boş yanıt verdi.)", giris: toplamGiris, cikis: toplamCikis, giden: sonGiden, model, yedek, kritik };
+    }
+    const sonuclar = [];
+    for (const h of hatalar) sonuclar.push(`<sonuc ad="hata">Araç çağrısı okunamadı (geçerli JSON değil): ${ksAsistanKisalt(h, 150)}</sonuc>`);
+    for (const c of cagrilar.slice(0, 6)) {
+      const a = KS_ASISTAN_ARACLAR[c.ad];
+      let sonuc, ogr = null;
+      if (!a) sonuc = `Böyle bir araç yok. Kullanılabilir araçlar: ${Object.keys(KS_ASISTAN_ARACLAR).join(", ")}`;
+      else {
+        if (a.ogrenciIster || c.girdi.ogrenci) {
+          const b = ksAsistanOgrenciBul(ctx, c.girdi.ogrenci, c.girdi.sinif);
+          if (b.tek) ogr = b.tek;
+          else if (a.ogrenciIster || a.yazma) sonuc = b.aday ? `Birden çok öğrenci eşleşti, "sinif" ekleyerek tekrar dene:\n${b.aday.map(ksAsistanEtiket).join("\n")}` : `"${c.girdi.ogrenci || ""}" adında kayıtlı öğrenci bulunamadı. ogrenci_ara aracıyla arayabilirsin.`;
+        }
+        if (sonuc === undefined) {
+          try {
+            if (a.yazma) {
+              const ozet = a.onayOzeti ? a.onayOzeti(c.girdi, ctx, ogr) : c.ad;
+              olay({ tip: "onay_bekliyor", ad: c.ad, ozet });
+              const ok = await onayIste(ozet);
+              olay({ tip: "onay_sonuc", ad: c.ad, ok });
+              sonuc = ok ? await a.calistir(c.girdi, ctx, ogr) : "Danışman bu işlemi onaylamadı; kayıt yapılmadı.";
+            } else sonuc = await a.calistir(c.girdi, ctx, ogr);
+          } catch (e) { sonuc = "Araç çalışırken hata oluştu: " + (e && e.message ? e.message : String(e)); }
+        }
+      }
+      // Kriz önceliği: öğrencinin notlarında kritik ifade varsa her araç sonucunun başına yazılır
+      if (ogr && a && !a.yazma && !/⚠ KRİTİK/.test(String(sonuc))) {
+        try { const X = ksSupBaglam(ksAsistanGirdi(ctx, ogr)); if (X.c.kritikTurler.length) sonuc = `⚠ KRİTİK: ${X.c.kritikTurler.join(", ")} ile ilgili ifadeler var — önce güvenlik.\n` + sonuc; } catch (e) {}
+      }
+      sonuc = ksAsistanKisalt(String(sonuc), 4500);
+      if (/⚠ KRİTİK/.test(sonuc)) kritik = true;
+      olay({ tip: "arac", ad: c.ad, ogrenci: ogr ? ksAsistanEtiket(ogr) : "", sonuc });
+      sonuclar.push(`<sonuc ad="${c.ad}">\n${sonuc}\n</sonuc>`);
+    }
+    gecmis.push({ role: "user", content: sonuclar.join("\n") });
+  }
+  return { yanit: "İşlem çok fazla adım gerektirdi ve durduruldu. İsteği daha küçük parçalara bölerek tekrar deneyebilirsin.", giris: toplamGiris, cikis: toplamCikis, giden: sonGiden, model, yedek, kritik };
+}
+// ===== PDR ASİSTANI (AGENT) ÇEKİRDEĞİ BİTİŞ =====
+
 
 
 
@@ -24746,6 +25242,339 @@ Sade, klinik ama sıcak bir dil kullan. Markdown kullanma.`}]
 
 
 // ── Prof. Dr. Hakan Süpervizyon Bileşeni ─────────────────────────────────────
+// ===== PDR ASİSTANI EKRANI BAŞLANGIÇ =====
+// Ücretsiz model için Cloudflare'de kurulacak "pdr-asistan" worker'ının kodu
+// (ayarlardaki kurulum rehberinden kopyalanır).
+const PDR_ASISTAN_WORKER_KODU = `// pdr-asistan — PDR Asistanı'nın ücretsiz modeli (Cloudflare Workers AI)
+// Bu worker hiçbir şey kaydetmez; gelen isteği modele iletir, yanıtı döndürür.
+// Gerekli bağlantı: Settings > Bindings > Workers AI, değişken adı: AI
+const IZINLI_MODELLER = [
+  "@cf/google/gemma-4-26b-a4b-it",
+  "@cf/qwen/qwen3-30b-a3b-fp8",
+  "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+];
+// Yalnızca programın açıldığı yerlerden gelen isteklere izin verilir
+// ("null": program dosyadan açıldığında tarayıcının gönderdiği değer)
+const IZINLI_KAYNAKLAR = ["https://hakanhas1989-ops.github.io", "null"];
+
+export default {
+  async fetch(request, env) {
+    const origin = request.headers.get("Origin") || "";
+    const cors = {
+      "Access-Control-Allow-Origin": IZINLI_KAYNAKLAR.includes(origin) ? origin : IZINLI_KAYNAKLAR[0],
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+      "Vary": "Origin",
+    };
+    const json = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { ...cors, "Content-Type": "application/json" } });
+    if (request.method === "OPTIONS") return new Response(null, { headers: cors });
+    if (request.method !== "POST") return json({ error: { message: "Yalnızca POST kabul edilir." } }, 405);
+    if (!IZINLI_KAYNAKLAR.includes(origin)) return json({ error: { message: "İzin verilmeyen kaynak." } }, 403);
+    if (!env.AI) return json({ error: { message: "Workers AI bağlantısı eklenmemiş (Settings > Bindings > Workers AI, ad: AI)." } }, 500);
+    let b;
+    try { b = await request.json(); } catch (e) { return json({ error: { message: "Geçersiz istek." } }, 400); }
+    const model = IZINLI_MODELLER.includes(b.model) ? b.model : IZINLI_MODELLER[0];
+    const mesajlar = (Array.isArray(b.messages) ? b.messages : []).slice(-30)
+      .map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content || "").slice(0, 24000) }));
+    const messages = b.system ? [{ role: "system", content: String(b.system).slice(0, 24000) }, ...mesajlar] : mesajlar;
+    try {
+      const r = await env.AI.run(model, { messages, max_tokens: Math.min(parseInt(b.max_tokens) || 1500, 2500) });
+      const text = (r && (r.response ?? (r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content))) ?? (typeof r === "string" ? r : "");
+      const u = (r && r.usage) || {};
+      return json({ content: [{ type: "text", text: typeof text === "string" ? text : JSON.stringify(text) }], usage: { input_tokens: u.prompt_tokens || 0, output_tokens: u.completion_tokens || 0 }, model });
+    } catch (e) {
+      return json({ error: { message: "Model hatası: " + (e && e.message ? e.message : String(e)) } }, 502);
+    }
+  },
+};
+`;
+
+// Sohbet, sekme değiştirince kaybolmasın diye bileşen dışında tutulur
+// (yalnızca bu oturumda, bellekte — cihaza yazılmaz).
+const PDR_ASISTAN_SOHBET = { gorunen: [], gecmis: [], calisiyor: false, durum: "", adimlar: [], onay: null, dinle: null, toplamDolar: 0 };
+function pdrAsistanBildir() { if (PDR_ASISTAN_SOHBET.dinle) PDR_ASISTAN_SOHBET.dinle(x => x + 1); }
+
+const PDR_ASISTAN_ARAC_AD = {
+  ogrenci_ara: "Öğrenci arandı", ogrenci_ozeti: "Öğrenci özeti", gorusme_notlari: "Görüşme notları okundu",
+  risk_analizi: "Risk analizi (kapalı sistem)", seans_hazirlik: "Seans hazırlığı (kapalı sistem)", mudahale_plani: "Müdahale planı önerisi (kapalı sistem)",
+  deneme_analizi: "Deneme analizi (kapalı sistem)", profil_analizi: "Profil analizi (kapalı sistem)", supervizyon: "Süpervizyon raporu (kapalı sistem)",
+  veli_mektubu: "Veli yazısı taslağı", liste: "Liste çıkarıldı", meb_raporu: "MEB raporu taslağı",
+  gorusme_kaydet: "Görüşme kaydı", hatirlatma_ekle: "Hatırlatma", risk_kaydet: "Risk kaydı", mudahale_kaydet: "Müdahale planı kaydı",
+};
+const PDR_ASISTAN_ORNEKLER = [
+  "Bugün öncelikle kimlerle ilgilenmeliyim?",
+  "3 haftadır görüşmediğim riskli öğrencileri listele",
+  "Açık hatırlatmalarım neler?",
+  "Son görüşmelerimi özetle",
+  "Dönem sonu MEB raporu taslağı hazırla",
+];
+
+function AsistanEkrani({
+  kayitliListesi, records, setRecords, riskListesi, setRiskListesi, hatirlatmalar, setHatirlatmalar,
+  mudahalePlan, setMudahalePlan, profiles, profiles2, denemeler, sevkler, testKayitlari,
+  akademikTaramalar, liseTaramalar, benlikOlcekleri, sinavTuru, aktifYil, setTab
+}) {
+  const S = PDR_ASISTAN_SOHBET;
+  const [, yenile] = useState(0);
+  const [ayar, setAyarState] = useState(pdrAsistanAyarOku);
+  const [girdi, setGirdi] = useState("");
+  const [ayarAcik, setAyarAcik] = useState(false);
+  const [kurulumAcik, setKurulumAcik] = useState(false);
+  const [testDurum, setTestDurum] = useState("");
+  const [acik, setAcik] = useState({}); // açılan "Modele ne gitti?" ve araç ayrıntıları
+  const altRef = useRef(null);
+
+  useEffect(() => { S.dinle = yenile; return () => { if (S.dinle === yenile) S.dinle = null; }; }, []);
+  useEffect(() => { if (altRef.current && altRef.current.scrollIntoView) altRef.current.scrollIntoView({ behavior: "smooth", block: "end" }); }, [S.gorunen.length, S.adimlar.length, !!S.onay]);
+
+  const inp = { width: "100%", padding: "9px 11px", borderRadius: 9, border: `1px solid ${BORDER}`, fontSize: 13, boxSizing: "border-box", background: CARD, color: TEXT, fontFamily: "inherit" };
+  const ayarDegis = (d) => { const y = { ...ayar, ...d }; setAyarState(y); pdrAsistanAyarYaz(y); };
+  const ac = (k) => setAcik(a => ({ ...a, [k]: !a[k] }));
+  const claudeMi = ayar.saglayici !== "ucretsiz";
+
+  function ctxOlustur() {
+    return {
+      records, riskListesi, hatirlatmalar, mudahalePlan, profiles, profiles2, denemeler, sevkler, testKayitlari,
+      akademikTaramalar, liseTaramalar, benlikOlcekleri, sinavTuru, aktifYil, ogrenciListesi: kayitliListesi,
+      kaydet: {
+        records: async (l) => { setRecords(l); await saveRecords(l); },
+        hatirlatmalar: async (l) => { setHatirlatmalar(l); await saveHatirlatmalar(l); },
+        riskListesi: async (l) => { setRiskListesi(l); await saveRiskListesi(l); },
+        mudahalePlan: async (l) => { setMudahalePlan(l); await saveMudahalePlan(l); },
+      },
+    };
+  }
+
+  async function gonder(metinVer) {
+    const m = String(metinVer ?? girdi).trim();
+    if (!m || S.calisiyor) return;
+    setGirdi("");
+    S.gorunen = [...S.gorunen, { rol: "ben", metin: m }];
+    S.gecmis.push({ role: "user", content: m });
+    S.calisiyor = true; S.durum = "dusunuyor"; S.adimlar = []; S.onay = null;
+    pdrAsistanBildir();
+    const adimlar = [];
+    const kullanilan = { ...ayar };
+    try {
+      const s = await pdrAsistanCalistir({
+        gecmis: S.gecmis, ayar: kullanilan, ctx: ctxOlustur(),
+        olay: (o) => {
+          if (o.tip === "arac") adimlar.push({ ad: o.ad, ogrenci: o.ogrenci, sonuc: o.sonuc });
+          if (o.tip === "onay_sonuc") adimlar.push({ ad: o.ad, onay: o.ok });
+          S.durum = o.tip; S.adimlar = [...adimlar]; pdrAsistanBildir();
+        },
+        onayIste: (ozet) => new Promise(coz => { S.onay = { ozet, coz }; pdrAsistanBildir(); }),
+      });
+      const dolar = kullanilan.saglayici === "ucretsiz" ? null : ksAsistanMaliyet(s.model, s.giris, s.cikis);
+      if (dolar) S.toplamDolar += dolar;
+      S.gorunen = [...S.gorunen, { rol: "asistan", metin: s.yanit, adimlar, model: s.model, giris: s.giris, cikis: s.cikis, dolar, giden: s.giden, kritik: s.kritik, yedek: s.yedek, ucretsiz: kullanilan.saglayici === "ucretsiz" }];
+    } catch (e) {
+      S.gorunen = [...S.gorunen, { rol: "asistan", hata: true, metin: (e && e.message) || String(e), adimlar }];
+      // yarım kalan turu geçmişten çıkar (bir sonraki istek düzgün başlasın)
+      while (S.gecmis.length && S.gecmis[S.gecmis.length - 1].role === "user" && S.gecmis[S.gecmis.length - 1].content.startsWith("<sonuc")) S.gecmis.pop();
+    } finally {
+      S.calisiyor = false; S.durum = ""; S.adimlar = []; S.onay = null;
+      pdrAsistanBildir();
+    }
+  }
+
+  function onayla(ok) { const o = S.onay; if (!o) return; S.onay = null; pdrAsistanBildir(); o.coz(ok); }
+  function yeniSohbet() {
+    if (S.calisiyor) return;
+    if (S.gorunen.length && !confirm("Sohbet temizlensin mi? (Kaydedilen görüşme/hatırlatma gibi kayıtlar silinmez.)")) return;
+    S.gorunen = []; S.gecmis = []; S.toplamDolar = 0; setAcik({}); pdrAsistanBildir();
+  }
+  async function baglantiTest() {
+    setTestDurum("⏳ Deneniyor…");
+    try {
+      const y = await ksAsistanModelCagir(ayar, "Kısa yanıt ver.", [{ role: "user", content: "Bağlantı testi: yalnızca 'Tamam' yaz." }]);
+      setTestDurum(`✅ Bağlantı çalışıyor (${y.model}${y.yedek ? ", yedek model" : ""}): "${ksAsistanKisalt(y.metin, 60)}"`);
+    } catch (e) { setTestDurum("❌ " + ((e && e.message) || e)); }
+  }
+  const dolarYaz = (d) => d == null ? "" : d < 0.001 ? "< $0,001" : "$" + d.toFixed(d < 0.01 ? 4 : 3).replace(".", ",");
+  const temizMetin = (t) => String(t || "").replace(/\*\*(.+?)\*\*/g, "$1").replace(/^#{1,4}\s+/gm, "");
+
+  function gidenGoster(g) {
+    if (!g) return "(kayıt yok)";
+    try {
+      const j = JSON.parse(g);
+      const ms = (j.messages || []).map(x => `── ${x.role === "user" ? "Program/Danışman" : "Asistan"} ──\n${x.content}`).join("\n\n");
+      return `Model: ${j.model}\nSistem talimatı: ${String(j.system || "").length} karakter (sabit kurallar ve araç listesi)\n\n${ms}`;
+    } catch (e) { return g; }
+  }
+
+  const modelAd = (id) => [...PDR_ASISTAN_MODELLER.claude, ...PDR_ASISTAN_MODELLER.ucretsiz].find(x => x.id === id)?.ad.split(" — ")[0] || id;
+
+  return (
+    <div>
+      {/* Başlık */}
+      <div style={{ background: "linear-gradient(135deg, #0F4D38 0%, #127C56 100%)", borderRadius: 12, padding: "14px 16px", marginBottom: 12, color: "#fff" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 900 }}>🤖 PDR Asistanı</div>
+            <div style={{ fontSize: 11, opacity: 0.85, marginTop: 2 }}>İşini yazarak söyle; program verilerine bakıp yapsın. Kayıt eklemeden önce onayını ister, silemez, kimseye bir şey gönderemez.</div>
+          </div>
+          <button onClick={yeniSohbet} disabled={S.calisiyor} style={{ background: "rgba(255,255,255,0.15)", color: "#fff", border: "1px solid rgba(255,255,255,0.35)", borderRadius: 8, padding: "6px 9px", fontSize: 11, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>🆕 Yeni sohbet</button>
+        </div>
+      </div>
+
+      {/* Model seçimi */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+        {[["claude", "🧠 Claude", "Ücretli · daha güçlü"], ["ucretsiz", "☁️ Ücretsiz Model", "Cloudflare · günlük kota"]].map(([k, ad, alt]) => {
+          const s = (ayar.saglayici === "ucretsiz" ? "ucretsiz" : "claude") === k;
+          return (
+            <button key={k} onClick={() => { ayarDegis({ saglayici: k }); setTestDurum(""); }} disabled={S.calisiyor} style={{ flex: 1, padding: "9px 6px", borderRadius: 10, border: `2px solid ${s ? ACCENT : BORDER}`, background: s ? ACCENT : CARD, color: s ? "#fff" : MUTED, cursor: "pointer" }}>
+              <div style={{ fontSize: 13, fontWeight: 800 }}>{ad}</div>
+              <div style={{ fontSize: 10, opacity: 0.85 }}>{alt}</div>
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11, color: MUTED, marginBottom: 10, gap: 6 }}>
+        <span>Kullanılan: <b>{modelAd(claudeMi ? ayar.claudeModel : ayar.ucretsizModel)}</b>{S.toplamDolar > 0 ? ` · bu sohbet ≈ ${dolarYaz(S.toplamDolar)}` : ""}</span>
+        <button onClick={() => setAyarAcik(!ayarAcik)} style={{ background: "none", border: "none", color: ACCENT, fontWeight: 700, fontSize: 12, cursor: "pointer", padding: 0 }}>⚙️ Ayarlar {ayarAcik ? "▲" : "▼"}</button>
+      </div>
+
+      {ayarAcik && (
+        <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 12, marginBottom: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: TEXT, marginBottom: 4 }}>🧠 Claude modeli</div>
+          <select value={ayar.claudeModel} onChange={e => ayarDegis({ claudeModel: e.target.value })} style={{ ...inp, marginBottom: 4 }}>
+            {PDR_ASISTAN_MODELLER.claude.map(m => <option key={m.id} value={m.id}>{m.ad}</option>)}
+          </select>
+          <div style={{ fontSize: 10.5, color: MUTED, marginBottom: 10 }}>Seçilen model sunucuda tanımlı değilse program otomatik olarak diğer AI özelliklerinin modeliyle dener.</div>
+
+          <div style={{ fontSize: 12, fontWeight: 800, color: TEXT, marginBottom: 4 }}>☁️ Ücretsiz model</div>
+          <select value={ayar.ucretsizModel} onChange={e => ayarDegis({ ucretsizModel: e.target.value })} style={{ ...inp, marginBottom: 6 }}>
+            {PDR_ASISTAN_MODELLER.ucretsiz.map(m => <option key={m.id} value={m.id}>{m.ad}</option>)}
+          </select>
+          <div style={{ fontSize: 11, color: MUTED, marginBottom: 3 }}>Worker adresi</div>
+          <input value={ayar.ucretsizUrl} onChange={e => ayarDegis({ ucretsizUrl: e.target.value.trim() })} style={{ ...inp, marginBottom: 10, fontSize: 12 }} />
+
+          <div style={{ fontSize: 12, fontWeight: 800, color: TEXT, marginBottom: 4 }}>📋 Asistana kurallarım</div>
+          <textarea value={ayar.kurallar} onChange={e => ayarDegis({ kurallar: e.target.value })} rows={4} placeholder={PDR_ASISTAN_VARSAYILAN_KURALLAR} style={{ ...inp, resize: "vertical", marginBottom: 4 }} />
+          <div style={{ fontSize: 10.5, color: MUTED, marginBottom: 10 }}>Boş bırakırsan soluk yazılı varsayılan kurallar geçerli olur. Güvenlik kuralları (onay, silmeme, kriz önceliği) her zaman geçerlidir, buradan kapatılamaz.</div>
+
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
+            <button onClick={baglantiTest} style={{ padding: "8px 12px", borderRadius: 9, border: `1px solid ${ACCENT}`, background: ACCENT_LIGHT, color: "#0F4D38", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>🔌 Bağlantıyı test et</button>
+            <button onClick={() => setKurulumAcik(!kurulumAcik)} style={{ padding: "8px 12px", borderRadius: 9, border: `1px solid ${BORDER}`, background: "#fff", color: TEXT, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>📖 Ücretsiz model kurulumu {kurulumAcik ? "▲" : "▼"}</button>
+          </div>
+          {testDurum && <div style={{ fontSize: 11.5, color: testDurum.startsWith("❌") ? "#B42318" : TEXT, marginBottom: 6, wordBreak: "break-word" }}>{testDurum}</div>}
+
+          {kurulumAcik && (
+            <div style={{ fontSize: 12, color: TEXT, lineHeight: 1.55, background: "#fff", border: `1px solid ${BORDER}`, borderRadius: 10, padding: 10 }}>
+              <div style={{ fontWeight: 800, marginBottom: 4 }}>Bir kerelik kurulum (5 dakika)</div>
+              <ol style={{ margin: "0 0 8px 18px", padding: 0 }}>
+                <li>dash.cloudflare.com'a, pdr-api'yi kurduğun hesapla gir.</li>
+                <li><b>Workers & Pages</b> → <b>Create</b> → <b>Create Worker</b>. Adını <b>pdr-asistan</b> yap → <b>Deploy</b>.</li>
+                <li><b>Edit code</b> → içindeki her şeyi sil → aşağıdaki kodu yapıştır → <b>Deploy</b>.</li>
+                <li>Worker sayfasında <b>Settings</b> → <b>Bindings</b> → <b>Add</b> → <b>Workers AI</b> → Variable name: <b>AI</b> → kaydet.</li>
+                <li>Worker adresi yukarıdakinden farklıysa (ör. hesap adın farklıysa) doğru adresi "Worker adresi" kutusuna yaz.</li>
+                <li>☁️ Ücretsiz Model'i seçip <b>Bağlantıyı test et</b>'e bas.</li>
+              </ol>
+              <div style={{ fontSize: 11, color: MUTED, marginBottom: 6 }}>Günlük ücretsiz kota (10.000 "neuron") bir gün içinde dolarsa model hata verir; ertesi gün kendiliğinden yenilenir. O sırada 🧠 Claude'a geçebilirsin.</div>
+              <button onClick={() => { try { navigator.clipboard.writeText(PDR_ASISTAN_WORKER_KODU); alert("Worker kodu kopyalandı."); } catch (e) { alert("Kopyalanamadı; aşağıdaki kutudan elle seçip kopyala."); } }} style={{ padding: "7px 11px", borderRadius: 8, border: "none", background: ACCENT, color: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", marginBottom: 6 }}>📋 Worker kodunu kopyala</button>
+              <textarea readOnly value={PDR_ASISTAN_WORKER_KODU} rows={6} style={{ ...inp, fontFamily: "monospace", fontSize: 10.5 }} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Boş sohbet: tanıtım + örnekler */}
+      {S.gorunen.length === 0 && !S.calisiyor && (
+        <div style={{ background: "#EEF7F2", border: "1px solid #BFE3D0", borderRadius: 12, padding: 12, marginBottom: 12 }}>
+          <div style={{ fontSize: 12.5, color: "#0F4D38", lineHeight: 1.55, marginBottom: 8 }}>
+            Öğrenci özetleri, riskli öğrenci listeleri, seans hazırlığı, müdahale planı, veli yazısı taslağı, MEB raporu… Analizleri programın kapalı sistemi yapar, asistan bunları senin için birleştirir. Görüşme, hatırlatma, risk ve müdahale kaydını <b>senin onayınla</b> ekleyebilir.
+            <div style={{ marginTop: 6 }}>🔒 Modele giden metinde öğrenci adları "Öğrenci-1", sınıflar "8-Ş1", veli/öğretmen/okul/yer adları "[KİŞİ-1]" gibi kodlanır; okul numarası, telefon, T.C. no gönderilmez. Her yanıtın altındaki "Modele ne gitti?" ile kontrol edebilirsin.</div>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {PDR_ASISTAN_ORNEKLER.map(o => <button key={o} onClick={() => gonder(o)} style={{ padding: "6px 10px", borderRadius: 16, border: `1px solid ${BORDER}`, background: "#fff", color: TEXT, fontSize: 11.5, cursor: "pointer", textAlign: "left" }}>{o}</button>)}
+          </div>
+        </div>
+      )}
+
+      {/* Mesajlar */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 12 }}>
+        {S.gorunen.map((m, i) => m.rol === "ben" ? (
+          <div key={i} style={{ alignSelf: "flex-end", maxWidth: "88%", background: ACCENT, color: "#fff", borderRadius: "14px 14px 4px 14px", padding: "9px 12px", fontSize: 13, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{m.metin}</div>
+        ) : (
+          <div key={i} style={{ alignSelf: "stretch", background: m.hata ? "#FEF3F2" : CARD, border: `1px solid ${m.hata ? "#FDA29B" : BORDER}`, borderRadius: "14px 14px 14px 4px", padding: "10px 12px" }}>
+            {m.kritik && (
+              <div style={{ background: "#B42318", color: "#fff", borderRadius: 8, padding: "7px 10px", fontSize: 12, fontWeight: 800, marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                <span>⚠ Kritik ifade bulundu — önce güvenlik adımları.</span>
+                {setTab && <button onClick={() => setTab("risk")} style={{ background: "#fff", color: "#B42318", border: "none", borderRadius: 6, padding: "4px 8px", fontSize: 11, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>Risk sekmesi →</button>}
+              </div>
+            )}
+            {m.adimlar && m.adimlar.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 8 }}>
+                {m.adimlar.map((a, j) => {
+                  const k = `a${i}-${j}`;
+                  const etiket = a.onay === undefined ? `🔧 ${PDR_ASISTAN_ARAC_AD[a.ad] || a.ad}${a.ogrenci ? " · " + a.ogrenci : ""}` : `${a.onay ? "✅ Onaylandı" : "✋ Vazgeçildi"}: ${PDR_ASISTAN_ARAC_AD[a.ad] || a.ad}`;
+                  return (
+                    <span key={k} style={{ display: "contents" }}>
+                      <button onClick={() => a.sonuc && ac(k)} style={{ padding: "3px 8px", borderRadius: 12, border: `1px solid ${BORDER}`, background: a.onay === false ? "#FFF4E5" : "#fff", color: MUTED, fontSize: 10.5, cursor: a.sonuc ? "pointer" : "default" }}>{etiket}{a.sonuc ? (acik[k] ? " ▲" : " ▼") : ""}</button>
+                      {acik[k] && a.sonuc && <div style={{ flexBasis: "100%", fontSize: 11, color: TEXT, background: "#fff", border: `1px dashed ${BORDER}`, borderRadius: 8, padding: 8, whiteSpace: "pre-wrap", maxHeight: 220, overflow: "auto" }}>{a.sonuc}</div>}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+            <div style={{ fontSize: 13, color: m.hata ? "#B42318" : TEXT, whiteSpace: "pre-wrap", lineHeight: 1.55, wordBreak: "break-word" }}>{m.hata ? "⚠ " : ""}{temizMetin(m.metin)}</div>
+            {m.hata && <div style={{ fontSize: 11, color: MUTED, marginTop: 6 }}>{!claudeMi ? "Ücretsiz model kurulu değilse ⚙️ Ayarlar > kurulum adımlarına bak ya da 🧠 Claude'a geç." : "Tekrar deneyebilirsin."}</div>}
+            {!m.hata && (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, marginTop: 8, paddingTop: 6, borderTop: `1px solid ${BORDER}`, fontSize: 10.5, color: MUTED, flexWrap: "wrap" }}>
+                <span>{modelAd(m.model)}{m.yedek ? " (yedek)" : ""} · {m.ucretsiz ? `ücretsiz · ${m.giris + m.cikis} token` : `≈ ${dolarYaz(m.dolar)}`}</span>
+                <span style={{ display: "flex", gap: 10 }}>
+                  <button onClick={() => { try { navigator.clipboard.writeText(temizMetin(m.metin)); } catch (e) {} }} style={{ background: "none", border: "none", color: ACCENT, fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: 0 }}>📋 Kopyala</button>
+                  <button onClick={() => ac("g" + i)} style={{ background: "none", border: "none", color: ACCENT, fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: 0 }}>🔍 Modele ne gitti? {acik["g" + i] ? "▲" : "▼"}</button>
+                </span>
+              </div>
+            )}
+            {acik["g" + i] && (
+              <div style={{ marginTop: 6 }}>
+                <div style={{ fontSize: 10.5, color: MUTED, marginBottom: 4 }}>Son isteğin modele giden hâli (kodlanmış). Gerçek adlar cihazda kalır; yanıt gelince kodlar ekranda gerçek adlara çevrilir.</div>
+                <div style={{ fontSize: 10.5, fontFamily: "monospace", background: "#fff", border: `1px dashed ${BORDER}`, borderRadius: 8, padding: 8, whiteSpace: "pre-wrap", maxHeight: 260, overflow: "auto", wordBreak: "break-word" }}>{gidenGoster(m.giden)}</div>
+              </div>
+            )}
+          </div>
+        ))}
+
+        {/* Çalışırken: adımlar + onay kartı */}
+        {S.calisiyor && (
+          <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: "10px 12px" }}>
+            {S.adimlar.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 6 }}>
+                {S.adimlar.map((a, j) => <span key={j} style={{ padding: "3px 8px", borderRadius: 12, border: `1px solid ${BORDER}`, background: "#fff", color: MUTED, fontSize: 10.5 }}>{a.onay === undefined ? "🔧 " : a.onay ? "✅ " : "✋ "}{PDR_ASISTAN_ARAC_AD[a.ad] || a.ad}{a.ogrenci ? " · " + a.ogrenci : ""}</span>)}
+              </div>
+            )}
+            {S.onay ? (
+              <div style={{ background: "#FFF8E6", border: "2px solid #E9B949", borderRadius: 10, padding: 10 }}>
+                <div style={{ fontSize: 12, fontWeight: 800, color: "#7A5300", marginBottom: 6 }}>Onayın gerekiyor — bu kayıt eklensin mi?</div>
+                <div style={{ fontSize: 12.5, color: TEXT, whiteSpace: "pre-wrap", lineHeight: 1.5, marginBottom: 10, wordBreak: "break-word" }}>{S.onay.ozet}</div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => onayla(true)} style={{ flex: 1, padding: "10px", borderRadius: 9, border: "none", background: ACCENT, color: "#fff", fontWeight: 800, fontSize: 13, cursor: "pointer" }}>✅ Onayla</button>
+                  <button onClick={() => onayla(false)} style={{ flex: 1, padding: "10px", borderRadius: 9, border: `1px solid ${BORDER}`, background: "#fff", color: TEXT, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>✋ Vazgeç</button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ fontSize: 12, color: MUTED }}>⏳ {S.durum === "arac" ? "Araç çalıştı, sonuç değerlendiriliyor…" : "Düşünüyor…"}</div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Yazma alanı — sağ alttaki sabit düğmelerin altında kalmasın diye yapışkan değil, altında boşluk var */}
+      <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 8 }}>
+        <textarea value={girdi} onChange={e => setGirdi(e.target.value)} rows={3} disabled={S.calisiyor}
+          onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent || "")) { e.preventDefault(); gonder(); } }}
+          placeholder={S.calisiyor ? "Asistan çalışıyor…" : "Ne yapayım? Örn: Ali için yarınki görüşmeye hazırlık yap"} style={{ ...inp, resize: "vertical", marginBottom: 6 }} />
+        <button onClick={() => gonder()} disabled={S.calisiyor || !girdi.trim()} style={{ width: "100%", padding: "11px", borderRadius: 10, border: "none", background: S.calisiyor || !girdi.trim() ? BORDER : ACCENT, color: "#fff", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>{S.calisiyor ? "⏳ Çalışıyor…" : "➤ Gönder"}</button>
+      </div>
+      <div ref={altRef} style={{ height: 90 }} />
+    </div>
+  );
+}
+// ===== PDR ASİSTANI EKRANI BİTİŞ =====
+
 function ProfDanismaEkrani({
   kayitliListesi, aktifOgrenci, records, profiles, profiles2,
   denemeler, riskListesi, mudahalePlan, sevkler,
@@ -33381,6 +34210,7 @@ const SEMA_DALLARI = [
       { tab: "kutuphane", label: "📚 Kütüphane" },
       { tab: "mudahale_kutuphane", label: "📁 Müdahale Programları" },
       { tab: "prof_danisma", label: "🎓 Prof. Hakan" },
+      { tab: "asistan", label: "🤖 Asistan" },
     ] },
   { key: "okul_capi", label: "🏫 Okul Çapı Etkinlikler", renk: "#8B5A00",
     aciklama: "Öğrenciye özel değil, sınıf/okul düzeyinde yürütülen çalışmalar ve kayıtlar.",
@@ -33422,6 +34252,7 @@ const SEMA_ICERIK = {
   kutuphane: [["Yönetmelik / makale yükle — AI referansı"]],
   mudahale_kutuphane: [["Hazır müdahale programları"]],
   prof_danisma: [["Süpervizyon soru-cevap"]],
+  asistan: [["Yazarak iş ver: özet, liste, hazırlık, rapor", true], ["Kayıt eklemeden önce onay ister"], ["Claude / ücretsiz model seçimi"]],
   grup_calismalari: [["Sınıf / okul grup etkinlikleri"]],
   kriz: [["Kriz müdahale kayıtları"]],
   sosyometri: [["3 kriterli sosyometri"], ["Kâğıt form PDF ve hızlı giriş"]],
@@ -34591,6 +35422,7 @@ const TABS_TUMU = [
     { key: "isci_raporu", label: "🤖 İşçi Raporu" },
     { key: "istatistik", label: "İstatistik" },
     { key: "prof_danisma", label: "🎓 Prof. Hakan" },
+    { key: "asistan", label: "🤖 Asistan" },
     { key: "ayarlar", label: "⚙️ Ayarlar" },
     { key: "sema", label: "🧠 Şema" },
   ];
@@ -34625,6 +35457,7 @@ const SEKME_ACIKLAMALARI = {
   isci_raporu: "Günlük öncelik özetini ve dikkat gerektiren noktaları otomatik gösterir.",
   istatistik: "Görüşme, risk ve kapsam istatistiklerini genel ve sınıf bazında gösterir.",
   prof_danisma: "Süpervizyon amaçlı mesleki soru-cevap ve danışma alanı.",
+  asistan: "Kendi asistanın: işi yazarak söyle, programdaki verilere bakıp yapsın; kayıt eklemeden önce onay ister.",
   ayarlar: "Okul kademesi, sınav türü, yedek alma/geri yükleme (30 günde bir hatırlatır) ve bildirim ayarları.",
   sema: "Programın zihin haritası — tüm sekmeler ve içlerindeki özellikler tek ekranda; dokununca o sekmeye gider.",
 };
@@ -35531,6 +36364,21 @@ function pdrBaslangicSekmesi() {
             liseTaramalar={liseTaramalar}
             benlikOlcekleri={benlikOlcekleri}
             testKayitlari={testKayitlari}
+          />
+        )}
+
+        {/* ── PDR ASİSTANI ─────────────────────────────────────────── */}
+        {tab === "asistan" && (
+          <AsistanEkrani
+            kayitliListesi={kayitliListesi}
+            records={records} setRecords={setRecords}
+            riskListesi={riskListesi} setRiskListesi={setRiskListesi}
+            hatirlatmalar={hatirlatmalar} setHatirlatmalar={setHatirlatmalar}
+            mudahalePlan={mudahalePlan} setMudahalePlan={setMudahalePlan}
+            profiles={profiles} profiles2={profiles2}
+            denemeler={denemeler} sevkler={sevkler} testKayitlari={testKayitlari}
+            akademikTaramalar={akademikTaramalar} liseTaramalar={liseTaramalar} benlikOlcekleri={benlikOlcekleri}
+            sinavTuru={sinavTuru} aktifYil={aktifYil} setTab={setTab}
           />
         )}
 

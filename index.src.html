@@ -10288,6 +10288,11 @@ const KS_ASISTAN_ARACLAR = {
       return s.join("\n");
     },
   },
+  ogrenci_dosyasi: {
+    aciklama: "Öğrencinin BÜTÜN dosyasını getirir: görüşmeler (tümünün konu dağılımı ve son notlar), bu yılın ve geçmiş dönemin denemeleri, yıl sonu not ortalamaları, BDT bilişsel çarpıtmaları, bireyi tanıma bilgileri, uygulanan testler, profil puanları, devamsızlık, olay kayıtları, risk/müdahale/sevk geçmişi. Risk değerlendirmesi, müdahale planı, seans hazırlığı ya da veli yazısından ÖNCE çağır.",
+    girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
+    calistir: (g, ctx, o) => ksAsistanOgrenciDosyasi(ctx, o),
+  },
   gorusme_notlari: {
     aciklama: "Bir öğrencinin son görüşme notlarını (tarih, konu, özet) getirir. Yalnızca gerektiğinde kullan; çoğu iş için ogrenci_ozeti yeterlidir.", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "adet": 5}', ogrenciIster: true,
     calistir: (g, ctx, o) => {
@@ -10406,12 +10411,14 @@ const KS_ASISTAN_ARACLAR = {
     },
   },
   mudahale_kaydet: {
-    aciklama: "Kapalı sistem müdahale planını öğrencinin planlarına kaydeder (ONAY GEREKİR).", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true, yazma: true,
-    onayOzeti: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); const p = pdrKapaliMudahalePlani({ gorusmeler: G.gorusmeler, kademe: G.kademe, profil1: G.profil1 }); return `🎯 Müdahale planı\nÖğrenci: ${ksAsistanEtiket(o)}\n${(p.match(/HEDEF:\s*(.+)/) || [, ""])[1]}`; },
+    aciklama: "Müdahale planını öğrencinin planlarına kaydeder (ONAY GEREKİR). ogrenci_dosyasi'na dayanarak hedef/adimlar/sure verirsen onları, vermezsen kapalı sistem planını kaydeder.", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "hedef": "isteğe bağlı", "adimlar": "1. ...", "sure": "örn. 6 hafta"}', ogrenciIster: true, yazma: true,
+    onayOzeti: (g, ctx, o) => { if (String(g.hedef || "").trim()) return `🎯 Müdahale planı\nÖğrenci: ${ksAsistanEtiket(o)}\nHedef: ${g.hedef}\n${String(g.adimlar || "").replace(/\\n/g, "\n")}${g.sure ? "\nSüre: " + g.sure : ""}`; const G = ksAsistanGirdi(ctx, o); const p = pdrKapaliMudahalePlani({ gorusmeler: G.gorusmeler, kademe: G.kademe, profil1: G.profil1 }); return `🎯 Müdahale planı (kapalı sistem)\nÖğrenci: ${ksAsistanEtiket(o)}\n${(p.match(/HEDEF:\s*(.+)/) || [, ""])[1]}`; },
     calistir: async (g, ctx, o) => {
       const G = ksAsistanGirdi(ctx, o);
-      const p = pdrKapaliMudahalePlani({ gorusmeler: G.gorusmeler, kademe: G.kademe, profil1: G.profil1, programlar: typeof MUDAHALE_PROGRAMLARI !== "undefined" ? MUDAHALE_PROGRAMLARI : null });
-      const hedef = (p.match(/HEDEF:\s*(.+)/) || [, ""])[1].trim(), adimlar = ((p.match(/MÜDAHALE ADIMLARI:\s*([\s\S]+?)SÜRE:/) || [, ""])[1] || "").trim(), sure = (p.match(/SÜRE:\s*(.+)/) || [, ""])[1].trim();
+      const p = String(g.hedef || "").trim() ? "" : pdrKapaliMudahalePlani({ gorusmeler: G.gorusmeler, kademe: G.kademe, profil1: G.profil1, programlar: typeof MUDAHALE_PROGRAMLARI !== "undefined" ? MUDAHALE_PROGRAMLARI : null });
+      const hedef = String(g.hedef || "").trim() || (p.match(/HEDEF:\s*(.+)/) || [, ""])[1].trim();
+      const adimlar = String(g.hedef || "").trim() ? String(g.adimlar || "").replace(/\\n/g, "\n").trim() : ((p.match(/MÜDAHALE ADIMLARI:\s*([\s\S]+?)SÜRE:/) || [, ""])[1] || "").trim();
+      const sure = String(g.hedef || "").trim() ? String(g.sure || "").trim() : (p.match(/SÜRE:\s*(.+)/) || [, ""])[1].trim();
       const baslangicPuan = typeof pdrSonProfilPuani === "function" ? pdrSonProfilPuani(ctx.profiles, o.name, o.className) : null;
       const yeni = { id: uid(), tarih: today(), ogrenci: o.name, ogrenciSinif: o.className, hedef, adimlar, sorumlu: "pdr", sure, oncelik: "Orta", durum: "Devam Ediyor", baslangicPuan, baslangicTarih: baslangicPuan ? today() : null, kaynak: "asistan" };
       const mevcut = pdrSozlukOku(ctx.mudahalePlan, o.name, o.className) || [];
@@ -10445,14 +10452,14 @@ const KS_ASISTAN_ARACLAR = {
     },
   },
   ekranda_risk: {
-    aciklama: "Risk ekranını açar, öğrenciyi forma seçer, istenirse kısa açıklama yazar ve 'Kapalı Sistemle Analiz Et ve Kaydet' düğmesini gösterir; düğmeye danışman basar.",
+    aciklama: "Risk ekranını açar, öğrenciyi forma seçer, ogrenci_dosyasi'na dayanan kısa gerekçeli açıklama yazar ve 'Kapalı Sistemle Analiz Et ve Kaydet' düğmesini gösterir; düğmeye danışman basar.",
     girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "aciklama": "isteğe bağlı kısa gözlem"}', ogrenciIster: true, ekran: true, ekranYazma: true, yontem: "ekran",
     calistir: (g, ctx, o) => ksEkranRisk(o, g),
   },
   ekranda_mudahale: {
-    aciklama: "Müdahale Planı ekranını açar, öğrenciyi seçer, kapalı sistemle planı forma yazdırır; 'Planı Kaydet'e danışman basar.",
-    girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true, ekran: true, ekranYazma: true, yontem: "ekran",
-    calistir: (g, ctx, o) => ksEkranMudahale(o),
+    aciklama: "Müdahale Planı ekranını açar, öğrenciyi seçer ve planı forma yazar; 'Planı Kaydet'e danışman basar. ogrenci_dosyasi'na dayanarak hedef (ölçülebilir), adimlar (numaralı), sure ve oncelik (Yüksek|Orta|Düşük) verirsen onları yazar; vermezsen kapalı sistem planını yazdırır.",
+    girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "hedef": "isteğe bağlı", "adimlar": "1. ...\\n2. ...", "sure": "örn. 6 hafta", "oncelik": "Orta"}', ogrenciIster: true, ekran: true, ekranYazma: true, yontem: "ekran",
+    calistir: (g, ctx, o) => ksEkranMudahale(o, g),
   },
 };
 // Kayıt yöntemine göre kullanılabilir araçlar: "ekran" modunda sohbetten kayıt araçları, "sohbet" modunda ekranda doldurma araçları kapalıdır
@@ -10467,6 +10474,87 @@ function ksAsistanAracAcik(ad, ayar) {
 function ksAsistanHassasMi(metin) {
   const t = String(metin || "").toLocaleLowerCase("tr");
   return /intihar|kendine zarar|kendini kes|kesik|jilet|ölmek iste|istismar|taciz|tecavüz|cinsel|şiddet|dayak|darp|uyuşturucu|madde kullan|alkol|bağımlı|depresyon|psikiyatri|ilaç|gebe|hamile|boşan|cezaevi|hapis|polis|savcı|mahkeme|koruma kararı|ihmal/.test(t);
+}
+// Öğrencinin tüm verilerinden kısa ama eksiksiz bir dosya çıkarır (veri azaltma: ham notların tamamı değil, özet)
+function ksAsistanOgrenciDosyasi(ctx, o) {
+  const ad = o.name, sinif = o.className, no = o.numara;
+  const ayni = (x) => pdrAyniOgrenci(x.studentName, x.className, ad, sinif);
+  const K = (t, n) => ksAsistanKisalt(String(t || "").replace(/\s+/g, " ").trim(), n);
+  const b = [`ÖĞRENCİ DOSYASI: ${ksAsistanEtiket(o)}`];
+  // Görüşmeler
+  const gor = (ctx.records || []).filter(ayni).sort((a, c) => ksTarihSirala(c, a));
+  if (gor.length) {
+    const konu = {}; gor.forEach(r => { const k = r.topic || "Konusuz"; konu[k] = (konu[k] || 0) + 1; });
+    const tur = {}; gor.forEach(r => { const k = r.meetingType || "Öğrenci"; tur[k] = (tur[k] || 0) + 1; });
+    b.push(`\nGÖRÜŞMELER (${gor.length}; ilk ${gor[gor.length - 1].date}, son ${gor[0].date}) — konular: ${Object.entries(konu).sort((a, c) => c[1] - a[1]).map(([k, v]) => k + " " + v).join(", ")}; türler: ${Object.entries(tur).map(([k, v]) => k + " " + v).join(", ")}`);
+    gor.slice(0, 6).forEach(r => b.push(`• ${r.date}${r.topic ? " · " + r.topic : ""}${r.meetingType && r.meetingType !== "Öğrenci" ? " · " + r.meetingType : ""}${r.grupKatilimcilari && r.grupKatilimcilari.length ? " · grup" : ""}: ${K(r.summary || r.raw, 280)}`));
+    if (gor.length > 6) b.push(`  (daha eski ${gor.length - 6} görüşme var; gerekirse gorusme_notlari ile adet artır)`);
+  } else b.push("\nGÖRÜŞMELER: kayıt yok.");
+  // Akademik
+  const ogrDen = pdrSozlukOku(ctx.denemeler, ad, sinif, no) || pdrSozlukOku(ctx.denemeler, ad, sinif) || {};
+  const dersler = aktifDersler(ctx.sinavTuru);
+  const buYil = Object.entries(ogrDen).filter(([k]) => k !== "7sinif" && !isNaN(parseInt(k))).sort((a, c) => a[0] - c[0])
+    .map(([n, nets]) => ({ n, top: dersler.reduce((t, d) => t + (parseFloat(nets[d.key]) || 0), 0), nets }));
+  const ak = [];
+  if (buYil.length) {
+    const son = buYil[buYil.length - 1];
+    const zayif = dersler.map(d => ({ ad: d.label || d.ad || d.key, v: parseFloat(son.nets[d.key]) })).filter(x => !isNaN(x.v)).sort((a, c) => a.v - c.v).slice(0, 2);
+    ak.push(`Bu yıl ${buYil.length} deneme, toplam netler: ${buYil.map(x => "D" + x.n + "=" + x.top.toFixed(1)).join(", ")}${zayif.length ? `; son denemede en düşük: ${zayif.map(z => z.ad + " " + z.v).join(", ")}` : ""}`);
+  }
+  const gecmis = ogrDen["7sinif"];
+  if (gecmis && (gecmis.ortalama || gecmis.denemeler)) {
+    const gl = gecmis.denemeler ? Object.entries(gecmis.denemeler).map(([n, v]) => ({ n, net: parseFloat(v && v.toplam_net) })).filter(x => !isNaN(x.net)) : [];
+    ak.push(`Geçmiş dönem denemeleri: ${gl.length ? gl.map(x => "G" + x.n + "=" + x.net).join(", ") : "-"}${gecmis.ortalama ? `; ortalama ${gecmis.ortalama}` : ""}`);
+  }
+  const p2 = (ctx.profiles2 || []).find(ayni);
+  if (p2 && p2.gecmisYillar && Object.keys(p2.gecmisYillar).length) ak.push(`Yıl sonu not ortalamaları: ${Object.entries(p2.gecmisYillar).sort((a, c) => a[0] - c[0]).map(([k, v]) => k + ". sınıf " + v).join(", ")}`);
+  b.push("\nAKADEMİK: " + (ak.length ? ak.join(" | ") : "deneme ya da not ortalaması kaydı yok."));
+  // Profil
+  const p1l = (ctx.profiles || []).filter(ayni).sort((a, c) => ksTarihSirala(c, a));
+  if (p1l.length && p1l[0].scores) b.push(`\nPROFİL 1 (${p1l[0].date || ""}${p1l.length > 1 ? `, ${p1l.length} ölçüm` : ""}): ${KS_BOYUTLAR.map(k => `${KS_BOYUT_BILGI[k].ad} ${p1l[0].scores[k] ?? "-"}`).join(", ")}`);
+  if (p2) {
+    const alan = [["kariyer_hedef", "kariyer hedefi"], ["ilgiNot", "ilgi notu"], ["aile_notu", "aile"]].map(([k, ad2]) => p2[k] ? `${ad2}: ${K(p2[k], 90)}` : "").filter(Boolean);
+    if (Array.isArray(p2.ilgiler) && p2.ilgiler.length) alan.unshift(`ilgiler: ${p2.ilgiler.slice(0, 6).join(", ")}`);
+    if (alan.length) b.push(`PROFİL 2: ${alan.join("; ")}`);
+  }
+  // BDT ve bireyi tanıma
+  const bdt = (ctx.bdtAnaliz || []).filter(ayni);
+  if (bdt.length) {
+    const kat = {}; bdt.forEach(x => { const k = (BDT_CARPITMA_KATEGORILERI.find(c => c.key === x.kategori) || {}).ad || x.kategori; (kat[k] = kat[k] || []).push(x.ifade); });
+    b.push(`\nBDT ÇARPITMALARI (${bdt.length}): ${Object.entries(kat).map(([k, l]) => `${k} ×${l.length} (örn. "${K(l[0], 70)}")`).join("; ")}`);
+  } else b.push("\nBDT ÇARPITMALARI: kayıt yok.");
+  const bt = (ctx.bireyiTanima || []).filter(ayni);
+  if (bt.length) {
+    const kat = {}; bt.forEach(x => { const k = (BIREYI_TANIMA_KATEGORILER.find(c => c.key === x.kategori) || {}).label || x.kategori; (kat[k] = kat[k] || []).push(x.metin); });
+    b.push(`BİREYİ TANIMA (${bt.length}): ${Object.entries(kat).map(([k, l]) => `${k}: ${l.slice(0, 2).map(t => K(t, 70)).join(" / ")}`).join("; ")}`);
+  }
+  // Testler
+  const testler = (typeof butunlesikTestKayitlari === "function" ? butunlesikTestKayitlari(ctx.testKayitlari, ad, sinif, no) : pdrSozlukOku(ctx.testKayitlari, ad, sinif, no)) || [];
+  if (testler.length) {
+    b.push(`\nTESTLER (${testler.length}):`);
+    testler.slice().sort((a, c) => ksTarihAnahtar(c.tarih).localeCompare(ksTarihAnahtar(a.tarih))).slice(0, 8).forEach(t => {
+      const v = t.veri || {};
+      const sayi = ["toplamPuan", "puan", "yuzdelik", "genelYuzde"].filter(k => v[k] !== undefined && v[k] !== null && v[k] !== "").map(k => `${k} ${v[k]}`);
+      const yazi = ["sonuc", "yorum", "genelYorum", "degerlendirme", "duzey", "seviye", "ozet"].map(k => typeof v[k] === "string" ? v[k] : "").filter(Boolean).slice(0, 1).map(x => K(x, 140));
+      b.push(`• ${t.testAdi || t.tip} (${t.tarih || "?"})${sayi.length ? ": " + sayi.join(", ") : ""}${yazi.length ? " — " + yazi[0] : ""}${t.not ? " · not: " + K(t.not, 80) : ""}`);
+    });
+  } else b.push("\nTESTLER: uygulanmış test kaydı yok.");
+  // Devamsızlık ve olaylar
+  const ogr = (ctx.ogrenciler || []).find(x => pdrAyniOgrenci(x.studentName, x.className, ad, sinif));
+  const dv = ogr && ogr.devamsizlikGecmisi || [];
+  if (dv.length) { const s2 = dv[dv.length - 1]; b.push(`\nDEVAMSIZLIK: son kayıt ${s2.tarih}: ${s2.gun} gün${dv.length > 1 ? ` (önceki ${dv[dv.length - 2].gun})` : ""}`); }
+  const ol = ogr && ogr.olayKayitlari || [];
+  if (ol.length) b.push(`OLAY/TUTANAK (${ol.length}): ${ol.slice(-3).map(x => `${x.tarih || ""} ${K(x.tur || x.baslik || x.aciklama || x.metin, 60)}`).join(" | ")}`);
+  // Risk / müdahale / sevk / uyum
+  const rl = (ctx.riskListesi || []).filter(ayni);
+  b.push(`\nRİSK KAYITLARI: ${rl.length ? rl.map(r => `${r.riskTuru} (${r.oncelik}${r.kapandi ? ", kapandı" : ", aktif"}${r.tarih ? ", " + r.tarih : ""})`).join("; ") : "yok"}`);
+  const ml = pdrSozlukOku(ctx.mudahalePlan, ad, sinif) || [];
+  b.push(`MÜDAHALE PLANLARI: ${ml.length ? ml.map(m => `${K(m.hedef, 90)} [${m.durum}${m.tarih ? ", " + m.tarih : ""}]`).join("; ") : "yok"}`);
+  const sv = (ctx.sevkler || []).filter(ayni);
+  if (sv.length) b.push(`SEVKLER: ${sv.map(x => `${x.kurum || x.sevkYeri || "sevk"} (${x.tarih || ""}${x.sonucBekleniyor ? ", sonuç bekleniyor" : ""})`).join("; ")}`);
+  const uy = (ctx.uyumIzleme || []).filter(ayni);
+  if (uy.length) b.push(`UYUM İZLEME: ${uy.length} kayıt`);
+  return b.join("\n");
 }
 function ksTarihSiralaAlan(alan) { return (a, b) => ksTarihAnahtar(a[alan]).localeCompare(ksTarihAnahtar(b[alan])); }
 
@@ -10494,6 +10582,7 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - Bir iş için gereken araçları aynı yanıtta birlikte çağırabilirsin.
 - Danışman tarihi "yarın", "cuma" gibi söylerse bugünün tarihine göre GG.AA.YYYY olarak hesapla.
 - "Bugün kimlerle ilgilenmeliyim", "öncelikler" gibi sorularda şu dört listeye birlikte bak: riskli, hatirlatmalar (gecikmişler önce), gorusulmeyen ve son_gorusmeler. Öncelik sırası: kriz/yüksek risk → gecikmiş hatırlatma → uzun süredir görüşülmeyen riskli öğrenci → yeni takip gerektirenler.
+- Bir öğrenci için risk değerlendirmesi, müdahale planı, seans hazırlığı, süpervizyon ya da veli yazısı istendiğinde ÖNCE ogrenci_dosyasi aracını çağır. Görüşme geçmişini, akademik gidişi (bu yılın ve geçmiş dönemin denemeleri, yıl sonu not ortalamaları), BDT çarpıtmalarını, bireyi tanıma bilgilerini, test sonuçlarını, devamsızlığı ve önceki risk/müdahale kayıtlarını BİRLİKTE değerlendir. Önerinin hangi verilere dayandığını kısaca belirt; olmayan veri için "… kaydı yok" de, uydurma.
 - Kodları her zaman eksiksiz yaz: "Öğrenci-11, Öğrenci-12" gibi; "11, 12 ve 13" diye kısaltma (kısaltılan kod danışmanın ekranında gerçek ada çevrilemez).
 ${ekranModu ? `- Danışman bir kayıt eklemeni ya da yazmanı isterse (görüşme notu, hatırlatma, risk, müdahale planı) [EKRANDA DOLDURUR] araçlarını kullan: formu danışmanın gözü önünde doldurursun, kayıt düğmesine danışman basar. Bu araçlardan bir yanıtta YALNIZCA BİRİNİ çağır; sonra danışmana formu kontrol edip kaydetmesini söyle.
 - Danışman bir ekranı "aç", "göster", "götür" derse ekranda_ac kullan.` : `- Danışman bir ekranı "aç", "göster", "götür" derse ekranda_ac kullan.`}
@@ -10962,19 +11051,32 @@ async function ksEkranRisk(o, g) {
     return "Risk formu ekranda hazırlandı; danışman 'Kapalı Sistemle Analiz Et ve Kaydet'e basacak (henüz kaydedilmedi).";
   });
 }
-async function ksEkranMudahale(o) {
+async function ksEkranMudahale(o, g) {
+  g = g || {};
   return ksEkranCalistir("Müdahale planı", async () => {
     await ksEkranSekme("mudahale", o);
     const h0 = document.querySelector('[data-asistan="mud-hedef"]');
     const secili0 = document.querySelector('[data-asistan="mud-secili"]');
     if (h0 && h0.value.trim() && !(secili0 && ksEkranAyniOgr(secili0, o))) throw new Error("Müdahale ekranında kaydedilmemiş bir plan taslağı var. Önce onu kaydet ya da temizle.");
     await ksEkranOgrenciSec("mud", o);
-    const kb = await ksEkranBul('[data-asistan="mud-kapali"]');
-    if (!kb) throw new Error("Kapalı sistem düğmesi bulunamadı.");
-    ksEkranBalon("🤖 Kapalı sistemle plan hazırlanıyor…");
-    await ksEkranTikla(kb);
-    const h = await ksEkranBul('[data-asistan="mud-hedef"]');
-    if (h) await ksEkranGit(h);
+    if (String(g.hedef || "").trim()) {
+      // Asistanın öğrenci dosyasına dayanarak yazdığı plan
+      const h = await ksEkranBul('[data-asistan="mud-hedef"]'); if (!h) throw new Error("Hedef alanı bulunamadı.");
+      ksEkranBalon("🤖 Hedef yazılıyor…"); await ksEkranYaz(h, g.hedef);
+      const ad2 = await ksEkranBul('[data-asistan="mud-adimlar"]');
+      if (ad2 && g.adimlar) { ksEkranBalon("🤖 Müdahale adımları yazılıyor…"); await ksEkranYaz(ad2, String(g.adimlar).replace(/\\n/g, "\n")); }
+      const su = await ksEkranBul('[data-asistan="mud-sure"]');
+      if (su && g.sure) await ksEkranYaz(su, g.sure);
+      const on = await ksEkranBul('[data-asistan="mud-oncelik"]');
+      if (on && ["Yüksek", "Orta", "Düşük"].includes(g.oncelik)) await ksEkranSec(on, g.oncelik);
+    } else {
+      const kb = await ksEkranBul('[data-asistan="mud-kapali"]');
+      if (!kb) throw new Error("Kapalı sistem düğmesi bulunamadı.");
+      ksEkranBalon("🤖 Kapalı sistemle plan hazırlanıyor…");
+      await ksEkranTikla(kb);
+      const h = await ksEkranBul('[data-asistan="mud-hedef"]');
+      if (h) await ksEkranGit(h);
+    }
     const k = await ksEkranBul('[data-asistan="mud-kaydet"]');
     if (!k) throw new Error("Planı Kaydet düğmesi bulunamadı.");
     await ksEkranGit(k);
@@ -21922,16 +22024,16 @@ ${kademe ? "Planı öğrencinin yaş/gelişim dönemine uygun şekilde oluştur.
             <input data-asistan="mud-hedef" placeholder="örn. 3 haftada sınav kaygısını yönetebilir hale gelme" value={form.hedef} onChange={e=>setForm(f=>({...f,hedef:e.target.value}))} style={{...inp,marginBottom:10}} />
 
             <label style={lbl}>MÜDAHALE ADIMLARI</label>
-            <textarea placeholder="1. Nefes egzersizi öğret&#10;2. Düşünce kaydı tut&#10;3. Veli görüşmesi yap" value={form.adimlar} onChange={e=>setForm(f=>({...f,adimlar:e.target.value}))} rows={4} style={{...inp,resize:"vertical",marginBottom:10}} />
+            <textarea data-asistan="mud-adimlar" placeholder="1. Nefes egzersizi öğret&#10;2. Düşünce kaydı tut&#10;3. Veli görüşmesi yap" value={form.adimlar} onChange={e=>setForm(f=>({...f,adimlar:e.target.value}))} rows={4} style={{...inp,resize:"vertical",marginBottom:10}} />
 
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
               <div>
                 <label style={lbl}>SÜRE</label>
-                <input placeholder="örn. 4 hafta" value={form.sure} onChange={e=>setForm(f=>({...f,sure:e.target.value}))} style={inp} />
+                <input data-asistan="mud-sure" placeholder="örn. 4 hafta" value={form.sure} onChange={e=>setForm(f=>({...f,sure:e.target.value}))} style={inp} />
               </div>
               <div>
                 <label style={lbl}>ÖNCELİK</label>
-                <select value={form.oncelik} onChange={e=>setForm(f=>({...f,oncelik:e.target.value}))} style={{...inp,height:38}}>
+                <select data-asistan="mud-oncelik" value={form.oncelik} onChange={e=>setForm(f=>({...f,oncelik:e.target.value}))} style={{...inp,height:38}}>
                   {["Yüksek","Orta","Düşük"].map(o=><option key={o}>{o}</option>)}
                 </select>
               </div>
@@ -25758,7 +25860,8 @@ const PDR_ASISTAN_SR = typeof window !== "undefined" ? (window.SpeechRecognition
 function AsistanEkrani({
   kayitliListesi, records, setRecords, riskListesi, setRiskListesi, hatirlatmalar, setHatirlatmalar,
   mudahalePlan, setMudahalePlan, profiles, profiles2, denemeler, sevkler, testKayitlari,
-  akademikTaramalar, liseTaramalar, benlikOlcekleri, sinavTuru, aktifYil, setTab
+  akademikTaramalar, liseTaramalar, benlikOlcekleri, sinavTuru, aktifYil, setTab,
+  bdtAnaliz, bireyiTanima, ogrenciler, uyumIzleme
 }) {
   const S = PDR_ASISTAN_SOHBET;
   const [, yenile] = useState(0);
@@ -25773,31 +25876,55 @@ function AsistanEkrani({
   const tanimaRef = useRef(null);
   const altRef = useRef(null);
 
-  useEffect(() => { S.dinle = yenile; return () => { if (S.dinle === yenile) S.dinle = null; try { tanimaRef.current && tanimaRef.current.abort(); } catch (e) {} pdrAsistanSustur(); }; }, []);
+  useEffect(() => { S.dinle = yenile; return () => { if (S.dinle === yenile) S.dinle = null; sesDurdur.current = true; try { tanimaRef.current && tanimaRef.current.abort(); } catch (e) {} pdrAsistanSustur(); }; }, []);
 
   function sesliOku(i, metin) {
     if (okunan === i) { pdrAsistanSustur(); setOkunan(null); return; }
     if (pdrAsistanKonus(metin, () => setOkunan(o => (o === i ? null : o)))) setOkunan(i);
     else alert("Bu tarayıcı sesli okumayı desteklemiyor.");
   }
-  function dinle() {
-    if (dinliyor) { try { tanimaRef.current && tanimaRef.current.stop(); } catch (e) {} return; }
-    if (!PDR_ASISTAN_SR) { alert("Bu tarayıcı sesle yazmayı desteklemiyor. (Android'de Chrome, iPhone'da Safari kullan.)"); return; }
-    pdrAsistanSustur(); setOkunan(null);
+  // Sesle yazma: kısa duraklamalarda kapanmaz; danışman "⏹ Bitir"e basana kadar
+  // dinlemeyi kendiliğinden yeniden başlatır (en fazla 5 dk). Sesli modda Bitir'e
+  // basınca gönderilir.
+  const sesBirikim = useRef(""), sesAra = useRef(""), sesDurdur = useRef(true), sesBaslangic = useRef(0);
+  function sesBitir() {
+    setDinliyor(false);
+    const t = (sesBirikim.current + sesAra.current).trim();
+    sesAra.current = "";
+    if (t) setGirdi(t);
+    if (ayar.sesliMod && t) gonder(t);
+  }
+  function sesBaslat() {
     const r = new PDR_ASISTAN_SR();
     r.lang = "tr-TR"; r.continuous = false; r.interimResults = true;
-    const bas = girdi ? girdi.replace(/\s+$/, "") + " " : "";
-    let son = "";
-    r.onresult = (e) => { son = Array.from(e.results).map(x => x[0].transcript).join(" "); setGirdi(bas + son); };
-    r.onerror = (e) => { setDinliyor(false); if (e && e.error === "not-allowed") alert("Mikrofon izni verilmedi. Tarayıcı ayarlarından mikrofona izin ver."); };
+    r.onresult = (e) => {
+      let kesin = "", gecici = "";
+      for (let k = 0; k < e.results.length; k++) { const x = e.results[k]; if (x.isFinal) kesin += x[0].transcript; else gecici += x[0].transcript; }
+      if (kesin.trim()) { sesBirikim.current += kesin.trim() + " "; sesAra.current = ""; } else sesAra.current = gecici;
+      setGirdi((sesBirikim.current + sesAra.current).trimStart());
+    };
+    r.onerror = (e) => {
+      if (e && (e.error === "not-allowed" || e.error === "service-not-allowed")) { sesDurdur.current = true; alert("Mikrofon izni verilmedi. Tarayıcı ayarlarından mikrofona izin ver."); }
+    };
     r.onend = () => {
-      setDinliyor(false);
-      // Sesli modda konuşma bitince kendiliğinden gönderilir
-      if (ayar.sesliMod && son.trim()) gonder(bas + son);
+      if (!sesDurdur.current && Date.now() - sesBaslangic.current < 300000) {
+        if (sesAra.current.trim()) { sesBirikim.current += sesAra.current.trim() + " "; sesAra.current = ""; }
+        try { sesBaslat(); return; } catch (e) {}
+      }
+      sesBitir();
     };
     tanimaRef.current = r;
-    try { r.start(); setDinliyor(true); } catch (e) { setDinliyor(false); }
+    r.start();
   }
+  function dinle() {
+    if (dinliyor) { sesDurdur.current = true; try { tanimaRef.current && tanimaRef.current.stop(); } catch (e) { sesBitir(); } return; }
+    if (!PDR_ASISTAN_SR) { alert("Bu tarayıcı sesle yazmayı desteklemiyor. (Android'de Chrome, iPhone'da Safari kullan.)"); return; }
+    pdrAsistanSustur(); setOkunan(null);
+    sesBirikim.current = girdi.trim() ? girdi.trim() + " " : ""; sesAra.current = "";
+    sesDurdur.current = false; sesBaslangic.current = Date.now();
+    try { sesBaslat(); setDinliyor(true); } catch (e) { sesDurdur.current = true; setDinliyor(false); }
+  }
+
   useEffect(() => { if (altRef.current && altRef.current.scrollIntoView) altRef.current.scrollIntoView({ behavior: "smooth", block: "end" }); }, [S.gorunen.length, S.adimlar.length, !!S.onay]);
 
   const inp = { width: "100%", padding: "9px 11px", borderRadius: 9, border: `1px solid ${BORDER}`, fontSize: 13, boxSizing: "border-box", background: CARD, color: TEXT, fontFamily: "inherit" };
@@ -25809,6 +25936,7 @@ function AsistanEkrani({
     return {
       records, riskListesi, hatirlatmalar, mudahalePlan, profiles, profiles2, denemeler, sevkler, testKayitlari,
       akademikTaramalar, liseTaramalar, benlikOlcekleri, sinavTuru, aktifYil, ogrenciListesi: kayitliListesi,
+      bdtAnaliz, bireyiTanima, ogrenciler, uyumIzleme,
       kaydet: {
         records: async (l) => { setRecords(l); await saveRecords(l); },
         hatirlatmalar: async (l) => { setHatirlatmalar(l); await saveHatirlatmalar(l); },
@@ -26090,16 +26218,16 @@ function AsistanEkrani({
           onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent || "")) { e.preventDefault(); gonder(); } }}
           placeholder={S.calisiyor ? "Asistan çalışıyor…" : "Ne yapayım? Örn: Ali için yarınki görüşmeye hazırlık yap"} style={{ ...inp, resize: "vertical", marginBottom: 6 }} />
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={dinle} disabled={S.calisiyor} title="Sesle yaz" style={{ flex: "0 0 auto", padding: "11px 14px", borderRadius: 10, border: dinliyor ? "none" : `2px solid ${ACCENT}`, background: dinliyor ? "#B42318" : "#fff", color: dinliyor ? "#fff" : ACCENT, fontWeight: 800, fontSize: 14, cursor: "pointer" }}>{dinliyor ? "⏹ Dinliyorum" : "🎤 Konuş"}</button>
+          <button onClick={dinle} disabled={S.calisiyor} title="Sesle yaz" style={{ flex: "0 0 auto", padding: "11px 14px", borderRadius: 10, border: dinliyor ? "none" : `2px solid ${ACCENT}`, background: dinliyor ? "#B42318" : "#fff", color: dinliyor ? "#fff" : ACCENT, fontWeight: 800, fontSize: 14, cursor: "pointer" }}>{dinliyor ? (ayar.sesliMod ? "⏹ Bitir ve gönder" : "⏹ Bitir") : "🎤 Konuş"}</button>
           <button onClick={() => gonder()} disabled={S.calisiyor || !girdi.trim()} style={{ flex: 1, padding: "11px", borderRadius: 10, border: "none", background: S.calisiyor || !girdi.trim() ? BORDER : ACCENT, color: "#fff", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>{S.calisiyor ? "⏳ Çalışıyor…" : "➤ Gönder"}</button>
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
           <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: TEXT, cursor: "pointer" }}>
             <input type="checkbox" checked={!!ayar.sesliMod} onChange={e => { ayarDegis({ sesliMod: e.target.checked }); if (!e.target.checked) { pdrAsistanSustur(); setOkunan(null); } }} />
-            🔊 Sesli mod <span style={{ color: MUTED }}>(cevapları okur, konuşman bitince gönderir)</span>
+            🔊 Sesli mod <span style={{ color: MUTED }}>(cevapları okur, Bitir'e basınca gönderir)</span>
           </label>
         </div>
-        {dinliyor && <div style={{ fontSize: 10.5, color: MUTED, marginTop: 4 }}>🎤 Ses tanıma tarayıcının servisiyle (Chrome'da Google) yapılır. Öğrenci adını söylemek yerine sonra yazman daha güvenli.</div>}
+        {dinliyor && <div style={{ fontSize: 10.5, color: MUTED, marginTop: 4 }}><b style={{ color: "#B42318" }}>● Dinliyorum</b> — düşünmek için duraklayabilirsin; bitince <b>⏹ Bitir</b>'e bas. Ses tanıma tarayıcının servisiyle (Chrome'da Google) yapılır. Öğrenci adını söylemek yerine sonra yazman daha güvenli.</div>}
       </div>
       <div ref={altRef} style={{ height: 90 }} />
     </div>
@@ -36913,6 +37041,7 @@ function pdrBaslangicSekmesi() {
             denemeler={denemeler} sevkler={sevkler} testKayitlari={testKayitlari}
             akademikTaramalar={akademikTaramalar} liseTaramalar={liseTaramalar} benlikOlcekleri={benlikOlcekleri}
             sinavTuru={sinavTuru} aktifYil={aktifYil} setTab={setTab}
+            bdtAnaliz={bdtAnaliz} bireyiTanima={bireyiTanima} ogrenciler={ogrenciler} uyumIzleme={uyumIzleme}
           />
         )}
 

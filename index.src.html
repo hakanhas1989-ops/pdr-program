@@ -10605,7 +10605,14 @@ const KS_ASISTAN_ARACLAR = {
         ...(g.konu ? { topic: g.konu } : {}), ...(["Öğrenci", "Veli", "Öğretmen"].includes(g.tur) ? { meetingType: g.tur } : {}),
         duzenlemeTarihi: today(), duzenleyen: "asistan" });
       ctx.records = guncel; await ctx.kaydet.records(guncel);
-      return `Görüşme düzeltildi (${r.date}${yt ? " → " + yt : ""}).${r.grupKatilimcilari && r.grupKatilimcilari.length ? ` Bu bir grup görüşmesi; diğer öğrencilerin (${r.grupKatilimcilari.join(", ")}) kayıtları ayrı, gerekirse onları da düzeltmeyi öner.` : ""} Bu nota dayanan risk/müdahale kaydı varsa yeniden değerlendirme gerekebilir.`;
+      let tasimaNotu = "";
+      if (yt && yt !== r.date) {
+        const t = pdrGorusmeTarihTasi(r, r.date, yt, guncel, { bdtAnaliz: ctx.bdtAnaliz, bireyiTanima: ctx.bireyiTanima, uyumIzleme: ctx.uyumIzleme });
+        for (const ad of ["bdtAnaliz", "bireyiTanima", "uyumIzleme"]) if (t.listeler[ad]) { ctx[ad] = t.listeler[ad]; await ctx.kaydet[ad](t.listeler[ad]); }
+        if (t.tasindi) tasimaNotu = ` O güne bağlı ${t.tasindi} kayıt (BDT/bireyi tanıma/uyum) da yeni tarihe taşındı.`;
+        if (t.atlandi) tasimaNotu = ` Eski tarihte bu öğrencinin başka görüşmesi de olduğu için o güne bağlı BDT/bireyi tanıma/uyum kayıtları taşınmadı; danışmana söyle.`;
+      }
+      return `Görüşme düzeltildi (${r.date}${yt ? " → " + yt : ""}).${tasimaNotu}${r.grupKatilimcilari && r.grupKatilimcilari.length ? ` Bu bir grup görüşmesi; diğer öğrencilerin (${r.grupKatilimcilari.join(", ")}) kayıtları ayrı, gerekirse onları da düzeltmeyi öner.` : ""} Bu nota dayanan risk/müdahale kaydı varsa yeniden değerlendirme gerekebilir.`;
     },
   },
   // ── Ekranda göstererek çalışan araçlar: formu danışmanın gözü önünde doldurur, Kaydet'e danışman basar ──
@@ -26176,6 +26183,9 @@ function pdrAsistanCtx(p) {
       hatirlatmalar: async (l) => { p.setHatirlatmalar(l); await saveHatirlatmalar(l); },
       riskListesi: async (l) => { p.setRiskListesi(l); await saveRiskListesi(l); },
       mudahalePlan: async (l) => { p.setMudahalePlan(l); await saveMudahalePlan(l); },
+      bdtAnaliz: async (l) => { if (p.setBdtAnaliz) p.setBdtAnaliz(l); await saveBdtAnaliz(l); },
+      bireyiTanima: async (l) => { if (p.setBireyiTanima) p.setBireyiTanima(l); await saveBireyiTanima(l); },
+      uyumIzleme: async (l) => { if (p.setUyumIzleme) p.setUyumIzleme(l); await saveUyumIzleme(l); },
     },
   };
 }
@@ -26255,7 +26265,7 @@ function AsistanEkrani({
   kayitliListesi, records, setRecords, riskListesi, setRiskListesi, hatirlatmalar, setHatirlatmalar,
   mudahalePlan, setMudahalePlan, profiles, profiles2, denemeler, sevkler, testKayitlari,
   akademikTaramalar, liseTaramalar, benlikOlcekleri, sinavTuru, aktifYil, setTab,
-  bdtAnaliz, bireyiTanima, ogrenciler, uyumIzleme
+  bdtAnaliz, bireyiTanima, ogrenciler, uyumIzleme, setBdtAnaliz, setBireyiTanima, setUyumIzleme
 }) {
   const S = PDR_ASISTAN_SOHBET;
   const [, yenile] = useState(0);
@@ -26329,7 +26339,8 @@ function AsistanEkrani({
   function ctxOlustur() {
     return pdrAsistanCtx({ kayitliListesi, records, setRecords, riskListesi, setRiskListesi, hatirlatmalar, setHatirlatmalar,
       mudahalePlan, setMudahalePlan, profiles, profiles2, denemeler, sevkler, testKayitlari,
-      akademikTaramalar, liseTaramalar, benlikOlcekleri, sinavTuru, aktifYil, bdtAnaliz, bireyiTanima, ogrenciler, uyumIzleme });
+      akademikTaramalar, liseTaramalar, benlikOlcekleri, sinavTuru, aktifYil, bdtAnaliz, bireyiTanima, ogrenciler, uyumIzleme,
+      setBdtAnaliz, setBireyiTanima, setUyumIzleme });
   }
 
   function gonder(metinVer) { return gonderAyar(metinVer, ayar); }
@@ -27753,9 +27764,18 @@ function OgrenciYonetim({
     await saveRecords(guncel);
   }
   async function handleGorusmeGuncelle(id, patch) {
+    const eski = records.find(r => r.id === id);
     const guncel = records.map(r => r.id === id ? { ...r, ...patch } : r);
     setRecords(guncel);
     await saveRecords(guncel);
+    // Tarih değiştiyse o güne bağlı BDT / bireyi tanıma / uyum izleme kayıtları da taşınır
+    if (eski && patch.date && patch.date !== eski.date) {
+      const t = pdrGorusmeTarihTasi(eski, eski.date, patch.date, guncel, { bdtAnaliz, bireyiTanima, uyumIzleme });
+      if (t.listeler.bdtAnaliz) { setBdtAnaliz(t.listeler.bdtAnaliz); await saveBdtAnaliz(t.listeler.bdtAnaliz); }
+      if (t.listeler.bireyiTanima) { setBireyiTanima(t.listeler.bireyiTanima); await saveBireyiTanima(t.listeler.bireyiTanima); }
+      if (t.listeler.uyumIzleme) { setUyumIzleme(t.listeler.uyumIzleme); await saveUyumIzleme(t.listeler.uyumIzleme); }
+      if (t.atlandi) alert(`ℹ️ Görüşme tarihi değişti. Ancak ${eski.date} tarihinde bu öğrencinin başka bir görüşmesi daha olduğu için o güne ait BDT / bireyi tanıma / uyum kayıtları taşınmadı; gerekiyorsa onları kendi ekranlarından düzelt.`);
+    }
   }
 
   // Geçmiş Dönem (7. sınıf) deneme ortalamasını manuel girmek/düzeltmek için —
@@ -34409,6 +34429,26 @@ function StatBar({ label, value, max, color = ACCENT }) {
   );
 }
 
+// Görüşmenin tarihi değişince o güne bağlı BDT, bireyi tanıma ve uyum izleme kayıtları
+// da yeni tarihe taşınır. Aynı öğrencinin eski tarihte başka bir görüşmesi kalıyorsa
+// kayıtların hangi görüşmeye ait olduğu bilinemeyeceği için taşınmaz (atlandi: true).
+function pdrGorusmeTarihTasi(rec, eskiTarih, yeniTarih, guncelRecords, listeler) {
+  if (!rec || !eskiTarih || !yeniTarih || eskiTarih === yeniTarih) return { tasindi: 0, atlandi: false, listeler: {} };
+  const ogr = (x) => pdrAyniOgrenci(x.studentName, x.className, rec.studentName, rec.className, x.numara, rec.numara);
+  const bagli = (x) => x && x.tarih === eskiTarih && ogr(x);
+  const bekleyen = Object.values(listeler).reduce((t, l) => t + (Array.isArray(l) ? l.filter(bagli).length : 0), 0);
+  const baskaGorusme = (guncelRecords || []).some(r => r.id !== rec.id && r.date === eskiTarih && ogr(r));
+  if (baskaGorusme) return { tasindi: 0, atlandi: bekleyen > 0, listeler: {} };
+  const out = {}; let tasindi = 0;
+  Object.entries(listeler).forEach(([ad, l]) => {
+    if (!Array.isArray(l)) return;
+    let n = 0;
+    const y = l.map(x => bagli(x) ? (n++, { ...x, tarih: yeniTarih }) : x);
+    if (n) { out[ad] = y; tasindi += n; }
+  });
+  return { tasindi, atlandi: false, listeler: out };
+}
+
 function RecordCard({ rec, records, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz, bireyiTanima, setBireyiTanima, uyumIzleme, setUyumIzleme, aktifYil, kayitliListesi, riskListesi, denemeler, konuHaritasiVerisi }) {
   const [open, setOpen] = useState(false);
   const [duzenle, setDuzenle] = useState(false);
@@ -37595,6 +37635,7 @@ function pdrBaslangicSekmesi() {
             akademikTaramalar={akademikTaramalar} liseTaramalar={liseTaramalar} benlikOlcekleri={benlikOlcekleri}
             sinavTuru={sinavTuru} aktifYil={aktifYil} setTab={setTab}
             bdtAnaliz={bdtAnaliz} bireyiTanima={bireyiTanima} ogrenciler={ogrenciler} uyumIzleme={uyumIzleme}
+            setBdtAnaliz={setBdtAnaliz} setBireyiTanima={setBireyiTanima} setUyumIzleme={setUyumIzleme}
           />
         )}
         {/* ── PDR ASİSTANI: her ekranda bas-konuş düğmesi ── */}
@@ -37610,6 +37651,7 @@ function pdrBaslangicSekmesi() {
             akademikTaramalar={akademikTaramalar} liseTaramalar={liseTaramalar} benlikOlcekleri={benlikOlcekleri}
             sinavTuru={sinavTuru} aktifYil={aktifYil} setTab={setTab}
             bdtAnaliz={bdtAnaliz} bireyiTanima={bireyiTanima} ogrenciler={ogrenciler} uyumIzleme={uyumIzleme}
+            setBdtAnaliz={setBdtAnaliz} setBireyiTanima={setBireyiTanima} setUyumIzleme={setUyumIzleme}
           />
         )}
 

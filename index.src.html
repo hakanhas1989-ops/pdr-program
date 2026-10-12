@@ -8293,7 +8293,7 @@ function ksTarihYaz(t) {
 }
 
 // ── Ana işlev ─────────────────────────────────────────────────────────────────
-function pdrKapaliRiskAnalizi(riskForm, gorusmeler = [], profil1 = null, kademe = "", denemeOzet = null) {
+function pdrKapaliRiskAnalizi(riskForm, gorusmeler = [], profil1 = null, kademe = "", denemeOzet = null, ek = null) {
   riskForm = riskForm || {};
   const notlar = [...(gorusmeler || [])].filter(g => g && (g.summary || "").trim())
     .sort(ksTarihSirala);
@@ -8359,6 +8359,20 @@ function pdrKapaliRiskAnalizi(riskForm, gorusmeler = [], profil1 = null, kademe 
   const gucluAlan = Object.entries(skor).filter(([, v]) => Number(v) >= 4).map(([k]) => KS_PROFIL_AD[k] || k);
   if (denemeRisk === "yuksek") { islev.add("akademik"); turPuan["Akademik"] = (turPuan["Akademik"] || 0) + 2; }
   else if (denemeRisk === "orta") turPuan["Akademik"] = (turPuan["Akademik"] || 0) + 0.5;
+  // 5b) Görüşme dışı dosya verileri (yıl sonu ortalamaları, geçmiş denemeler, testler, BDT, devamsızlık, olaylar)
+  const ekNot = [], ekKoruyucu = []; let ekPuan = 0;
+  if (ek) {
+    const ekle = (t, p) => { turPuan[t] = (turPuan[t] || 0) + p; };
+    if (ek.yilSonuDusus !== null && ek.yilSonuDusus >= 5) { islev.add("akademik"); ekle("Akademik", 1); ekNot.push(`Yıl sonu not ortalaması ${ek.yilSonu.slice(-2).map(x => x[0] + ". sınıf " + x[1]).join(" → ")} (${ek.yilSonuDusus.toFixed(1)} puan düşüş).`); }
+    if (ek.denemeDususYuzde !== null && ek.denemeDususYuzde >= 10) { ekle("Akademik", 0.5); ekNot.push(`Deneme netleri geçmiş döneme göre %${Math.round(ek.denemeDususYuzde)} düşmüş (geçmiş ort. ${ek.gecmisDenemeOrt}, bu yıl ${ek.buYilDenemeOrt}).`); }
+    if (ek.devamsizlik && ek.devamsizlik.gun >= 10) { islev.add("devam"); if (ek.devamsizlik.gun >= 20) ekle("Devamsızlık", 1.5); ekNot.push(`Devamsızlık ${ek.devamsizlik.gun} gün${ek.devamsizlik.onceki !== null ? ` (önceki kayıt ${ek.devamsizlik.onceki})` : ""}.`); }
+    const tu = (ek.testler || []).filter(t => t.uyari);
+    if (tu.length) { tu.forEach(t => { if (t.alan) ekle(t.alan, 1); }); ekPuan += 0.5; ekNot.push(`Test sonuçlarında dikkat gerektiren: ${tu.slice(0, 3).map(t => `${t.ad}${t.puan !== null ? " (" + t.puan + ")" : ""}${t.yorum ? " — " + t.yorum : ""}`).join("; ")}.`); }
+    if ((ek.bdt || []).length) { if (ek.bdt.length >= 3) ekle("Duygusal", 0.5); ekNot.push(`BDT kayıtlarında ${ek.bdt.length} bilişsel çarpıtma ifadesi (${ek.bdtOzet}).`); }
+    if (ek.olaySon60 >= 2) { ekle("Davranış", 1); ekNot.push(`Son 60 günde ${ek.olaySon60} olay/tutanak kaydı.`); }
+    if ((ek.bt || []).length) ekNot.push(`Bireyi tanıma bilgileri: ${ek.bt.slice(0, 3).map(x => x.metin).join("; ")}.`);
+    if (ek.yilSonu.length && (ek.yilSonuDusus === null || ek.yilSonuDusus < 5) && ek.yilSonu[ek.yilSonu.length - 1][1] >= 85) ekKoruyucu.push(`yıl sonu not ortalamasının yüksek olması (${ek.yilSonu[ek.yilSonu.length - 1][1]})`);
+  }
   const sureVar = gecerli.some(b => b.sure && !b.gecmis);
 
   // 6) Ton değişimi
@@ -8430,6 +8444,7 @@ function pdrKapaliRiskAnalizi(riskForm, gorusmeler = [], profil1 = null, kademe 
   if (aileFaktor.size) puan += 0.5;
   if (cevreFaktor.size) puan += 0.5;
   if (ekranBelirti === "Var" && anaTur !== "Teknoloji-Ekran Bağımlılığı") puan += 0.5;
+  puan += ekPuan;
   puan += { "Yüksek": 1, "Orta": 0, "Düşük": -0.5 }[riskForm.oncelik] || 0;
   if (["Madde Kullanımı", "Travma", "Adli Süreç-Danışmanlık Tedbiri"].includes(anaTur) && anaPuan >= 2) puan += 1;
 
@@ -8497,6 +8512,7 @@ function pdrKapaliRiskAnalizi(riskForm, gorusmeler = [], profil1 = null, kademe 
     koruyucu.push(k.ad);
   }
   if (denemeRisk === "dusuk") koruyucu.push("akademik başarısının iyi düzeyde olması");
+  koruyucu.push(...ekKoruyucu);
   if (n >= 2) koruyucu.push("rehberlik sürecine devam etmesi");
 
   // Adımlar
@@ -8537,6 +8553,7 @@ function pdrKapaliRiskAnalizi(riskForm, gorusmeler = [], profil1 = null, kademe 
     `DEĞİŞİM: ${tonDegisim}`,
     `GEREKÇE: ${tonGerekce}`,
     ...(dayanak.length ? [``, `DAYANAK İFADELER (değerlendirmenin dayandığı notlar):`, ...dayanak] : []),
+    ...(ekNot.length ? [``, `DOSYADAKİ DİĞER VERİLER (görüşme dışı, değerlendirmeye katıldı):`, ...ekNot.map(x => "• " + x)] : []),
     ``,
     `— 🔒 Kapalı Sistem · mesleki yargının yerini tutmaz.`,
   ].join("\n");
@@ -8548,7 +8565,7 @@ function pdrKapaliRiskAnalizi(riskForm, gorusmeler = [], profil1 = null, kademe 
     tonDegisim, cssrs: [...cssrsGuncel], islev: [...islev], puan,
     // Diğer kapalı sistem işlevlerinin (profil, müdahale, seans hazırlık) ortak kullandığı çekirdek
     cekirdek: { turPuan, sirali, turIfade, turGorusme, gecerli, islev: [...islev], koruyucu, aileFaktor: [...aileFaktor], cevreFaktor: [...cevreFaktor],
-      kritikTurler, cssrsMax, ozGecmisVar, sorgulanan, tonKotu, tonIyi, ekranBelirti, ekranGerekce, istismarIpucu, dusukAlan, gucluAlan, notlar, anaTur, ikincil, duzey },
+      kritikTurler, cssrsMax, ozGecmisVar, sorgulanan, tonKotu, tonIyi, ekranBelirti, ekranGerekce, istismarIpucu, dusukAlan, gucluAlan, notlar, anaTur, ikincil, duzey, ek, ekNot },
   };
 }
 // ===== KAPALI SİSTEM: RİSK ANALİZİ BİTİŞ =====
@@ -8559,8 +8576,60 @@ function pdrKapaliRiskAnalizi(riskForm, gorusmeler = [], profil1 = null, kademe 
 // Not çözümlemesi risk analiziyle aynı çekirdeği kullanır (pdrKapaliRiskAnalizi().cekirdek).
 
 // Notlardaki ifadeleri tek bir çekirdek analizine dönüştürür
-function ksCekirdek(gorusmeler, ekMetin, profil1, kademe, denemeOzet) {
-  return pdrKapaliRiskAnalizi({ riskTuru: "", oncelik: "Orta", aciklama: ekMetin || "" }, gorusmeler || [], profil1 || null, kademe || "", denemeOzet || null);
+function ksCekirdek(gorusmeler, ekMetin, profil1, kademe, denemeOzet, ek) {
+  return pdrKapaliRiskAnalizi({ riskTuru: "", oncelik: "Orta", aciklama: ekMetin || "" }, gorusmeler || [], profil1 || null, kademe || "", denemeOzet || null, ek || null);
+}
+
+// ── Görüşme dışı dosya verileri ──────────────────────────────────────────────
+// Program açıkken App bu kaynağı güncel tutar (bkz. PDR_EKRAN güncellemesi).
+const PDR_EK_KAYNAK = {};
+const KS_TEST_ALAN = [[/kayg|anksiyete|scas|sinav kayg|korku/, "Duygusal"], [/depres|umutsuz|beck/, "Duygusal"], [/dikkat|d2|cdt|dehb|cas\b/, "Akademik"], [/akran|zorbal/, "Akran-Zorbalık"], [/ogrenme|oog|bilpro|okuma|disleksi/, "Özel Öğrenme Güçlüğü"]];
+function ksEkVeriTopla(ad, sinif, numara, kaynak) {
+  const K = kaynak || PDR_EK_KAYNAK;
+  if (!ad || !K || !Object.keys(K).length) return null;
+  const ayni = (x) => x && pdrAyniOgrenci(x.studentName, x.className, ad, sinif);
+  const ek = { bdt: [], bdtOzet: "", bt: [], testler: [], yilSonu: [], yilSonuDusus: null, gecmisDenemeOrt: null, buYilDenemeOrt: null, denemeDususYuzde: null, zayifDersler: [], devamsizlik: null, olaySon60: 0 };
+  try {
+    ek.bdt = (K.bdtAnaliz || []).filter(ayni).map(x => ({ kat: ((typeof BDT_CARPITMA_KATEGORILERI !== "undefined" && BDT_CARPITMA_KATEGORILERI.find(c => c.key === x.kategori)) || {}).ad || x.kategori, ifade: x.ifade }));
+    if (ek.bdt.length) { const say = {}; ek.bdt.forEach(x => { say[x.kat] = (say[x.kat] || 0) + 1; }); ek.bdtOzet = Object.entries(say).sort((a, b) => b[1] - a[1]).map(([k, v]) => k + (v > 1 ? " ×" + v : "")).join(", "); }
+    ek.bt = (K.bireyiTanima || []).filter(ayni).map(x => ({ kat: x.kategori, metin: String(x.metin || "").slice(0, 120) }));
+    const tl = (typeof butunlesikTestKayitlari === "function" ? butunlesikTestKayitlari(K.testKayitlari, ad, sinif, numara) : pdrSozlukOku(K.testKayitlari, ad, sinif, numara)) || [];
+    ek.testler = tl.map(t => {
+      const v = t.veri || {};
+      const puanH = ["toplamPuan", "puan", "yuzdelik", "genelYuzde"].map(k => v[k]).find(x => x !== undefined && x !== null && x !== "");
+      const yorum = ["sonuc", "yorum", "genelYorum", "degerlendirme", "duzey", "seviye", "ozet"].map(k => typeof v[k] === "string" ? v[k] : "").find(Boolean) || "";
+      const ys = ksSade(yorum + " " + (t.not || ""));
+      const uyari = v.riskli === true || (/(yuksek|klinik|risk|agir|siddetli|anlamli|belirgin|riskli|destek gerek|yonlendir)/.test(ys) && !/(risk yok|riskli degil|dusuk risk|normal|olagan|risk saptanmadi)/.test(ys));
+      const ad2 = String(t.testAdi || t.tip || "Test"); const as = ksSade(ad2 + " " + (t.tip || ""));
+      const alan = (KS_TEST_ALAN.find(([re]) => re.test(as)) || [])[1] || null;
+      return { ad: ad2, tarih: t.tarih || "", puan: puanH === undefined ? null : puanH, yorum: yorum.slice(0, 90), uyari, alan };
+    });
+    const p2 = (K.profiles2 || []).find(ayni);
+    if (p2 && p2.gecmisYillar) {
+      ek.yilSonu = Object.entries(p2.gecmisYillar).map(([k, v]) => [k, parseFloat(String(v).replace(",", "."))]).filter(x => !isNaN(x[1])).sort((a, b) => parseInt(a[0]) - parseInt(b[0]));
+      if (ek.yilSonu.length >= 2) ek.yilSonuDusus = ek.yilSonu[ek.yilSonu.length - 2][1] - ek.yilSonu[ek.yilSonu.length - 1][1];
+    }
+    const d = pdrSozlukOku(K.denemeler, ad, sinif, numara) || pdrSozlukOku(K.denemeler, ad, sinif) || {};
+    const dersler = typeof aktifDersler === "function" ? aktifDersler(K.sinavTuru) : [];
+    const buYil = Object.entries(d).filter(([k]) => k !== "7sinif" && !isNaN(parseInt(k))).map(([, nets]) => dersler.reduce((t, x) => t + (parseFloat(nets[x.key]) || 0), 0));
+    if (buYil.length) ek.buYilDenemeOrt = Math.round(buYil.reduce((a, b) => a + b, 0) / buYil.length * 10) / 10;
+    const g = d["7sinif"];
+    if (g) {
+      const gl = g.denemeler ? Object.values(g.denemeler).map(v => parseFloat(v && v.toplam_net)).filter(x => !isNaN(x)) : [];
+      const go = g.ortalama !== undefined && g.ortalama !== "" ? parseFloat(g.ortalama) : (gl.length ? gl.reduce((a, b) => a + b, 0) / gl.length : NaN);
+      if (!isNaN(go)) ek.gecmisDenemeOrt = Math.round(go * 10) / 10;
+    }
+    if (ek.gecmisDenemeOrt && ek.buYilDenemeOrt !== null) ek.denemeDususYuzde = (ek.gecmisDenemeOrt - ek.buYilDenemeOrt) / ek.gecmisDenemeOrt * 100;
+    const sonD = Object.entries(d).filter(([k]) => k !== "7sinif" && !isNaN(parseInt(k))).sort((a, b) => parseInt(b[0]) - parseInt(a[0]))[0];
+    if (sonD) ek.zayifDersler = dersler.map(x => ({ ad: x.label || x.key, oran: (parseFloat(sonD[1][x.key]) || 0) / (x.maks || 20) })).sort((a, b) => a.oran - b.oran).slice(0, 2).filter(x => x.oran < 0.5).map(x => x.ad);
+    const ogr = (K.ogrenciler || []).find(ayni);
+    const dv = ogr && ogr.devamsizlikGecmisi || [];
+    if (dv.length) ek.devamsizlik = { gun: parseFloat(dv[dv.length - 1].gun) || 0, onceki: dv.length > 1 ? (parseFloat(dv[dv.length - 2].gun) || 0) : null, tarih: dv[dv.length - 1].tarih };
+    const ol = ogr && ogr.olayKayitlari || [];
+    ek.olaySon60 = ol.filter(x => { const a = ksTarihAnahtar(x.tarih); if (a === "00000000") return false; const t = new Date(+a.slice(0, 4), +a.slice(4, 6) - 1, +a.slice(6, 8)).getTime(); return Date.now() - t <= 60 * 86400000; }).length;
+  } catch (e) { return null; }
+  const bos = !ek.bdt.length && !ek.bt.length && !ek.testler.length && !ek.yilSonu.length && ek.gecmisDenemeOrt === null && !ek.devamsizlik && !ek.olaySon60 && !ek.zayifDersler.length;
+  return bos ? null : ek;
 }
 
 // ── Boyut sözlüğü: olumlu (+) ve olumsuz (−) göstergeler ─────────────────────
@@ -9211,9 +9280,9 @@ const KS_PLAN = {
 // Türe göre MEB müdahale programı anahtarı (kişisel programdaki kütüphane)
 const KS_PROGRAM_ESLE = { "Akran-Zorbalık": "zorbalik-maruz-kalan", "Davranış": "zorbalik-yapan", "Duygusal": "psikolojik-saglamlik", "Travma": "psikolojik-saglamlik", "Yas-Kayıp": "psikolojik-saglamlik", "Aile": "psikolojik-saglamlik", "Akademik": "akademik-beceriler", "Özel Öğrenme Güçlüğü": "akademik-beceriler", "Göç-Uyum Süreci": "sosyal-duygusal" };
 
-function pdrKapaliMudahalePlani({ gorusmeler = [], kademe = "", profil1 = null, denemeOzet = null, programlar = null }) {
+function pdrKapaliMudahalePlani({ gorusmeler = [], kademe = "", profil1 = null, denemeOzet = null, programlar = null, ek = null }) {
   const kd = kademe || "ortaokul";
-  const r = ksCekirdek(gorusmeler, "", profil1, kd, denemeOzet);
+  const r = ksCekirdek(gorusmeler, "", profil1, kd, denemeOzet, ek);
   const c = r.cekirdek;
   let anahtar = r.tur;
   const alt = ksAltTema(c, r.tur);
@@ -9230,6 +9299,28 @@ function pdrKapaliMudahalePlani({ gorusmeler = [], kademe = "", profil1 = null, 
     if (ek) adimlar.push(`(${r.ikincil}) ${ek.adimlar(kd)[0].replace(/^\d+(-\d+)?\. hafta – /, "")}`);
   }
   if (c.ekranBelirti === "Var" && r.tur !== "Teknoloji-Ekran Bağımlılığı") adimlar.push("(Ekran kullanımı) Veliyle ekran süresi anlaşması yap; yatmadan 1 saat önce ekransız rutin hedefle.");
+  // Görüşme dışı dosya verilerine dayalı kişiselleştirilmiş adımlar
+  const ekKullanilan = [];
+  if (ek) {
+    if (ek.bdt.length) {
+      const say = {}; ek.bdt.forEach(x => { say[x.kat] = (say[x.kat] || 0) + 1; });
+      const enCok = Object.entries(say).sort((a, b) => b[1] - a[1])[0][0];
+      const ornek = ek.bdt.find(x => x.kat === enCok);
+      adimlar.push(`(BDT) Bilişsel yeniden yapılandırma: kayıtlı "${ornek.ifade}" (${enCok}) düşüncesini kanıt–karşı kanıt ve alternatif düşünce tekniğiyle ele al; düşünce kaydı ödevi ver.`);
+      ekKullanilan.push("BDT çarpıtmaları");
+    }
+    if ((ek.yilSonuDusus !== null && ek.yilSonuDusus >= 5) || (ek.denemeDususYuzde !== null && ek.denemeDususYuzde >= 10) || ek.zayifDersler.length) {
+      adimlar = adimlar.filter(a => !a.startsWith("(Akademik) "));   // genel akademik adım yerine kişiye özgü olanı
+      adimlar.push(`(Akademik) ${ek.zayifDersler.length ? ek.zayifDersler.join(" ve ") + " için" : "Düşüş gösteren derslerde"} haftalık çalışma planı ve hedef net belirle; ilgili ders öğretmeniyle iş birliği yap.`);
+      ekKullanilan.push("akademik gidiş (yıl sonu ortalamaları/denemeler)");
+    }
+    const tu = ek.testler.filter(t => t.uyari);
+    const ilgili = tu.find(t => t.alan === r.tur) || tu[0] || ek.testler.find(t => t.alan === r.tur && t.puan !== null);
+    if (ilgili) { adimlar.push(`(Ölçme) ${ilgili.ad}${ilgili.puan !== null ? " (" + ilgili.puan + ")" : ""} sonucunu başlangıç ölçümü say; plan sonunda aynı testi yeniden uygulayarak değişimi karşılaştır.`); ekKullanilan.push("test sonuçları"); }
+    if (ek.devamsizlik && ek.devamsizlik.gun >= 10) { adimlar.push(`(Devam) ${ek.devamsizlik.gun} günlük devamsızlık için veliyle devam planı yap; haftalık devam kontrolü ekle.`); ekKullanilan.push("devamsızlık"); }
+    const aileBt = ek.bt.find(x => x.kat === "aile");
+    if (aileBt) { adimlar.push(`(Aile bağlamı) Bireyi tanıma bilgisini ("${aileBt.metin.slice(0, 60)}") dikkate alarak veli iş birliğini planla.`); ekKullanilan.push("bireyi tanıma"); }
+  }
   // Kişisel programdaki MEB müdahale programı eşleşmesi
   if (programlar && programlar.length) {
     const key = KS_PROGRAM_ESLE[r.tur];
@@ -9240,6 +9331,7 @@ function pdrKapaliMudahalePlani({ gorusmeler = [], kademe = "", profil1 = null, 
   const gerekce = r.tur !== "Diğer"
     ? `Plan, görüşme notlarına göre öne çıkan ${r.tur.toLocaleLowerCase("tr")} alanına${alt ? ` (${{ sinavKaygisi: "sınav kaygısı", kaygi: "kaygı", depresif: "depresif belirtiler", ofke: "öfke" }[alt]})` : ""} göre hazırlandı (risk düzeyi: ${r.duzey.toLocaleLowerCase("tr")}).`
     : "Görüşme notlarında belirgin bir sorun alanı saptanmadı; değerlendirme odaklı başlangıç planı önerildi.";
+  const gerekceEk = ekKullanilan.length ? ` Görüşme dışı veriler de plana katıldı: ${ekKullanilan.join(", ")}.` : "";
   return [
     `HEDEF: ${plan.hedef(r.islev)}`,
     `MÜDAHALE ADIMLARI:`,
@@ -9247,7 +9339,7 @@ function pdrKapaliMudahalePlani({ gorusmeler = [], kademe = "", profil1 = null, 
     `SÜRE: ${plan.sure}`,
     `KONTROL KRİTERİ: ${plan.kontrol}`,
     ``,
-    `${gerekce} — 🔒 Kapalı Sistem`,
+    `${gerekce}${gerekceEk} — 🔒 Kapalı Sistem`,
   ].join("\n");
 }
 
@@ -9734,11 +9826,11 @@ function pdrKapaliButunlesikYorum(v) {
 // soru menüsüne öğrenciye özel yanıtlar. Veri cihazdan çıkmaz.
 
 // Ortak bağlam: tüm veriler tek nesnede, çekirdek çözümleme bir kez yapılır
-function ksSupBaglam({ gorusmeler = [], profil1 = null, profil2 = null, denemeGirilen = [], dersListesi = [], sinavTuru = "lgs", riskler = [], mudahaleler = [], sevkler = [], butunlesik = null, kademe = "" }) {
+function ksSupBaglam({ gorusmeler = [], profil1 = null, profil2 = null, denemeGirilen = [], dersListesi = [], sinavTuru = "lgs", riskler = [], mudahaleler = [], sevkler = [], butunlesik = null, kademe = "", ek = null }) {
   const notlar = [...gorusmeler].filter(g => g && (g.summary || "").trim()).sort(ksTarihSirala);
   const kd = kademe || "ortaokul";
   const denemeOzet = denemeGirilen && denemeGirilen.length ? ksDenemeOzetHesapla(denemeGirilen, sinavTuru) : null;
-  const r = ksCekirdek(notlar, "", profil1 && profil1.scores ? profil1 : null, kd, denemeOzet);
+  const r = ksCekirdek(notlar, "", profil1 && profil1.scores ? profil1 : null, kd, denemeOzet, ek);
   const c = r.cekirdek;
   const alt = ksAltTema(c, r.tur);
   const sade = (b) => ksSade(b.ifade);
@@ -9884,6 +9976,7 @@ function pdrKapaliSupervizyon(girdi) {
   if (c.cevreFaktor.length) kg.push(`Yakın çevrede: ${c.cevreFaktor.join(", ")}.`);
   if (X.denemeOzet && X.denemeOzet.risk === "dusuk" && r.duzey !== "HAFİF") kg.push("Akademik başarısı iyi olduğu için güçlüğü gözden kaçabilir; başarılı görünen öğrencilerde içsel sıkıntı daha geç fark edilir.");
   if (X.direnc) kg.push("Notlarda görüşmeye isteksizlik/direnç ipuçları var; zorlamak yerine ilişkiyi güçlendirmeye öncelik ver.");
+  if (c.ekNot && c.ekNot.length) c.ekNot.forEach(x => kg.push("Dosya verisi: " + x));
   s.push("KRİTİK GÖZLEMLER:\n" + (kg.length ? kg.map(x => "- " + x).join("\n") : "- Gözden kaçmış olabilecek belirgin bir risk saptanmadı."));
 
   // ÖNERİLEN YAKLAŞIM
@@ -10229,6 +10322,7 @@ function ksAsistanGirdi(ctx, o) {
     }
   } catch (e) { butunlesik = null; }
   return {
+    ek: ksEkVeriTopla(ad, sinif, o.numara, ctx),
     gorusmeler,
     profil1: (ctx.profiles || []).find(ayni) || null,
     profil2: (ctx.profiles2 || []).find(ayni) || null,
@@ -10302,11 +10396,11 @@ const KS_ASISTAN_ARACLAR = {
     },
   },
   risk_analizi: { aciklama: "Kapalı sistemle risk analizi yapar (kaydetmez).", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
-    calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); const r = pdrKapaliRiskAnalizi({ riskTuru: "", oncelik: "Orta", aciklama: "" }, G.gorusmeler, G.profil1, G.kademe, ksDenemeOzetHesapla(G.denemeGirilen, G.sinavTuru)); return (r.acil ? "⚠ KRİTİK — acil müdahale gerekiyor.\n" : "") + r.metin; } },
+    calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); const r = pdrKapaliRiskAnalizi({ riskTuru: "", oncelik: "Orta", aciklama: "" }, G.gorusmeler, G.profil1, G.kademe, ksDenemeOzetHesapla(G.denemeGirilen, G.sinavTuru), G.ek); return (r.acil ? "⚠ KRİTİK — acil müdahale gerekiyor.\n" : "") + r.metin; } },
   seans_hazirlik: { aciklama: "Bir sonraki görüşme için kapalı sistemle hazırlık notu çıkarır.", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
     calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); return pdrKapaliSeansHazirlik({ gorusmeler: G.gorusmeler, mudahaleler: G.mudahaleler, riskler: G.riskler, denemeAvg: G.denemeGirilen.length ? (G.denemeGirilen.reduce((t, d) => t + d.toplam, 0) / G.denemeGirilen.length).toFixed(1) : null, etkinlikHavuzu: typeof ogrenciEtkinlikHavuzu === "function" ? ogrenciEtkinlikHavuzu(o.className, G.kademe) : [], kademe: G.kademe, profil1: G.profil1 }); } },
   mudahale_plani: { aciklama: "Kapalı sistemle müdahale planı önerir (kaydetmez).", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
-    calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); return pdrKapaliMudahalePlani({ gorusmeler: G.gorusmeler, kademe: G.kademe, profil1: G.profil1, programlar: typeof MUDAHALE_PROGRAMLARI !== "undefined" ? MUDAHALE_PROGRAMLARI : null }); } },
+    calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); return pdrKapaliMudahalePlani({ ek: G.ek, gorusmeler: G.gorusmeler, kademe: G.kademe, profil1: G.profil1, programlar: typeof MUDAHALE_PROGRAMLARI !== "undefined" ? MUDAHALE_PROGRAMLARI : null }); } },
   deneme_analizi: { aciklama: "Kapalı sistemle deneme sonuçlarını analiz eder.", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
     calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); return pdrKapaliDenemeAnalizi({ gorusmeler: G.gorusmeler, girilen: G.denemeGirilen, dersListesi: G.dersListesi, sinavTuru: G.sinavTuru, kademe: G.kademe }); } },
   profil_analizi: { aciklama: "Notlardan 8 boyutlu profil puanı çıkarır ve kapalı sistemle profil analizi yapar (kaydetmez).", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
@@ -10397,10 +10491,10 @@ const KS_ASISTAN_ARACLAR = {
   },
   risk_kaydet: {
     aciklama: "Kapalı sistem risk analizini yapıp risk listesine kaydeder (ONAY GEREKİR).", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true, yazma: true,
-    onayOzeti: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); const r = pdrKapaliRiskAnalizi({ riskTuru: "", oncelik: "Orta", aciklama: "" }, G.gorusmeler, G.profil1, G.kademe, ksDenemeOzetHesapla(G.denemeGirilen, G.sinavTuru)); return `⚠ Risk kaydı\nÖğrenci: ${ksAsistanEtiket(o)}\nTür: ${r.tur} · Düzey: ${r.duzey}${r.acil ? " · ACİL" : ""}`; },
+    onayOzeti: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); const r = pdrKapaliRiskAnalizi({ riskTuru: "", oncelik: "Orta", aciklama: "" }, G.gorusmeler, G.profil1, G.kademe, ksDenemeOzetHesapla(G.denemeGirilen, G.sinavTuru), G.ek); return `⚠ Risk kaydı\nÖğrenci: ${ksAsistanEtiket(o)}\nTür: ${r.tur} · Düzey: ${r.duzey}${r.acil ? " · ACİL" : ""}`; },
     calistir: async (g, ctx, o) => {
       const G = ksAsistanGirdi(ctx, o);
-      const ks = pdrKapaliRiskAnalizi({ riskTuru: "", oncelik: "Orta", aciklama: "" }, G.gorusmeler, G.profil1, G.kademe, ksDenemeOzetHesapla(G.denemeGirilen, G.sinavTuru));
+      const ks = pdrKapaliRiskAnalizi({ riskTuru: "", oncelik: "Orta", aciklama: "" }, G.gorusmeler, G.profil1, G.kademe, ksDenemeOzetHesapla(G.denemeGirilen, G.sinavTuru), G.ek);
       const s = ks.tur.replace(/-/g, " / ");
       const turAd = ["Akran / Zorbalık", "Teknoloji / Ekran Bağımlılığı", "Yas / Kayıp", "Göç / Uyum Süreci", "Adli Süreç / Danışmanlık Tedbiri", "İhmal / İstismar"].includes(s) ? s : ks.tur;
       const item = { id: uid(), tarih: today(), studentName: o.name, className: o.className, numara: o.numara || "", riskTuru: turAd, aciklama: "Asistan aracılığıyla kapalı sistemle eklendi.", oncelik: ks.oncelik,
@@ -10412,10 +10506,10 @@ const KS_ASISTAN_ARACLAR = {
   },
   mudahale_kaydet: {
     aciklama: "Müdahale planını öğrencinin planlarına kaydeder (ONAY GEREKİR). ogrenci_dosyasi'na dayanarak hedef/adimlar/sure verirsen onları, vermezsen kapalı sistem planını kaydeder.", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "hedef": "isteğe bağlı", "adimlar": "1. ...", "sure": "örn. 6 hafta"}', ogrenciIster: true, yazma: true,
-    onayOzeti: (g, ctx, o) => { if (String(g.hedef || "").trim()) return `🎯 Müdahale planı\nÖğrenci: ${ksAsistanEtiket(o)}\nHedef: ${g.hedef}\n${String(g.adimlar || "").replace(/\\n/g, "\n")}${g.sure ? "\nSüre: " + g.sure : ""}`; const G = ksAsistanGirdi(ctx, o); const p = pdrKapaliMudahalePlani({ gorusmeler: G.gorusmeler, kademe: G.kademe, profil1: G.profil1 }); return `🎯 Müdahale planı (kapalı sistem)\nÖğrenci: ${ksAsistanEtiket(o)}\n${(p.match(/HEDEF:\s*(.+)/) || [, ""])[1]}`; },
+    onayOzeti: (g, ctx, o) => { if (String(g.hedef || "").trim()) return `🎯 Müdahale planı\nÖğrenci: ${ksAsistanEtiket(o)}\nHedef: ${g.hedef}\n${String(g.adimlar || "").replace(/\\n/g, "\n")}${g.sure ? "\nSüre: " + g.sure : ""}`; const G = ksAsistanGirdi(ctx, o); const p = pdrKapaliMudahalePlani({ ek: G.ek, gorusmeler: G.gorusmeler, kademe: G.kademe, profil1: G.profil1 }); return `🎯 Müdahale planı (kapalı sistem)\nÖğrenci: ${ksAsistanEtiket(o)}\n${(p.match(/HEDEF:\s*(.+)/) || [, ""])[1]}`; },
     calistir: async (g, ctx, o) => {
       const G = ksAsistanGirdi(ctx, o);
-      const p = String(g.hedef || "").trim() ? "" : pdrKapaliMudahalePlani({ gorusmeler: G.gorusmeler, kademe: G.kademe, profil1: G.profil1, programlar: typeof MUDAHALE_PROGRAMLARI !== "undefined" ? MUDAHALE_PROGRAMLARI : null });
+      const p = String(g.hedef || "").trim() ? "" : pdrKapaliMudahalePlani({ ek: G.ek, gorusmeler: G.gorusmeler, kademe: G.kademe, profil1: G.profil1, programlar: typeof MUDAHALE_PROGRAMLARI !== "undefined" ? MUDAHALE_PROGRAMLARI : null });
       const hedef = String(g.hedef || "").trim() || (p.match(/HEDEF:\s*(.+)/) || [, ""])[1].trim();
       const adimlar = String(g.hedef || "").trim() ? String(g.adimlar || "").replace(/\\n/g, "\n").trim() : ((p.match(/MÜDAHALE ADIMLARI:\s*([\s\S]+?)SÜRE:/) || [, ""])[1] || "").trim();
       const sure = String(g.hedef || "").trim() ? String(g.sure || "").trim() : (p.match(/SÜRE:\s*(.+)/) || [, ""])[1].trim();
@@ -21801,6 +21895,7 @@ function MudahalePlanEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, mud
     if (!seciliAd) return;
     const sc = pdrSonProfilPuani(profiles, seciliAd, seciliSinif);
     const analiz = pdrKapaliMudahalePlani({ gorusmeler: ogrRec, kademe: ksKademeTahmin(seciliSinif, kademe), profil1: sc ? { scores: sc } : null,
+      ek: ksEkVeriTopla(seciliAd, seciliSinif, (kayitliListesi.find(o => o.name === seciliAd) || {}).numara),
       programlar: typeof MUDAHALE_PROGRAMLARI !== "undefined" ? MUDAHALE_PROGRAMLARI : null });
     const hedefMatch = analiz.match(/HEDEF:\s*(.+)/);
     const adimlarMatch = analiz.match(/MÜDAHALE ADIMLARI:\s*([\s\S]+?)SÜRE:/);
@@ -26371,6 +26466,7 @@ Seans Hazırlık Notu: ${ogrHazirlik || "Henüz oluşturulmamış"}
     const bt = (ogrKademe === "ortaokul" || ogrKademe === "lise")
       ? butunlesikHesapla({ kademe: ogrKademe, ad, sinif, numara: null, akademikTaramalar, liseTaramalar, benlikOlcekleri, testKayitlari, profiles2 }) : null;
     return {
+      ek: ksEkVeriTopla(ad, sinif, (kayitliListesi.find(o => o.name === ad && (o.className || "") === (sinif || "")) || {}).numara),
       gorusmeler: ogrRec,
       profil1: profiles.find(p => pdrAyniOgrenci(p.studentName, p.className, ad, sinif)) || null,
       profil2: profiles2.find(p => pdrAyniOgrenci(p.studentName, p.className, ad, sinif)) || null,
@@ -35655,7 +35751,7 @@ export default function App() {
     }
     // 🔒 Kapalı Sistem: yapay zekâ ve internet kullanılmaz, veri cihazdan çıkmaz
     if (yontem === "kapali") {
-      const ks = pdrKapaliRiskAnalizi(riskForm, ogrGorusmeler, ogrP1, kademe, denemeOzet);
+      const ks = pdrKapaliRiskAnalizi(riskForm, ogrGorusmeler, ogrP1, kademe, denemeOzet, ksEkVeriTopla(riskForm.studentName, riskForm.className, riskForm.numara));
       // Kapalı sistem türleri "Akran-Zorbalık" biçiminde; listedeki "Akran / Zorbalık" adına çevrilir
       const ksTurAd = (t) => { const s = t.replace(/-/g, " / "); return ["Akran / Zorbalık","Teknoloji / Ekran Bağımlılığı","Yas / Kayıp","Göç / Uyum Süreci","Adli Süreç / Danışmanlık Tedbiri","İhmal / İstismar"].includes(s) ? s : t; };
       const item = { id: uid(), tarih: today(), ...riskForm, riskTuru: ksTurAd(ks.tur), oncelik: ks.oncelik, aiAnaliz: ks.metin, analizYontem: "kapali", analizDuzey: ks.duzey, kapandi: false, teknolojiBagimliligi: ks.teknolojiBagimliligi, teknolojiGerekce: ks.teknolojiGerekce, kaynak: "Kapalı" };
@@ -36022,6 +36118,8 @@ export default function App() {
   }, [ogrenciler, records, profiles, profiles2, kademe]);
   // PDR Asistanı ekran sürücüsü sekme değiştirebilsin ve öğrenci seçebilsin
   useEffect(() => { PDR_EKRAN.setTab = setTab; PDR_EKRAN.setAktifOgrenci = setAktifOgrenci; PDR_EKRAN.tab = tab; });
+  // Kapalı sistemin görüşme dışı veri kaynağı (BDT, bireyi tanıma, testler, yıl sonu ortalamaları, denemeler, devamsızlık)
+  useEffect(() => { Object.assign(PDR_EK_KAYNAK, { bdtAnaliz, bireyiTanima, testKayitlari, profiles2, denemeler, ogrenciler, sinavTuru }); });
 
   // Deneme/Net Haritası/Konu Haritası sekmeleri LGS/YKS tarzı sınav takibi
   // içindir — ilkokul kademesinde anlamı yok, o yüzden kademe "ilkokul" iken

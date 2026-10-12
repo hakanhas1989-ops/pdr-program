@@ -1152,6 +1152,23 @@ function pdrKalkanAdlariGuncelle(adlar, siniflar) {
   const liste = [...desen.keys()].sort((a, b) => b.length - a.length).map(pdrKalkanRegexKac);
   if (typeof window !== "undefined") window.__pdrKalkanAdSayisi = orijinal.size; // denetim için: kaç kişi korunuyor
   PDR_KALKAN.regex = liste.length ? new RegExp("(^|[^\\p{L}\\p{N}])(" + liste.join("|") + ")(?=[^\\p{L}\\p{N}]|$)", "gu") : null;
+  // Kısaltılmış kayıtlı adlar ("MUSTAFA AB** AK"): danışman tam adı yazarsa ("Mustafa Aber Ak")
+  // da yakalansın diye yıldızlı parça önek olarak eşlenir. Büyük/küçük harf Türkçeye göre.
+  const harf = (ch) => { const k = pdrKalkanKucukHarf(ch), b = pdrKalkanBuyukHarf(ch); return /\p{L}/u.test(ch) ? `[${pdrKalkanRegexKac(k)}${b !== k ? pdrKalkanRegexKac(b) : ""}]` : pdrKalkanRegexKac(ch); };
+  const maske = [];
+  tekil.filter(t => t.includes("*")).forEach(tam => {
+    const parca = tam.split(" ").filter(Boolean);
+    if (parca.length < 2) return;
+    const desenM = parca.map(p => {
+      if (p.length <= 2 && !p.includes("*")) p = p + "*";   // 1-2 harflik parça da kısaltmadır
+      const on = p.replace(/\*+$/, "");
+      if (!on) return "[\\p{L}*]+";
+      return [...on].map(harf).join("") + (p.includes("*") ? "[\\p{L}*]*" : "");
+    }).join("\\s+");
+    maske.push({ desen: desenM, anahtar: pdrKalkanKucukHarf(tam) });
+  });
+  PDR_KALKAN.maske = maske.map(m => ({ ...m, re: new RegExp("^(?:" + m.desen + ")$", "u") }));
+  PDR_KALKAN.maskeRegex = maske.length ? new RegExp("(^|[^\\p{L}\\p{N}])(" + maske.map(m => m.desen).sort((a, b) => b.length - a.length).join("|") + ")(?=[^\\p{L}\\p{N}*]|$)", "gu") : null;
   const sListe = [...sinifTekil].sort((a, b) => b.length - a.length).map(pdrKalkanRegexKac);
   PDR_KALKAN.sinifRegex = sListe.length ? new RegExp("(^|[^\\p{L}\\p{N}])(" + sListe.join("|") + ")(?=[^\\p{L}\\p{N}]|$)", "gu") : null;
 }
@@ -1168,12 +1185,22 @@ function pdrKalkanKodVer(o, anahtar, gorunen) {
 function pdrKalkanMetin(s, o) {
   if (typeof s !== "string" || !s) return s;
   let t = s;
+  if (PDR_KALKAN.maskeRegex) {
+    t = t.replace(PDR_KALKAN.maskeRegex, (m, on, ad) => {
+      const e = PDR_KALKAN.maske.find(x => x.re.test(ad));
+      if (!e) return m;
+      o.buIstekteTam.add(e.anahtar);
+      return on + pdrKalkanKodVer(o, "T:" + e.anahtar, PDR_KALKAN.orijinal.get(e.anahtar) || ad);
+    });
+  }
   if (PDR_KALKAN.regex) {
     // 1. tur: bu metinde geçen tam adları topla (parça eşleşmelerini doğru kişiye bağlamak için)
     t.replace(PDR_KALKAN.regex, (m, on, ad) => { const d = PDR_KALKAN.desen.get(ad); if (d && d.tur === "tam") o.buIstekteTam.add(d.anahtar); return m; });
     t = t.replace(PDR_KALKAN.regex, (m, on, ad, konum, butun) => {
       const d = PDR_KALKAN.desen.get(ad);
       if (!d) return m;
+      // Zaten verilmiş bir kodun ("Öğrenci-3") parçası yeniden kodlanmaz
+      if (/^-\d/.test(butun.slice(konum + on.length + ad.length, konum + on.length + ad.length + 2))) return m;
       // "Prof. Hakan", "Dr. Ayşe" gibi unvanlı adlar öğrenci değildir (ör. AI personası)
       if (/(Prof|Dr|Doç|Uzm|Av)\.\s*$/.test(butun.slice(Math.max(0, konum - 8), konum + on.length))) return m;
       if (d.tur === "tam") return on + pdrKalkanKodVer(o, "T:" + d.anahtar, ad);
@@ -10245,7 +10272,9 @@ const PDR_ASISTAN_VARSAYILAN_AYAR = {
   ucretsizModel: "@cf/google/gemma-4-26b-a4b-it",
   ucretsizUrl: "https://pdr-asistan.hakanhas1989.workers.dev",
   kurallar: "",
-  kayitYontemi: "ekran",                     // "ekran" (formu ekranda doldurur, Kaydet'e danışman basar) | "sohbet" (sohbette onay kartı)
+  kayitYontemi: "ekran",
+  yuzenDugme: true,                          // her ekranda sol altta bas-konuş düğmesi
+  acilistaAsistan: false,                    // program açılınca asistan ekranıyla başla                     // "ekran" (formu ekranda doldurur, Kaydet'e danışman basar) | "sohbet" (sohbette onay kartı)
 };
 const PDR_ASISTAN_CLAUDE_URL = "https://pdr-api.hakanhas1989.workers.dev";
 const PDR_ASISTAN_MODELLER = {
@@ -10273,17 +10302,47 @@ function pdrAsistanKalkanaEkle(url) {
 }
 
 // ── Öğrenci bulma ─────────────────────────────────────────────────────────────
+// Kayıtlı adlar kısaltılmış olabilir ("MUSTAFA AB** AK"). Yıldızlı parça önek gibi
+// eşleşir: "Aber" → "AB**". Sorgu da kısaltılmış olabilir.
+function ksAdParcaUyar(q, k) {
+  const qy = q.includes("*"), ky = k.includes("*");
+  const qp = q.replace(/\*+/g, ""), kp = k.replace(/\*+/g, "");
+  if (!qp || !kp) return false;
+  if (!qy && !ky) return qp === kp;
+  if (ky && !qy) return qp.startsWith(kp);
+  if (qy && !ky) return kp.startsWith(qp);
+  return qp.startsWith(kp) || kp.startsWith(qp);
+}
+// 3: tüm parçalar sırayla birebir, 2: sorgunun tüm parçaları sırayla bir alt dizi, 0: uymuyor
+function ksAdEslesir(sorgu, kayitli) {
+  const q = ksSade(sorgu).replace(/[^\p{L}\d* ]/gu, " ").split(/\s+/).filter(Boolean);
+  let k = ksSade(kayitli).replace(/[^\p{L}\d* ]/gu, " ").split(/\s+/).filter(Boolean);
+  // Kısaltılmış adlarda 1-2 harflik parça da kısaltmadır ("SERRA SE TO*" → SE = Sevgi)
+  if (String(kayitli).includes("*")) k = k.map(t => (t.length <= 2 && !t.includes("*")) ? t + "*" : t);
+  if (!q.length || !k.length) return 0;
+  if (q.length === k.length && q.every((t, i) => ksAdParcaUyar(t, k[i]))) return 3;
+  let j = 0;
+  for (const t of q) { while (j < k.length && !ksAdParcaUyar(t, k[j])) j++; if (j >= k.length) return 0; j++; }
+  return 2;
+}
 function ksAsistanOgrenciBul(ctx, ad, sinif) {
   const liste = ctx.ogrenciListesi || [];
-  const q = ksSade(String(ad || "").replace(/\*/g, "").trim());
+  const ham = String(ad || "").trim();
+  const q = ksSade(ham.replace(/\*/g, "").trim());
   if (!q) return { yok: true };
   const s = ksSade(String(sinif || "").trim());
-  const sinifUyar = (o) => !s || ksSade(o.className || "") === s || ksSade(o.className || "").replace(/[^a-z0-9]/g, "") === s.replace(/[^a-z0-9]/g, "");
+  const sinifUyar = (o) => !s || ksSade(o.className || "") === s || ksSade(o.className || "").replace(/[^a-z0-9ıüöçşğ]/g, "") === s.replace(/[^a-z0-9ıüöçşğ]/g, "");
   const ad2 = (o) => ksSade(String(o.name || "").replace(/\*/g, "").trim());
-  let aday = liste.filter(o => ad2(o) === q && sinifUyar(o));
-  if (!aday.length) aday = liste.filter(o => ad2(o).startsWith(q) && sinifUyar(o));
-  if (!aday.length) aday = liste.filter(o => ad2(o).includes(q) && sinifUyar(o));
-  if (!aday.length) { const ilk = q.split(" ")[0]; if (ilk.length >= 3) aday = liste.filter(o => ad2(o).split(" ").includes(ilk) && sinifUyar(o)); }
+  const sec = (l) => l.filter(sinifUyar);
+  // 1) birebir (yıldızlar dahil ya da hariç)
+  let aday = sec(liste.filter(o => ksSade(o.name || "") === ksSade(ham) || ad2(o) === q));
+  // 2) parça parça (kısaltılmış adlar önek olarak)
+  if (!aday.length) aday = sec(liste.filter(o => ksAdEslesir(ham, o.name) === 3));
+  if (!aday.length) aday = sec(liste.filter(o => ksAdEslesir(ham, o.name) === 2));
+  // 3) eski gevşek yöntemler
+  if (!aday.length) aday = sec(liste.filter(o => ad2(o).startsWith(q)));
+  if (!aday.length) aday = sec(liste.filter(o => ad2(o).includes(q)));
+  if (!aday.length) { const ilk = q.split(" ")[0]; if (ilk.length >= 3) aday = sec(liste.filter(o => ad2(o).split(" ").includes(ilk))); }
   if (aday.length === 1) return { tek: aday[0] };
   if (aday.length > 1) return { aday: aday.slice(0, 10) };
   return { yok: true };
@@ -10355,7 +10414,7 @@ const KS_ASISTAN_ARACLAR = {
     aciklama: "Ada, soyada ya da sınıfa göre kayıtlı öğrenci arar.", girdi: '{"sorgu": "ad ya da sınıf"}',
     calistir: (g, ctx) => {
       const q = ksSade(String(g.sorgu || "").replace(/\*/g, ""));
-      const l = (ctx.ogrenciListesi || []).filter(o => ksSade(String(o.name || "").replace(/\*/g, "")).includes(q) || ksSade(o.className || "") === q).slice(0, 20);
+      const l = (ctx.ogrenciListesi || []).filter(o => ksSade(String(o.name || "").replace(/\*/g, "")).includes(q) || ksAdEslesir(g.sorgu, o.name) > 0 || ksSade(o.className || "") === q).slice(0, 20);
       return l.length ? `${l.length} öğrenci bulundu:\n` + l.map(ksAsistanEtiket).join("\n") : "Eşleşen öğrenci bulunamadı.";
     },
   },
@@ -10548,7 +10607,7 @@ const KS_ASISTAN_ARACLAR = {
   },
   // ── Ekranda göstererek çalışan araçlar: formu danışmanın gözü önünde doldurur, Kaydet'e danışman basar ──
   ekranda_ac: {
-    aciklama: "Programda bir ekranı açar (öğrenci verilirse o öğrenciyle). ekran: profil | ogrenciler | gorusme | risk | mudahale | hatirlatici | takvim | deneme | testler | sinif | devamsizlik | belgeler | istatistik | uyum | prof",
+    aciklama: "Programda bir ekranı açar (öğrenci verilirse o öğrenciyle). 'Dosyasını aç' için ekran=dosya, 'görüşme notlarını göster' için ekran=gorusmeler (öğrencinin kayıtlı görüşmeleri), yeni not formu için gorusme. ekran: dosya | gorusmeler | profil | ogrenciler | gorusme | risk | mudahale | hatirlatici | takvim | deneme | testler | sinif | devamsizlik | belgeler | istatistik | uyum | prof",
     girdi: '{"ekran": "profil", "ogrenci": "isteğe bağlı", "sinif": "isteğe bağlı"}', ekran: true, yontem: "hepsi",
     calistir: (g, ctx, o) => ksEkranAc(o, PDR_EKRAN_SEKMELER[g.ekran] ? g.ekran : "profil"),
   },
@@ -10927,6 +10986,7 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
 const PDR_EKRAN = { setTab: null, setAktifOgrenci: null, tab: "", durdur: false, calisiyor: false, izleyici: null };
 const PDR_EKRAN_SEKMELER = {
   gorusme: ["yeni", "📝 Görüşme Notu"], profil: ["profil_merkez", "📋 Profil"], ogrenciler: ["ogrenciler", "👥 Öğrenciler"],
+  dosya: ["ogrenciler", "👥 Öğrenci dosyası"], gorusmeler: ["ogrenciler", "📝 Görüşme notları"],
   risk: ["risk", "⚠ Risk"], mudahale: ["mudahale", "🎯 Müdahale Planı"], hatirlatici: ["hatirlatici", "🔔 Hatırlatıcı"],
   takvim: ["gorusme_takvimi", "📅 Takvim"], deneme: ["deneme", "📊 Deneme"], testler: ["testler", "🧪 Testler"],
   sinif: ["sinif_profili", "🏫 Sınıf"], devamsizlik: ["devamsizlik", "📅 Devamsızlık"], belgeler: ["belgeler", "📑 Belgeler"],
@@ -11289,7 +11349,22 @@ async function ksEkranAc(o, ekran) {
   const s = PDR_EKRAN_SEKMELER[ekran] || PDR_EKRAN_SEKMELER.profil;
   return ksEkranCalistir(s[1], async () => {
     await ksEkranSekme(s[0], o);
-    ksEkranTemizle();
+    if (o && (ekran === "gorusmeler" || ekran === "dosya")) {
+      // Öğrenci dosyası açılır; görüşmeler istendiyse görüşme sekmesine geçilip zaman çizelgesi gösterilir
+      const sk = await ksEkranBul('[data-asistan="ogr-sekme"]', 5000);
+      if (sk && ekran === "gorusmeler") {
+        const g = document.querySelector('[data-asistan="ogr-sekme"][data-deger="gorusme"]');
+        if (g) { ksEkranBalon(`🤖 <b>${pdrHtmlKac(o.name)}</b> görüşme notları açılıyor…`); await ksEkranTikla(g); }
+        const z = await ksEkranBul('[data-asistan="ogr-gorusmeler"]', 2500);
+        if (z) {
+          // En son görüşmenin kartını açıp notu göster
+          const kart = z.querySelector('[data-asistan="kart-ac"]');
+          if (kart && kart.getAttribute("data-acik") !== "1") { ksEkranBalon(`🤖 Son görüşme açılıyor…`); await ksEkranTikla(kart); }
+          await ksEkranGit(z); ksEkranImlecGizle(); ksEkranKalkan(false); setTimeout(() => ksEkranHalka(null), 2500);
+        }
+        else { ksEkranTemizle(); }
+      } else ksEkranTemizle();
+    } else ksEkranTemizle();
     ksEkranBalon(`📍 <b>${s[1]}</b> açıldı${o ? ` — ${pdrHtmlKac(o.name)}` : ""}.`, [{ ad: "🤖 Asistana dön", renk: "#E9B949", yazi: "#3A2A00", fn: ksEkranAsistanaDon }, { ad: "Kapat", fn: ksEkranKapat }]);
     setTimeout(() => { const b = document.getElementById("pdr-asistan-balon"); if (b && b.textContent.includes("açıldı")) ksEkranBalon(null); }, 8000);
     return `${s[1]} ekranı açıldı${o ? " (" + o.name + ")" : ""}.`;
@@ -26021,7 +26096,7 @@ function pdrAsistanDurdur() {
   if (typeof PDR_EKRAN !== "undefined" && PDR_EKRAN.calisiyor) PDR_EKRAN.durdur = true;
   S.durum = "durduruluyor"; pdrAsistanBildir();
 }
-function pdrAsistanBildir() { if (PDR_ASISTAN_SOHBET.dinle) PDR_ASISTAN_SOHBET.dinle(x => x + 1); }
+function pdrAsistanBildir() { const S = PDR_ASISTAN_SOHBET; if (S.dinle) S.dinle(x => x + 1); if (S.dinleYuzen) S.dinleYuzen(x => x + 1); }
 
 const PDR_ASISTAN_ARAC_AD = {
   ogrenci_ara: "Öğrenci arandı", ogrenci_ozeti: "Öğrenci özeti", gorusme_notlari: "Görüşme notları okundu",
@@ -26085,6 +26160,94 @@ function pdrAsistanTekDinle(sureMs) {
 function pdrAsistanSustur() { try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {} }
 const PDR_ASISTAN_SR = typeof window !== "undefined" ? (window.SpeechRecognition || window.webkitSpeechRecognition || null) : null;
 
+// Program verilerinden asistan bağlamı (App'in durumları ve kaydetme işlevleri)
+function pdrAsistanCtx(p) {
+  return {
+    records: p.records, riskListesi: p.riskListesi, hatirlatmalar: p.hatirlatmalar, mudahalePlan: p.mudahalePlan,
+    profiles: p.profiles, profiles2: p.profiles2, denemeler: p.denemeler, sevkler: p.sevkler, testKayitlari: p.testKayitlari,
+    akademikTaramalar: p.akademikTaramalar, liseTaramalar: p.liseTaramalar, benlikOlcekleri: p.benlikOlcekleri,
+    sinavTuru: p.sinavTuru, aktifYil: p.aktifYil, ogrenciListesi: p.kayitliListesi,
+    bdtAnaliz: p.bdtAnaliz, bireyiTanima: p.bireyiTanima, ogrenciler: p.ogrenciler, uyumIzleme: p.uyumIzleme,
+    kaydet: {
+      records: async (l) => { p.setRecords(l); await saveRecords(l); },
+      hatirlatmalar: async (l) => { p.setHatirlatmalar(l); await saveHatirlatmalar(l); },
+      riskListesi: async (l) => { p.setRiskListesi(l); await saveRiskListesi(l); },
+      mudahalePlan: async (l) => { p.setMudahalePlan(l); await saveMudahalePlan(l); },
+    },
+  };
+}
+// Onay kartına yazılı/sesli yanıt: "kaydet", "bekle", "ben yaparım", "şunu düzelt…"
+function pdrAsistanOnayYanitla(metin) {
+  const S = PDR_ASISTAN_SOHBET;
+  const o = S.onay; if (!o) return;
+  const y = pdrAsistanCevapYorumla(metin);
+  S.gorunen = [...S.gorunen, { rol: "ben", metin, onayYaniti: true }];
+  S.onay = null; pdrAsistanBildir();
+  o.coz(y === "evet" ? { ok: true } : { ok: false, not: y === null || y === "hayir" ? metin : "" });
+}
+function pdrAsistanSesliOkuOrtak(i, metin) {
+  const S = PDR_ASISTAN_SOHBET;
+  if (pdrAsistanKonus(metin, () => { if (S.okunan === i) { S.okunan = null; pdrAsistanBildir(); } })) { S.okunan = i; pdrAsistanBildir(); return true; }
+  return false;
+}
+// Bir isteği çalıştırır (asistan ekranı da her ekrandaki düğme de bunu kullanır)
+async function pdrAsistanIstek(m, kullanilan, ctx) {
+  const S = PDR_ASISTAN_SOHBET;
+  if (!m || S.calisiyor) return;
+  pdrAsistanSustur(); S.okunan = null;
+  S.gorunen = [...S.gorunen, { rol: "ben", metin: m }];
+  S.gecmis.push({ role: "user", content: m });
+  S.calisiyor = true; S.durum = "dusunuyor"; S.adimlar = []; S.onay = null;
+  const iptal = { iptal: false, ctrl: typeof AbortController !== "undefined" ? new AbortController() : null };
+  S.iptal = iptal;
+  pdrAsistanBildir();
+  const adimlar = [];
+  const dinleyenVar = () => !!(S.dinle || S.dinleYuzen);
+  try {
+    const s = await pdrAsistanCalistir({
+      gecmis: S.gecmis, ayar: kullanilan, ctx, iptal,
+      olay: (o) => {
+        if (o.tip === "arac") adimlar.push({ ad: o.ad, ogrenci: o.ogrenci, sonuc: o.sonuc });
+        if (o.tip === "onay_sonuc") adimlar.push({ ad: o.ad, onay: o.ok });
+        S.durum = o.tip; S.adimlar = [...adimlar]; pdrAsistanBildir();
+      },
+      onayIste: (ozet) => new Promise(coz => {
+        S.onay = { ozet, coz }; pdrAsistanBildir();
+        if (kullanilan.sesliMod && dinleyenVar()) {
+          const kisa = String(ozet).split("\n").filter(x => !/^ESKİ:/.test(x)).slice(0, 4).join(". ");
+          pdrAsistanKonus(kisa + ". Kaydedeyim mi?", async () => {
+            if (!S.onay || S.onay.coz !== coz) return;
+            S.onayDinliyor = true; pdrAsistanBildir();
+            const t = await pdrAsistanTekDinle(8000);
+            S.onayDinliyor = false; pdrAsistanBildir();
+            if (t && S.onay && S.onay.coz === coz) pdrAsistanOnayYanitla(t);
+          });
+        }
+      }),
+    });
+    const dolar = kullanilan.saglayici === "ucretsiz" ? null : ksAsistanMaliyet(s.model, s.giris, s.cikis);
+    if (dolar) S.toplamDolar += dolar;
+    S.gorunen = [...S.gorunen, { rol: "asistan", metin: s.yanit, adimlar, model: s.model, giris: s.giris, cikis: s.cikis, dolar, giden: s.giden, kritik: s.kritik, yedek: s.yedek, ucretsiz: kullanilan.saglayici === "ucretsiz" }];
+    // Sesli modda cevap kendiliğinden okunur
+    if (kullanilan.sesliMod && dinleyenVar()) pdrAsistanSesliOkuOrtak(S.gorunen.length - 1, s.yanit);
+  } catch (e) {
+    if (iptal.iptal || (e && e.durduruldu)) {
+      // Geçmişi kullanıcının mesajına kadar geri al, modele durdurulduğunu bildir
+      for (let j = S.gecmis.length - 1; j >= 0; j--) { const x = S.gecmis[j]; if (x.role === "user" && !String(x.content).startsWith("<sonuc")) { S.gecmis.length = j + 1; break; } }
+      S.gecmis.push({ role: "assistant", content: "(Danışman bu isteği yarıda durdurdu.)" });
+      const yapilan = adimlar.filter(a => a.onay === true).map(a => PDR_ASISTAN_ARAC_AD[a.ad] || a.ad);
+      S.gorunen = [...S.gorunen, { rol: "asistan", durdu: true, metin: "⏹ Durdurdun." + (yapilan.length ? ` Durdurmadan önce onayladığın işlem(ler) yapılmıştı: ${yapilan.join(", ")}.` : " Hiçbir kayıt yapılmadı."), adimlar }];
+      return;
+    }
+    S.gorunen = [...S.gorunen, { rol: "asistan", hata: true, metin: (e && e.message) || String(e), adimlar, ucretsizIdi: kullanilan.saglayici === "ucretsiz" }];
+    // yarım kalan turu geçmişten çıkar (bir sonraki istek düzgün başlasın)
+    while (S.gecmis.length && S.gecmis[S.gecmis.length - 1].role === "user" && S.gecmis[S.gecmis.length - 1].content.startsWith("<sonuc")) S.gecmis.pop();
+  } finally {
+    S.calisiyor = false; S.durum = ""; S.adimlar = []; S.onay = null; S.iptal = null;
+    pdrAsistanBildir();
+  }
+}
+
 function AsistanEkrani({
   kayitliListesi, records, setRecords, riskListesi, setRiskListesi, hatirlatmalar, setHatirlatmalar,
   mudahalePlan, setMudahalePlan, profiles, profiles2, denemeler, sevkler, testKayitlari,
@@ -26100,7 +26263,8 @@ function AsistanEkrani({
   const [testDurum, setTestDurum] = useState("");
   const [acik, setAcik] = useState({}); // açılan "Modele ne gitti?" ve araç ayrıntıları
   const [dinliyor, setDinliyor] = useState(false);
-  const [okunan, setOkunan] = useState(null); // şu an sesli okunan mesajın sırası
+  const okunan = S.okunan;   // şu an sesli okunan mesajın sırası (ortak)
+  const setOkunan = (v) => { S.okunan = typeof v === "function" ? v(S.okunan) : v; pdrAsistanBildir(); };
   const tanimaRef = useRef(null);
   const altRef = useRef(null);
 
@@ -26108,8 +26272,7 @@ function AsistanEkrani({
 
   function sesliOku(i, metin) {
     if (okunan === i) { pdrAsistanSustur(); setOkunan(null); return; }
-    if (pdrAsistanKonus(metin, () => setOkunan(o => (o === i ? null : o)))) setOkunan(i);
-    else alert("Bu tarayıcı sesli okumayı desteklemiyor.");
+    if (!pdrAsistanSesliOkuOrtak(i, metin)) alert("Bu tarayıcı sesli okumayı desteklemiyor.");
   }
   // Sesle yazma: kısa duraklamalarda kapanmaz; danışman "⏹ Bitir"e basana kadar
   // dinlemeyi kendiliğinden yeniden başlatır (en fazla 5 dk). Sesli modda Bitir'e
@@ -26161,76 +26324,18 @@ function AsistanEkrani({
   const claudeMi = ayar.saglayici !== "ucretsiz";
 
   function ctxOlustur() {
-    return {
-      records, riskListesi, hatirlatmalar, mudahalePlan, profiles, profiles2, denemeler, sevkler, testKayitlari,
-      akademikTaramalar, liseTaramalar, benlikOlcekleri, sinavTuru, aktifYil, ogrenciListesi: kayitliListesi,
-      bdtAnaliz, bireyiTanima, ogrenciler, uyumIzleme,
-      kaydet: {
-        records: async (l) => { setRecords(l); await saveRecords(l); },
-        hatirlatmalar: async (l) => { setHatirlatmalar(l); await saveHatirlatmalar(l); },
-        riskListesi: async (l) => { setRiskListesi(l); await saveRiskListesi(l); },
-        mudahalePlan: async (l) => { setMudahalePlan(l); await saveMudahalePlan(l); },
-      },
-    };
+    return pdrAsistanCtx({ kayitliListesi, records, setRecords, riskListesi, setRiskListesi, hatirlatmalar, setHatirlatmalar,
+      mudahalePlan, setMudahalePlan, profiles, profiles2, denemeler, sevkler, testKayitlari,
+      akademikTaramalar, liseTaramalar, benlikOlcekleri, sinavTuru, aktifYil, bdtAnaliz, bireyiTanima, ogrenciler, uyumIzleme });
   }
 
   function gonder(metinVer) { return gonderAyar(metinVer, ayar); }
   async function gonderAyar(metinVer, ayarVer) {
     const m = String(metinVer ?? girdi).trim();
-    if (m && S.calisiyor && S.onay) { setGirdi(""); onayYanitla(m); return; }
+    if (m && S.calisiyor && S.onay) { setGirdi(""); pdrAsistanOnayYanitla(m); return; }
     if (!m || S.calisiyor) return;
-    setGirdi(""); pdrAsistanSustur(); setOkunan(null);
-    S.gorunen = [...S.gorunen, { rol: "ben", metin: m }];
-    S.gecmis.push({ role: "user", content: m });
-    S.calisiyor = true; S.durum = "dusunuyor"; S.adimlar = []; S.onay = null;
-    const iptal = { iptal: false, ctrl: typeof AbortController !== "undefined" ? new AbortController() : null };
-    S.iptal = iptal;
-    pdrAsistanBildir();
-    const adimlar = [];
-    const kullanilan = { ...(ayarVer || ayar) };
-    try {
-      const s = await pdrAsistanCalistir({
-        gecmis: S.gecmis, ayar: kullanilan, ctx: ctxOlustur(), iptal,
-        olay: (o) => {
-          if (o.tip === "arac") adimlar.push({ ad: o.ad, ogrenci: o.ogrenci, sonuc: o.sonuc });
-          if (o.tip === "onay_sonuc") adimlar.push({ ad: o.ad, onay: o.ok });
-          S.durum = o.tip; S.adimlar = [...adimlar]; pdrAsistanBildir();
-        },
-        onayIste: (ozet) => new Promise(coz => {
-          S.onay = { ozet, coz }; pdrAsistanBildir();
-          if (kullanilan.sesliMod && S.dinle) {
-            const kisa = String(ozet).split("\n").filter(x => !/^ESKİ:/.test(x)).slice(0, 4).join(". ");
-            pdrAsistanKonus(kisa + ". Kaydedeyim mi?", async () => {
-              if (!S.onay || S.onay.coz !== coz) return;
-              S.onayDinliyor = true; pdrAsistanBildir();
-              const t = await pdrAsistanTekDinle(8000);
-              S.onayDinliyor = false; pdrAsistanBildir();
-              if (t && S.onay && S.onay.coz === coz) onayYanitla(t);
-            });
-          }
-        }),
-      });
-      const dolar = kullanilan.saglayici === "ucretsiz" ? null : ksAsistanMaliyet(s.model, s.giris, s.cikis);
-      if (dolar) S.toplamDolar += dolar;
-      S.gorunen = [...S.gorunen, { rol: "asistan", metin: s.yanit, adimlar, model: s.model, giris: s.giris, cikis: s.cikis, dolar, giden: s.giden, kritik: s.kritik, yedek: s.yedek, ucretsiz: kullanilan.saglayici === "ucretsiz" }];
-      // Sesli modda cevap kendiliğinden okunur (asistan ekranı açıksa)
-      if (kullanilan.sesliMod && S.dinle) { const i = S.gorunen.length - 1; if (pdrAsistanKonus(s.yanit, () => setOkunan(o => (o === i ? null : o)))) setOkunan(i); }
-    } catch (e) {
-      if (iptal.iptal || (e && e.durduruldu)) {
-        // Geçmişi kullanıcının mesajına kadar geri al, modele durdurulduğunu bildir
-        for (let j = S.gecmis.length - 1; j >= 0; j--) { const x = S.gecmis[j]; if (x.role === "user" && !String(x.content).startsWith("<sonuc")) { S.gecmis.length = j + 1; break; } }
-        S.gecmis.push({ role: "assistant", content: "(Danışman bu isteği yarıda durdurdu.)" });
-        const yapilan = adimlar.filter(a => a.onay === true).map(a => PDR_ASISTAN_ARAC_AD[a.ad] || a.ad);
-        S.gorunen = [...S.gorunen, { rol: "asistan", durdu: true, metin: "⏹ Durdurdun." + (yapilan.length ? ` Durdurmadan önce onayladığın işlem(ler) yapılmıştı: ${yapilan.join(", ")}.` : " Hiçbir kayıt yapılmadı."), adimlar }];
-        return;
-      }
-      S.gorunen = [...S.gorunen, { rol: "asistan", hata: true, metin: (e && e.message) || String(e), adimlar, ucretsizIdi: kullanilan.saglayici === "ucretsiz" }];
-      // yarım kalan turu geçmişten çıkar (bir sonraki istek düzgün başlasın)
-      while (S.gecmis.length && S.gecmis[S.gecmis.length - 1].role === "user" && S.gecmis[S.gecmis.length - 1].content.startsWith("<sonuc")) S.gecmis.pop();
-    } finally {
-      S.calisiyor = false; S.durum = ""; S.adimlar = []; S.onay = null; S.iptal = null;
-      pdrAsistanBildir();
-    }
+    setGirdi("");
+    await pdrAsistanIstek(m, { ...(ayarVer || ayar) }, ctxOlustur());
   }
 
   // Gönderilen mesajı düzenle: o mesaj ve sonrası sohbetten çıkar, metin kutuya geri gelir
@@ -26252,13 +26357,7 @@ function AsistanEkrani({
     setTimeout(() => gonderAyar(t, y), 0);
   }
   // Onay kartına yazılı/sesli yanıt: "kaydet", "bekle", "ben yaparım", "şunu düzelt…"
-  function onayYanitla(metin) {
-    const o = S.onay; if (!o) return;
-    const y = pdrAsistanCevapYorumla(metin);
-    S.gorunen = [...S.gorunen, { rol: "ben", metin, onayYaniti: true }];
-    S.onay = null; pdrAsistanBildir();
-    o.coz(y === "evet" ? { ok: true } : { ok: false, not: y === null || y === "hayir" ? metin : "" });
-  }
+  const onayYanitla = pdrAsistanOnayYanitla;
   function onayla(ok) { const o = S.onay; if (!o) return; S.onay = null; pdrAsistanBildir(); o.coz(ok); }
   function yeniSohbet() {
     if (S.calisiyor) return;
@@ -26318,6 +26417,16 @@ function AsistanEkrani({
 
       {ayarAcik && (
         <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 12, marginBottom: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: TEXT, marginBottom: 6 }}>🎛️ Kullanım</div>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: TEXT, marginBottom: 6, cursor: "pointer" }}>
+            <input type="checkbox" checked={ayar.yuzenDugme !== false} onChange={e => ayarDegis({ yuzenDugme: e.target.checked })} />
+            Her ekranda asistan düğmesi (sol altta 🎤 — dokun, konuş)
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: TEXT, marginBottom: 10, cursor: "pointer" }}>
+            <input type="checkbox" checked={!!ayar.acilistaAsistan} onChange={e => ayarDegis({ acilistaAsistan: e.target.checked })} />
+            Program açılınca asistan ekranıyla başla
+          </label>
+
           <div style={{ fontSize: 12, fontWeight: 800, color: TEXT, marginBottom: 4 }}>✍️ Kayıt yöntemi</div>
           <div style={{ display: "flex", gap: 6, marginBottom: 4 }}>
             {[["ekran", "👀 Ekranda göstererek", "Formu gözünün önünde doldurur, Kaydet'e sen basarsın"], ["sohbet", "💬 Sohbette onayla", "Onay kartına basınca doğrudan kaydeder"]].map(([k, ad, alt]) => {
@@ -26501,6 +26610,169 @@ function AsistanEkrani({
   );
 }
 // ===== PDR ASİSTANI EKRANI BİTİŞ =====
+
+// ===== PDR ASİSTANI HER EKRANDA DÜĞME BAŞLANGIÇ =====
+// Sol altta duran bas-konuş düğmesi: dokun → konuş → "Bitir" → asistan bulunduğun
+// ekrandan ayrılmadan işi yapar. Sürekli dinlemez; yalnızca dokunduğunda dinler.
+// Sesle yazma yardımcısı: kısa duraklamalarda kapanmaz, bitir() çağrılana kadar yeniden başlar
+function pdrSesDinleyici({ onMetin, onBitti }) {
+  let birikim = "", ara = "", durdur = true, bas = 0, r = null;
+  const baslat = () => {
+    r = new PDR_ASISTAN_SR();
+    r.lang = "tr-TR"; r.continuous = false; r.interimResults = true;
+    r.onresult = (e) => {
+      let kesin = "", gecici = "";
+      for (let k = 0; k < e.results.length; k++) { const x = e.results[k]; if (x.isFinal) kesin += x[0].transcript; else gecici += x[0].transcript; }
+      if (kesin.trim()) { birikim += kesin.trim() + " "; ara = ""; } else ara = gecici;
+      onMetin((birikim + ara).trim());
+    };
+    r.onerror = (e) => { if (e && (e.error === "not-allowed" || e.error === "service-not-allowed")) { durdur = true; alert("Mikrofon izni verilmedi. Tarayıcı ayarlarından mikrofona izin ver."); } };
+    r.onend = () => {
+      if (!durdur && Date.now() - bas < 300000) {
+        if (ara.trim()) { birikim += ara.trim() + " "; ara = ""; }
+        try { baslat(); return; } catch (e) {}
+      }
+      const t = (birikim + ara).trim(); ara = "";
+      onBitti(t);
+    };
+    r.start();
+  };
+  return {
+    baslat: (onceki) => { birikim = onceki ? onceki.trim() + " " : ""; ara = ""; durdur = false; bas = Date.now(); baslat(); },
+    bitir: () => { durdur = true; try { r && r.stop(); } catch (e) { onBitti((birikim + ara).trim()); } },
+    iptal: () => { durdur = true; try { r && r.abort(); } catch (e) {} },
+  };
+}
+
+function AsistanYuzen(props) {
+  const S = PDR_ASISTAN_SOHBET;
+  const [, yenile] = useState(0);
+  const [acik, setAcik] = useState(false);
+  const [girdi, setGirdi] = useState("");
+  const [dinliyor, setDinliyor] = useState(false);
+  const [bildirim, setBildirim] = useState(null);   // panel kapalıyken gelen yanıtın kısa hâli
+  const dinleyiciRef = useRef(null);
+  const oncekiCalisiyor = useRef(false);
+  const altRef = useRef(null);
+
+  useEffect(() => { S.dinleYuzen = yenile; return () => { if (S.dinleYuzen === yenile) S.dinleYuzen = null; try { dinleyiciRef.current && dinleyiciRef.current.iptal(); } catch (e) {} }; }, []);
+  // Ekranda form doldurma başlayınca panel kapanır (ekran görünsün); onay istenirse açılır
+  useEffect(() => { if (S.durum === "ekran" && acik) setAcik(false); }, [S.durum]);
+  useEffect(() => { if (S.onay && !acik) setAcik(true); }, [!!S.onay]);
+  // İş bitince panel kapalıysa yanıtın kısa hâli düğmenin yanında gösterilir
+  useEffect(() => {
+    if (oncekiCalisiyor.current && !S.calisiyor && !acik) {
+      const son = S.gorunen[S.gorunen.length - 1];
+      if (son && son.rol === "asistan") { setBildirim(String(son.metin || "").replace(/\*\*/g, "").slice(0, 160)); setTimeout(() => setBildirim(null), 15000); }
+    }
+    oncekiCalisiyor.current = S.calisiyor;
+  }, [S.calisiyor]);
+  useEffect(() => { if (acik && altRef.current && altRef.current.scrollIntoView) altRef.current.scrollIntoView({ block: "end" }); }, [acik, S.gorunen.length, S.adimlar.length, !!S.onay]);
+
+  const ayar = pdrAsistanAyarOku();
+  if (ayar.yuzenDugme === false) return null;
+
+  async function gonder(metin) {
+    const m = String(metin ?? girdi).trim();
+    if (!m) return;
+    setGirdi("");
+    if (S.calisiyor && S.onay) { pdrAsistanOnayYanitla(m); return; }
+    if (S.calisiyor) return;
+    await pdrAsistanIstek(m, pdrAsistanAyarOku(), pdrAsistanCtx(props));
+  }
+  function dinle() {
+    if (dinliyor) { dinleyiciRef.current && dinleyiciRef.current.bitir(); return; }
+    if (!PDR_ASISTAN_SR) { setAcik(true); alert("Bu tarayıcı sesle konuşmayı desteklemiyor; yazarak kullanabilirsin."); return; }
+    pdrAsistanSustur();
+    dinleyiciRef.current = pdrSesDinleyici({
+      onMetin: (t) => setGirdi(t),
+      onBitti: (t) => { setDinliyor(false); if (t) gonder(t); },   // her ekrandaki düğmede konuşma bitince gönderilir
+    });
+    try { dinleyiciRef.current.baslat(""); setDinliyor(true); setAcik(true); setBildirim(null); } catch (e) { setDinliyor(false); }
+  }
+  function sohbeteGit() { setAcik(false); if (props.setTab) props.setTab("asistan"); }
+
+  const sonMesajlar = S.gorunen.slice(-4);
+  const yesil = "linear-gradient(135deg, #0F4D38 0%, #127C56 100%)";
+
+  return (
+    <>
+      {/* Panel */}
+      {acik && (
+        <div data-asistan="yuzen-panel" style={{ position: "fixed", left: 8, right: 8, bottom: 86, maxWidth: 520, margin: "0 auto", maxHeight: "58vh", display: "flex", flexDirection: "column", background: CARD, border: `1px solid ${BORDER}`, borderRadius: 16, boxShadow: "0 12px 32px rgba(0,0,0,0.28)", zIndex: 2147482000, overflow: "hidden" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 12px", background: yesil, color: "#fff" }}>
+            <div style={{ fontWeight: 900, fontSize: 14 }}>🤖 Asistan</div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button onClick={sohbeteGit} style={{ background: "rgba(255,255,255,0.18)", color: "#fff", border: "1px solid rgba(255,255,255,0.4)", borderRadius: 8, padding: "4px 8px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>💬 Sohbeti aç</button>
+              <button onClick={() => { setAcik(false); if (dinliyor) dinleyiciRef.current && dinleyiciRef.current.iptal(); setDinliyor(false); }} style={{ background: "none", color: "#fff", border: "none", fontSize: 18, cursor: "pointer", padding: "0 4px" }}>✕</button>
+            </div>
+          </div>
+          <div style={{ overflowY: "auto", padding: "10px 12px", flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
+            {!sonMesajlar.length && !S.calisiyor && (
+              <div style={{ fontSize: 12.5, color: MUTED, lineHeight: 1.5 }}>Söyle ya da yaz: <i>"Ali'nin dosyasını aç"</i>, <i>"görüşme notlarını göster"</i>, <i>"notlarına göre müdahale planı oluştur"</i>…</div>
+            )}
+            {sonMesajlar.map((m, i) => m.rol === "ben" ? (
+              <div key={i} style={{ alignSelf: "flex-end", maxWidth: "88%", background: ACCENT, color: "#fff", borderRadius: "12px 12px 3px 12px", padding: "7px 10px", fontSize: 12.5, whiteSpace: "pre-wrap" }}>{m.metin}</div>
+            ) : (
+              <div key={i} style={{ alignSelf: "stretch", background: m.hata ? "#FEF3F2" : "#fff", border: `1px solid ${m.hata ? "#FDA29B" : BORDER}`, borderRadius: "12px 12px 12px 3px", padding: "8px 10px" }}>
+                {m.kritik && <div style={{ background: "#B42318", color: "#fff", borderRadius: 6, padding: "4px 8px", fontSize: 11.5, fontWeight: 800, marginBottom: 6 }}>⚠ Kritik ifade bulundu — önce güvenlik adımları.</div>}
+                <div style={{ fontSize: 12.5, color: m.hata ? "#B42318" : TEXT, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{String(m.metin || "").replace(/\*\*(.+?)\*\*/g, "$1")}</div>
+              </div>
+            ))}
+            {S.calisiyor && (
+              <div style={{ background: "#fff", border: `1px solid ${BORDER}`, borderRadius: 10, padding: "8px 10px" }}>
+                {S.adimlar.length > 0 && <div style={{ fontSize: 10.5, color: MUTED, marginBottom: 6 }}>{S.adimlar.map(a => (a.onay === undefined ? "🔧 " : a.onay ? "✅ " : "✋ ") + (PDR_ASISTAN_ARAC_AD[a.ad] || a.ad)).join(" · ")}</div>}
+                {S.onay ? (
+                  <div style={{ background: "#FFF8E6", border: "2px solid #E9B949", borderRadius: 10, padding: 8 }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: "#7A5300", marginBottom: 4 }}>Kaydedeyim mi?</div>
+                    <div style={{ fontSize: 12, color: TEXT, whiteSpace: "pre-wrap", maxHeight: 140, overflowY: "auto", marginBottom: 8 }}>{S.onay.ozet}</div>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button onClick={() => pdrAsistanOnayYanitla("evet kaydet")} style={{ flex: 1, padding: 8, borderRadius: 8, border: "none", background: ACCENT, color: "#fff", fontWeight: 800, fontSize: 12.5, cursor: "pointer" }}>✅ Kaydet</button>
+                      <button onClick={() => pdrAsistanOnayYanitla("bekle")} style={{ flex: 1, padding: 8, borderRadius: 8, border: `1px solid ${BORDER}`, background: "#fff", color: TEXT, fontWeight: 800, fontSize: 12.5, cursor: "pointer" }}>✋ Bekle</button>
+                    </div>
+                    {S.onayDinliyor && <div style={{ fontSize: 11, color: "#7A5300", marginTop: 6 }}>🎤 Dinliyorum — "kaydet" ya da "bekle" de.</div>}
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: 12, color: MUTED }}>⏳ {S.durum === "durduruluyor" ? "Durduruluyor…" : "Çalışıyor…"}</span>
+                    <button onClick={pdrAsistanDurdur} style={{ padding: "4px 9px", borderRadius: 8, border: "1px solid #FDA29B", background: "#fff", color: "#B42318", fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>⏹ Durdur</button>
+                  </div>
+                )}
+              </div>
+            )}
+            <div ref={altRef} />
+          </div>
+          <div style={{ display: "flex", gap: 6, padding: 8, borderTop: `1px solid ${BORDER}`, background: CARD }}>
+            <input value={girdi} onChange={e => setGirdi(e.target.value)} onKeyDown={e => { if (e.key === "Enter") gonder(); }} disabled={S.calisiyor && !S.onay}
+              placeholder={dinliyor ? "🎤 Dinliyorum…" : S.onay ? "\"kaydet\" ya da \"bekle\"…" : "Yaz ya da 🎤'ye dokun"} style={{ flex: 1, minWidth: 0, padding: "9px 10px", borderRadius: 9, border: `1px solid ${BORDER}`, fontSize: 13, background: "#fff", color: TEXT }} />
+            <button onClick={() => gonder()} disabled={!girdi.trim() || (S.calisiyor && !S.onay)} style={{ padding: "0 12px", borderRadius: 9, border: "none", background: girdi.trim() && !(S.calisiyor && !S.onay) ? ACCENT : BORDER, color: "#fff", fontWeight: 800, cursor: "pointer" }}>➤</button>
+          </div>
+        </div>
+      )}
+
+      {/* Panel kapalıyken gelen yanıt */}
+      {!acik && bildirim && (
+        <div onClick={() => { setAcik(true); setBildirim(null); }} style={{ position: "fixed", left: 80, right: 80, bottom: 22, maxWidth: 360, background: "#0F4D38", color: "#fff", borderRadius: 12, padding: "8px 10px", fontSize: 12, lineHeight: 1.4, boxShadow: "0 8px 20px rgba(0,0,0,0.3)", zIndex: 2147482000, cursor: "pointer" }}>
+          🤖 {bildirim}{bildirim.length >= 160 ? "…" : ""} <b style={{ color: "#E9B949" }}>Aç</b>
+        </div>
+      )}
+
+      {/* Düğme */}
+      <button data-asistan="yuzen-dugme" onClick={dinle} onContextMenu={(e) => { e.preventDefault(); setAcik(!acik); }}
+        title="Asistan: dokun ve konuş (tekrar dokununca biter)"
+        style={{ position: "fixed", left: 14, bottom: 18, width: 58, height: 58, borderRadius: "50%", border: "none", cursor: "pointer", zIndex: 2147482001,
+          background: dinliyor ? "#B42318" : yesil, color: "#fff", fontSize: 24, boxShadow: dinliyor ? "0 0 0 6px rgba(180,35,24,0.28), 0 6px 16px rgba(0,0,0,0.3)" : "0 6px 16px rgba(0,0,0,0.3)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {dinliyor ? "⏹" : S.calisiyor ? "⏳" : "🎤"}
+        <span style={{ position: "absolute", top: -4, right: -4, fontSize: 15, background: "#fff", borderRadius: "50%", width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }}>🤖</span>
+      </button>
+      {!acik && (S.gorunen.length > 0 || S.calisiyor) && (
+        <button data-asistan="yuzen-ac" onClick={() => { setAcik(true); setBildirim(null); }} style={{ position: "fixed", left: 76, bottom: 30, padding: "5px 9px", borderRadius: 14, border: `1px solid ${BORDER}`, background: "#fff", color: ACCENT, fontSize: 11, fontWeight: 800, cursor: "pointer", zIndex: 2147482001, boxShadow: "0 2px 6px rgba(0,0,0,0.15)", display: bildirim ? "none" : "block" }}>💬</button>
+      )}
+    </>
+  );
+}
+// ===== PDR ASİSTANI HER EKRANDA DÜĞME BİTİŞ =====
+
 
 function ProfDanismaEkrani({
   kayitliListesi, aktifOgrenci, records, profiles, profiles2,
@@ -28242,7 +28514,7 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
               { key:"bdt_analiz", label:"🧠 BDT Analiz" },
               { key:"sinav_kaygisi", label:"😰 Sınav Kaygısı" },
             ].map(s => (
-              <button key={s.key} onClick={() => setAktifSekme(s.key)} style={{
+              <button key={s.key} data-asistan="ogr-sekme" data-deger={s.key} onClick={() => setAktifSekme(s.key)} style={{
                 padding:"6px 12px", border:`1px solid ${aktifSekme===s.key ? ACCENT : BORDER}`,
                 background:aktifSekme===s.key ? ACCENT_LIGHT : "#fff",
                 color:aktifSekme===s.key ? ACCENT : MUTED,
@@ -28326,7 +28598,7 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
                   </div>
 
                   {/* Zaman çizelgesi */}
-                  <div style={{position:"relative", paddingLeft:20}}>
+                  <div data-asistan="ogr-gorusmeler" style={{position:"relative", paddingLeft:20}}>
                     <div style={{position:"absolute",left:7,top:8,bottom:8,width:2,background:ACCENT_LIGHT,borderRadius:2}}/>
                     {[...ogrRec].sort((a,b)=>{
                       const parse=d=>{const [g,ay,y]=(d||"").split(".");return new Date(`${y}-${ay}-${g}`);};
@@ -34293,7 +34565,7 @@ function RecordCard({ rec, records, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz,
 
   return (
     <div style={{ background: CARD, border: `1px solid ${duzenle ? ACCENT : BORDER}`, borderRadius: 12, marginBottom: 10, overflow: "hidden", transition: "border .2s" }}>
-      <div onClick={() => { if (!duzenle) setOpen(o => !o); }} style={{
+      <div data-asistan="kart-ac" data-acik={open ? "1" : "0"} onClick={() => { if (!duzenle) setOpen(o => !o); }} style={{
         display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", cursor: duzenle ? "default" : "pointer",
         borderBottom: open ? `1px solid ${BORDER}` : "none"
       }}>
@@ -35297,7 +35569,7 @@ export default function App() {
   const [liseTaramalar, setLiseTaramalar] = useState([]);
   const [benlikOlcekleri, setBenlikOlcekleri] = useState([]);
   const [bilproDegerlendirmeler, setBilproDegerlendirmeler] = useState([]);
-  const [tab, setTab] = useState(() => pdrBaslangicSekmesi() || "ogrenci");
+  const [tab, setTab] = useState(() => pdrBaslangicSekmesi() || (pdrAsistanAyarOku().acilistaAsistan ? "asistan" : "ogrenci"));
   // 3B Görünüm'den gelindiğinde hash tüketildikten sonra temizlenir —
   // sayfa yenilenince aynı sekmeye tekrar tekrar zıplamasın diye.
   useEffect(() => {
@@ -37302,6 +37574,21 @@ function pdrBaslangicSekmesi() {
         {/* ── PDR ASİSTANI ─────────────────────────────────────────── */}
         {tab === "asistan" && (
           <AsistanEkrani
+            kayitliListesi={kayitliListesi}
+            records={records} setRecords={setRecords}
+            riskListesi={riskListesi} setRiskListesi={setRiskListesi}
+            hatirlatmalar={hatirlatmalar} setHatirlatmalar={setHatirlatmalar}
+            mudahalePlan={mudahalePlan} setMudahalePlan={setMudahalePlan}
+            profiles={profiles} profiles2={profiles2}
+            denemeler={denemeler} sevkler={sevkler} testKayitlari={testKayitlari}
+            akademikTaramalar={akademikTaramalar} liseTaramalar={liseTaramalar} benlikOlcekleri={benlikOlcekleri}
+            sinavTuru={sinavTuru} aktifYil={aktifYil} setTab={setTab}
+            bdtAnaliz={bdtAnaliz} bireyiTanima={bireyiTanima} ogrenciler={ogrenciler} uyumIzleme={uyumIzleme}
+          />
+        )}
+        {/* ── PDR ASİSTANI: her ekranda bas-konuş düğmesi ── */}
+        {tab !== "asistan" && (
+          <AsistanYuzen
             kayitliListesi={kayitliListesi}
             records={records} setRecords={setRecords}
             riskListesi={riskListesi} setRiskListesi={setRiskListesi}

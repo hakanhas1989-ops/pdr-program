@@ -10581,8 +10581,8 @@ const KS_ASISTAN_ARACLAR = {
     },
   },
   gorusme_duzelt: {
-    aciklama: "Kayıtlı bir görüşme notunu düzeltir (ONAY GEREKİR; eski ve yeni metin danışmana gösterilir). tarih verilmezse öğrencinin en son görüşmesi düzeltilir. Yalnızca değişmesi gereken alanları ver; 'yeni_not' notun TAMAMININ düzeltilmiş hâli olmalı. Grup görüşmesinde her öğrencinin kaydı ayrıdır; gerekirse her biri için ayrı çağır.",
-    girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "tarih": "GG.AA.YYYY (isteğe bağlı)", "yeni_not": "düzeltilmiş tam not", "konu": "isteğe bağlı", "tur": "isteğe bağlı"}', ogrenciIster: true, yazma: true, yontem: "hepsi",
+    aciklama: "Kayıtlı bir görüşmeyi düzeltir: not metni, TARİHİ, konusu ya da türü (ONAY GEREKİR; eski ve yeni hâl danışmana gösterilir). 'tarih' hangi görüşmenin düzeltileceğini seçer (verilmezse en son görüşme); tarihi değiştirmek için 'yeni_tarih' ver. Yalnızca değişmesi gereken alanları ver; 'yeni_not' notun TAMAMININ düzeltilmiş hâli olmalı. Grup görüşmesinde her öğrencinin kaydı ayrıdır; gerekirse her biri için ayrı çağır.",
+    girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "tarih": "düzeltilecek görüşmenin şimdiki tarihi (isteğe bağlı)", "yeni_tarih": "GG.AA.YYYY (tarih yanlışsa)", "yeni_not": "düzeltilmiş tam not (not değişmiyorsa boş bırak)", "konu": "isteğe bağlı", "tur": "isteğe bağlı"}', ogrenciIster: true, yazma: true, yontem: "hepsi",
     bul: (g, ctx, o) => {
       const l = (ctx.records || []).filter(x => pdrAyniOgrenci(x.studentName, x.className, o.name, o.className)).sort((a, b) => ksTarihSirala(b, a));
       const t = ksAsistanTarihNormal(g.tarih);
@@ -10591,18 +10591,21 @@ const KS_ASISTAN_ARACLAR = {
     onayOzeti: (g, ctx, o) => {
       const r = KS_ASISTAN_ARACLAR.gorusme_duzelt.bul(g, ctx, o);
       if (!r) return `✏️ Görüşme düzeltme\nÖğrenci: ${ksAsistanEtiket(o)}\n⚠ Düzeltilecek görüşme bulunamadı.`;
-      return `✏️ Görüşme notu düzeltme\nÖğrenci: ${ksAsistanEtiket(o)} · ${r.date}${r.grupKatilimcilari && r.grupKatilimcilari.length ? " · grup görüşmesi (yalnızca bu öğrencinin kaydı)" : ""}\n\nESKİ: ${ksAsistanKisalt(r.summary || r.raw, 500)}\n\nYENİ: ${g.yeni_not || "(değişmiyor)"}${g.konu ? "\nKonu: " + g.konu : ""}${g.tur ? "\nTür: " + g.tur : ""}`;
+      const yt = ksAsistanTarihNormal(g.yeni_tarih);
+      return `✏️ Görüşme düzeltme\nÖğrenci: ${ksAsistanEtiket(o)} · ${r.date}${r.grupKatilimcilari && r.grupKatilimcilari.length ? " · grup görüşmesi (yalnızca bu öğrencinin kaydı)" : ""}${yt ? `\n\nTARİH: ${r.date} → ${yt}` : ""}${g.yeni_not ? `\n\nESKİ: ${ksAsistanKisalt(r.summary || r.raw, 500)}\n\nYENİ: ${g.yeni_not}` : ""}${g.konu ? "\nKonu: " + (r.topic || "-") + " → " + g.konu : ""}${g.tur ? "\nTür: " + (r.meetingType || "Öğrenci") + " → " + g.tur : ""}${g.yeni_tarih && !yt ? "\n⚠ Yeni tarih anlaşılamadı (GG.AA.YYYY olmalı)." : ""}`;
     },
     calistir: async (g, ctx, o) => {
       const r = KS_ASISTAN_ARACLAR.gorusme_duzelt.bul(g, ctx, o);
       if (!r) return "Düzeltilecek görüşme bulunamadı; tarih ver ya da gorusme_notlari ile kontrol et.";
       const yeniNot = String(g.yeni_not || "").trim();
-      const guncel = (ctx.records || []).map(x => x.id !== r.id ? x : { ...x,
+      const yt = ksAsistanTarihNormal(g.yeni_tarih);
+      if (g.yeni_tarih && !yt) return "Yeni tarih anlaşılamadı; GG.AA.YYYY biçiminde ver. Değişiklik yapılmadı.";
+      const guncel = (ctx.records || []).map(x => x.id !== r.id ? x : { ...x, ...(yt ? { date: yt } : {}),
         ...(yeniNot ? { summary: yeniNot, raw: yeniNot } : {}),
         ...(g.konu ? { topic: g.konu } : {}), ...(["Öğrenci", "Veli", "Öğretmen"].includes(g.tur) ? { meetingType: g.tur } : {}),
         duzenlemeTarihi: today(), duzenleyen: "asistan" });
       ctx.records = guncel; await ctx.kaydet.records(guncel);
-      return `Görüşme notu düzeltildi (${r.date}).${r.grupKatilimcilari && r.grupKatilimcilari.length ? ` Bu bir grup görüşmesi; diğer öğrencilerin (${r.grupKatilimcilari.join(", ")}) kayıtları ayrı, gerekirse onları da düzeltmeyi öner.` : ""} Bu nota dayanan risk/müdahale kaydı varsa yeniden değerlendirme gerekebilir.`;
+      return `Görüşme düzeltildi (${r.date}${yt ? " → " + yt : ""}).${r.grupKatilimcilari && r.grupKatilimcilari.length ? ` Bu bir grup görüşmesi; diğer öğrencilerin (${r.grupKatilimcilari.join(", ")}) kayıtları ayrı, gerekirse onları da düzeltmeyi öner.` : ""} Bu nota dayanan risk/müdahale kaydı varsa yeniden değerlendirme gerekebilir.`;
     },
   },
   // ── Ekranda göstererek çalışan araçlar: formu danışmanın gözü önünde doldurur, Kaydet'e danışman basar ──
@@ -34409,7 +34412,7 @@ function StatBar({ label, value, max, color = ACCENT }) {
 function RecordCard({ rec, records, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz, bireyiTanima, setBireyiTanima, uyumIzleme, setUyumIzleme, aktifYil, kayitliListesi, riskListesi, denemeler, konuHaritasiVerisi }) {
   const [open, setOpen] = useState(false);
   const [duzenle, setDuzenle] = useState(false);
-  const [editForm, setEditForm] = useState({ summary: rec.summary, topic: rec.topic || "", altKonu: rec.altKonu || "", raw: rec.raw || "" });
+  const [editForm, setEditForm] = useState({ summary: rec.summary, topic: rec.topic || "", altKonu: rec.altKonu || "", raw: rec.raw || "", date: rec.date || "" });
   const [aiLoading, setAiLoading] = useState(false);
   const [kaydedildi, setKaydedildi] = useState(false);
   const [onerilenBdt, setOnerilenBdt] = useState(null);
@@ -34557,7 +34560,11 @@ function RecordCard({ rec, records, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz,
   }
 
   function handleSave() {
-    onUpdate(rec.id, { summary: editForm.summary, topic: editForm.topic, altKonu: editForm.topic ? editForm.altKonu : "", raw: editForm.raw });
+    // Tarih GG.AA.YYYY (ya da G.A.YYYY / GG/AA/YYYY) biçiminde girilmeli; değilse kaydedilmez
+    const tm = /^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/.exec(String(editForm.date || "").trim());
+    if (!tm || +tm[1] < 1 || +tm[1] > 31 || +tm[2] < 1 || +tm[2] > 12) { alert("⚠️ Tarih GG.AA.YYYY biçiminde olmalı (örn. 09.10.2026)."); return; }
+    const yeniTarih = `${tm[1].padStart(2, "0")}.${tm[2].padStart(2, "0")}.${tm[3]}`;
+    onUpdate(rec.id, { summary: editForm.summary, topic: editForm.topic, altKonu: editForm.topic ? editForm.altKonu : "", raw: editForm.raw, date: yeniTarih });
     setDuzenle(false);
     setKaydedildi(true);
     setTimeout(() => setKaydedildi(false), 2000);
@@ -34644,6 +34651,10 @@ function RecordCard({ rec, records, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz,
       {duzenle && (
         <div style={{ padding: "14px 16px", borderTop: `1px solid ${BORDER}` }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: ACCENT, marginBottom: 10 }}>✏ Görüşmeyi Düzenle</div>
+
+          <label style={{ fontSize: 11, fontWeight: 600, color: MUTED, display: "block", marginBottom: 4 }}>GÖRÜŞME TARİHİ</label>
+          <input data-asistan="kart-tarih" value={editForm.date} onChange={e => setEditForm(f => ({ ...f, date: e.target.value }))} placeholder="GG.AA.YYYY"
+            style={{ width: "100%", padding: "8px 10px", border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 13, marginBottom: 10, boxSizing: "border-box" }} />
 
           <label style={{ fontSize: 11, fontWeight: 600, color: MUTED, display: "block", marginBottom: 4 }}>KONU</label>
           <select value={editForm.topic} onChange={e => setEditForm(f => ({ ...f, topic: e.target.value, altKonu: "" }))}

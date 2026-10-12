@@ -10521,6 +10521,31 @@ const KS_ASISTAN_ARACLAR = {
       return `Müdahale planı kaydedildi. Hedef: ${hedef}`;
     },
   },
+  gorusme_duzelt: {
+    aciklama: "Kayıtlı bir görüşme notunu düzeltir (ONAY GEREKİR; eski ve yeni metin danışmana gösterilir). tarih verilmezse öğrencinin en son görüşmesi düzeltilir. Yalnızca değişmesi gereken alanları ver; 'yeni_not' notun TAMAMININ düzeltilmiş hâli olmalı. Grup görüşmesinde her öğrencinin kaydı ayrıdır; gerekirse her biri için ayrı çağır.",
+    girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "tarih": "GG.AA.YYYY (isteğe bağlı)", "yeni_not": "düzeltilmiş tam not", "konu": "isteğe bağlı", "tur": "isteğe bağlı"}', ogrenciIster: true, yazma: true, yontem: "hepsi",
+    bul: (g, ctx, o) => {
+      const l = (ctx.records || []).filter(x => pdrAyniOgrenci(x.studentName, x.className, o.name, o.className)).sort((a, b) => ksTarihSirala(b, a));
+      const t = ksAsistanTarihNormal(g.tarih);
+      return t ? l.find(x => ksTarihAnahtar(x.date) === ksTarihAnahtar(t)) : l[0];
+    },
+    onayOzeti: (g, ctx, o) => {
+      const r = KS_ASISTAN_ARACLAR.gorusme_duzelt.bul(g, ctx, o);
+      if (!r) return `✏️ Görüşme düzeltme\nÖğrenci: ${ksAsistanEtiket(o)}\n⚠ Düzeltilecek görüşme bulunamadı.`;
+      return `✏️ Görüşme notu düzeltme\nÖğrenci: ${ksAsistanEtiket(o)} · ${r.date}${r.grupKatilimcilari && r.grupKatilimcilari.length ? " · grup görüşmesi (yalnızca bu öğrencinin kaydı)" : ""}\n\nESKİ: ${ksAsistanKisalt(r.summary || r.raw, 500)}\n\nYENİ: ${g.yeni_not || "(değişmiyor)"}${g.konu ? "\nKonu: " + g.konu : ""}${g.tur ? "\nTür: " + g.tur : ""}`;
+    },
+    calistir: async (g, ctx, o) => {
+      const r = KS_ASISTAN_ARACLAR.gorusme_duzelt.bul(g, ctx, o);
+      if (!r) return "Düzeltilecek görüşme bulunamadı; tarih ver ya da gorusme_notlari ile kontrol et.";
+      const yeniNot = String(g.yeni_not || "").trim();
+      const guncel = (ctx.records || []).map(x => x.id !== r.id ? x : { ...x,
+        ...(yeniNot ? { summary: yeniNot, raw: yeniNot } : {}),
+        ...(g.konu ? { topic: g.konu } : {}), ...(["Öğrenci", "Veli", "Öğretmen"].includes(g.tur) ? { meetingType: g.tur } : {}),
+        duzenlemeTarihi: today(), duzenleyen: "asistan" });
+      ctx.records = guncel; await ctx.kaydet.records(guncel);
+      return `Görüşme notu düzeltildi (${r.date}).${r.grupKatilimcilari && r.grupKatilimcilari.length ? ` Bu bir grup görüşmesi; diğer öğrencilerin (${r.grupKatilimcilari.join(", ")}) kayıtları ayrı, gerekirse onları da düzeltmeyi öner.` : ""} Bu nota dayanan risk/müdahale kaydı varsa yeniden değerlendirme gerekebilir.`;
+    },
+  },
   // ── Ekranda göstererek çalışan araçlar: formu danışmanın gözü önünde doldurur, Kaydet'e danışman basar ──
   ekranda_ac: {
     aciklama: "Programda bir ekranı açar (öğrenci verilirse o öğrenciyle). ekran: profil | ogrenciler | gorusme | risk | mudahale | hatirlatici | takvim | deneme | testler | sinif | devamsizlik | belgeler | istatistik | uyum | prof",
@@ -10559,6 +10584,7 @@ const KS_ASISTAN_ARACLAR = {
 // Kayıt yöntemine göre kullanılabilir araçlar: "ekran" modunda sohbetten kayıt araçları, "sohbet" modunda ekranda doldurma araçları kapalıdır
 function ksAsistanAracAcik(ad, ayar) {
   const a = KS_ASISTAN_ARACLAR[ad]; if (!a) return false;
+  if (a.yontem === "hepsi") return true;
   const yontem = (ayar && ayar.kayitYontemi) === "sohbet" ? "sohbet" : "ekran";
   if (a.yazma) return yontem === "sohbet";
   if (a.yontem === "ekran") return yontem === "ekran";
@@ -10677,8 +10703,12 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - Danışman tarihi "yarın", "cuma" gibi söylerse bugünün tarihine göre GG.AA.YYYY olarak hesapla.
 - "Bugün kimlerle ilgilenmeliyim", "öncelikler" gibi sorularda şu dört listeye birlikte bak: riskli, hatirlatmalar (gecikmişler önce), gorusulmeyen ve son_gorusmeler. Öncelik sırası: kriz/yüksek risk → gecikmiş hatırlatma → uzun süredir görüşülmeyen riskli öğrenci → yeni takip gerektirenler.
 - Bir öğrenci için risk değerlendirmesi, müdahale planı, seans hazırlığı, süpervizyon ya da veli yazısı istendiğinde ÖNCE ogrenci_dosyasi aracını çağır. Görüşme geçmişini, akademik gidişi (bu yılın ve geçmiş dönemin denemeleri, yıl sonu not ortalamaları), BDT çarpıtmalarını, bireyi tanıma bilgilerini, test sonuçlarını, devamsızlığı ve önceki risk/müdahale kayıtlarını BİRLİKTE değerlendir. Önerinin hangi verilere dayandığını kısaca belirt; olmayan veri için "… kaydı yok" de, uydurma.
+- Danışmana ASLA kod sorma ve kodlardan söz etme; o ekranında gerçek adları görür. Öğrenciyi araçlara adıyla ya da sana gelen koduyla yazabilirsin. Ad belirsizse ogrenci_ara ile ara ve bulunan seçenekleri sun.
+- Kayıtlı bir görüşme notunu düzeltmen istenirse gorusme_duzelt kullan.
+- Bir kayıt aracı onaya sunulduğunda danışman "kaydet/evet" ya da "bekle/hayır/ben yaparım/şunu düzelt" diye cevap verebilir; araç sonucunda gelen cevaba göre davran.
+- Yanıtların kısa olsun (genelde 150 kelimeyi geçme); uzun rapor istenirse maddeler hâlinde öz ver.
 - Kodları her zaman eksiksiz yaz: "Öğrenci-11, Öğrenci-12" gibi; "11, 12 ve 13" diye kısaltma (kısaltılan kod danışmanın ekranında gerçek ada çevrilemez).
-${ekranModu ? `- Danışman bir kayıt eklemeni ya da yazmanı isterse (görüşme notu, hatırlatma, risk, müdahale planı) [EKRANDA DOLDURUR] araçlarını kullan: formu danışmanın gözü önünde doldurursun, kayıt düğmesine danışman basar. Bu araçlardan bir yanıtta YALNIZCA BİRİNİ çağır; sonra danışmana formu kontrol edip kaydetmesini söyle.
+${ekranModu ? `- Danışman bir kayıt eklemeni ya da yazmanı isterse (görüşme notu, hatırlatma, risk, müdahale planı) [EKRANDA DOLDURUR] araçlarını kullan: formu danışmanın gözü önünde doldurursun, ardından program danışmana "Kaydedeyim mi?" diye sorar; danışman onaylarsa kaydedilir. Araç sonucu kaydedilip kaydedilmediğini söyler, ona göre kısa bir yanıt ver. Bu araçlardan bir yanıtta YALNIZCA BİRİNİ çağır.
 - Danışman bir ekranı "aç", "göster", "götür" derse ekranda_ac kullan.` : `- Danışman bir ekranı "aç", "göster", "götür" derse ekranda_ac kullan.`}
 - "Bugün kimlerle ilgilenmeliyim", "öncelikli kim var" gibi sorularda bu dört listenin HEPSİNE bak: liste tur=riskli, liste tur=gorusulmeyen, liste tur=hatirlatmalar (gecikmiş olanlar önce), liste tur=son_gorusmeler. Sonra kriz > gecikmiş hatırlatma > uzun süredir görüşülmeyen riskli > son görüşmelerde takip gerektiren sırasıyla öner. Bir liste boşsa diğerlerine bakmadan "kimse yok" deme.
 
@@ -10698,6 +10728,13 @@ Bugün: ${today()} ${gunler[new Date().getDay()]}.`;
 
 // ── Model çağrısı (A: Claude, B: Cloudflare) ─────────────────────────────────
 const PDR_ASISTAN_YEDEK_CLAUDE = "claude-sonnet-4-6"; // programın diğer AI özelliklerinin kullandığı model
+// Kesilen yanıt parçalarını birleştirir: kelime ortasında kesildiyse bitişik, değilse boşlukla
+function ksAsistanBirlestir(a, b) {
+  if (!a) return b; if (!b) return a;
+  if (/\s$/.test(a) || /^\s/.test(b)) return a + b;
+  const kelimeOrtasi = /[\p{Ll}]$/u.test(a) && /^[\p{Ll}]/u.test(b);
+  return a + (kelimeOrtasi ? "" : " ") + b;
+}
 // Danışman "Durdur"a basınca fırlatılan hata
 function ksAsistanDurdu(iptal) { if (iptal && iptal.iptal) { const e = new Error("Durduruldu."); e.durduruldu = true; throw e; } }
 async function ksAsistanModelCagir(ayar, sistem, mesajlar, iptal) {
@@ -10706,7 +10743,7 @@ async function ksAsistanModelCagir(ayar, sistem, mesajlar, iptal) {
   if (!claudeMi) pdrAsistanKalkanaEkle(url);
   const istek = async (model) => {
     // __kalkanGenis: gizlilik kalkanı bu istekte veli/öğretmen/okul/yer adlarını da kodlar (sunucuya gitmeden silinir)
-    const govde = { model, max_tokens: 1800, system: sistem, messages: mesajlar, __kalkanGenis: true };
+    const govde = { model, max_tokens: claudeMi ? 4000 : 2500, system: sistem, messages: mesajlar, __kalkanGenis: true };
     let res;
     try { res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(govde), signal: iptal && iptal.ctrl ? iptal.ctrl.signal : undefined }); }
     catch (e) {
@@ -10741,7 +10778,8 @@ async function ksAsistanModelCagir(ayar, sistem, mesajlar, iptal) {
   const u = data.usage || {};
   const giris = u.input_tokens ?? u.prompt_tokens ?? Math.round((sistem.length + JSON.stringify(mesajlar).length) / 3.5);
   const cikis = u.output_tokens ?? u.completion_tokens ?? Math.round(metin.length / 3.5);
-  return { metin: String(metin), giris, cikis, giden, tahmini: !data.usage, model, yedek };
+  const kesildi = data.stop_reason === "max_tokens" || !!(data.choices && data.choices[0] && data.choices[0].finish_reason === "length");
+  return { metin: String(metin), giris, cikis, giden, tahmini: !data.usage, model, yedek, kesildi };
 }
 // Yanıttaki metni çıkarır: Anthropic (birden çok blok olabilir; yalnızca "text" blokları),
 // Workers AI ("response") ve OpenAI biçimi ("choices")
@@ -10807,6 +10845,7 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
   const sistem = ksAsistanSistem(ayar);
   ksAsistanGecmisDuzenle(gecmis);
   let toplamGiris = 0, toplamCikis = 0, sonGiden = "", model = "", yedek = false, kritik = false, ekranIsi = false;
+  let birikmis = "", devamBas = -1, devamSay = 0;   // yarıda kesilen yanıtın parçaları
   for (let tur = 0; tur < enFazlaTur; tur++) {
     olay({ tip: "dusunuyor" });
     ksAsistanDurdu(iptal);
@@ -10816,8 +10855,22 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
     toplamGiris += y.giris; toplamCikis += y.cikis; sonGiden = y.giden; model = y.model; yedek = yedek || y.yedek;
     gecmis.push({ role: "assistant", content: y.metin || "(boş yanıt)" });
     const { cagrilar, hatalar, disMetin } = ksAsistanAyristir(y.metin || "");
+    // Yanıt uzunluk sınırına takıldıysa (araç çağrısı yoksa) kaldığı yerden devam ettir (en fazla 2 kez)
+    if (y.kesildi && !cagrilar.length && devamSay < 2) {
+      if (devamBas < 0) devamBas = gecmis.length - 1;
+      birikmis = ksAsistanBirlestir(birikmis, y.metin || "");
+      devamSay++;
+      gecmis.push({ role: "user", content: "(Yanıtın uzunluk sınırında kesildi. Kaldığın yerden, önceki kısmı tekrar etmeden ve kısa tutarak devam et.)" });
+      continue;
+    }
     if (!cagrilar.length && !hatalar.length) {
-      return { yanit: disMetin || y.metin || "(Model boş yanıt verdi.)", giris: toplamGiris, cikis: toplamCikis, giden: sonGiden, model, yedek, kritik };
+      let yanit = disMetin || y.metin || "(Model boş yanıt verdi.)";
+      if (devamBas >= 0) {
+        yanit = ksAsistanBirlestir(birikmis, yanit);
+        gecmis.splice(devamBas, gecmis.length - devamBas, { role: "assistant", content: yanit });
+      }
+      if (y.kesildi) yanit += "\n\n(…yanıt çok uzun olduğu için kısaltıldı; devamını istersen \"devam et\" yaz.)";
+      return { yanit, giris: toplamGiris, cikis: toplamCikis, giden: sonGiden, model, yedek, kritik };
     }
     const sonuclar = [];
     for (const h of hatalar) sonuclar.push(`<sonuc ad="hata">Araç çağrısı okunamadı (geçerli JSON değil): ${ksAsistanKisalt(h, 150)}</sonuc>`);
@@ -10839,9 +10892,11 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
             if (a.yazma) {
               const ozet = a.onayOzeti ? a.onayOzeti(c.girdi, ctx, ogr) : c.ad;
               olay({ tip: "onay_bekliyor", ad: c.ad, ozet });
-              const ok = await onayIste(ozet);
+              const cevap = await onayIste(ozet);
+              const ok = cevap === true || !!(cevap && cevap.ok);
+              const not = cevap && typeof cevap === "object" && cevap.not ? String(cevap.not) : "";
               olay({ tip: "onay_sonuc", ad: c.ad, ok });
-              sonuc = ok ? await a.calistir(c.girdi, ctx, ogr) : "Danışman bu işlemi onaylamadı; kayıt yapılmadı.";
+              sonuc = ok ? await a.calistir(c.girdi, ctx, ogr) : `Danışman bu işlemi onaylamadı; kayıt yapılmadı.${not ? ` Danışmanın yanıtı: "${ksAsistanKisalt(not, 300)}" — buna göre davran (örn. düzeltme istiyorsa düzeltip yeniden onaya sun, beklemek istiyorsa bekle).` : ""}`;
             } else {
               if (a.ekran) { ekranIsi = true; olay({ tip: "ekran", ad: c.ad }); }
               sonuc = await a.calistir(c.girdi, ctx, ogr);
@@ -11028,24 +11083,69 @@ function pdrHtmlKac(s) { return String(s || "").replace(/[&<>"']/g, c => ({ "&":
 function ksEkranIzlemeBitir() { if (PDR_EKRAN.izleyici) { clearInterval(PDR_EKRAN.izleyici); PDR_EKRAN.izleyici = null; } }
 function ksEkranAsistanaDon() { ksEkranIzlemeBitir(); ksEkranHalka(null); ksEkranBalon(null); if (PDR_EKRAN.setTab) PDR_EKRAN.setTab("asistan"); }
 function ksEkranKapat() { ksEkranIzlemeBitir(); ksEkranHalka(null); ksEkranBalon(null); }
+// Danışmanın evet/hayır yanıtını yorumlar ("kaydet", "bekle", "ben yaparım", "şunu düzelt"…)
+function pdrAsistanCevapYorumla(t) {
+  const s = " " + ksSade(String(t || "")) + " ";
+  if (!s.trim()) return null;
+  if (/(hayir|vazgec|bekle|\bdur\b|durdur|iptal|ben yap|ben kaydede|kendim|yapma|kaydetme|sonra|simdi degil|duzelt|degistir|olmaz|istemiyorum)/.test(s)) return "hayir";
+  if (/(evet|kaydet|tamam|onayla|onayliyorum|\bolur\b|\bekle\b|ekleyebilirsin|kaydedebilirsin|uygun|devam|peki|tabii|tabi)/.test(s)) return "evet";
+  return null;
+}
+// Son adım: kayıt düğmesini parlatır ve danışmana "Kaydedeyim mi?" diye sorar.
+// Döner (Promise): "asistan" (onayla asistan bastı) | "danisman" (danışman kendisi bastı) | "bekle" | "durdu", not
 function ksEkranSonAdim(el, mesaj) {
   ksEkranImlecGizle(); ksEkranKalkan(false);
   ksEkranHalka(el, true);
   ksEkranIzlemeBitir();
   const bas = Date.now();
-  // Halka düğmeyi takip eder; danışman başka ekrana geçerse ya da 10 dk geçerse kalkar
-  PDR_EKRAN.izleyici = setInterval(() => {
-    if (!document.body.contains(el) || Date.now() - bas > 600000) { ksEkranKapat(); return; }
-    ksEkranHalka(el, true); ksEkranBalonKonum(el);
-  }, 300);
-  el.addEventListener("click", () => {
-    ksEkranIzlemeBitir(); ksEkranHalka(null);
-    ksEkranBalon("✅ Kaydettin. Sohbete dönmek istersen:", [{ ad: "🤖 Asistana dön", renk: "#E9B949", yazi: "#3A2A00", fn: ksEkranAsistanaDon }, { ad: "Kapat", fn: ksEkranKapat }]);
-    setTimeout(() => { const b = document.getElementById("pdr-asistan-balon"); if (b && b.textContent.includes("Kaydettin")) ksEkranBalon(null); }, 9000);
-  }, { once: true });
-  ksEkranBalonKonum(el);
-  ksEkranBalon(mesaj + "<br><span style='opacity:.85;font-size:12px'>Asistan kayıt düğmesine basmaz — kontrol et, istersen düzelt, sonra parlayan düğmeye <b>sen</b> bas.</span>",
-    [{ ad: "🤖 Asistana dön", renk: "#E9B949", yazi: "#3A2A00", fn: ksEkranAsistanaDon }, { ad: "Kapat", fn: ksEkranKapat }]);
+  return new Promise((coz) => {
+    let bitti = false;
+    const karar = (k, not) => { if (bitti) return; bitti = true; coz({ karar: k, not: not || "" }); };
+    // Halka düğmeyi takip eder; danışman başka ekrana geçerse ya da 10 dk geçerse kalkar
+    PDR_EKRAN.izleyici = setInterval(() => {
+      if (PDR_EKRAN.durdur) { ksEkranKapat(); karar("durdu"); return; }
+      if (!document.body.contains(el) || Date.now() - bas > 600000) { ksEkranKapat(); karar("bekle"); return; }
+      ksEkranHalka(el, true); ksEkranBalonKonum(el);
+    }, 300);
+    let asistanBasiyor = false;
+    el.addEventListener("click", () => {
+      ksEkranIzlemeBitir(); ksEkranHalka(null); pdrAsistanSustur();
+      ksEkranBalon(`✅ ${asistanBasiyor ? "Kaydettim" : "Kaydettin"}. Sohbete dönmek istersen:`, [{ ad: "🤖 Asistana dön", renk: "#E9B949", yazi: "#3A2A00", fn: ksEkranAsistanaDon }, { ad: "Kapat", fn: ksEkranKapat }]);
+      setTimeout(() => { const b = document.getElementById("pdr-asistan-balon"); if (b && /Kaydett/.test(b.textContent)) ksEkranBalon(null); }, 9000);
+      karar(asistanBasiyor ? "asistan" : "danisman");
+    }, { once: true });
+    const kaydet = async () => { if (bitti) return; asistanBasiyor = true; try { await ksEkranTikla(el); } catch (e) { asistanBasiyor = false; } };
+    const bekle = (not) => {
+      pdrAsistanSustur();
+      ksEkranBalon("✋ Tamam, beklettim. Kontrol edip parlayan düğmeye istediğin zaman <b>sen</b> basabilirsin.", [{ ad: "🤖 Asistana dön", renk: "#E9B949", yazi: "#3A2A00", fn: ksEkranAsistanaDon }, { ad: "Kapat", fn: () => ksEkranBalon(null) }]);
+      karar("bekle", not);
+    };
+    ksEkranBalonKonum(el);
+    ksEkranBalon(mesaj + "<br><b>Kaydedeyim mi?</b> <span style='opacity:.85;font-size:12px'>Önce kontrol et, istersen alanları düzelt. Kendin de basabilirsin.</span>",
+      [{ ad: "✅ Evet, kaydet", renk: "#E9B949", yazi: "#3A2A00", fn: kaydet }, { ad: "✋ Bekle, ben yaparım", fn: () => bekle("") }, { ad: "🤖 Asistana dön", fn: () => { bekle(""); ksEkranAsistanaDon(); } }]);
+    // Sesli modda soruyu sesli sorar ve tek cümlelik yanıtı dinler
+    let ayar = {}; try { ayar = pdrAsistanAyarOku(); } catch (e) {}
+    if (ayar.sesliMod) {
+      const soru = String(mesaj).replace(/<[^>]+>/g, "") + " Kaydedeyim mi?";
+      pdrAsistanKonus(soru, async () => {
+        if (bitti) return;
+        ksEkranBalon(mesaj + "<br><b>🎤 Dinliyorum: \"kaydet\" ya da \"bekle\" de.</b>", [{ ad: "✅ Evet, kaydet", renk: "#E9B949", yazi: "#3A2A00", fn: kaydet }, { ad: "✋ Bekle, ben yaparım", fn: () => bekle("") }]);
+        const t = await pdrAsistanTekDinle(8000);
+        if (bitti) return;
+        const y = pdrAsistanCevapYorumla(t);
+        if (y === "evet") kaydet();
+        else if (y === "hayir" || t) bekle(t);
+        else ksEkranBalon(mesaj + "<br><b>Kaydedeyim mi?</b>", [{ ad: "✅ Evet, kaydet", renk: "#E9B949", yazi: "#3A2A00", fn: kaydet }, { ad: "✋ Bekle, ben yaparım", fn: () => bekle("") }]);
+      });
+    }
+  });
+}
+function ksEkranKararMetni(d, ad) {
+  if (!d) return `${ad} ekranda dolduruldu.`;
+  if (d.karar === "asistan") return `${ad} ekranda dolduruldu; danışman onayladı, asistan kayıt düğmesine bastı — KAYDEDİLDİ.`;
+  if (d.karar === "danisman") return `${ad} ekranda dolduruldu; danışman kontrol edip kendisi kaydetti — KAYDEDİLDİ.`;
+  if (d.karar === "durdu") return `${ad} ekranda dolduruldu ama danışman işlemi durdurdu; kaydedilmedi.`;
+  return `${ad} ekranda dolduruldu; danışman beklemeyi seçti, kayıt henüz YAPILMADI (kendisi kaydedecek).${d.not ? ` Danışmanın yanıtı: "${d.not}" — buna göre davran.` : ""}`;
 }
 
 // Bir ekran işini çalıştırır: kalkan + durdur düğmesi + hata yönetimi
@@ -11113,8 +11213,8 @@ async function ksEkranGorusme(o, g) {
     if (!k) throw new Error("Kaydet düğmesi bulunamadı.");
     await ksEkranGit(k);
     const grupAd = (g.__digerler || []).length ? `<b>${pdrHtmlKac(o.name)}</b> ve ${g.__digerler.map(d => "<b>" + pdrHtmlKac(d.name) + "</b>").join(", ")} için grup görüşmesi notu hazır (her öğrenciye ayrı kayıt düşer).` : `<b>${pdrHtmlKac(o.name)}</b> için görüşme notu hazır.`;
-    ksEkranSonAdim(k, "📝 " + grupAd);
-    return `Görüşme notu ekranda dolduruldu${(g.__digerler || []).length ? " (grup görüşmesi: " + (1 + g.__digerler.length) + " öğrenci)" : ""}; danışman kontrol edip kayıt düğmesine basacak (henüz kaydedilmedi).`;
+    const d = await ksEkranSonAdim(k, "📝 " + grupAd);
+    return ksEkranKararMetni(d, `Görüşme notu${(g.__digerler || []).length ? " (grup görüşmesi: " + (1 + g.__digerler.length) + " öğrenci)" : ""}`);
   });
 }
 async function ksEkranHatirlatma(o, g) {
@@ -11133,8 +11233,8 @@ async function ksEkranHatirlatma(o, g) {
     const k = await ksEkranBul('[data-asistan="hat-kaydet"]');
     if (!k) throw new Error("Ekle düğmesi bulunamadı.");
     await ksEkranGit(k);
-    ksEkranSonAdim(k, `🔔 <b>${pdrHtmlKac(o.name)}</b> için hatırlatma hazır.`);
-    return "Hatırlatma ekranda dolduruldu; danışman kontrol edip 'Ekle'ye basacak (henüz eklenmedi).";
+    const d = await ksEkranSonAdim(k, `🔔 <b>${pdrHtmlKac(o.name)}</b> için hatırlatma hazır.`);
+    return ksEkranKararMetni(d, "Hatırlatma");
   });
 }
 async function ksEkranRisk(o, g) {
@@ -11148,8 +11248,8 @@ async function ksEkranRisk(o, g) {
     const k = await ksEkranBul('[data-asistan="risk-kapali"]');
     if (!k) throw new Error("Risk kaydet düğmesi bulunamadı.");
     await ksEkranGit(k);
-    ksEkranSonAdim(k, `⚠ <b>${pdrHtmlKac(o.name)}</b> risk formuna alındı. "🔒 Kapalı Sistemle Analiz Et ve Kaydet" ile analiz edilip kaydedilir.`);
-    return "Risk formu ekranda hazırlandı; danışman 'Kapalı Sistemle Analiz Et ve Kaydet'e basacak (henüz kaydedilmedi).";
+    const d = await ksEkranSonAdim(k, `⚠ <b>${pdrHtmlKac(o.name)}</b> risk formuna alındı. "🔒 Kapalı Sistemle Analiz Et ve Kaydet" ile analiz edilip kaydedilir.`);
+    return ksEkranKararMetni(d, "Risk formu (kapalı sistem analiziyle)");
   });
 }
 async function ksEkranMudahale(o, g) {
@@ -11181,8 +11281,8 @@ async function ksEkranMudahale(o, g) {
     const k = await ksEkranBul('[data-asistan="mud-kaydet"]');
     if (!k) throw new Error("Planı Kaydet düğmesi bulunamadı.");
     await ksEkranGit(k);
-    ksEkranSonAdim(k, `🎯 <b>${pdrHtmlKac(o.name)}</b> için müdahale planı forma yazıldı. İstersen hedef ve adımları düzenle.`);
-    return "Müdahale planı ekranda dolduruldu; danışman kontrol edip 'Planı Kaydet'e basacak (henüz kaydedilmedi).";
+    const d = await ksEkranSonAdim(k, `🎯 <b>${pdrHtmlKac(o.name)}</b> için müdahale planı forma yazıldı. İstersen hedef ve adımları düzenle.`);
+    return ksEkranKararMetni(d, "Müdahale planı");
   });
 }
 async function ksEkranAc(o, ekran) {
@@ -25966,6 +26066,22 @@ function pdrAsistanKonus(metin, bitince) {
     return true;
   } catch (e) { return false; }
 }
+// Tek cümlelik yanıt dinler (onay soruları için); ses tanıma yoksa ya da süre dolarsa "" döner
+function pdrAsistanTekDinle(sureMs) {
+  return new Promise((coz) => {
+    const SR = typeof window !== "undefined" ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null;
+    if (!SR) { coz(""); return; }
+    let metin = "", bitti = false;
+    const bitir = () => { if (bitti) return; bitti = true; clearTimeout(z); coz(metin.trim()); };
+    let r;
+    try { r = new SR(); } catch (e) { coz(""); return; }
+    r.lang = "tr-TR"; r.continuous = false; r.interimResults = false;
+    r.onresult = (e) => { metin = Array.from(e.results).map(x => x[0].transcript).join(" "); };
+    r.onerror = () => bitir(); r.onend = () => bitir();
+    const z = setTimeout(() => { try { r.stop(); } catch (e) {} setTimeout(bitir, 400); }, sureMs || 8000);
+    try { r.start(); } catch (e) { bitir(); }
+  });
+}
 function pdrAsistanSustur() { try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {} }
 const PDR_ASISTAN_SR = typeof window !== "undefined" ? (window.SpeechRecognition || window.webkitSpeechRecognition || null) : null;
 
@@ -26061,6 +26177,7 @@ function AsistanEkrani({
   function gonder(metinVer) { return gonderAyar(metinVer, ayar); }
   async function gonderAyar(metinVer, ayarVer) {
     const m = String(metinVer ?? girdi).trim();
+    if (m && S.calisiyor && S.onay) { setGirdi(""); onayYanitla(m); return; }
     if (!m || S.calisiyor) return;
     setGirdi(""); pdrAsistanSustur(); setOkunan(null);
     S.gorunen = [...S.gorunen, { rol: "ben", metin: m }];
@@ -26079,7 +26196,19 @@ function AsistanEkrani({
           if (o.tip === "onay_sonuc") adimlar.push({ ad: o.ad, onay: o.ok });
           S.durum = o.tip; S.adimlar = [...adimlar]; pdrAsistanBildir();
         },
-        onayIste: (ozet) => new Promise(coz => { S.onay = { ozet, coz }; pdrAsistanBildir(); }),
+        onayIste: (ozet) => new Promise(coz => {
+          S.onay = { ozet, coz }; pdrAsistanBildir();
+          if (kullanilan.sesliMod && S.dinle) {
+            const kisa = String(ozet).split("\n").filter(x => !/^ESKİ:/.test(x)).slice(0, 4).join(". ");
+            pdrAsistanKonus(kisa + ". Kaydedeyim mi?", async () => {
+              if (!S.onay || S.onay.coz !== coz) return;
+              S.onayDinliyor = true; pdrAsistanBildir();
+              const t = await pdrAsistanTekDinle(8000);
+              S.onayDinliyor = false; pdrAsistanBildir();
+              if (t && S.onay && S.onay.coz === coz) onayYanitla(t);
+            });
+          }
+        }),
       });
       const dolar = kullanilan.saglayici === "ucretsiz" ? null : ksAsistanMaliyet(s.model, s.giris, s.cikis);
       if (dolar) S.toplamDolar += dolar;
@@ -26121,6 +26250,14 @@ function AsistanEkrani({
     const t = geriAl(i); if (t === null) return;
     const y = { ...ayar, saglayici: "claude" }; setAyarState(y); pdrAsistanAyarYaz(y);
     setTimeout(() => gonderAyar(t, y), 0);
+  }
+  // Onay kartına yazılı/sesli yanıt: "kaydet", "bekle", "ben yaparım", "şunu düzelt…"
+  function onayYanitla(metin) {
+    const o = S.onay; if (!o) return;
+    const y = pdrAsistanCevapYorumla(metin);
+    S.gorunen = [...S.gorunen, { rol: "ben", metin, onayYaniti: true }];
+    S.onay = null; pdrAsistanBildir();
+    o.coz(y === "evet" ? { ok: true } : { ok: false, not: y === null || y === "hayir" ? metin : "" });
   }
   function onayla(ok) { const o = S.onay; if (!o) return; S.onay = null; pdrAsistanBildir(); o.coz(ok); }
   function yeniSohbet() {
@@ -26252,7 +26389,7 @@ function AsistanEkrani({
         {S.gorunen.map((m, i) => m.rol === "ben" ? (
           <div key={i} style={{ alignSelf: "flex-end", maxWidth: "88%", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
             <div style={{ background: ACCENT, color: "#fff", borderRadius: "14px 14px 4px 14px", padding: "9px 12px", fontSize: 13, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{m.metin}</div>
-            {!S.calisiyor && i === S.gorunen.map(x => x.rol).lastIndexOf("ben") && (
+            {!S.calisiyor && !m.onayYaniti && i === S.gorunen.map(x => x.rol === "ben" && !x.onayYaniti ? "ben" : "").lastIndexOf("ben") && (
               <button onClick={() => duzenle(i)} style={{ background: "none", border: "none", color: ACCENT, fontSize: 11, fontWeight: 700, cursor: "pointer", padding: "0 4px" }}>✏️ Düzenle</button>
             )}
           </div>
@@ -26317,6 +26454,7 @@ function AsistanEkrani({
               <div style={{ background: "#FFF8E6", border: "2px solid #E9B949", borderRadius: 10, padding: 10 }}>
                 <div style={{ fontSize: 12, fontWeight: 800, color: "#7A5300", marginBottom: 6 }}>Onayın gerekiyor — bu kayıt eklensin mi?</div>
                 <div style={{ fontSize: 12.5, color: TEXT, whiteSpace: "pre-wrap", lineHeight: 1.5, marginBottom: 10, wordBreak: "break-word" }}>{S.onay.ozet}</div>
+                <div style={{ fontSize: 11, color: "#7A5300", marginBottom: 8 }}>{S.onayDinliyor ? "🎤 Dinliyorum — \"kaydet\" ya da \"bekle\" de." : "Düğmelere basabilir ya da aşağıya yazarak/sesle yanıt verebilirsin: \"kaydet\", \"bekle\", \"şunu düzelt…\""}</div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <button onClick={() => onayla(true)} style={{ flex: 1, padding: "10px", borderRadius: 9, border: "none", background: ACCENT, color: "#fff", fontWeight: 800, fontSize: 13, cursor: "pointer" }}>✅ Onayla</button>
                   <button onClick={() => onayla(false)} style={{ flex: 1, padding: "10px", borderRadius: 9, border: `1px solid ${BORDER}`, background: "#fff", color: TEXT, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>✋ Vazgeç</button>
@@ -26339,12 +26477,14 @@ function AsistanEkrani({
             {PDR_ASISTAN_ORNEKLER.map(o => <button key={o} onClick={() => gonder(o)} style={{ flex: "0 0 auto", padding: "5px 9px", borderRadius: 14, border: `1px solid ${BORDER}`, background: "#fff", color: TEXT, fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }}>{o}</button>)}
           </div>
         )}
-        <textarea value={girdi} onChange={e => setGirdi(e.target.value)} rows={3} disabled={S.calisiyor}
+        <textarea value={girdi} onChange={e => setGirdi(e.target.value)} rows={3} disabled={S.calisiyor && !S.onay}
           onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent || "")) { e.preventDefault(); gonder(); } }}
-          placeholder={S.calisiyor ? "Asistan çalışıyor…" : "Ne yapayım? Örn: Ali için yarınki görüşmeye hazırlık yap"} style={{ ...inp, resize: "vertical", marginBottom: 6 }} />
+          placeholder={S.onay ? "Yanıtla: \"kaydet\", \"bekle\", \"ben yaparım\" ya da ne değişsin…" : S.calisiyor ? "Asistan çalışıyor…" : "Ne yapayım? Örn: Ali için yarınki görüşmeye hazırlık yap"} style={{ ...inp, resize: "vertical", marginBottom: 6 }} />
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={dinle} disabled={S.calisiyor} title="Sesle yaz" style={{ flex: "0 0 auto", padding: "11px 14px", borderRadius: 10, border: dinliyor ? "none" : `2px solid ${ACCENT}`, background: dinliyor ? "#B42318" : "#fff", color: dinliyor ? "#fff" : ACCENT, fontWeight: 800, fontSize: 14, cursor: "pointer" }}>{dinliyor ? (ayar.sesliMod ? "⏹ Bitir ve gönder" : "⏹ Bitir") : "🎤 Konuş"}</button>
-          {S.calisiyor
+          <button onClick={dinle} disabled={S.calisiyor && !S.onay} title="Sesle yaz" style={{ flex: "0 0 auto", padding: "11px 14px", borderRadius: 10, border: dinliyor ? "none" : `2px solid ${ACCENT}`, background: dinliyor ? "#B42318" : "#fff", color: dinliyor ? "#fff" : ACCENT, fontWeight: 800, fontSize: 14, cursor: "pointer" }}>{dinliyor ? (ayar.sesliMod ? "⏹ Bitir ve gönder" : "⏹ Bitir") : "🎤 Konuş"}</button>
+          {S.calisiyor && S.onay && girdi.trim()
+            ? <button onClick={() => gonder()} style={{ flex: 1, padding: "11px", borderRadius: 10, border: "none", background: ACCENT, color: "#fff", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>➤ Yanıtla</button>
+            : S.calisiyor
             ? <button onClick={pdrAsistanDurdur} disabled={S.durum === "durduruluyor"} style={{ flex: 1, padding: "11px", borderRadius: 10, border: "none", background: "#B42318", color: "#fff", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>{S.durum === "durduruluyor" ? "⏳ Durduruluyor…" : "⏹ Durdur"}</button>
             : <button onClick={() => gonder()} disabled={!girdi.trim()} style={{ flex: 1, padding: "11px", borderRadius: 10, border: "none", background: !girdi.trim() ? BORDER : ACCENT, color: "#fff", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>➤ Gönder</button>}
         </div>

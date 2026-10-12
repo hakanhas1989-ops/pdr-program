@@ -10698,7 +10698,9 @@ Bugün: ${today()} ${gunler[new Date().getDay()]}.`;
 
 // ── Model çağrısı (A: Claude, B: Cloudflare) ─────────────────────────────────
 const PDR_ASISTAN_YEDEK_CLAUDE = "claude-sonnet-4-6"; // programın diğer AI özelliklerinin kullandığı model
-async function ksAsistanModelCagir(ayar, sistem, mesajlar) {
+// Danışman "Durdur"a basınca fırlatılan hata
+function ksAsistanDurdu(iptal) { if (iptal && iptal.iptal) { const e = new Error("Durduruldu."); e.durduruldu = true; throw e; } }
+async function ksAsistanModelCagir(ayar, sistem, mesajlar, iptal) {
   const claudeMi = ayar.saglayici !== "ucretsiz";
   const url = claudeMi ? PDR_ASISTAN_CLAUDE_URL : ayar.ucretsizUrl;
   if (!claudeMi) pdrAsistanKalkanaEkle(url);
@@ -10706,8 +10708,9 @@ async function ksAsistanModelCagir(ayar, sistem, mesajlar) {
     // __kalkanGenis: gizlilik kalkanı bu istekte veli/öğretmen/okul/yer adlarını da kodlar (sunucuya gitmeden silinir)
     const govde = { model, max_tokens: 1800, system: sistem, messages: mesajlar, __kalkanGenis: true };
     let res;
-    try { res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(govde) }); }
-    catch (e) { throw new Error(claudeMi ? "Sunucuya ulaşılamadı. İnternet bağlantını kontrol et." : "Ücretsiz model sunucusuna ulaşılamadı. Cloudflare'de 'pdr-asistan' worker'ı kurulu mu? (Asistan ayarlarındaki kurulum adımlarına bak.)"); }
+    try { res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(govde), signal: iptal && iptal.ctrl ? iptal.ctrl.signal : undefined }); }
+    catch (e) {
+      ksAsistanDurdu(iptal); throw new Error(claudeMi ? "Sunucuya ulaşılamadı. İnternet bağlantını kontrol et." : "Ücretsiz model sunucusuna ulaşılamadı. Cloudflare'de 'pdr-asistan' worker'ı kurulu mu? (Asistan ayarlarındaki kurulum adımlarına bak.)"); }
     const giden = typeof window !== "undefined" ? window.__pdrKalkanSonGiden || "" : "";
     const ham = await res.text();
     let data; try { data = JSON.parse(ham); } catch (e) { data = null; }
@@ -10800,13 +10803,16 @@ function ksAsistanGecmisDuzenle(gecmis) {
   gecmis.length = 0; sonuc.forEach(m => gecmis.push(m));
   return gecmis;
 }
-async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTur = 8 }) {
+async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTur = 8, iptal = null }) {
   const sistem = ksAsistanSistem(ayar);
   ksAsistanGecmisDuzenle(gecmis);
   let toplamGiris = 0, toplamCikis = 0, sonGiden = "", model = "", yedek = false, kritik = false, ekranIsi = false;
   for (let tur = 0; tur < enFazlaTur; tur++) {
     olay({ tip: "dusunuyor" });
-    const y = await ksAsistanModelCagir(ayar, sistem, gecmis);
+    ksAsistanDurdu(iptal);
+    let y;
+    try { y = await ksAsistanModelCagir(ayar, sistem, gecmis, iptal); } catch (e) { ksAsistanDurdu(iptal); throw e; }
+    ksAsistanDurdu(iptal);
     toplamGiris += y.giris; toplamCikis += y.cikis; sonGiden = y.giden; model = y.model; yedek = yedek || y.yedek;
     gecmis.push({ role: "assistant", content: y.metin || "(boş yanıt)" });
     const { cagrilar, hatalar, disMetin } = ksAsistanAyristir(y.metin || "");
@@ -10816,6 +10822,7 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
     const sonuclar = [];
     for (const h of hatalar) sonuclar.push(`<sonuc ad="hata">Araç çağrısı okunamadı (geçerli JSON değil): ${ksAsistanKisalt(h, 150)}</sonuc>`);
     for (const c of cagrilar.slice(0, 6)) {
+      ksAsistanDurdu(iptal);
       const a = KS_ASISTAN_ARACLAR[c.ad];
       let sonuc, ogr = null;
       if (!a) sonuc = `Böyle bir araç yok. Kullanılabilir araçlar: ${Object.keys(KS_ASISTAN_ARACLAR).filter(x => ksAsistanAracAcik(x, ayar)).join(", ")}`;
@@ -25903,7 +25910,17 @@ export default {
 
 // Sohbet, sekme değiştirince kaybolmasın diye bileşen dışında tutulur
 // (yalnızca bu oturumda, bellekte — cihaza yazılmaz).
-const PDR_ASISTAN_SOHBET = { gorunen: [], gecmis: [], calisiyor: false, durum: "", adimlar: [], onay: null, dinle: null, toplamDolar: 0 };
+const PDR_ASISTAN_SOHBET = { gorunen: [], gecmis: [], calisiyor: false, durum: "", adimlar: [], onay: null, dinle: null, toplamDolar: 0, iptal: null };
+// Çalışan isteği durdurur: model isteği kesilir, bekleyen onay "vazgeç" sayılır, ekrandaki işlem durur
+function pdrAsistanDurdur() {
+  const S = PDR_ASISTAN_SOHBET;
+  if (!S.calisiyor || !S.iptal) return;
+  S.iptal.iptal = true;
+  try { S.iptal.ctrl && S.iptal.ctrl.abort(); } catch (e) {}
+  if (S.onay) { const o = S.onay; S.onay = null; o.coz(false); }
+  if (typeof PDR_EKRAN !== "undefined" && PDR_EKRAN.calisiyor) PDR_EKRAN.durdur = true;
+  S.durum = "durduruluyor"; pdrAsistanBildir();
+}
 function pdrAsistanBildir() { if (PDR_ASISTAN_SOHBET.dinle) PDR_ASISTAN_SOHBET.dinle(x => x + 1); }
 
 const PDR_ASISTAN_ARAC_AD = {
@@ -26049,12 +26066,14 @@ function AsistanEkrani({
     S.gorunen = [...S.gorunen, { rol: "ben", metin: m }];
     S.gecmis.push({ role: "user", content: m });
     S.calisiyor = true; S.durum = "dusunuyor"; S.adimlar = []; S.onay = null;
+    const iptal = { iptal: false, ctrl: typeof AbortController !== "undefined" ? new AbortController() : null };
+    S.iptal = iptal;
     pdrAsistanBildir();
     const adimlar = [];
     const kullanilan = { ...(ayarVer || ayar) };
     try {
       const s = await pdrAsistanCalistir({
-        gecmis: S.gecmis, ayar: kullanilan, ctx: ctxOlustur(),
+        gecmis: S.gecmis, ayar: kullanilan, ctx: ctxOlustur(), iptal,
         olay: (o) => {
           if (o.tip === "arac") adimlar.push({ ad: o.ad, ogrenci: o.ogrenci, sonuc: o.sonuc });
           if (o.tip === "onay_sonuc") adimlar.push({ ad: o.ad, onay: o.ok });
@@ -26068,11 +26087,19 @@ function AsistanEkrani({
       // Sesli modda cevap kendiliğinden okunur (asistan ekranı açıksa)
       if (kullanilan.sesliMod && S.dinle) { const i = S.gorunen.length - 1; if (pdrAsistanKonus(s.yanit, () => setOkunan(o => (o === i ? null : o)))) setOkunan(i); }
     } catch (e) {
+      if (iptal.iptal || (e && e.durduruldu)) {
+        // Geçmişi kullanıcının mesajına kadar geri al, modele durdurulduğunu bildir
+        for (let j = S.gecmis.length - 1; j >= 0; j--) { const x = S.gecmis[j]; if (x.role === "user" && !String(x.content).startsWith("<sonuc")) { S.gecmis.length = j + 1; break; } }
+        S.gecmis.push({ role: "assistant", content: "(Danışman bu isteği yarıda durdurdu.)" });
+        const yapilan = adimlar.filter(a => a.onay === true).map(a => PDR_ASISTAN_ARAC_AD[a.ad] || a.ad);
+        S.gorunen = [...S.gorunen, { rol: "asistan", durdu: true, metin: "⏹ Durdurdun." + (yapilan.length ? ` Durdurmadan önce onayladığın işlem(ler) yapılmıştı: ${yapilan.join(", ")}.` : " Hiçbir kayıt yapılmadı."), adimlar }];
+        return;
+      }
       S.gorunen = [...S.gorunen, { rol: "asistan", hata: true, metin: (e && e.message) || String(e), adimlar, ucretsizIdi: kullanilan.saglayici === "ucretsiz" }];
       // yarım kalan turu geçmişten çıkar (bir sonraki istek düzgün başlasın)
       while (S.gecmis.length && S.gecmis[S.gecmis.length - 1].role === "user" && S.gecmis[S.gecmis.length - 1].content.startsWith("<sonuc")) S.gecmis.pop();
     } finally {
-      S.calisiyor = false; S.durum = ""; S.adimlar = []; S.onay = null;
+      S.calisiyor = false; S.durum = ""; S.adimlar = []; S.onay = null; S.iptal = null;
       pdrAsistanBildir();
     }
   }
@@ -26230,7 +26257,7 @@ function AsistanEkrani({
             )}
           </div>
         ) : (
-          <div key={i} style={{ alignSelf: "stretch", background: m.hata ? "#FEF3F2" : CARD, border: `1px solid ${m.hata ? "#FDA29B" : BORDER}`, borderRadius: "14px 14px 14px 4px", padding: "10px 12px" }}>
+          <div key={i} style={{ alignSelf: "stretch", background: m.hata ? "#FEF3F2" : m.durdu ? "#F4F4F2" : CARD, border: `1px solid ${m.hata ? "#FDA29B" : BORDER}`, borderRadius: "14px 14px 14px 4px", padding: "10px 12px" }}>
             {m.kritik && (
               <div style={{ background: "#B42318", color: "#fff", borderRadius: 8, padding: "7px 10px", fontSize: 12, fontWeight: 800, marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                 <span>⚠ Kritik ifade bulundu — önce güvenlik adımları.</span>
@@ -26259,7 +26286,7 @@ function AsistanEkrani({
                 <button onClick={() => duzenle(i - 1)} style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${BORDER}`, background: "#fff", color: TEXT, fontSize: 12, fontWeight: 800, cursor: "pointer" }}>✏️ Düzenle</button>
               </div>
             )}
-            {!m.hata && (
+            {!m.hata && !m.durdu && (
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, marginTop: 8, paddingTop: 6, borderTop: `1px solid ${BORDER}`, fontSize: 10.5, color: MUTED, flexWrap: "wrap" }}>
                 <span>{modelAd(m.model)}{m.yedek ? " (yedek)" : ""} · {m.ucretsiz ? `ücretsiz · ${m.giris + m.cikis} token` : `≈ ${dolarYaz(m.dolar)} · ${m.giris + m.cikis} token`}</span>
                 <span style={{ display: "flex", gap: 10 }}>
@@ -26296,7 +26323,10 @@ function AsistanEkrani({
                 </div>
               </div>
             ) : (
-              <div style={{ fontSize: 12, color: MUTED }}>⏳ {S.durum === "arac" ? "Araç çalıştı, sonuç değerlendiriliyor…" : "Düşünüyor…"}</div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                <div style={{ fontSize: 12, color: MUTED }}>⏳ {S.durum === "durduruluyor" ? "Durduruluyor…" : S.durum === "arac" ? "Araç çalıştı, sonuç değerlendiriliyor…" : "Düşünüyor…"}</div>
+                <button onClick={pdrAsistanDurdur} disabled={S.durum === "durduruluyor"} style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid #FDA29B", background: "#fff", color: "#B42318", fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>⏹ Durdur</button>
+              </div>
             )}
           </div>
         )}
@@ -26314,7 +26344,9 @@ function AsistanEkrani({
           placeholder={S.calisiyor ? "Asistan çalışıyor…" : "Ne yapayım? Örn: Ali için yarınki görüşmeye hazırlık yap"} style={{ ...inp, resize: "vertical", marginBottom: 6 }} />
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={dinle} disabled={S.calisiyor} title="Sesle yaz" style={{ flex: "0 0 auto", padding: "11px 14px", borderRadius: 10, border: dinliyor ? "none" : `2px solid ${ACCENT}`, background: dinliyor ? "#B42318" : "#fff", color: dinliyor ? "#fff" : ACCENT, fontWeight: 800, fontSize: 14, cursor: "pointer" }}>{dinliyor ? (ayar.sesliMod ? "⏹ Bitir ve gönder" : "⏹ Bitir") : "🎤 Konuş"}</button>
-          <button onClick={() => gonder()} disabled={S.calisiyor || !girdi.trim()} style={{ flex: 1, padding: "11px", borderRadius: 10, border: "none", background: S.calisiyor || !girdi.trim() ? BORDER : ACCENT, color: "#fff", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>{S.calisiyor ? "⏳ Çalışıyor…" : "➤ Gönder"}</button>
+          {S.calisiyor
+            ? <button onClick={pdrAsistanDurdur} disabled={S.durum === "durduruluyor"} style={{ flex: 1, padding: "11px", borderRadius: 10, border: "none", background: "#B42318", color: "#fff", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>{S.durum === "durduruluyor" ? "⏳ Durduruluyor…" : "⏹ Durdur"}</button>
+            : <button onClick={() => gonder()} disabled={!girdi.trim()} style={{ flex: 1, padding: "11px", borderRadius: 10, border: "none", background: !girdi.trim() ? BORDER : ACCENT, color: "#fff", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>➤ Gönder</button>}
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
           <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: TEXT, cursor: "pointer" }}>

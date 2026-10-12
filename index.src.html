@@ -1217,34 +1217,36 @@ function pdrKalkanGenisKod(o, tur, deger) {
 }
 const PDR_KALKAN_BH = "A-ZÇĞİÖŞÜÂÎÛ", PDR_KALKAN_KH = "a-zçğıöşüâîû";
 const PDR_KALKAN_AD = `[${PDR_KALKAN_BH}][${PDR_KALKAN_KH}]+`;
-const PDR_KALKAN_RE_UNVAN = new RegExp(`(?<![\\p{L}\\p{N}\\-\\[])(${PDR_KALKAN_AD}(?:\\s+${PDR_KALKAN_AD})?)(\\s+)(Hanım|Bey|Hoca|Öğretmen)(?=[^\\p{L}]|[${PDR_KALKAN_KH}]|$)`, "gu");
-const PDR_KALKAN_RE_YAKIN = new RegExp(`(?<![\\p{L}])((?:üvey\\s+)?(?:anneanne|babaanne|anne|baba|abla|abi|ağabey|kız\\s+kardeş|erkek\\s+kardeş|kardeş|teyze|dayı|amca|hala|dede|nine|eş|veli|vasi|arkadaş|sevgili|komşu|kuzen|yeğen|enişte|yenge)(?:si|sı|i|ı|leri|ları)?(?:nin|nın|nun|nün)?(?:\\s*[:(]\\s*|\\s+))(${PDR_KALKAN_AD}(?:\\s+${PDR_KALKAN_AD})?)(?![\\p{L}\\-])`, "giu");
-const PDR_KALKAN_RE_OKUL = new RegExp(`(?<![\\p{L}\\p{N}\\-\\[])((?:(?:[${PDR_KALKAN_BH}][\\p{L}]*|\\d{1,3}\\.?)\\s+){1,5})((?:İlkokul|Ortaokul|Okul|Anaokul)u|Lisesi|Koleji)([\\p{L}'’]*)`, "gu");
-const PDR_KALKAN_RE_YER = new RegExp(`(?<![\\p{L}\\p{N}\\-\\[])((?:(?:[${PDR_KALKAN_BH}][\\p{L}]*|\\d{1,4}\\.?)\\s+){1,4})(Mahallesi|Mahalle|Mah\\.|Sokağı|Sokak|Caddesi|Cad\\.|Bulvarı|Sitesi|Apartmanı|Köyü)([\\p{L}'’]*)`, "gu");
+// Not: eski Safari "geriye bakma" (?<…) desteklemediği için önek grubu kullanılır
+const PDR_KALKAN_RE_UNVAN = new RegExp(`(^|[^\\p{L}\\p{N}\\-\\[])(${PDR_KALKAN_AD}(?:\\s+${PDR_KALKAN_AD})?)(\\s+)(Hanım|Bey|Hoca|Öğretmen)(?=[^\\p{L}]|[${PDR_KALKAN_KH}]|$)`, "gu");
+const PDR_KALKAN_RE_YAKIN = new RegExp(`(^|[^\\p{L}])((?:üvey\\s+)?(?:anneanne|babaanne|anne|baba|abla|abi|ağabey|kız\\s+kardeş|erkek\\s+kardeş|kardeş|teyze|dayı|amca|hala|dede|nine|eş|veli|vasi|arkadaş|sevgili|komşu|kuzen|yeğen|enişte|yenge)(?:si|sı|i|ı|leri|ları)?(?:nin|nın|nun|nün)?(?:\\s*[:(]\\s*|\\s+))(${PDR_KALKAN_AD}(?:\\s+${PDR_KALKAN_AD})?)(?![\\p{L}\\-])`, "giu");
+const PDR_KALKAN_RE_OKUL = new RegExp(`(^|[^\\p{L}\\p{N}\\-\\[])((?:(?:[${PDR_KALKAN_BH}][\\p{L}]*|\\d{1,3}\\.?)\\s+){1,5})((?:İlkokul|Ortaokul|Okul|Anaokul)u|Lisesi|Koleji)([\\p{L}'’]*)`, "gu");
+const PDR_KALKAN_RE_YER = new RegExp(`(^|[^\\p{L}\\p{N}\\-\\[])((?:(?:[${PDR_KALKAN_BH}][\\p{L}]*|\\d{1,4}\\.?)\\s+){1,4})(Mahallesi|Mahalle|Mah\\.|Sokağı|Sokak|Caddesi|Cad\\.|Bulvarı|Sitesi|Apartmanı|Köyü)([\\p{L}'’]*)`, "gu");
 function pdrKalkanGenisMetin(t, o) {
   // okul ve yer önce (içlerindeki adlar kişi sanılmasın)
-  const zincir = (tur) => (m, on, ek, ekSon) => {
+  const zincir = (tur) => (m, on0, on, ek, ekSon) => {
     const kelimeler = on.trim().split(/\s+/);
     let i = 0; while (i < kelimeler.length && pdrKalkanAdDegil(kelimeler[i])) i++;
     if (i === kelimeler.length) return m;
     const onEk = kelimeler.slice(0, i).join(" ");
-    return (onEk ? onEk + " " : "") + pdrKalkanGenisKod(o, tur, kelimeler.slice(i).join(" ") + " " + ek) + ekSon;
+    return on0 + (onEk ? onEk + " " : "") + pdrKalkanGenisKod(o, tur, kelimeler.slice(i).join(" ") + " " + ek) + ekSon;
   };
   t = t.replace(PDR_KALKAN_RE_OKUL, zincir("OKUL"));
   t = t.replace(PDR_KALKAN_RE_YER, zincir("YER"));
-  t = t.replace(PDR_KALKAN_RE_UNVAN, (m, ad, bosluk, unvan, konum, butun) => {
-    if (/(Prof|Dr|Doç|Uzm|Av)\.\s*$/.test(butun.slice(Math.max(0, konum - 8), konum))) return m;
+  t = t.replace(PDR_KALKAN_RE_UNVAN, (m, on, ad, bosluk, unvan, konum, butun) => {
+    const yer = konum + on.length;
+    if (/(Prof|Dr|Doç|Uzm|Av)\.\s*$/.test(butun.slice(Math.max(0, yer - 8), yer))) return m;
     const k = ad.split(/\s+/).filter(w => !pdrKalkanAdDegil(w));
     if (!k.length) return m;
     const temiz = k.join(" ");
     const i = ad.indexOf(temiz);
-    return ad.slice(0, i) + pdrKalkanGenisKod(o, "KİŞİ", temiz) + ad.slice(i + temiz.length) + bosluk + unvan;
+    return on + ad.slice(0, i) + pdrKalkanGenisKod(o, "KİŞİ", temiz) + ad.slice(i + temiz.length) + bosluk + unvan;
   });
-  t = t.replace(PDR_KALKAN_RE_YAKIN, (m, iliski, ad) => {
+  t = t.replace(PDR_KALKAN_RE_YAKIN, (m, on, iliski, ad) => {
     const k = ad.split(/\s+/);
     if (!/^[A-ZÇĞİÖŞÜÂÎÛ]/.test(k[0]) || pdrKalkanAdDegil(k[0])) return m;
     const al = (k.length > 1 && !pdrKalkanAdDegil(k[1]) && /^[A-ZÇĞİÖŞÜÂÎÛ]/.test(k[1])) ? k.join(" ") : k[0];
-    return iliski + pdrKalkanGenisKod(o, "KİŞİ", al) + ad.slice(al.length);
+    return on + iliski + pdrKalkanGenisKod(o, "KİŞİ", al) + ad.slice(al.length);
   });
   return t;
 }
@@ -1271,7 +1273,7 @@ function pdrKalkanGeriCevir(x, o) {
   if (typeof x === "string") {
     let t = x.replace(/Öğrenci-(\d+)/giu, (m, n) => o.geri.get("Öğrenci-" + n) || m);
     t = t.replace(/\[(TC|TELEFON|EPOSTA|N|KİŞİ|OKUL|YER)-(\d+)\]/gu, m => o.geri.get(m) || m);
-    t = t.replace(/(?<![\[\p{L}])(KİŞİ|OKUL|YER)-(\d+)(?!\])/gu, (m, a, n) => o.geri.get(`[${a}-${n}]`) || m);
+    t = t.replace(/(^|[^\[\p{L}])(KİŞİ|OKUL|YER)-(\d+)(?!\])/gu, (m, on, a, n) => { const v = o.geri.get(`[${a}-${n}]`); return v ? on + v : m; });
     t = t.replace(/\d{0,2}-Ş\d+/gu, m => o.geri.get(m) || m);
     return t;
   }
@@ -25683,6 +25685,34 @@ const PDR_ASISTAN_ORNEKLER = [
   "Bugünkü görüşmemi not olarak ekle",
 ];
 
+// ── Sesli konuşma ──
+// Okuma (konuşma sentezi) telefonun kendi sesiyle cihazda yapılır. Dinleme
+// (ses tanıma) tarayıcının servisiyle yapılır; Chrome'da bu Google sunucusudur.
+function pdrAsistanSesliMetin(t) {
+  return String(t || "").replace(/\*\*(.+?)\*\*/g, "$1").replace(/^#{1,4}\s+/gm, "").replace(/^\s*[-*•]\s+/gm, "").replace(/[⚠🔒📝🔔🎯📍👀✅✋🔧🤖]/gu, "").replace(/\n{2,}/g, ". ").replace(/\n/g, ", ").trim();
+}
+function pdrAsistanKonus(metin, bitince) {
+  try {
+    if (!("speechSynthesis" in window)) return false;
+    const ss = window.speechSynthesis; ss.cancel();
+    const t = pdrAsistanSesliMetin(metin); if (!t) return false;
+    // Uzun metin cümlelere bölünür (bazı telefonlar uzun okumayı yarıda keser)
+    const parcalar = []; let buf = "";
+    t.replace(/([.!?;:])\s+/g, "$1\u0001").split("\u0001").forEach(c => { if ((buf + " " + c).length > 180 && buf) { parcalar.push(buf); buf = c; } else buf = buf ? buf + " " + c : c; });
+    if (buf) parcalar.push(buf);
+    const ses = (ss.getVoices() || []).find(v => /^tr/i.test(v.lang));
+    parcalar.forEach((p, i) => {
+      const u = new SpeechSynthesisUtterance(p);
+      u.lang = "tr-TR"; u.rate = 1.0; if (ses) u.voice = ses;
+      if (i === parcalar.length - 1 && bitince) u.onend = bitince;
+      ss.speak(u);
+    });
+    return true;
+  } catch (e) { return false; }
+}
+function pdrAsistanSustur() { try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {} }
+const PDR_ASISTAN_SR = typeof window !== "undefined" ? (window.SpeechRecognition || window.webkitSpeechRecognition || null) : null;
+
 function AsistanEkrani({
   kayitliListesi, records, setRecords, riskListesi, setRiskListesi, hatirlatmalar, setHatirlatmalar,
   mudahalePlan, setMudahalePlan, profiles, profiles2, denemeler, sevkler, testKayitlari,
@@ -25696,9 +25726,36 @@ function AsistanEkrani({
   const [kurulumAcik, setKurulumAcik] = useState(false);
   const [testDurum, setTestDurum] = useState("");
   const [acik, setAcik] = useState({}); // açılan "Modele ne gitti?" ve araç ayrıntıları
+  const [dinliyor, setDinliyor] = useState(false);
+  const [okunan, setOkunan] = useState(null); // şu an sesli okunan mesajın sırası
+  const tanimaRef = useRef(null);
   const altRef = useRef(null);
 
-  useEffect(() => { S.dinle = yenile; return () => { if (S.dinle === yenile) S.dinle = null; }; }, []);
+  useEffect(() => { S.dinle = yenile; return () => { if (S.dinle === yenile) S.dinle = null; try { tanimaRef.current && tanimaRef.current.abort(); } catch (e) {} pdrAsistanSustur(); }; }, []);
+
+  function sesliOku(i, metin) {
+    if (okunan === i) { pdrAsistanSustur(); setOkunan(null); return; }
+    if (pdrAsistanKonus(metin, () => setOkunan(o => (o === i ? null : o)))) setOkunan(i);
+    else alert("Bu tarayıcı sesli okumayı desteklemiyor.");
+  }
+  function dinle() {
+    if (dinliyor) { try { tanimaRef.current && tanimaRef.current.stop(); } catch (e) {} return; }
+    if (!PDR_ASISTAN_SR) { alert("Bu tarayıcı sesle yazmayı desteklemiyor. (Android'de Chrome, iPhone'da Safari kullan.)"); return; }
+    pdrAsistanSustur(); setOkunan(null);
+    const r = new PDR_ASISTAN_SR();
+    r.lang = "tr-TR"; r.continuous = false; r.interimResults = true;
+    const bas = girdi ? girdi.replace(/\s+$/, "") + " " : "";
+    let son = "";
+    r.onresult = (e) => { son = Array.from(e.results).map(x => x[0].transcript).join(" "); setGirdi(bas + son); };
+    r.onerror = (e) => { setDinliyor(false); if (e && e.error === "not-allowed") alert("Mikrofon izni verilmedi. Tarayıcı ayarlarından mikrofona izin ver."); };
+    r.onend = () => {
+      setDinliyor(false);
+      // Sesli modda konuşma bitince kendiliğinden gönderilir
+      if (ayar.sesliMod && son.trim()) gonder(bas + son);
+    };
+    tanimaRef.current = r;
+    try { r.start(); setDinliyor(true); } catch (e) { setDinliyor(false); }
+  }
   useEffect(() => { if (altRef.current && altRef.current.scrollIntoView) altRef.current.scrollIntoView({ behavior: "smooth", block: "end" }); }, [S.gorunen.length, S.adimlar.length, !!S.onay]);
 
   const inp = { width: "100%", padding: "9px 11px", borderRadius: 9, border: `1px solid ${BORDER}`, fontSize: 13, boxSizing: "border-box", background: CARD, color: TEXT, fontFamily: "inherit" };
@@ -25722,7 +25779,7 @@ function AsistanEkrani({
   async function gonder(metinVer) {
     const m = String(metinVer ?? girdi).trim();
     if (!m || S.calisiyor) return;
-    setGirdi("");
+    setGirdi(""); pdrAsistanSustur(); setOkunan(null);
     S.gorunen = [...S.gorunen, { rol: "ben", metin: m }];
     S.gecmis.push({ role: "user", content: m });
     S.calisiyor = true; S.durum = "dusunuyor"; S.adimlar = []; S.onay = null;
@@ -25742,6 +25799,8 @@ function AsistanEkrani({
       const dolar = kullanilan.saglayici === "ucretsiz" ? null : ksAsistanMaliyet(s.model, s.giris, s.cikis);
       if (dolar) S.toplamDolar += dolar;
       S.gorunen = [...S.gorunen, { rol: "asistan", metin: s.yanit, adimlar, model: s.model, giris: s.giris, cikis: s.cikis, dolar, giden: s.giden, kritik: s.kritik, yedek: s.yedek, ucretsiz: kullanilan.saglayici === "ucretsiz" }];
+      // Sesli modda cevap kendiliğinden okunur (asistan ekranı açıksa)
+      if (kullanilan.sesliMod && S.dinle) { const i = S.gorunen.length - 1; if (pdrAsistanKonus(s.yanit, () => setOkunan(o => (o === i ? null : o)))) setOkunan(i); }
     } catch (e) {
       S.gorunen = [...S.gorunen, { rol: "asistan", hata: true, metin: (e && e.message) || String(e), adimlar }];
       // yarım kalan turu geçmişten çıkar (bir sonraki istek düzgün başlasın)
@@ -25909,6 +25968,7 @@ function AsistanEkrani({
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, marginTop: 8, paddingTop: 6, borderTop: `1px solid ${BORDER}`, fontSize: 10.5, color: MUTED, flexWrap: "wrap" }}>
                 <span>{modelAd(m.model)}{m.yedek ? " (yedek)" : ""} · {m.ucretsiz ? `ücretsiz · ${m.giris + m.cikis} token` : `≈ ${dolarYaz(m.dolar)} · ${m.giris + m.cikis} token`}</span>
                 <span style={{ display: "flex", gap: 10 }}>
+                  <button onClick={() => sesliOku(i, m.metin)} style={{ background: "none", border: "none", color: ACCENT, fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: 0 }}>{okunan === i ? "⏹ Sustur" : "🔊 Sesli oku"}</button>
                   <button onClick={() => { try { navigator.clipboard.writeText(temizMetin(m.metin)); } catch (e) {} }} style={{ background: "none", border: "none", color: ACCENT, fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: 0 }}>📋 Kopyala</button>
                   <button onClick={() => ac("g" + i)} style={{ background: "none", border: "none", color: ACCENT, fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: 0 }}>🔍 Modele ne gitti? {acik["g" + i] ? "▲" : "▼"}</button>
                 </span>
@@ -25957,7 +26017,17 @@ function AsistanEkrani({
         <textarea value={girdi} onChange={e => setGirdi(e.target.value)} rows={3} disabled={S.calisiyor}
           onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent || "")) { e.preventDefault(); gonder(); } }}
           placeholder={S.calisiyor ? "Asistan çalışıyor…" : "Ne yapayım? Örn: Ali için yarınki görüşmeye hazırlık yap"} style={{ ...inp, resize: "vertical", marginBottom: 6 }} />
-        <button onClick={() => gonder()} disabled={S.calisiyor || !girdi.trim()} style={{ width: "100%", padding: "11px", borderRadius: 10, border: "none", background: S.calisiyor || !girdi.trim() ? BORDER : ACCENT, color: "#fff", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>{S.calisiyor ? "⏳ Çalışıyor…" : "➤ Gönder"}</button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={dinle} disabled={S.calisiyor} title="Sesle yaz" style={{ flex: "0 0 auto", padding: "11px 14px", borderRadius: 10, border: dinliyor ? "none" : `2px solid ${ACCENT}`, background: dinliyor ? "#B42318" : "#fff", color: dinliyor ? "#fff" : ACCENT, fontWeight: 800, fontSize: 14, cursor: "pointer" }}>{dinliyor ? "⏹ Dinliyorum" : "🎤 Konuş"}</button>
+          <button onClick={() => gonder()} disabled={S.calisiyor || !girdi.trim()} style={{ flex: 1, padding: "11px", borderRadius: 10, border: "none", background: S.calisiyor || !girdi.trim() ? BORDER : ACCENT, color: "#fff", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>{S.calisiyor ? "⏳ Çalışıyor…" : "➤ Gönder"}</button>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: TEXT, cursor: "pointer" }}>
+            <input type="checkbox" checked={!!ayar.sesliMod} onChange={e => { ayarDegis({ sesliMod: e.target.checked }); if (!e.target.checked) { pdrAsistanSustur(); setOkunan(null); } }} />
+            🔊 Sesli mod <span style={{ color: MUTED }}>(cevapları okur, konuşman bitince gönderir)</span>
+          </label>
+        </div>
+        {dinliyor && <div style={{ fontSize: 10.5, color: MUTED, marginTop: 4 }}>🎤 Ses tanıma tarayıcının servisiyle (Chrome'da Google) yapılır. Öğrenci adını söylemek yerine sonra yazman daha güvenli.</div>}
       </div>
       <div ref={altRef} style={{ height: 90 }} />
     </div>

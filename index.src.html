@@ -10441,6 +10441,11 @@ const KS_ASISTAN_ARACLAR = {
       return s.join("\n");
     },
   },
+  program_rehberi: {
+    aciklama: "Programın ekranlarını, her ekranın ne işe yaradığını ve özelliklerini anlatır. Danışman programın kullanımını sorduğunda kullan. sorgu: ekran anahtarı ya da konu kelimesi (boşsa bütün harita).",
+    girdi: '{"sorgu": "örn. deneme | risk | sevk | bdt (isteğe bağlı)"}', yontem: "hepsi",
+    calistir: (g) => ksAsistanProgramRehberi(g.sorgu),
+  },
   ogrenci_dosyasi: {
     aciklama: "Öğrencinin BÜTÜN dosyasını getirir: görüşmeler (tümünün konu dağılımı ve son notlar), bu yılın ve geçmiş dönemin denemeleri, yıl sonu not ortalamaları, BDT bilişsel çarpıtmaları, bireyi tanıma bilgileri, uygulanan testler, profil puanları, devamsızlık, olay kayıtları, risk/müdahale/sevk geçmişi. Risk değerlendirmesi, müdahale planı, seans hazırlığı ya da veli yazısından ÖNCE çağır.",
     girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
@@ -10617,9 +10622,9 @@ const KS_ASISTAN_ARACLAR = {
   },
   // ── Ekranda göstererek çalışan araçlar: formu danışmanın gözü önünde doldurur, Kaydet'e danışman basar ──
   ekranda_ac: {
-    aciklama: "Programda bir ekranı açar (öğrenci verilirse o öğrenciyle). 'Dosyasını aç' için ekran=dosya, 'görüşme notlarını göster' için ekran=gorusmeler (öğrencinin kayıtlı görüşmeleri), yeni not formu için gorusme. ekran: dosya | gorusmeler | profil | ogrenciler | gorusme | risk | mudahale | hatirlatici | takvim | deneme | testler | sinif | devamsizlik | belgeler | istatistik | uyum | prof",
+    aciklama: "Programda bir ekranı açar (öğrenci verilirse o öğrenciyle). 'Dosyasını aç' için ekran=dosya, 'görüşme notlarını göster' için ekran=gorusmeler (öğrencinin kayıtlı görüşmeleri), yeni not formu için gorusme. Program haritasındaki herhangi bir ekran anahtarı da olur. ekran: dosya | gorusmeler | profil | ogrenciler | gorusme | risk | mudahale | hatirlatici | takvim | deneme | testler | sinif | devamsizlik | belgeler | istatistik | uyum | prof",
     girdi: '{"ekran": "profil", "ogrenci": "isteğe bağlı", "sinif": "isteğe bağlı"}', ekran: true, yontem: "hepsi",
-    calistir: (g, ctx, o) => ksEkranAc(o, PDR_EKRAN_SEKMELER[g.ekran] ? g.ekran : "profil"),
+    calistir: (g, ctx, o) => ksEkranAc(o, g.ekran || "profil"),
   },
   ekranda_gorusme: {
     aciklama: "Görüşme Notu ekranını açar, öğrenciyi seçer, türü/tarihi/konuyu ve notu danışmanın gözü önünde yazar. Kaydet'e danışman basar. Birden çok öğrenciyle yapılan grup görüşmesinde ilk öğrenciyi 'ogrenci'ye, diğerlerini 'diger_ogrenciler' listesine yaz (her öğrenciye ayrı kayıt düşer). tur: Öğrenci | Veli | Öğretmen; tarih GG.AA.YYYY (boşsa bugün); konu şunlardan biri: " + KONU_LISTESI.join(" | ") + ".",
@@ -10747,6 +10752,44 @@ function ksAsistanOgrenciDosyasi(ctx, o) {
 }
 function ksTarihSiralaAlan(alan) { return (a, b) => ksTarihAnahtar(a[alan]).localeCompare(ksTarihAnahtar(b[alan])); }
 
+// ── Programın mimarisi ve işlevi (asistanın "program bilgisi") ──────────────────
+// Ekran listesi ve açıklamalar programın kendi Şema/Özellik tablolarından üretilir;
+// programa yeni bir sekme eklendiğinde asistan da kendiliğinden öğrenir.
+function ksAsistanSekmeAdi(key) {
+  try { for (const d of SEMA_DALLARI) for (const y of d.yapraklar) if (y.tab === key) return y.label; } catch (e) {}
+  return key;
+}
+function ksAsistanProgramOzet() {
+  let gruplar = "";
+  try { gruplar = SEMA_DALLARI.map(d => `- ${d.label}: ${d.aciklama} Ekranlar: ${d.yapraklar.map(y => `${y.label} [${y.tab}]`).join(", ")}`).join("\n"); } catch (e) { gruplar = "- (ekran listesi okunamadı)"; }
+  return `PROGRAM HAKKINDA (içinde çalıştığın program)
+- Amaç: Okul psikolojik danışmanının (rehber öğretmen) rehberlik servisini yönettiği öğrenci takip programı. Danışman görüşmelerini kaydeder, riskli öğrencileri izler, müdahale planlar, akademik gidişi ve testleri takip eder, resmî belgeleri hazırlar.
+- Mimari: Telefonda/tablette/bilgisayarda tarayıcıda çalışan tek sayfalık bir uygulama. Veriler cihazda şifreli tutulur; isteğe bağlı bulut yedeği vardır. Akademik yıl ve okul kademesi (ilkokul/ortaokul/lise) seçilir; sınav türü (LGS/TYT…) deneme derslerini belirler.
+- İki analiz yolu: 🔒 Kapalı Sistem (cihazda, kural tabanlı, ücretsiz; risk, profil, müdahale, seans hazırlığı, süpervizyon, MEB raporu, veli yazısı) ve ✦ AI (isteğe bağlı; gizlilik kalkanıyla adlar kodlanarak gönderilir).
+- Veri modeli: Merkezde ÖĞRENCİ vardır (ad soyad gizlilik için kısaltılmış/maskeli saklanır, ör. "AYŞE YI****"; sınıf; okul no). Öğrenciye bağlı kayıtlar: görüşme notları (öğrenci/veli/öğretmen görüşmesi, konu, tarih, grup görüşmesi) → bu notlardan BDT bilişsel çarpıtmaları, bireyi tanıma bilgileri ve uyum izleme önerileri çıkar; risk kayıtları; müdahale planları (hedef, adımlar, oturumlar, ilerleme); hatırlatmalar; denemeler (bu yıl D1, D2… ve geçmiş dönem G1…); testler; devamsızlık; sevkler; Profil 1 (8 boyutlu PDR puanları) ve Profil 2 (akademik bilgiler, ilgiler, kariyer hedefi, yıl sonu not ortalamaları).
+- Ekranlar (gruplar hâlinde, köşeli parantezde ekran anahtarı):
+${gruplar}
+- Sen (Asistan) bu programın içindesin: verileri araçlarla okursun, ekranları açarsın, formları doldurursun; kayıt için danışmanın onayını alırsın; silemezsin, dışarıya bir şey gönderemezsin.
+- Danışman programın nasıl kullanılacağını sorarsa ("… nerede?", "nasıl girerim?") ilgili ekranı ve 2-4 adımı kısa anlat; ayrıntı gerekirse program_rehberi aracını kullan; istenirse ekranda_ac ile o ekranı aç. Programda olmayan bir özelliği uydurma.`;
+}
+function ksAsistanProgramRehberi(sorgu) {
+  const q = ksSade(String(sorgu || "").trim());
+  const satirlar = [];
+  try {
+    SEMA_DALLARI.forEach(d => {
+      const yap = d.yapraklar.filter(y => !q || ksSade(y.tab).includes(q) || ksSade(y.label).includes(q) || ksSade(d.label).includes(q) || ksSade(((PDR_EKRAN.sekmeAciklama || {})[y.tab]) || "").includes(q) || ((typeof SEMA_ICERIK !== "undefined" && SEMA_ICERIK[y.tab]) || []).some(f => ksSade(f[0]).includes(q)));
+      if (!yap.length) return;
+      satirlar.push(`${d.label} — ${d.aciklama}`);
+      yap.forEach(y => {
+        const ac = ((PDR_EKRAN.sekmeAciklama || {})[y.tab]) || "";
+        const oz = ((typeof SEMA_ICERIK !== "undefined" && SEMA_ICERIK[y.tab]) || []).map(f => f[0] + (f[1] ? " (AI)" : "")).join("; ");
+        satirlar.push(`  • ${y.label} [${y.tab}]: ${ac}${oz ? " Özellikler: " + oz + "." : ""}`);
+      });
+    });
+  } catch (e) {}
+  return satirlar.length ? satirlar.join("\n") : `"${sorgu}" ile eşleşen ekran bulunamadı. Sorgusuz çağırırsan bütün program haritasını verir.`;
+}
+
 // ── Sistem talimatı ──────────────────────────────────────────────────────────
 const PDR_ASISTAN_VARSAYILAN_KURALLAR = "Bana meslektaşın gibi, sade ve kısa yanıt ver.\nÖnerilerinde önce öğrencinin güçlü yönlerini gözet.\nEmin olmadığın bir konuda bunu açıkça söyle.";
 function ksAsistanSistem(ayar) {
@@ -10755,6 +10798,8 @@ function ksAsistanSistem(ayar) {
   const ekranModu = (ayar.kayitYontemi || "ekran") !== "sohbet";
   const ek = String(ayar.kurallar || "").trim() || PDR_ASISTAN_VARSAYILAN_KURALLAR;
   return `Sen "PDR Asistanı"sın: bir okul psikolojik danışmanının (rehber öğretmen) öğrenci takip programının içinde çalışan yardımcısısın. Danışmanla meslektaş gibi, doğru Türkçe imlayla konuşursun.
+
+${ksAsistanProgramOzet()}
 
 VERİ VE GİZLİLİK
 - Öğrenci adları sana "Öğrenci-1" gibi kodlarla, sınıflar "8-Ş1" gibi, diğer kişi/okul/yer adları "[KİŞİ-1]", "[OKUL-1]", "[YER-1]" gibi gelir. Kodları aynen kullan; gerçek adları tahmin etmeye çalışma. Danışman ekranında kodları gerçek adlarla görür.
@@ -11356,7 +11401,8 @@ async function ksEkranMudahale(o, g) {
   });
 }
 async function ksEkranAc(o, ekran) {
-  const s = PDR_EKRAN_SEKMELER[ekran] || PDR_EKRAN_SEKMELER.profil;
+  const sekmeVar = (k) => !!(PDR_EKRAN.sekmeAciklama || {})[k];
+  const s = PDR_EKRAN_SEKMELER[ekran] || (sekmeVar(ekran) ? [ekran, ksAsistanSekmeAdi(ekran)] : PDR_EKRAN_SEKMELER.profil);
   return ksEkranCalistir(s[1], async () => {
     await ksEkranSekme(s[0], o);
     if (o && (ekran === "gorusmeler" || ekran === "dosya")) {
@@ -36612,7 +36658,7 @@ export default function App() {
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, "tr"));
   }, [ogrenciler, records, profiles, profiles2, kademe]);
   // PDR Asistanı ekran sürücüsü sekme değiştirebilsin ve öğrenci seçebilsin
-  useEffect(() => { PDR_EKRAN.setTab = setTab; PDR_EKRAN.setAktifOgrenci = setAktifOgrenci; PDR_EKRAN.tab = tab; });
+  useEffect(() => { PDR_EKRAN.setTab = setTab; PDR_EKRAN.setAktifOgrenci = setAktifOgrenci; PDR_EKRAN.tab = tab; PDR_EKRAN.sekmeAciklama = SEKME_ACIKLAMALARI; });
   // Kapalı sistemin görüşme dışı veri kaynağı (BDT, bireyi tanıma, testler, yıl sonu ortalamaları, denemeler, devamsızlık)
   useEffect(() => { Object.assign(PDR_EK_KAYNAK, { bdtAnaliz, bireyiTanima, testKayitlari, profiles2, denemeler, ogrenciler, sinavTuru }); });
 

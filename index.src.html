@@ -10195,6 +10195,20 @@ function ksAsistanOgrenciBul(ctx, ad, sinif) {
   if (aday.length > 1) return { aday: aday.slice(0, 10) };
   return { yok: true };
 }
+// Grup görüşmesindeki diğer öğrencileri bulur: { liste } ya da { hata }
+function ksAsistanDigerleriBul(ctx, g, o) {
+  const ham = Array.isArray(g.diger_ogrenciler) ? g.diger_ogrenciler : [];
+  const liste = [], sorunlar = [];
+  ham.slice(0, 8).forEach(x => {
+    const ad = typeof x === "string" ? x : (x && (x.ogrenci || x.ad)) || "", sinif = typeof x === "string" ? "" : (x && x.sinif) || "";
+    if (!ad) return;
+    const b = ksAsistanOgrenciBul(ctx, ad, sinif);
+    if (b.tek) { if (!(b.tek.name === o.name && b.tek.className === o.className) && !liste.some(l => l.name === b.tek.name && l.className === b.tek.className)) liste.push(b.tek); }
+    else if (b.aday) sorunlar.push(`"${ad}" için birden çok öğrenci var (${b.aday.map(ksAsistanEtiket).join(", ")}); sınıf ekle.`);
+    else sorunlar.push(`"${ad}${sinif ? " " + sinif : ""}" kayıtlı öğrenciler arasında bulunamadı.`);
+  });
+  return sorunlar.length ? { hata: "Grup görüşmesi: " + sorunlar.join(" "), liste } : { liste };
+}
 function ksAsistanEtiket(o) { return `${o.name}${o.className ? " (" + o.className + ")" : ""}`; }
 
 // Bir öğrencinin tüm kapalı sistem girdileri (Prof. Hakan ekranıyla aynı kaynaklar)
@@ -10346,16 +10360,20 @@ const KS_ASISTAN_ARACLAR = {
     } },
   // ── Kayıt oluşturan araçlar (danışman onayı gerekir) ──
   gorusme_kaydet: {
-    aciklama: "Danışmanın anlattığı görüşmeyi kaydeder (ONAY GEREKİR). tur: Öğrenci | Veli | Öğretmen. tarih GG.AA.YYYY (boşsa bugün).", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "konu": "kısa konu", "ozet": "görüşme özeti", "tarih": "GG.AA.YYYY", "tur": "Öğrenci"}', ogrenciIster: true, yazma: true,
-    onayOzeti: (g, ctx, o) => `📝 Görüşme kaydı\nÖğrenci: ${ksAsistanEtiket(o)}\nTarih: ${ksAsistanTarihNormal(g.tarih) || today()} · Tür: ${g.tur || "Öğrenci"}${g.konu ? " · Konu: " + g.konu : ""}\nÖzet: ${g.ozet || "—"}`,
+    aciklama: "Danışmanın anlattığı görüşmeyi kaydeder (ONAY GEREKİR). tur: Öğrenci | Veli | Öğretmen. tarih GG.AA.YYYY (boşsa bugün). Grup görüşmesinde diğer öğrencileri 'diger_ogrenciler' listesine yaz.", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "diger_ogrenciler": [{"ogrenci": "ad", "sinif": "8-H"}], "konu": "kısa konu", "ozet": "görüşme özeti", "tarih": "GG.AA.YYYY", "tur": "Öğrenci"}', ogrenciIster: true, yazma: true,
+    onayOzeti: (g, ctx, o) => { const d = ksAsistanDigerleriBul(ctx, g, o); return `📝 Görüşme kaydı${d.liste && d.liste.length ? " (grup)" : ""}\nÖğrenci: ${[o, ...(d.liste || [])].map(ksAsistanEtiket).join(", ")}${d.hata ? "\n⚠ " + d.hata : ""}\nTarih: ${ksAsistanTarihNormal(g.tarih) || today()} · Tür: ${g.tur || "Öğrenci"}${g.konu ? " · Konu: " + g.konu : ""}\nÖzet: ${g.ozet || "—"}`; },
     calistir: async (g, ctx, o) => {
       if (!String(g.ozet || "").trim()) return "Özet boş olduğu için kaydedilmedi.";
+      const dg = ksAsistanDigerleriBul(ctx, g, o); if (dg.hata) return dg.hata + " Kayıt yapılmadı.";
       const yeni = { id: uid(), date: ksAsistanTarihNormal(g.tarih) || today(), saat: new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }),
         meetingType: ["Öğrenci", "Veli", "Öğretmen"].includes(g.tur) ? g.tur : "Öğrenci", topic: g.konu || "", altKonu: "", raw: g.ozet, summary: g.ozet,
         studentName: o.name, className: o.className, numara: o.numara || "", kaynak: "asistan" };
-      const guncel = [yeni, ...(ctx.records || [])];
+      const hepsi = [o, ...dg.liste];
+      const kayitlar = hepsi.map((k, i) => ({ ...yeni, id: i ? uid() : yeni.id, studentName: k.name, className: k.className, numara: k.numara || "",
+        grupKatilimcilari: hepsi.length > 1 ? hepsi.filter(x => x !== k).map(x => x.name) : undefined }));
+      const guncel = [...kayitlar, ...(ctx.records || [])];
       ctx.records = guncel; await ctx.kaydet.records(guncel);
-      return `Görüşme kaydedildi (${yeni.date}).`;
+      return `Görüşme kaydedildi (${yeni.date})${hepsi.length > 1 ? `; grup görüşmesi, ${hepsi.length} öğrenciye ayrı kayıt` : ""}.`;
     },
   },
   hatirlatma_ekle: {
@@ -10409,11 +10427,12 @@ const KS_ASISTAN_ARACLAR = {
     calistir: (g, ctx, o) => ksEkranAc(o, PDR_EKRAN_SEKMELER[g.ekran] ? g.ekran : "profil"),
   },
   ekranda_gorusme: {
-    aciklama: "Görüşme Notu ekranını açar, öğrenciyi seçer, türü/tarihi/konuyu ve notu danışmanın gözü önünde yazar. Kaydet'e danışman basar. tur: Öğrenci | Veli | Öğretmen; tarih GG.AA.YYYY (boşsa bugün); konu şunlardan biri: " + KONU_LISTESI.join(" | ") + ".",
-    girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "ozet": "görüşme notu", "konu": "isteğe bağlı", "tarih": "GG.AA.YYYY", "tur": "Öğrenci"}', ogrenciIster: true, ekran: true, ekranYazma: true, yontem: "ekran",
+    aciklama: "Görüşme Notu ekranını açar, öğrenciyi seçer, türü/tarihi/konuyu ve notu danışmanın gözü önünde yazar. Kaydet'e danışman basar. Birden çok öğrenciyle yapılan grup görüşmesinde ilk öğrenciyi 'ogrenci'ye, diğerlerini 'diger_ogrenciler' listesine yaz (her öğrenciye ayrı kayıt düşer). tur: Öğrenci | Veli | Öğretmen; tarih GG.AA.YYYY (boşsa bugün); konu şunlardan biri: " + KONU_LISTESI.join(" | ") + ".",
+    girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "diger_ogrenciler": [{"ogrenci": "ad", "sinif": "8-H"}], "ozet": "görüşme notu", "konu": "isteğe bağlı", "tarih": "GG.AA.YYYY", "tur": "Öğrenci"}', ogrenciIster: true, ekran: true, ekranYazma: true, yontem: "ekran",
     calistir: async (g, ctx, o) => {
       if (!String(g.ozet || "").trim()) return "Not metni boş olduğu için form doldurulmadı.";
-      return ksEkranGorusme(o, g);
+      const d = ksAsistanDigerleriBul(ctx, g, o); if (d.hata) return d.hata;
+      return ksEkranGorusme(o, { ...g, __digerler: d.liste });
     },
   },
   ekranda_hatirlatma: {
@@ -10518,6 +10537,8 @@ async function ksAsistanModelCagir(ayar, sistem, mesajlar) {
   if (claudeMi && r.model !== PDR_ASISTAN_YEDEK_CLAUDE && ((hatali(r) && [400, 403, 404, 422].includes(r.res.status)) || (!hatali(r) && !ksAsistanMetinCikar(r.data).trim()))) {
     r = await istek(PDR_ASISTAN_YEDEK_CLAUDE); yedek = true;
   }
+  // Ücretsiz model boş yanıt verdiyse aynı isteği bir kez daha dene
+  if (!claudeMi && !hatali(r) && !ksAsistanMetinCikar(r.data).trim()) r = await istek(r.model);
   const { res, data, ham, giden, model } = r;
   if (!res.ok || !data || data.error) {
     const m = data && data.error ? (data.error.message || data.error) : ham.slice(0, 200);
@@ -10526,7 +10547,10 @@ async function ksAsistanModelCagir(ayar, sistem, mesajlar) {
   let metin = ksAsistanMetinCikar(data);
   if (!metin.trim()) {
     const bloklar = Array.isArray(data.content) ? data.content.map(b => b && b.type).join(", ") : typeof data.content;
-    throw new Error(`Model boş yanıt döndürdü (model: ${model}; bitiş: ${data.stop_reason || "?"}; içerik: ${bloklar || "yok"}). Bu ekranın görüntüsünü geliştiriciye iletebilirsin.`);
+    const e = new Error(claudeMi
+      ? `Model boş yanıt döndürdü (model: ${model}; bitiş: ${data.stop_reason || "?"}; içerik: ${bloklar || "yok"}).`
+      : "Ücretsiz model bu mesaja iki kez boş yanıt verdi. Uzun ya da hassas içerikli metinlerde bu model zaman zaman yanıt üretmiyor. Aşağıdan Claude ile tekrar sorabilir ya da mesajı düzenleyebilirsin.");
+    e.bos = true; throw e;
   }
   const u = data.usage || {};
   const giris = u.input_tokens ?? u.prompt_tokens ?? Math.round((sistem.length + JSON.stringify(mesajlar).length) / 3.5);
@@ -10861,6 +10885,23 @@ async function ksEkranGorusme(o, g) {
     if (!not0) throw new Error("Görüşme notu ekranı açılamadı.");
     if (not0.value.trim()) throw new Error("Görüşme Notu ekranında kaydedilmemiş bir taslak var. Önce onu kaydet ya da temizle, sonra tekrar iste.");
     await ksEkranOgrenciSec("gorusme", o);
+    // Grup görüşmesi: istenmeyen eski katılımcılar çıkarılır, istenenler eklenir
+    const digerler = (g.__digerler || []);
+    for (const x of [...document.querySelectorAll('[data-asistan="grup-cikar"]')]) {
+      if (!digerler.some(d => ksEkranAyniOgr(x, d))) { ksEkranBalon("🤖 Eski grup katılımcısı çıkarılıyor…"); await ksEkranTikla(x); }
+    }
+    for (const d of digerler) {
+      if ([...document.querySelectorAll('[data-asistan="grup-cikar"]')].some(x => ksEkranAyniOgr(x, d))) continue;
+      const ekle = await ksEkranBul('[data-asistan="grup-ekle"], [data-asistan="grup-ara"]');
+      if (!ekle) throw new Error("Grup görüşmesi düğmesi bulunamadı.");
+      if (ekle.getAttribute("data-asistan") === "grup-ekle") { ksEkranBalon("🤖 Grup görüşmesine öğrenci ekleniyor…"); await ksEkranTikla(ekle); }
+      const ara = await ksEkranBul('[data-asistan="grup-ara"]');
+      ksEkranBalon(`🤖 Gruba ekleniyor: <b>${pdrHtmlKac(d.name)}</b>`);
+      await ksEkranYaz(ara, String(d.name || "").replace(/\*/g, "").trim().split(" ").slice(0, 2).join(" "));
+      const btn = await ksEkranBul(() => [...document.querySelectorAll('[data-asistan="grup-sonuc"]')].find(b => ksEkranAyniOgr(b, d)));
+      if (!btn) throw new Error(`${d.name} grup listesinde bulunamadı.`);
+      await ksEkranTikla(btn);
+    }
     const tur = ["Öğrenci", "Veli", "Öğretmen"].includes(g.tur) ? g.tur : "Öğrenci";
     const tb = await ksEkranBul(`[data-asistan="gorusme-tur"][data-deger="${tur}"]`);
     if (tb) { ksEkranBalon(`🤖 Görüşme türü: <b>${tur}</b>`); await ksEkranTikla(tb); }
@@ -10881,8 +10922,9 @@ async function ksEkranGorusme(o, g) {
     const k = await ksEkranBul('[data-asistan="gorusme-kaydet"]');
     if (!k) throw new Error("Kaydet düğmesi bulunamadı.");
     await ksEkranGit(k);
-    ksEkranSonAdim(k, `📝 <b>${pdrHtmlKac(o.name)}</b> için görüşme notu hazır.`);
-    return "Görüşme notu ekranda dolduruldu; danışman kontrol edip 'Görüşmeyi Kaydet'e basacak (henüz kaydedilmedi).";
+    const grupAd = (g.__digerler || []).length ? `<b>${pdrHtmlKac(o.name)}</b> ve ${g.__digerler.map(d => "<b>" + pdrHtmlKac(d.name) + "</b>").join(", ")} için grup görüşmesi notu hazır (her öğrenciye ayrı kayıt düşer).` : `<b>${pdrHtmlKac(o.name)}</b> için görüşme notu hazır.`;
+    ksEkranSonAdim(k, "📝 " + grupAd);
+    return `Görüşme notu ekranda dolduruldu${(g.__digerler || []).length ? " (grup görüşmesi: " + (1 + g.__digerler.length) + " öğrenci)" : ""}; danışman kontrol edip kayıt düğmesine basacak (henüz kaydedilmedi).`;
   });
 }
 async function ksEkranHatirlatma(o, g) {
@@ -25776,7 +25818,8 @@ function AsistanEkrani({
     };
   }
 
-  async function gonder(metinVer) {
+  function gonder(metinVer) { return gonderAyar(metinVer, ayar); }
+  async function gonderAyar(metinVer, ayarVer) {
     const m = String(metinVer ?? girdi).trim();
     if (!m || S.calisiyor) return;
     setGirdi(""); pdrAsistanSustur(); setOkunan(null);
@@ -25785,7 +25828,7 @@ function AsistanEkrani({
     S.calisiyor = true; S.durum = "dusunuyor"; S.adimlar = []; S.onay = null;
     pdrAsistanBildir();
     const adimlar = [];
-    const kullanilan = { ...ayar };
+    const kullanilan = { ...(ayarVer || ayar) };
     try {
       const s = await pdrAsistanCalistir({
         gecmis: S.gecmis, ayar: kullanilan, ctx: ctxOlustur(),
@@ -25802,7 +25845,7 @@ function AsistanEkrani({
       // Sesli modda cevap kendiliğinden okunur (asistan ekranı açıksa)
       if (kullanilan.sesliMod && S.dinle) { const i = S.gorunen.length - 1; if (pdrAsistanKonus(s.yanit, () => setOkunan(o => (o === i ? null : o)))) setOkunan(i); }
     } catch (e) {
-      S.gorunen = [...S.gorunen, { rol: "asistan", hata: true, metin: (e && e.message) || String(e), adimlar }];
+      S.gorunen = [...S.gorunen, { rol: "asistan", hata: true, metin: (e && e.message) || String(e), adimlar, ucretsizIdi: kullanilan.saglayici === "ucretsiz" }];
       // yarım kalan turu geçmişten çıkar (bir sonraki istek düzgün başlasın)
       while (S.gecmis.length && S.gecmis[S.gecmis.length - 1].role === "user" && S.gecmis[S.gecmis.length - 1].content.startsWith("<sonuc")) S.gecmis.pop();
     } finally {
@@ -25811,6 +25854,24 @@ function AsistanEkrani({
     }
   }
 
+  // Gönderilen mesajı düzenle: o mesaj ve sonrası sohbetten çıkar, metin kutuya geri gelir
+  function geriAl(i) {
+    if (S.calisiyor) return null;
+    const m = S.gorunen[i]; if (!m || m.rol !== "ben") return null;
+    S.gorunen = S.gorunen.slice(0, i);
+    for (let j = S.gecmis.length - 1; j >= 0; j--) {
+      const x = S.gecmis[j];
+      if (x.role === "user" && !String(x.content).startsWith("<sonuc") && (x.content === m.metin || String(x.content).endsWith(m.metin))) { S.gecmis.length = j; break; }
+    }
+    pdrAsistanSustur(); setOkunan(null); setAcik({}); pdrAsistanBildir();
+    return m.metin;
+  }
+  function duzenle(i) { const t = geriAl(i); if (t !== null) setGirdi(t); }
+  function claudeIleSor(i) {
+    const t = geriAl(i); if (t === null) return;
+    const y = { ...ayar, saglayici: "claude" }; setAyarState(y); pdrAsistanAyarYaz(y);
+    setTimeout(() => gonderAyar(t, y), 0);
+  }
   function onayla(ok) { const o = S.onay; if (!o) return; S.onay = null; pdrAsistanBildir(); o.coz(ok); }
   function yeniSohbet() {
     if (S.calisiyor) return;
@@ -25939,7 +26000,12 @@ function AsistanEkrani({
       {/* Mesajlar */}
       <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 12 }}>
         {S.gorunen.map((m, i) => m.rol === "ben" ? (
-          <div key={i} style={{ alignSelf: "flex-end", maxWidth: "88%", background: ACCENT, color: "#fff", borderRadius: "14px 14px 4px 14px", padding: "9px 12px", fontSize: 13, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{m.metin}</div>
+          <div key={i} style={{ alignSelf: "flex-end", maxWidth: "88%", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
+            <div style={{ background: ACCENT, color: "#fff", borderRadius: "14px 14px 4px 14px", padding: "9px 12px", fontSize: 13, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{m.metin}</div>
+            {!S.calisiyor && i === S.gorunen.map(x => x.rol).lastIndexOf("ben") && (
+              <button onClick={() => duzenle(i)} style={{ background: "none", border: "none", color: ACCENT, fontSize: 11, fontWeight: 700, cursor: "pointer", padding: "0 4px" }}>✏️ Düzenle</button>
+            )}
+          </div>
         ) : (
           <div key={i} style={{ alignSelf: "stretch", background: m.hata ? "#FEF3F2" : CARD, border: `1px solid ${m.hata ? "#FDA29B" : BORDER}`, borderRadius: "14px 14px 14px 4px", padding: "10px 12px" }}>
             {m.kritik && (
@@ -25963,7 +26029,13 @@ function AsistanEkrani({
               </div>
             )}
             <div style={{ fontSize: 13, color: m.hata ? "#B42318" : TEXT, whiteSpace: "pre-wrap", lineHeight: 1.55, wordBreak: "break-word" }}>{m.hata ? "⚠ " : ""}{temizMetin(m.metin)}</div>
-            {m.hata && <div style={{ fontSize: 11, color: MUTED, marginTop: 6 }}>{!claudeMi ? "Ücretsiz model kurulu değilse ⚙️ Ayarlar > kurulum adımlarına bak ya da 🧠 Claude'a geç." : "Tekrar deneyebilirsin."}</div>}
+            {m.hata && !S.calisiyor && i === S.gorunen.length - 1 && S.gorunen[i - 1] && S.gorunen[i - 1].rol === "ben" && (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                {m.ucretsizIdi && <button onClick={() => claudeIleSor(i - 1)} style={{ padding: "6px 10px", borderRadius: 8, border: "none", background: ACCENT, color: "#fff", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>🧠 Claude ile tekrar sor</button>}
+                <button onClick={() => { const t = geriAl(i - 1); if (t !== null) gonder(t); }} style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${BORDER}`, background: "#fff", color: TEXT, fontSize: 12, fontWeight: 800, cursor: "pointer" }}>🔁 Aynı modelle tekrar dene</button>
+                <button onClick={() => duzenle(i - 1)} style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${BORDER}`, background: "#fff", color: TEXT, fontSize: 12, fontWeight: 800, cursor: "pointer" }}>✏️ Düzenle</button>
+              </div>
+            )}
             {!m.hata && (
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, marginTop: 8, paddingTop: 6, borderTop: `1px solid ${BORDER}`, fontSize: 10.5, color: MUTED, flexWrap: "wrap" }}>
                 <span>{modelAd(m.model)}{m.yedek ? " (yedek)" : ""} · {m.ucretsiz ? `ücretsiz · ${m.giris + m.cikis} token` : `≈ ${dolarYaz(m.dolar)} · ${m.giris + m.cikis} token`}</span>
@@ -36496,14 +36568,14 @@ function pdrBaslangicSekmesi() {
                       {digerKatilimcilar.map((k,ki) => (
                         <div key={ki} style={{ display:"flex", alignItems:"center", gap:5, background:"#F3F0FF", border:`1px solid ${PURPLE}`, borderRadius:14, padding:"3px 4px 3px 10px" }}>
                           <span style={{ fontSize:11.5, fontWeight:700, color:PURPLE }}>👥 {k.name}{k.className?` — ${k.className}`:""}</span>
-                          <button onClick={()=>setDigerKatilimcilar(l=>l.filter((_,i)=>i!==ki))} style={{ background:"none", border:"none", color:PURPLE, fontSize:13, fontWeight:800, cursor:"pointer", padding:"0 3px" }}>✕</button>
+                          <button data-asistan="grup-cikar" data-ad={k.name} data-sinif={k.className||""} onClick={()=>setDigerKatilimcilar(l=>l.filter((_,i)=>i!==ki))} style={{ background:"none", border:"none", color:PURPLE, fontSize:13, fontWeight:800, cursor:"pointer", padding:"0 3px" }}>✕</button>
                         </div>
                       ))}
                     </div>
                   )}
                   {katilimciAramaAcik ? (
                     <div>
-                      <input value={katilimciArama} onChange={e=>setKatilimciArama(e.target.value)} placeholder="Grup görüşmesine eklenecek öğrenciyi ara…" autoFocus
+                      <input data-asistan="grup-ara" value={katilimciArama} onChange={e=>setKatilimciArama(e.target.value)} placeholder="Grup görüşmesine eklenecek öğrenciyi ara…" autoFocus
                         style={{ width:"100%", padding:"8px 10px", border:`1px solid ${PURPLE}`, borderRadius:9, fontSize:12.5, boxSizing:"border-box", marginBottom:6 }} />
                       {katilimciArama.trim().length >= 2 && (
                         <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:6 }}>
@@ -36514,7 +36586,7 @@ function pdrBaslangicSekmesi() {
                              o.className?.toLocaleLowerCase("tr").includes(katilimciArama.toLocaleLowerCase("tr")) ||
                              o.numara?.includes(katilimciArama))
                           ).slice(0,15).map(o => (
-                            <button key={pdrOgrAnahtar(o.name,o.className,o.numara)} onClick={()=>{ setDigerKatilimcilar(l=>[...l,{name:o.name, className:o.className||"", numara:o.numara||""}]); setKatilimciArama(""); setKatilimciAramaAcik(false); }}
+                            <button key={pdrOgrAnahtar(o.name,o.className,o.numara)} data-asistan="grup-sonuc" data-ad={o.name} data-sinif={o.className||""} onClick={()=>{ setDigerKatilimcilar(l=>[...l,{name:o.name, className:o.className||"", numara:o.numara||""}]); setKatilimciArama(""); setKatilimciAramaAcik(false); }}
                               style={{ padding:"5px 10px", borderRadius:16, border:`2px solid ${PURPLE}`, background:"#fff", color:PURPLE, fontSize:12, fontWeight:600, cursor:"pointer" }}>{o.name}{o.className?` — ${o.className}`:""}</button>
                           ))}
                         </div>
@@ -36522,7 +36594,7 @@ function pdrBaslangicSekmesi() {
                       <button onClick={()=>{setKatilimciAramaAcik(false); setKatilimciArama("");}} style={{ fontSize:11, color:MUTED, background:"none", border:"none", cursor:"pointer", padding:0 }}>Vazgeç</button>
                     </div>
                   ) : (
-                    <button onClick={()=>setKatilimciAramaAcik(true)} style={{
+                    <button data-asistan="grup-ekle" onClick={()=>setKatilimciAramaAcik(true)} style={{
                       width:"100%", padding:"7px", background:"none", border:`1.5px dashed ${PURPLE}`, borderRadius:9,
                       color:PURPLE, fontSize:11.5, fontWeight:700, cursor:"pointer"
                     }}>+ Grup Görüşmesi — Diğer Öğrenci Ekle</button>

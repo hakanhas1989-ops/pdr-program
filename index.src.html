@@ -10879,7 +10879,7 @@ async function ksAsistanModelCagir(ayar, sistem, mesajlar, iptal) {
   };
   let r = await istek(claudeMi ? ayar.claudeModel : ayar.ucretsizModel);
   // Sunucu önbellek biçimini kabul etmezse aynı isteği önbelleksiz bir kez daha dene
-  if (onbellekAcik && (!r.res.ok || !r.data || r.data.error) && r.res.status === 400 && /cache|system|content/i.test(r.ham || "")) { onbellekAcik = false; r = await istek(r.model); }
+  if (onbellekAcik && (!r.res.ok || !r.data || r.data.error) && (r.res.status === 400 || (r.data && r.data.error && r.data.error.type === "invalid_request_error")) && /cache|system|content/i.test(r.ham || "")) { onbellekAcik = false; r = await istek(r.model); }
   let yedek = false;
   // Seçilen Claude modeli sunucuda tanımlı değilse ya da boş yanıt verdiyse programın bilinen modeliyle bir kez daha dene
   const hatali = (x) => !x.res.ok || !x.data || x.data.error;

@@ -10274,7 +10274,8 @@ const PDR_ASISTAN_VARSAYILAN_AYAR = {
   kurallar: "",
   kayitYontemi: "ekran",
   yuzenDugme: true,                          // her ekranda sol altta bas-konuş düğmesi
-  hizliKomut: true,                          // net ekran açma/liste isteklerini modele gitmeden yap
+  hizliKomut: true,
+  onbellek: true,                            // Claude istem önbelleği (sabit talimat + önceki konuşma)                          // net ekran açma/liste isteklerini modele gitmeden yap
   acilistaAsistan: false,                    // program açılınca asistan ekranıyla başla                     // "ekran" (formu ekranda doldurur, Kaydet'e danışman basar) | "sohbet" (sohbette onay kartı)
 };
 const PDR_ASISTAN_CLAUDE_URL = "https://pdr-api.hakanhas1989.workers.dev";
@@ -10856,9 +10857,17 @@ async function ksAsistanModelCagir(ayar, sistem, mesajlar, iptal) {
   const claudeMi = ayar.saglayici !== "ucretsiz";
   const url = claudeMi ? PDR_ASISTAN_CLAUDE_URL : ayar.ucretsizUrl;
   if (!claudeMi) pdrAsistanKalkanaEkle(url);
+  // Önbellek (yalnızca Claude): sabit sistem talimatı ve konuşmanın önceki kısmı Anthropic tarafında
+  // 5 dk saklanır; aynı işin sonraki adımlarında yeniden işlenmez → daha hızlı ve ~%90 daha ucuz giriş.
+  let onbellekAcik = claudeMi && ayar.onbellek !== false;
   const istek = async (model) => {
     // __kalkanGenis: gizlilik kalkanı bu istekte veli/öğretmen/okul/yer adlarını da kodlar (sunucuya gitmeden silinir)
     const govde = { model, max_tokens: claudeMi ? 4000 : 2500, system: sistem, messages: mesajlar, __kalkanGenis: true };
+    if (onbellekAcik) {
+      govde.system = [{ type: "text", text: sistem, cache_control: { type: "ephemeral" } }];
+      govde.messages = mesajlar.map((m, i) => i === mesajlar.length - 1 && typeof m.content === "string"
+        ? { role: m.role, content: [{ type: "text", text: m.content, cache_control: { type: "ephemeral" } }] } : m);
+    }
     let res;
     try { res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(govde), signal: iptal && iptal.ctrl ? iptal.ctrl.signal : undefined }); }
     catch (e) {
@@ -10869,6 +10878,8 @@ async function ksAsistanModelCagir(ayar, sistem, mesajlar, iptal) {
     return { res, data, ham, giden, model };
   };
   let r = await istek(claudeMi ? ayar.claudeModel : ayar.ucretsizModel);
+  // Sunucu önbellek biçimini kabul etmezse aynı isteği önbelleksiz bir kez daha dene
+  if (onbellekAcik && (!r.res.ok || !r.data || r.data.error) && r.res.status === 400 && /cache|system|content/i.test(r.ham || "")) { onbellekAcik = false; r = await istek(r.model); }
   let yedek = false;
   // Seçilen Claude modeli sunucuda tanımlı değilse ya da boş yanıt verdiyse programın bilinen modeliyle bir kez daha dene
   const hatali = (x) => !x.res.ok || !x.data || x.data.error;
@@ -10891,10 +10902,13 @@ async function ksAsistanModelCagir(ayar, sistem, mesajlar, iptal) {
     e.bos = true; throw e;
   }
   const u = data.usage || {};
-  const giris = u.input_tokens ?? u.prompt_tokens ?? Math.round((sistem.length + JSON.stringify(mesajlar).length) / 3.5);
+  const okunan = u.cache_read_input_tokens || 0, yazilan = u.cache_creation_input_tokens || 0;
+  const giris = (u.input_tokens ?? u.prompt_tokens ?? Math.round((sistem.length + JSON.stringify(mesajlar).length) / 3.5)) + okunan + yazilan;
+  // Ücrete esas giriş: önbellekten okunan 0,1×, önbelleğe yazılan 1,25× fiyatlanır
+  const ucretGiris = giris - okunan - yazilan + okunan * 0.1 + yazilan * 1.25;
   const cikis = u.output_tokens ?? u.completion_tokens ?? Math.round(metin.length / 3.5);
   const kesildi = data.stop_reason === "max_tokens" || !!(data.choices && data.choices[0] && data.choices[0].finish_reason === "length");
-  return { metin: String(metin), giris, cikis, giden, tahmini: !data.usage, model, yedek, kesildi };
+  return { metin: String(metin), giris, cikis, ucretGiris, onbellek: okunan, giden, tahmini: !data.usage, model, yedek, kesildi };
 }
 // Yanıttaki metni çıkarır: Anthropic (birden çok blok olabilir; yalnızca "text" blokları),
 // Workers AI ("response") ve OpenAI biçimi ("choices")
@@ -10959,7 +10973,7 @@ function ksAsistanGecmisDuzenle(gecmis) {
 async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTur = 8, iptal = null }) {
   const sistem = ksAsistanSistem(ayar);
   ksAsistanGecmisDuzenle(gecmis);
-  let toplamGiris = 0, toplamCikis = 0, sonGiden = "", model = "", yedek = false, kritik = false, ekranIsi = false;
+  let toplamGiris = 0, toplamCikis = 0, toplamUcret = 0, toplamOnb = 0, sonGiden = "", model = "", yedek = false, kritik = false, ekranIsi = false;
   let birikmis = "", devamBas = -1, devamSay = 0;   // yarıda kesilen yanıtın parçaları
   for (let tur = 0; tur < enFazlaTur; tur++) {
     olay({ tip: "dusunuyor" });
@@ -10967,7 +10981,7 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
     let y;
     try { y = await ksAsistanModelCagir(ayar, sistem, gecmis, iptal); } catch (e) { ksAsistanDurdu(iptal); throw e; }
     ksAsistanDurdu(iptal);
-    toplamGiris += y.giris; toplamCikis += y.cikis; sonGiden = y.giden; model = y.model; yedek = yedek || y.yedek;
+    toplamGiris += y.giris; toplamCikis += y.cikis; toplamUcret += y.ucretGiris ?? y.giris; toplamOnb += y.onbellek || 0; sonGiden = y.giden; model = y.model; yedek = yedek || y.yedek;
     gecmis.push({ role: "assistant", content: y.metin || "(boş yanıt)" });
     const { cagrilar, hatalar, disMetin } = ksAsistanAyristir(y.metin || "");
     // Yanıt uzunluk sınırına takıldıysa (araç çağrısı yoksa) kaldığı yerden devam ettir (en fazla 2 kez)
@@ -10985,7 +10999,7 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
         gecmis.splice(devamBas, gecmis.length - devamBas, { role: "assistant", content: yanit });
       }
       if (y.kesildi) yanit += "\n\n(…yanıt çok uzun olduğu için kısaltıldı; devamını istersen \"devam et\" yaz.)";
-      return { yanit, giris: toplamGiris, cikis: toplamCikis, giden: sonGiden, model, yedek, kritik };
+      return { yanit, giris: toplamGiris, cikis: toplamCikis, ucretGiris: toplamUcret, onbellek: toplamOnb, giden: sonGiden, model, yedek, kritik };
     }
     const sonuclar = [], dogrudan = [];
     for (const h of hatalar) sonuclar.push(`<sonuc ad="hata">Araç çağrısı okunamadı (geçerli JSON değil): ${ksAsistanKisalt(h, 150)}</sonuc>`);
@@ -11035,10 +11049,10 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
     if (!hatalar.length && dogrudan.length && dogrudan.every(Boolean)) {
       const yanit = dogrudan.join("\n");
       gecmis.push({ role: "assistant", content: yanit });
-      return { yanit, giris: toplamGiris, cikis: toplamCikis, giden: sonGiden, model, yedek, kritik };
+      return { yanit, giris: toplamGiris, cikis: toplamCikis, ucretGiris: toplamUcret, onbellek: toplamOnb, giden: sonGiden, model, yedek, kritik };
     }
   }
-  return { yanit: "İşlem çok fazla adım gerektirdi ve durduruldu. İsteği daha küçük parçalara bölerek tekrar deneyebilirsin.", giris: toplamGiris, cikis: toplamCikis, giden: sonGiden, model, yedek, kritik };
+  return { yanit: "İşlem çok fazla adım gerektirdi ve durduruldu. İsteği daha küçük parçalara bölerek tekrar deneyebilirsin.", giris: toplamGiris, cikis: toplamCikis, ucretGiris: toplamUcret, onbellek: toplamOnb, giden: sonGiden, model, yedek, kritik };
 }
 // Sonucu kendini anlatan araçlar için modelsiz kısa yanıt (yoksa null → model yorumlar)
 function ksAsistanDogrudanYanit(ad, sonuc) {
@@ -26370,9 +26384,9 @@ async function pdrAsistanIstek(m, kullanilan, ctx) {
         }
       }),
     });
-    const dolar = kullanilan.saglayici === "ucretsiz" ? null : ksAsistanMaliyet(s.model, s.giris, s.cikis);
+    const dolar = kullanilan.saglayici === "ucretsiz" ? null : ksAsistanMaliyet(s.model, s.ucretGiris ?? s.giris, s.cikis);
     if (dolar) S.toplamDolar += dolar;
-    S.gorunen = [...S.gorunen, { rol: "asistan", metin: s.yanit, adimlar, model: s.model, giris: s.giris, cikis: s.cikis, dolar, giden: s.giden, kritik: s.kritik, yedek: s.yedek, ucretsiz: kullanilan.saglayici === "ucretsiz" }];
+    S.gorunen = [...S.gorunen, { rol: "asistan", metin: s.yanit, adimlar, model: s.model, giris: s.giris, cikis: s.cikis, onbellek: s.onbellek || 0, dolar, giden: s.giden, kritik: s.kritik, yedek: s.yedek, ucretsiz: kullanilan.saglayici === "ucretsiz" }];
     // Sesli modda cevap kendiliğinden okunur
     if (kullanilan.sesliMod && dinleyenVar()) pdrAsistanSesliOkuOrtak(S.gorunen.length - 1, s.yanit);
   } catch (e) {
@@ -26524,8 +26538,9 @@ function AsistanEkrani({
     if (!g) return "(kayıt yok)";
     try {
       const j = JSON.parse(g);
-      const ms = (j.messages || []).map(x => `── ${x.role === "user" ? "Program/Danışman" : "Asistan"} ──\n${x.content}`).join("\n\n");
-      return `Model: ${j.model}\nSistem talimatı: ${String(j.system || "").length} karakter (sabit kurallar ve araç listesi)\n\n${ms}`;
+      const duz = (c) => Array.isArray(c) ? c.map(b => (b && b.text) || "").join("") : String(c || "");
+      const ms = (j.messages || []).map(x => `── ${x.role === "user" ? "Program/Danışman" : "Asistan"} ──\n${duz(x.content)}`).join("\n\n");
+      return `Model: ${j.model}\nSistem talimatı: ${duz(j.system).length} karakter (sabit kurallar ve araç listesi)\n\n${ms}`;
     } catch (e) { return g; }
   }
 
@@ -26575,6 +26590,10 @@ function AsistanEkrani({
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: TEXT, marginBottom: 10, marginTop: -4, cursor: "pointer" }}>
             <input type="checkbox" checked={ayar.hizliKomut !== false} onChange={e => ayarDegis({ hizliKomut: e.target.checked })} />
             ⚡ Hızlı komutlar ("Ali'nin dosyasını aç" gibi net istekleri modele gitmeden anında yap)
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: TEXT, marginBottom: 10, marginTop: -4, cursor: "pointer" }}>
+            <input type="checkbox" checked={ayar.onbellek !== false} onChange={e => ayarDegis({ onbellek: e.target.checked })} />
+            ♻ Claude önbelleği (sabit talimatlar 5 dk saklanır; aynı işin sonraki adımları daha hızlı ve ucuz)
           </label>
 
           <div style={{ fontSize: 12, fontWeight: 800, color: TEXT, marginBottom: 4 }}>✍️ Kayıt yöntemi</div>
@@ -26684,7 +26703,7 @@ function AsistanEkrani({
             )}
             {!m.hata && !m.durdu && (
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, marginTop: 8, paddingTop: 6, borderTop: `1px solid ${BORDER}`, fontSize: 10.5, color: MUTED, flexWrap: "wrap" }}>
-                <span>{m.yerel ? "⚡ Hızlı komut · model kullanılmadı · ücretsiz" : <>{modelAd(m.model)}{m.yedek ? " (yedek)" : ""} · {m.ucretsiz ? `ücretsiz · ${m.giris + m.cikis} token` : `≈ ${dolarYaz(m.dolar)} · ${m.giris + m.cikis} token`}</>}</span>
+                <span>{m.yerel ? "⚡ Hızlı komut · model kullanılmadı · ücretsiz" : <>{modelAd(m.model)}{m.yedek ? " (yedek)" : ""} · {m.ucretsiz ? `ücretsiz · ${m.giris + m.cikis} token` : `≈ ${dolarYaz(m.dolar)} · ${m.giris + m.cikis} token${m.onbellek ? ` · ♻ ${Math.round(100 * m.onbellek / Math.max(1, m.giris))}% önbellekten` : ""}`}</>}</span>
                 <span style={{ display: "flex", gap: 10 }}>
                   <button onClick={() => sesliOku(i, m.metin)} style={{ background: "none", border: "none", color: ACCENT, fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: 0 }}>{okunan === i ? "⏹ Sustur" : "🔊 Sesli oku"}</button>
                   <button onClick={() => { try { navigator.clipboard.writeText(temizMetin(m.metin)); } catch (e) {} }} style={{ background: "none", border: "none", color: ACCENT, fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: 0 }}>📋 Kopyala</button>

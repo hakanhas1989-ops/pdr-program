@@ -1319,6 +1319,7 @@ function pdrKalkanGeriCevir(x, o) {
     try { govde = JSON.parse(ayar.body); } catch (e) { return asil(girdi, ayar); }
     const o = pdrKalkanOturum();
     if (govde && govde.__kalkanGenis) { o.genis = true; delete govde.__kalkanGenis; }
+    if (govde && govde.__asistan) delete govde.__asistan;
     const temiz = pdrKalkanGez(govde, o);
     window.__pdrKalkanSon = { kod: o.sayac, ek: { ...o.ek } }; // test/denetim için: kaç ad gizlendi
     window.__pdrKalkanSonGiden = JSON.stringify(temiz); // "Modele ne gitti?" görünümü için
@@ -1331,6 +1332,123 @@ function pdrKalkanGeriCevir(x, o) {
   };
 })();
 // ===== AI GİZLİLİK KALKANI BİTİŞ =====
+
+// ===== AI MODEL YÖNLENDİRİCİ =====
+// Programdaki tüm AI analizleri (görüşme özeti, risk, müdahale, süpervizyon, raporlar…)
+// aynı Claude adresine gider. Danışmanın seçtiği model burada, tek noktada uygulanır:
+//  • Claude modelleri: istek aynı adrese, yalnızca model adı değiştirilerek gider.
+//  • Ücretsiz modeller (Cloudflare Workers AI): istek Asistan'daki "pdr-asistan" worker'ına
+//    yönlendirilir. Görsel/PDF içeren istekler bu modellere gidemez → Claude ile yapılır.
+//    Ücretsiz model yanıt vermezse ya da istenen JSON'u üretemezse (yedek açıksa) Claude'a döner.
+// PDR Asistanı kendi model ayarını kullanır; onun istekleri (__asistan) dokunulmadan geçer.
+// Gizlilik kalkanı bu katmanın ALTINDA çalışır: hangi model seçilirse seçilsin adlar kodlanır.
+function pdrAiSecenekleri() {
+  return [
+    { id: "varsayilan", ad: "Claude Sonnet 4.6 — varsayılan", kisa: "Sonnet 4.6", tur: "claude", model: null },
+    { id: "claude-haiku-5-5", ad: "Claude Haiku 5.5 — hızlı, en ucuz", kisa: "Haiku 5.5", tur: "claude", model: "claude-haiku-5-5" },
+    { id: "claude-sonnet-5-5", ad: "Claude Sonnet 5.5 — en güçlü", kisa: "Sonnet 5.5", tur: "claude", model: "claude-sonnet-5-5" },
+    ...PDR_ASISTAN_MODELLER.ucretsiz.map(m => ({ id: m.id, ad: "🆓 " + m.ad, kisa: m.ad.split(" — ")[0].replace(/\s*\(.*\)/, ""), tur: "ucretsiz", model: m.id })),
+  ];
+}
+function pdrAiAyarOku() { try { return { secim: "varsayilan", yedek: true, ...(JSON.parse(localStorage.getItem("pdr_ai_model") || "{}")) }; } catch (e) { return { secim: "varsayilan", yedek: true }; } }
+function pdrAiAyarYaz(a) { try { localStorage.setItem("pdr_ai_model", JSON.stringify(a)); } catch (e) {} try { window.dispatchEvent(new Event("pdr-ai-model")); } catch (e) {} }
+function pdrAiSecili() { const a = pdrAiAyarOku(); return pdrAiSecenekleri().find(x => x.id === a.secim) || pdrAiSecenekleri()[0]; }
+function pdrAiBildir(metin) {
+  try {
+    let el = document.getElementById("pdr-ai-bildirim");
+    if (!el) { el = document.createElement("div"); el.id = "pdr-ai-bildirim"; Object.assign(el.style, { position: "fixed", left: "50%", transform: "translateX(-50%)", bottom: "96px", maxWidth: "88vw", background: "#1F2937", color: "#fff", padding: "8px 14px", borderRadius: "12px", fontSize: "12.5px", fontWeight: "700", zIndex: "2147483000", boxShadow: "0 6px 18px rgba(0,0,0,0.25)", transition: "opacity .3s", pointerEvents: "none" }); document.body.appendChild(el); }
+    el.textContent = metin; el.style.opacity = "1";
+    clearTimeout(el._t); el._t = setTimeout(() => { el.style.opacity = "0"; }, 4500);
+  } catch (e) {}
+}
+function pdrAiDuzMetin(c) { return typeof c === "string" ? c : Array.isArray(c) ? c.map(b => (b && b.type === "text" ? b.text : "")).join("\n") : String(c || ""); }
+function pdrAiJsonVarMi(t) {
+  const s = String(t || "").replace(/```(?:json)?/gi, "");
+  for (const [a, b] of [["{", "}"], ["[", "]"]]) { const i = s.indexOf(a), j = s.lastIndexOf(b); if (i >= 0 && j > i) { try { JSON.parse(s.slice(i, j + 1)); return true; } catch (e) {} } }
+  return false;
+}
+(function pdrAiYonlendiriciKur() {
+  if (typeof window === "undefined" || !window.fetch || window.__pdrAiYonKuruldu) return;
+  window.__pdrAiYonKuruldu = true;
+  const altKatman = window.fetch.bind(window);   // gizlilik kalkanı dahil
+  window.fetch = async function (girdi, ayar) {
+    const url = String(girdi && girdi.url ? girdi.url : girdi);
+    if (!url.includes("pdr-api.hakanhas1989.workers.dev") || !ayar || typeof ayar.body !== "string") return altKatman(girdi, ayar);
+    let g; try { g = JSON.parse(ayar.body); } catch (e) { return altKatman(girdi, ayar); }
+    if (!g || typeof g !== "object") return altKatman(girdi, ayar);
+    if (g.__asistan) { delete g.__asistan; return altKatman(girdi, { ...ayar, body: JSON.stringify(g) }); }
+    const sec = pdrAiSecili(), ay = pdrAiAyarOku();
+    if (!g.model || sec.id === "varsayilan") return altKatman(girdi, ayar);
+    if (sec.tur === "claude") {
+      const r = await altKatman(girdi, { ...ayar, body: JSON.stringify({ ...g, model: sec.model }) });
+      if (!r.ok && [400, 403, 404].includes(r.status)) { pdrAiBildir(`${sec.kisa} bu istekte kullanılamadı; Sonnet 4.6 ile yapıldı.`); return altKatman(girdi, ayar); }
+      return r;
+    }
+    // Ücretsiz model
+    const sadeceMetin = Array.isArray(g.messages) && g.messages.every(m => typeof m.content === "string" || (Array.isArray(m.content) && m.content.every(b => b && b.type === "text")));
+    const ucUrl = (typeof pdrAsistanAyarOku === "function" ? pdrAsistanAyarOku().ucretsizUrl : "") || "";
+    const claudeIle = (neden) => { pdrAiBildir(neden + " Claude Sonnet 4.6 ile yapıldı."); return altKatman(girdi, ayar); };
+    if (!sadeceMetin) return claudeIle("Bu analiz görsel/dosya içerdiği için");
+    if (!ucUrl) return claudeIle("Ücretsiz model adresi ayarlanmamış (Asistan ayarları);");
+    pdrAsistanKalkanaEkle(ucUrl);
+    const g2 = { model: sec.model, max_tokens: Math.min(parseInt(g.max_tokens) || 1500, 2500), system: pdrAiDuzMetin(g.system), messages: g.messages.map(m => ({ role: m.role, content: pdrAiDuzMetin(m.content) })) };
+    const jsonIstendi = /\bJSON\b/i.test(g2.system + " " + (g2.messages[g2.messages.length - 1] || {}).content);
+    let hata = "";
+    try {
+      const r = await altKatman(ucUrl, { ...ayar, body: JSON.stringify(g2) });
+      const t = await r.text(); let d = null; try { d = JSON.parse(t); } catch (e) {}
+      let metin = d && Array.isArray(d.content) ? d.content.map(b => (b && b.text) || "").join("") : "";
+      metin = metin.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+      if (r.ok && d && !d.error && metin && (!jsonIstendi || pdrAiJsonVarMi(metin))) {
+        pdrAiBildir(`🆓 ${sec.kisa} ile yapıldı (ücretsiz).`);
+        return new Response(JSON.stringify({ ...d, content: [{ type: "text", text: metin }], stop_reason: d.stop_reason || "end_turn" }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      hata = !r.ok || (d && d.error) ? ((d && d.error && (d.error.message || d.error)) || `HTTP ${r.status}`) : !metin ? "boş yanıt" : "istenen biçimde (JSON) yanıt üretemedi";
+    } catch (e) { hata = (e && e.message) || "bağlantı hatası"; }
+    if (ay.yedek !== false) return claudeIle(`Ücretsiz model ${hata};`);
+    return new Response(JSON.stringify({ error: { message: `Ücretsiz model (${sec.kisa}) ${hata}. Ayarlardan Claude'u seçebilir ya da "Claude'a geç" yedeğini açabilirsiniz.` } }), { status: 502, headers: { "Content-Type": "application/json" } });
+  };
+})();
+// ===== AI MODEL YÖNLENDİRİCİ BİTİŞ =====
+
+// Üst çubuktaki / ayarlardaki model seçici
+function AiModelSecici({ panel }) {
+  const [, yenile] = useState(0);
+  const [acik, setAcik] = useState(false);
+  useEffect(() => { const f = () => yenile(x => x + 1); window.addEventListener("pdr-ai-model", f); return () => window.removeEventListener("pdr-ai-model", f); }, []);
+  const ay = pdrAiAyarOku(), sec = pdrAiSecili();
+  const liste = (
+    <div>
+      {pdrAiSecenekleri().map(o => (
+        <button key={o.id} onClick={() => { pdrAiAyarYaz({ ...ay, secim: o.id }); setAcik(false); pdrAiBildir(`AI analizleri artık: ${o.kisa}`); }}
+          style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 10px", marginBottom: 4, borderRadius: 9, border: `1.5px solid ${sec.id === o.id ? ACCENT : BORDER}`, background: sec.id === o.id ? "#ECFDF5" : "#fff", color: TEXT, fontSize: 12.5, fontWeight: sec.id === o.id ? 800 : 600, cursor: "pointer" }}>
+          {sec.id === o.id ? "✓ " : ""}{o.ad}
+        </button>
+      ))}
+      <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 11.5, color: TEXT, marginTop: 6, cursor: "pointer" }}>
+        <input type="checkbox" checked={ay.yedek !== false} onChange={e => pdrAiAyarYaz({ ...ay, yedek: e.target.checked })} style={{ marginTop: 2 }} />
+        Ücretsiz model yanıt veremezse otomatik Claude'a geç
+      </label>
+      <div style={{ fontSize: 11, color: MUTED, marginTop: 6, lineHeight: 1.5 }}>
+        Seçim tüm AI analizlerine uygulanır (PDR Asistanı'nın kendi model ayarı ayrıdır). Ücretsiz modeller: görsel/PDF okuyan analizlerde kullanılamaz, uzun raporları ~2500 kelime-parçasıyla sınırlar ve günlük ücretsiz kotası vardır; Türkçe ve klinik yorum kalitesi Claude'dan düşük olabilir. Gizlilik kalkanı her modelde çalışır.
+        {sec.tur === "ucretsiz" && !pdrAsistanAyarOku().ucretsizUrl && <div style={{ color: "#B91C1C", fontWeight: 700, marginTop: 4 }}>Ücretsiz model adresi ayarlı değil: Asistan → ⚙️ Ayarlar bölümünden ekleyin.</div>}
+      </div>
+    </div>
+  );
+  if (panel) return liste;
+  return (
+    <span style={{ position: "relative" }}>
+      <button onClick={() => setAcik(a => !a)} title={"AI modeli: " + sec.ad} data-asistan="ai-model" style={{ background: sec.tur === "ucretsiz" ? "rgba(253,224,71,0.35)" : "rgba(255,255,255,0.25)", color: "#fff", border: "1px solid rgba(255,255,255,0.5)", borderRadius: "50%", width: 26, height: 26, padding: 0, fontSize: 13, cursor: "pointer", lineHeight: 1, position: "relative" }}>🤖{sec.id !== "varsayilan" && <span style={{ position: "absolute", right: -3, bottom: -3, width: 10, height: 10, borderRadius: "50%", background: sec.tur === "ucretsiz" ? "#FACC15" : "#60A5FA", border: "1.5px solid #fff" }} />}</button>
+      {acik && <>
+        <div onClick={() => setAcik(false)} style={{ position: "fixed", inset: 0, zIndex: 2147482500 }} />
+        <div style={{ position: "absolute", right: 0, top: 32, width: 290, maxWidth: "86vw", background: "#fff", border: `1px solid ${BORDER}`, borderRadius: 12, boxShadow: "0 12px 28px rgba(0,0,0,0.22)", padding: 10, zIndex: 2147482600, color: TEXT, textAlign: "left" }}>
+          <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 6 }}>🤖 AI analiz modeli</div>
+          {liste}
+        </div>
+      </>}
+    </span>
+  );
+}
 
 
 const ACCENT = "#127C56";
@@ -10862,7 +10980,7 @@ async function ksAsistanModelCagir(ayar, sistem, mesajlar, iptal) {
   let onbellekAcik = claudeMi && ayar.onbellek !== false;
   const istek = async (model) => {
     // __kalkanGenis: gizlilik kalkanı bu istekte veli/öğretmen/okul/yer adlarını da kodlar (sunucuya gitmeden silinir)
-    const govde = { model, max_tokens: claudeMi ? 4000 : 2500, system: sistem, messages: mesajlar, __kalkanGenis: true };
+    const govde = { model, max_tokens: claudeMi ? 4000 : 2500, system: sistem, messages: mesajlar, __kalkanGenis: true, __asistan: true };
     if (onbellekAcik) {
       govde.system = [{ type: "text", text: sistem, cache_control: { type: "ephemeral" } }];
       govde.messages = mesajlar.map((m, i) => i === mesajlar.length - 1 && typeof m.content === "string"
@@ -37090,6 +37208,12 @@ function AyarlarEkrani({ ogrenciler, setOgrenciler, records, setRecords, profile
     <div style={{ maxWidth: 520 }}>
       <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 6 }}>⚙️ Ayarlar</div>
 
+      <div style={{ background: "#ECFDF5", borderRadius: 12, padding: 14, marginBottom: 16 }}>
+        <div style={{ fontWeight: 700, marginBottom: 4, fontSize: 14, color: ACCENT }}>🤖 AI analiz modeli</div>
+        <div style={{ fontSize: 12.5, color: MUTED, marginBottom: 10, lineHeight: 1.5 }}>Programdaki AI değerlendirmeleri (görüşme özeti, risk, müdahale, süpervizyon, raporlar…) hangi modelle yapılsın? Üst çubuktaki 🤖 düğmesinden de değiştirebilirsin.</div>
+        <AiModelSecici panel />
+      </div>
+
       {onTumOzellikler && (
         <div style={{ background: "#F3F0FF", borderRadius: 12, padding: 14, marginBottom: 16 }}>
           <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 14, color: PURPLE }}>📖 Tüm Özellikler</div>
@@ -38950,7 +39074,8 @@ function pdrBaslangicSekmesi() {
               </span>
             )}
           </div>
-          <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+          <div style={{ display:"flex", gap:6, alignItems:"center", flexShrink:0 }}>
+            <AiModelSecici />
             <button onClick={() => setRehberGoster(true)} title="Başlarken Rehberi" style={{
               background:"rgba(255,255,255,0.25)", color:"#fff", border:"1px solid rgba(255,255,255,0.5)",
               borderRadius:"50%", width:26, height:26, fontSize:13, fontWeight:800, cursor:"pointer", lineHeight:1
@@ -38961,7 +39086,7 @@ function pdrBaslangicSekmesi() {
             }}>📖</button>
             <button onClick={() => { setTab("ogrenciler"); setYilEkrani(true); }} style={{
               background:"rgba(255,255,255,0.25)", color:"#fff", border:"1px solid rgba(255,255,255,0.5)",
-              borderRadius:20, padding:"3px 12px", fontSize:12, fontWeight:800, cursor:"pointer"
+              borderRadius:20, padding:"3px 9px", fontSize:12, fontWeight:800, cursor:"pointer", whiteSpace:"nowrap"
             }}>📅 {aktifYil}</button>
           </div>
         </div>

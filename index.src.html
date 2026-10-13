@@ -1318,9 +1318,17 @@ function pdrKalkanGeriCevir(x, o) {
     let govde;
     try { govde = JSON.parse(ayar.body); } catch (e) { return asil(girdi, ayar); }
     const o = pdrKalkanOturum();
-    if (govde && govde.__kalkanGenis) { o.genis = true; delete govde.__kalkanGenis; }
+    // Veli/öğretmen/okul/yer adları da TÜM yapay zekâ isteklerinde kodlanır (Asistan bunu
+    // __kalkanGenis ile zaten istiyordu; diğer analizler için de varsayılan oldu).
+    const asistanIstegi = !!(govde && govde.__kalkanGenis);
+    o.genis = true;
+    if (govde && govde.__kalkanGenis) delete govde.__kalkanGenis;
     if (govde && govde.__asistan) delete govde.__asistan;
     const temiz = pdrKalkanGez(govde, o);
+    // Asistan dışındaki analizlerde modele kodların anlamı kısaca bildirilir
+    if (!asistanIstegi && temiz && typeof temiz.system === "string" && (o.ek["KİŞİ"] || o.ek.OKUL || o.ek.YER)) {
+      temiz.system += "\n\n(Gizlilik: Metindeki [KİŞİ-n], [OKUL-n], [YER-n] kodları gerçek kişi, okul ve yer adlarının yerine konmuştur; yanıtında bu kodları aynen kullan.)";
+    }
     window.__pdrKalkanSon = { kod: o.sayac, ek: { ...o.ek } }; // test/denetim için: kaç ad gizlendi
     window.__pdrKalkanSonGiden = JSON.stringify(temiz); // "Modele ne gitti?" görünümü için
     const yanit = await asil(girdi, { ...ayar, body: JSON.stringify(temiz) });

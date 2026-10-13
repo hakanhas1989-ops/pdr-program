@@ -8750,12 +8750,14 @@ function ksEkVeriTopla(ad, sinif, numara, kaynak) {
     ek.testler = tl.map(t => {
       const v = t.veri || {};
       const puanH = ["toplamPuan", "puan", "yuzdelik", "genelYuzde"].map(k => v[k]).find(x => x !== undefined && x !== null && x !== "");
-      const yorum = ["sonuc", "yorum", "genelYorum", "degerlendirme", "duzey", "seviye", "ozet"].map(k => typeof v[k] === "string" ? v[k] : "").find(Boolean) || "";
+      let yorum = ["sonuc", "yorum", "genelYorum", "degerlendirme", "duzey", "seviye", "ozet"].map(k => typeof v[k] === "string" ? v[k] : "").find(Boolean) || "";
+      // Yapılandırılmış kayıtlarda (okuma-yazma, kaynaştırma, dikkat programları…) raporlardaki kısa özet kullanılır
+      if (!yorum && typeof testSonucOzeti === "function") { try { const oz = testSonucOzeti(t); if (oz && oz !== "—") yorum = String(oz); } catch (e) {} }
       const ys = ksSade(yorum + " " + (t.not || ""));
       const uyari = v.riskli === true || (/(yuksek|klinik|risk|agir|siddetli|anlamli|belirgin|riskli|destek gerek|yonlendir)/.test(ys) && !/(risk yok|riskli degil|dusuk risk|normal|olagan|risk saptanmadi)/.test(ys));
       const ad2 = String(t.testAdi || t.tip || "Test"); const as = ksSade(ad2 + " " + (t.tip || ""));
       const alan = (KS_TEST_ALAN.find(([re]) => re.test(as)) || [])[1] || null;
-      return { ad: ad2, tarih: t.tarih || "", puan: puanH === undefined ? null : puanH, yorum: yorum.slice(0, 90), uyari, alan };
+      return { ad: ad2, tarih: t.tarih || "", puan: puanH === undefined ? null : puanH, yorum: yorum.slice(0, 160), uyari, alan };
     });
     const p2 = (K.profiles2 || []).find(ayni);
     if (p2 && p2.gecmisYillar) {
@@ -10858,6 +10860,8 @@ function ksAsistanOgrenciDosyasi(ctx, o) {
       const v = t.veri || {};
       const sayi = ["toplamPuan", "puan", "yuzdelik", "genelYuzde"].filter(k => v[k] !== undefined && v[k] !== null && v[k] !== "").map(k => `${k} ${v[k]}`);
       const yazi = ["sonuc", "yorum", "genelYorum", "degerlendirme", "duzey", "seviye", "ozet"].map(k => typeof v[k] === "string" ? v[k] : "").filter(Boolean).slice(0, 1).map(x => K(x, 140));
+      // Yapılandırılmış kayıtlar (okuma-yazma, kaynaştırma, ÇDT, SCAS, İnsan Çiz…) için raporlardaki kısa özet
+      if (!sayi.length && !yazi.length && typeof testSonucOzeti === "function") { try { const oz = testSonucOzeti(t); if (oz && oz !== "—") yazi.push(K(String(oz), 260)); } catch (e) {} }
       b.push(`• ${t.testAdi || t.tip} (${t.tarih || "?"})${sayi.length ? ": " + sayi.join(", ") : ""}${yazi.length ? " — " + yazi[0] : ""}${t.not ? " · not: " + K(t.not, 80) : ""}`);
     });
   } else b.push("\nTESTLER: uygulanmış test kaydı yok.");

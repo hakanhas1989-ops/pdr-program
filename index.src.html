@@ -13582,6 +13582,18 @@ function pdrVeriBekcisiTara(riskListesi, uyumIzleme, ogrenciler, sosyometri, akt
     }
   });
 
+  // 7) Kaynaştırma öğrencisinin RAM raporu 60 gün içinde doluyor ya da dolmuş
+  if (testKayitlari) {
+    (ogrenciler || []).filter(o => (!o.yil || o.yil === aktifYil) && (o.kaynastirma || []).length).forEach(o => {
+      const k = (pdrSozlukOku(testKayitlari, o.studentName, o.className, o.numara) || []).filter(x => x.tip === "kaynastirma_ed").sort((a, b) => pdrTarihMs(b.tarih) - pdrTarihMs(a.tarih))[0];
+      const ms = k && k.veri ? pdrTarihMs(k.veri.ramBitis) : 0;
+      if (!ms) return;
+      const gun = Math.floor((ms - Date.now()) / 86400000);
+      if (gun <= 60) bulgular.push({ tur: "ram_rapor_bitiyor", ad: o.studentName, sinif: o.className, numara: o.numara,
+        mesaj: `${o.studentName} — RAM raporunun geçerlilik süresi ${gun < 0 ? `${-gun} gün önce doldu` : `${gun} gün içinde doluyor`}; Bireysel Gelişim Raporu hazırlanıp yeniden değerlendirme istenmeli.` });
+    });
+  }
+
   // 6) Okuma-Yazma Destek Programı sürüyor ama 14+ gündür ne oturum ne ilerleme ölçümü girilmiş
   if (testKayitlari) {
     (ogrenciler || []).filter(o => !o.yil || o.yil === aktifYil).forEach(o => {
@@ -20004,6 +20016,521 @@ function OYPaneli({ seciliAd, seciliSinif, seciliNumara, testKayitlari, setTestK
 }
 
 
+// ── Kaynaştırma Eğitsel Değerlendirme (KED) ─────────────────────────────────
+// Okul düzeyinde BEP'e temel olacak "eğitsel performans belirleme" aracıdır.
+// Resmî eğitsel değerlendirme ve tanılama RAM'ın görevidir; bu modül tanı
+// koymaz. Yapı Özel Eğitim Hizmetleri Yönetmeliği'ndeki BEP içeriğini izler:
+// eğitsel performans (kaba değerlendirme: yapabildikleri/yapamadıkları),
+// uzun ve kısa dönemli amaçlar, destek eğitim, yöntem-materyal, ortam
+// düzenlemesi, ölçme-değerlendirme uyarlamaları ve davranış önlemleri.
+// Gelişim alanları MEB'in 4 düzeyli gözlem ölçeğiyle derecelendirilir.
+// Beceri listeleri ölçüte dayalı (kazanım temelli) kaba değerlendirme içindir;
+// parantezdeki sayı becerinin yaklaşık sınıf düzeyidir.
+
+const KED_DERSLER = [
+  { k: "turkce", ad: "Türkçe", ikon: "📖", akademik: "turkce", maddeler: [
+    ["Harfleri tanır ve seslerini söyler", 1], ["Hece ve kısa kelimeleri okur", 1], ["Basit cümleleri okur", 1],
+    ["Kısa bir metni sesli ve anlaşılır biçimde okur", 2], ["Okuduğu kısa metinle ilgili 5N1K sorularını cevaplar", 2], ["Dinlediği bir metni kendi cümleleriyle anlatır", 2],
+    ["Dikte edilen kelimeleri doğru yazar", 2], ["Büyük harf ve noktayı yerinde kullanarak cümle yazar", 2], ["Okuduğu metnin konusunu ve ana fikrini belirler", 3],
+    ["Bilmediği kelimenin anlamını cümleden çıkarır", 3], ["Olayları oluş sırasına göre anlatır", 3], ["3-5 cümlelik bir paragraf yazar", 3],
+    ["Metindeki neden-sonuç ilişkilerini fark eder", 4], ["Tablo, afiş gibi bilgilendirici metinlerden bilgi çıkarır", 4], ["Duygu ve düşüncelerini sözlü olarak düzenli ifade eder", 4],
+    ["Metnin türünü ve yazarın amacını belirler", 5], ["Giriş-gelişme-sonuç bölümleri olan bir yazı yazar", 5], ["Deyim ve atasözlerinin anlamını açıklar", 6],
+  ] },
+  { k: "matematik", ad: "Matematik", ikon: "🔢", akademik: "matematik", maddeler: [
+    ["20'ye kadar nesne sayar, sayıları tanır", 1], ["20 içinde eldesiz toplama ve çıkarma yapar", 1], ["100'e kadar sayıları okur ve yazar", 2],
+    ["Eldeli toplama ve onluk bozarak çıkarma yapar", 2], ["Saati tam ve yarım olarak okur", 2], ["Paralarımızı tanır, basit alışveriş hesabı yapar", 2],
+    ["Tek işlemli problemleri çözer", 2], ["Çarpım tablosunu bilir", 3], ["Tek basamaklı bölenle bölme yapar", 3],
+    ["İki işlemli problemleri çözer", 3], ["Uzunluk, kütle ve sıvı ölçü birimlerini kullanır", 3], ["Yarım ve çeyreği modelle gösterir", 3],
+    ["Çok basamaklı sayılarla dört işlem yapar", 4], ["Temel geometrik şekilleri tanır, çevre hesaplar", 4], ["Tablo ve grafik okur, yorumlar", 4],
+    ["Kesirleri karşılaştırır, kesirlerle toplama-çıkarma yapar", 5], ["Ondalık gösterimleri okur ve yazar", 5], ["Tam sayılarla işlem yapar", 6],
+    ["Basit denklem kurar ve çözer", 7], ["Yüzde ve oran-orantı problemlerini çözer", 7],
+  ] },
+  { k: "fen", ad: "Fen Bilimleri", ikon: "🔬", akademik: "fen", maddeler: [
+    ["Canlı ve cansız varlıkları ayırt eder", 1], ["Duyu organlarını ve görevlerini söyler", 3], ["Mevsimleri ve hava olaylarını tanır", 2],
+    ["Sağlıklı beslenme ve kişisel temizlik kurallarını açıklar", 2], ["Maddenin katı, sıvı ve gaz hâllerini ayırt eder", 3], ["Işık ve ses kaynaklarını örneklendirir", 3],
+    ["İtme ve çekme kuvvetini örneklerle açıklar", 3], ["Basit bir deney yönergesini izler ve gözlemini kaydeder", 4], ["Vücudumuzun temel sistemlerini adlandırır", 5],
+    ["Basit elektrik devresinin elemanlarını tanır, güvenli kullanımı bilir", 4], ["Çevre kirliliği ve geri dönüşümün önemini açıklar", 4], ["Dünya, Güneş ve Ay'ın hareketlerini açıklar", 5],
+  ] },
+  { k: "sosyal", ad: "Sosyal Bilgiler / İnkılap", ikon: "🏛️", akademik: "inkilap", maddeler: [
+    ["Kendini tanıtır (ad, yaş, adres, aile)", 1], ["Okul ve sınıf kurallarını açıklar ve uyar", 1], ["Haftanın günlerini, ayları ve mevsimleri sıralar", 2],
+    ["Yakın çevresindeki yerleri ve yönleri tarif eder", 2], ["Milli bayramları ve önemini bilir", 2], ["Basit bir harita ya da krokide yer bulur", 3],
+    ["Hak ve sorumluluklarını örneklerle açıklar", 3], ["Geçmiş ile bugünü karşılaştırır (zaman çizelgesi)", 4], ["İhtiyaç-istek ve tasarruf kavramlarını açıklar", 4],
+    ["Atatürk'ün hayatındaki önemli olayları sıralar", 4], ["Kurtuluş Savaşı'nın temel olaylarını sıralar", 8],
+  ] },
+  { k: "ingilizce", ad: "İngilizce", ikon: "🔤", akademik: null, maddeler: [
+    ["Selamlaşma ve tanışma ifadelerini kullanır", 2], ["Renkleri ve 1-20 arası sayıları söyler", 2], ["Sınıf eşyalarını ve hayvanları adlandırır", 2],
+    ["Basit sınıf yönergelerini anlar (stand up, open your book)", 2], ["Kendini kısa cümlelerle tanıtır", 3], ["Basit kelime listesini okur ve yazar", 3],
+    ["Günlük rutinlerini basit cümlelerle anlatır", 5],
+  ] },
+];
+const KED_PERF = [["Yapamıyor", "#B91C1C", "#FEE2E2"], ["Destekle", "#B45309", "#FEF3C7"], ["Bağımsız", "#15803D", "#DCFCE7"]];
+
+const KED_GELISIM = [
+  { k: "dil", ad: "Dil ve iletişim", ikon: "🗣️", maddeler: ["Tek ve çok basamaklı yönergeleri anlayıp uygular", "Sırasını bekleyerek konuşur, göz teması kurar", "İhtiyaç ve duygularını sözlü ifade eder", "Anlaşılır konuşur", "Soru sorar ve sohbeti sürdürür"] },
+  { k: "sosyal", ad: "Sosyal-duygusal", ikon: "🤝", maddeler: ["Arkadaşlarıyla oyun ve grup çalışmasına katılır", "Duygularını tanır ve uygun biçimde ifade eder", "Hayal kırıklığı ve öfkeyle baş eder", "Kurallara ve değişikliklere uyum sağlar", "Gerektiğinde yardım ister ve kabul eder", "Akranları tarafından kabul görür"] },
+  { k: "ozbakim", ad: "Öz bakım ve günlük yaşam", ikon: "🧼", maddeler: ["Tuvalet, el yıkama gibi öz bakımını bağımsız yapar", "Eşyalarını düzenler ve korur", "Okul içinde bağımsız hareket eder (kantin, servis, sınıf değişimi)", "Para ve zamanı günlük yaşamda kullanır", "Güvenlik kurallarını bilir ve uyar"] },
+  { k: "motor", ad: "Motor beceriler", ikon: "✋", maddeler: ["Kalemi uygun tutar, okunaklı yazar", "Makas, cetvel gibi araçları kullanır", "Koşma, atlama, top yakalama gibi kaba motor becerileri yapar", "Beden eğitimi etkinliklerine katılır"] },
+  { k: "dikkat", ad: "Dikkat ve çalışma davranışları", ikon: "🎯", maddeler: ["Bir etkinliğe yaşına uygun süre odaklanır", "Göreve başlar ve tamamlar", "Sırasını bekler, dürtüsel davranışlarını kontrol eder", "Sınıfta yerinde oturur, hareketliliği uygun düzeydedir", "Ödev ve materyallerini takip eder", "Yönergeleri izleyerek bağımsız çalışır"] },
+];
+const KED_GELISIM_OLCEK = ["Henüz yapamıyor", "Sık destekle yapıyor", "Büyük ölçüde yapıyor", "Bağımsız yapıyor"];
+
+const KED_OGRENME = ["Görsel materyalle daha iyi öğrenir", "Dinleyerek daha iyi öğrenir", "Yaparak-yaşayarak, somut materyalle öğrenir", "Kısa ve sık tekrara ihtiyaç duyar", "Birebir ya da küçük grupta daha verimlidir", "Akran desteğinden yararlanır", "Teknoloji destekli materyalle motive olur", "Ödül ve övgüyle motive olur"];
+
+// Tanıya göre ortam, öğretim ve ölçme-değerlendirme uyarlama önerileri
+const KED_UYARLAMA = {
+  "Özel Öğrenme Güçlüğü": {
+    ortam: ["Ön sırada, dikkat dağıtıcılardan uzak oturma", "Tahtadan uzun metin kopyalatmak yerine çıktı verme"],
+    ogretim: ["Çok duyulu öğretim (gör-söyle-yaz-dokun)", "Yönergeleri kısa ve tek tek verme", "Okuma yükünü azaltma; sesli kitap ve görsel özet kullanma", "Çarpım tablosu, formül ve kelime kartları gibi destek araçlarına izin verme", "Yeni konudan önce anahtar kelimeleri önceden çalışma"],
+    olcme: ["Ek süre", "Soruların öğretmen tarafından sesli okunması", "Gerektiğinde sözlü sınav", "Yazım ve imla hatalarından puan kırmayıp içeriğe odaklanma", "Büyük punto, sayfa başına az soru, sade düzen"],
+  },
+  "DEHB": {
+    ortam: ["Öğretmene yakın, kapı ve pencereden uzak oturma", "Planlı hareket molaları (görev dağıtma, tahta silme)", "Masada yalnızca o anki görevin materyali"],
+    ogretim: ["Görevleri küçük adımlara bölme ve kontrol listesi", "Sık ve anında geri bildirim, olumlu davranışı hemen pekiştirme", "Önemli bilgileri renkli vurgulama", "Ödevleri ajandaya yazdırıp kontrol etme"],
+    olcme: ["Sessiz ve ayrı ortamda sınav", "Ek süre ya da sınavı parçalara bölme", "Sayfa başına az soru", "Teslimden önce kontrol etmesini hatırlatma"],
+  },
+  "Otizm Spektrum Bozukluğu": {
+    ortam: ["Öngörülebilir günlük rutin ve görsel ders programı", "Değişiklikleri önceden haber verme", "Gürültü, ışık gibi duyusal hassasiyetlere dikkat; sakinleşme köşesi", "Teneffüs ve geçişlerde akran eşliği"],
+    ogretim: ["Somut ve görsel destekli anlatım", "Açık, kelimesi kelimesine yönergeler (mecaz ve imadan kaçınma)", "Sosyal öyküler ve video model", "İlgi alanını öğretimde kullanma"],
+    olcme: ["Ayrı ve tanıdık ortamda sınav", "Ek süre", "Açık uçlu yerine yapılandırılmış sorular", "Mecaz içermeyen, net soru dili"],
+  },
+  "Zihinsel Yetersizlik": {
+    ortam: ["Akran desteği ve işbirlikli gruplar", "Destek eğitim odasında bireysel çalışma"],
+    ogretim: ["BEP'teki sadeleştirilmiş kazanımlara odaklanma", "Somut materyal, adım adım öğretim ve çok tekrar", "Öğrenileni farklı ortamlara genelleme çalışmaları", "Sabit bekleme süreli ya da eşzamanlı ipucuyla öğretim"],
+    olcme: ["Yalnızca BEP hedefleriyle sınırlı sınav", "Az ve kısa soru, görsel destek", "Seçenek sayısını azaltma", "Sözlü sınav ve ek süre"],
+  },
+  "İşitme Yetersizliği": {
+    ortam: ["Ön sıra, konuşan kişinin yüzünü görebileceği yer", "Gürültüyü azaltma; işitme cihazının çalıştığını kontrol etme"],
+    ogretim: ["Konuşurken yüzü öğrenciye dönük tutma", "Anlatımı yazılı ve görsel olarak destekleme", "Yeni kavramları önceden yazılı verme"],
+    olcme: ["Sözlü yönergeleri yazılı verme", "Dinlemeye dayalı bölümlerde uyarlama", "Gerekirse işaret dili desteği"],
+  },
+  "Görme Yetersizliği": {
+    ortam: ["İyi aydınlatılmış, tahtaya yakın oturma", "Sınıf düzenini sabit tutma ve değişiklikleri haber verme"],
+    ogretim: ["Büyük puntolu ya da kabartma materyal", "Büyüteç ve sesli materyal", "Tahtaya yazılanları sesli okuma"],
+    olcme: ["Büyük puntolu ya da kabartma sınav kâğıdı", "Okuyucu ve işaretleyici desteği", "Ek süre"],
+  },
+  "Bedensel Yetersizlik": {
+    ortam: ["Erişilebilir sınıf ve oturma düzeni", "Malzemelere kolay ulaşım"],
+    ogretim: ["Yazma yükünü azaltma; bilgisayar ya da yardımcı teknoloji", "Uygulamalı etkinliklerde uyarlama"],
+    olcme: ["İşaretleyici desteği ve ek süre", "Uygulamalı bölümlerde uyarlama ya da muafiyet (BEP biriminin kararıyla)"],
+  },
+  "Süregelen Hastalık": {
+    ortam: ["Gerekirse dinlenme molası", "İlaç ve acil durum planının ilgili öğretmenlerce bilinmesi"],
+    ogretim: ["Devamsızlık dönemleri için ders telafi planı", "Ödevleri esnek teslim süresiyle verme"],
+    olcme: ["Telafi sınavı", "Ek süre"],
+  },
+  "Dil ve Konuşma Güçlüğü": {
+    ortam: ["Kalabalık önünde konuşmaya zorlamama", "Akran desteği"],
+    ogretim: ["Cevap için yeterli bekleme süresi", "Yazılı ya da görsel cevap seçenekleri"],
+    olcme: ["Sözlü yerine yazılı (ya da tersi) cevap hakkı", "Ek süre"],
+  },
+  "Diğer": { ortam: ["Öğrencinin ihtiyacına göre oturma düzeni"], ogretim: ["Bireysel ihtiyaca göre uyarlanmış öğretim"], olcme: ["BEP biriminin belirleyeceği uyarlamalar"] },
+};
+const KED_YONTEM = {
+  "Özel Öğrenme Güçlüğü": "Doğrudan öğretim, çok duyulu öğretim, strateji öğretimi",
+  "DEHB": "Kısa adımlı doğrudan öğretim, öz-izleme kartları, anında pekiştirme",
+  "Otizm Spektrum Bozukluğu": "Görsel destekli öğretim, video model, sosyal öykü, ayrık denemelerle öğretim",
+  "Zihinsel Yetersizlik": "Sabit bekleme süreli öğretim, eşzamanlı ipucuyla öğretim, basamaklandırılmış öğretim",
+  "İşitme Yetersizliği": "Görsel destekli anlatım, yazılı özet, dudak okumaya uygun konuşma",
+  "Görme Yetersizliği": "Dokunsal ve işitsel materyalle öğretim, büyütülmüş materyal",
+  "Bedensel Yetersizlik": "Yardımcı teknoloji destekli öğretim",
+  "Süregelen Hastalık": "Telafi planlı bireysel öğretim",
+  "Dil ve Konuşma Güçlüğü": "Model olma, genişletme, görsel destekli iletişim",
+  "Diğer": "Doğrudan öğretim",
+};
+
+// ── KED hesaplamaları ──
+function kedDersOzet(veri, ders) {
+  const d = (veri.dersler || {})[ders.k] || {};
+  const grup = [[], [], []];
+  ders.maddeler.forEach((m, i) => { const v = d[i]; if (v === 0 || v === 1 || v === 2) grup[v].push({ i, metin: m[0], duzey: m[1] }); });
+  const n = grup[0].length + grup[1].length + grup[2].length;
+  // Kaba düzey: bağımsız yapılanların kesintisiz sürdüğü en yüksek sınıf düzeyi
+  let kaba = null;
+  const duzeyler = [...new Set(ders.maddeler.map(m => m[1]))].sort((a, b) => a - b);
+  for (const dz of duzeyler) {
+    const mm = ders.maddeler.map((m, i) => ({ m, i })).filter(x => x.m[1] === dz && (d[x.i] === 0 || d[x.i] === 1 || d[x.i] === 2));
+    if (!mm.length) continue;
+    const bag = mm.filter(x => d[x.i] === 2).length;
+    if (bag / mm.length >= 0.75) kaba = dz; else break;
+  }
+  return { n, bagimsiz: grup[2], destekle: grup[1], yapamiyor: grup[0], kaba };
+}
+// Ders için kullanılacak işlevsel düzey: elle girilen > akademik tarama > kaba değerlendirme
+function kedIslevselDuzey(veri, ders, kaynak) {
+  const r = kedIslevselDuzeyHam(veri, ders, kaynak);
+  r.metin = typeof r.duzey === "number" ? `≈ ${r.duzey}. sınıf` : r.duzey === "<5" ? "5. sınıf düzeyinin altında" : r.duzey === "<1" ? "1. sınıf düzeyinin altında" : null;
+  return r;
+}
+function kedIslevselDuzeyHam(veri, ders, kaynak) {
+  const elle = (veri.dersDuzey || {})[ders.k];
+  if (elle) return { duzey: elle, kaynak: "danışman/öğretmen" };
+  if (kaynak && kaynak.akademik && ders.akademik && kaynak.akademik[ders.akademik] && !kaynak.akademik[ders.akademik].hicUygulanmadi) {
+    const s = kaynak.akademik[ders.akademik].islevselSeviye;
+    return { duzey: s || (kaynak.ilkokul && kaynak.ilkokul.islevselSinif) || "<5", kaynak: s ? "Akademik Düzey Taraması" : (kaynak.ilkokul && kaynak.ilkokul.islevselSinif ? "İlkokul Düzey Taraması" : "Akademik Düzey Taraması (5. sınıf eşiğinin altı)") };
+  }
+  if (ders.k === "turkce" && kaynak && kaynak.okuma != null) return { duzey: kaynak.okuma || "<1", kaynak: "Okuma-Yazma değerlendirmesi (okuma düzeyi)" };
+  if (kaynak && kaynak.ilkokul && kaynak.ilkokul.islevselSinif && (ders.k === "turkce" || ders.k === "matematik")) return { duzey: kaynak.ilkokul.islevselSinif, kaynak: "İlkokul Düzey Taraması (genel)" };
+  const o = kedDersOzet(veri, ders);
+  if (o.kaba) return { duzey: o.kaba, kaynak: "kaba değerlendirme" };
+  return { duzey: null, kaynak: "" };
+}
+function kedGelisimOzet(veri) {
+  return KED_GELISIM.map(a => {
+    const p = (veri.gelisim || {})[a.k] || {};
+    const puanlar = a.maddeler.map((_, i) => p[i]).filter(x => x >= 1 && x <= 4);
+    const ort = puanlar.length ? Math.round(10 * puanlar.reduce((s, x) => s + x, 0) / puanlar.length) / 10 : null;
+    const zayif = a.maddeler.map((m, i) => ({ m, v: p[i] })).filter(x => x.v === 1 || x.v === 2).map(x => x.m);
+    return { ...a, ort, n: puanlar.length, zayif };
+  });
+}
+// BEP taslağı: her ders için uzun dönemli amaç + en fazla 5 kısa dönemli amaç
+function kedBepTaslak(veri, kaynak) {
+  const tanilar = veri.tanilar || [];
+  const yontem = [...new Set(tanilar.map(t => KED_YONTEM[t]).filter(Boolean))].join("; ") || KED_YONTEM["Diğer"];
+  const dersler = KED_DERSLER.filter(d => (veri.bepDersler || []).includes(d.k)).map(ders => {
+    const o = kedDersOzet(veri, ders);
+    const hedefler = [...o.destekle, ...o.yapamiyor].sort((a, b) => a.duzey - b.duzey || a.i - b.i).slice(0, 5);
+    const isl = kedIslevselDuzey(veri, ders, kaynak);
+    return {
+      ders, isl,
+      uda: hedefler.length ? `${ders.ad} dersinde ${Math.min(...hedefler.map(h => h.duzey))}. sınıf düzeyindeki temel becerileri bağımsız olarak yerine getirir.` : "",
+      kda: hedefler.map(h => ({ metin: h.metin, olcut: o.destekle.some(x => x.i === h.i) ? "Desteği azaltılarak, 5 denemenin en az 4'ünde bağımsız ve doğru yapar." : "5 denemenin en az 4'ünde doğru yapar (önce destekle, sonra bağımsız)." })),
+      yontem, olcme: "Gözlem, kontrol listesi, kısa sözlü/yazılı yoklama",
+    };
+  }).filter(x => x.kda.length);
+  const davranis = kedGelisimOzet(veri).filter(a => (a.k === "dikkat" || a.k === "sosyal") && a.zayif.length).flatMap(a => a.zayif.slice(0, 3).map(m => ({ alan: a.ad, metin: m })));
+  return { dersler, davranis };
+}
+function kedUyarlamalar(tanilar) {
+  const t = (tanilar && tanilar.length ? tanilar : ["Diğer"]);
+  const birlestir = (alan) => [...new Set(t.flatMap(x => (KED_UYARLAMA[x] || KED_UYARLAMA["Diğer"])[alan]))];
+  return { ortam: birlestir("ortam"), ogretim: birlestir("ogretim"), olcme: birlestir("olcme") };
+}
+// Önceki değerlendirmeye göre yeni kazanılan beceriler
+function kedKazanimlar(onceki, simdi) {
+  if (!onceki) return [];
+  const sonuc = [];
+  KED_DERSLER.forEach(d => {
+    const a = (onceki.dersler || {})[d.k] || {}, b = (simdi.dersler || {})[d.k] || {};
+    d.maddeler.forEach((m, i) => { if (b[i] === 2 && (a[i] === 0 || a[i] === 1)) sonuc.push(`${d.ad}: ${m[0]}`); else if (b[i] === 1 && a[i] === 0) sonuc.push(`${d.ad}: ${m[0]} (destekle)`); });
+  });
+  return sonuc;
+}
+function kedKisaOzet(v) {
+  const dersler = KED_DERSLER.map(d => ({ d, o: kedDersOzet(v, d) })).filter(x => x.o.n);
+  const gel = kedGelisimOzet(v).filter(a => a.ort != null);
+  return `${v.donem || ""}${(v.tanilar || []).length ? " · " + v.tanilar.map(t => KAYNASTIRMA_KISALT[t] || t).join(", ") : ""}${dersler.length ? " · " + dersler.map(x => `${x.d.ad}: ${x.o.bagimsiz.length}/${x.o.n} bağımsız`).join(", ") : ""}${gel.length ? " · gelişim ort. " + gel.map(a => `${({ dil: "Dil", sosyal: "Sosyal", ozbakim: "Öz bakım", motor: "Motor", dikkat: "Dikkat" })[a.k]} ${a.ort}`).join(", ") : ""}`;
+}
+function kedRaporBitisGun(v) { const ms = pdrTarihMs(v && v.ramBitis); return ms ? Math.floor((ms - Date.now()) / 86400000) : null; }
+
+// ── KED yazdırılabilir sayfalar ──
+function kedBaslikHtml(baslik, bilgi, alt) {
+  return `<div style="display:flex;align-items:center;gap:14px;border-bottom:3px solid #6D28D9;padding-bottom:10px;margin-bottom:14px">
+    <div style="font-size:32px">🧩</div>
+    <div style="flex:1"><div style="font-size:18px;font-weight:700;color:#4C1D95">${oyEsc(baslik)}</div>
+    <div style="font-size:12px;color:#555;margin-top:3px">${bilgi && bilgi.ogrenci ? `${oyEsc(bilgi.ogrenci)}${bilgi.sinif ? " · " + oyEsc(bilgi.sinif) : ""} · ` : ""}${oyEsc(bilgi && bilgi.tarih || today())}${alt ? " · " + oyEsc(alt) : ""}</div></div></div>`;
+}
+const KED_TH = "border:1px solid #CBD5E1;padding:5px 7px;vertical-align:top;background:#F5F3FF;color:#4C1D95;text-align:left";
+const KED_TD = "border:1px solid #CBD5E1;padding:5px 7px;vertical-align:top";
+function kedListe(arr) { return arr.length ? `<ul style="margin:2px 0 6px;padding-left:18px;font-size:12px;line-height:1.5">${arr.map(x => `<li>${oyEsc(x)}</li>`).join("")}</ul>` : `<div style="color:#888;margin:2px 0 6px">—</div>`; }
+function kedBilgiTablo(v) {
+  const sat = (a, b) => b ? `<tr><td style="${KED_TD};width:34%;color:#555">${a}</td><td style="${KED_TD}">${b}</td></tr>` : "";
+  return `<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:10px">
+    ${sat("Tanı / yetersizlik türü", oyEsc((v.tanilar || []).join(", ") || "—"))}
+    ${sat("RAM raporu", oyEsc([v.ramTarih ? "tarih: " + v.ramTarih : "", v.ramBitis ? "geçerlilik: " + v.ramBitis : ""].filter(Boolean).join(" · ")))}
+    ${sat("Eğitim ortamı", oyEsc(v.ortam || ""))}
+    ${sat("Destek eğitim", oyEsc([v.destekSaat ? `haftada ${v.destekSaat} ders saati` : "", (v.destekDersler || []).length ? (v.destekDersler || []).map(k => KED_DERSLER.find(d => d.k === k)?.ad).join(", ") : ""].filter(Boolean).join(" · ")))}
+    ${sat("Güçlü yönleri", oyEsc(v.guclu || ""))}
+    ${sat("İlgi alanları ve pekiştireçler", oyEsc([v.ilgiler, v.pekistirec].filter(Boolean).join(" · ")))}
+    ${sat("Öğrenme özellikleri", oyEsc((v.ogrenme || []).join("; ")))}
+    ${sat("Sağlık / ilaç", oyEsc(v.saglik || ""))}
+    ${sat("Aile", oyEsc(v.aile || ""))}
+  </table>`;
+}
+function kedRaporHtml(kayit, bilgi, kaynak) {
+  const v = kayit.veri || {};
+  let h = kedBaslikHtml("Eğitsel Performans Raporu", { ...bilgi, tarih: kayit.tarih }, v.donem);
+  h += `<div style="font-size:11px;color:#666;margin-bottom:8px">BEP geliştirme biriminin kullanımı içindir. Resmî eğitsel değerlendirme ve tanılama RAM tarafından yapılır.</div>`;
+  h += kedBilgiTablo(v);
+  KED_DERSLER.forEach(d => {
+    const o = kedDersOzet(v, d); if (!o.n) return;
+    const isl = kedIslevselDuzey(v, d, kaynak);
+    h += `<h3 style="font-size:14px;color:#4C1D95;margin:12px 0 4px">${d.ikon} ${d.ad}${isl.metin ? ` — işlevsel düzey ${isl.metin} <span style="font-size:11px;color:#888;font-weight:400">(${oyEsc(isl.kaynak)})</span>` : ""}</h3>
+    <div style="font-size:12px;line-height:1.5"><b style="color:#15803D">Bağımsız yapabildikleri:</b>${kedListe(o.bagimsiz.map(x => x.metin))}<b style="color:#B45309">Destekle yapabildikleri:</b>${kedListe(o.destekle.map(x => x.metin))}<b style="color:#B91C1C">Henüz yapamadıkları:</b>${kedListe(o.yapamiyor.map(x => x.metin))}</div>`;
+  });
+  const gel = kedGelisimOzet(v).filter(a => a.n);
+  if (gel.length) {
+    h += `<h3 style="font-size:14px;color:#4C1D95;margin:14px 0 4px">Gelişim alanları (1 = henüz yapamıyor … 4 = bağımsız)</h3><table style="width:100%;border-collapse:collapse;font-size:12px"><tr><th style="${KED_TH}">Alan</th><th style="${KED_TH};width:60px">Ort.</th><th style="${KED_TH}">Destek gereken davranışlar</th></tr>
+    ${gel.map(a => `<tr><td style="${KED_TD}">${a.ikon} ${a.ad}</td><td style="${KED_TD};text-align:center"><b>${a.ort}</b></td><td style="${KED_TD}">${a.zayif.length ? a.zayif.map(oyEsc).join("; ") : "—"}</td></tr>`).join("")}</table>`;
+  }
+  if (kayit.not) h += `<div style="font-size:12px;margin-top:10px"><b>Gözlem ve notlar:</b> ${oyEsc(kayit.not)}</div>`;
+  return h;
+}
+function kedBepHtml(kayit, bilgi, kaynak) {
+  const v = kayit.veri || {};
+  const bep = kedBepTaslak(v, kaynak);
+  const u = kedUyarlamalar(v.tanilar);
+  let h = kedBaslikHtml("Bireyselleştirilmiş Eğitim Programı (BEP) — Taslak", bilgi, v.donem);
+  h += `<div style="font-size:11px;color:#666;margin-bottom:8px">Bu taslak eğitsel performans verisinden üretilmiştir. BEP geliştirme biriminde ders öğretmenleriyle gözden geçirilip karara bağlanmalıdır. Uygulama: ${oyEsc(v.bepBaslangic || "…")} – ${oyEsc(v.bepBitis || "…")}</div>`;
+  h += kedBilgiTablo(v);
+  if (!bep.dersler.length) h += `<div style="font-size:12px;color:#B45309">BEP'e alınacak ders seçilmemiş ya da seçilen derslerde destek gerektiren beceri işaretlenmemiş.</div>`;
+  bep.dersler.forEach(b => {
+    h += `<h3 style="font-size:14px;color:#4C1D95;margin:12px 0 4px">${b.ders.ikon} ${b.ders.ad}</h3>
+    <div style="font-size:12px;margin-bottom:4px"><b>Eğitsel performans:</b> ${b.isl.metin ? `işlevsel düzey ${b.isl.metin}; ` : ""}${kedDersOzet(v, b.ders).bagimsiz.length} beceriyi bağımsız yapabiliyor (ayrıntı Eğitsel Performans Raporu'nda).</div>
+    <div style="font-size:12px;margin-bottom:4px"><b>Uzun dönemli amaç:</b> ${oyEsc(b.uda)}</div>
+    <table style="width:100%;border-collapse:collapse;font-size:11.5px"><tr><th style="${KED_TH}">Kısa dönemli amaç</th><th style="${KED_TH}">Ölçüt</th><th style="${KED_TH};width:80px">Başlama</th><th style="${KED_TH};width:80px">Bitiş</th><th style="${KED_TH};width:70px">Durum</th></tr>
+    ${b.kda.map(k => `<tr><td style="${KED_TD}">${oyEsc(k.metin)}</td><td style="${KED_TD}">${oyEsc(k.olcut)}</td><td style="${KED_TD}"></td><td style="${KED_TD}"></td><td style="${KED_TD}">☐ ☐ ☐</td></tr>`).join("")}</table>
+    <div style="font-size:11.5px;margin-top:3px"><b>Yöntem-teknik:</b> ${oyEsc(b.yontem)} · <b>Değerlendirme:</b> ${oyEsc(b.olcme)} · <b>Materyal:</b> somut materyal, görsel kartlar, çalışma yaprakları</div>`;
+  });
+  if (bep.davranis.length) h += `<h3 style="font-size:14px;color:#4C1D95;margin:14px 0 4px">Davranışa yönelik amaçlar ve önlemler</h3><div style="font-size:12px;margin-bottom:2px"><b>Hedef davranışlar</b> (her biri için ölçüt: 2 hafta boyunca gözlemlerin en az %80'inde):</div>${kedListe(bep.davranis.map(x => `${x.alan}: ${x.metin}`))}<div style="font-size:12px"><b>Önlemler:</b> Olumlu davranışı anında ve somut olarak pekiştirme; sınıf kurallarını görsel olarak asma; öz-izleme kartı; davranıştan önce gelen durumları (ne zaman, hangi derste) not ederek tetikleyicileri azaltma; veliyle aynı pekiştireç sistemini kullanma.</div>`;
+  h += `<h3 style="font-size:14px;color:#4C1D95;margin:14px 0 4px">Destek eğitim hizmeti</h3><div style="font-size:12px">${v.destekSaat ? `Haftada ${oyEsc(v.destekSaat)} ders saati` : "Haftalık süre: ……"}${(v.destekDersler || []).length ? " · Dersler: " + (v.destekDersler || []).map(k => KED_DERSLER.find(d => d.k === k)?.ad).join(", ") : ""} · Yer: destek eğitim odası · Sağlayan: ……… (Haftalık ders saatinin %40'ını geçemez; birebir ya da benzer düzeyde en çok 3 öğrenci.)</div>`;
+  h += `<h3 style="font-size:14px;color:#4C1D95;margin:14px 0 4px">Eğitim ortamı düzenlemeleri</h3>${kedListe(u.ortam)}<h3 style="font-size:14px;color:#4C1D95;margin:8px 0 4px">Ölçme ve değerlendirme uyarlamaları</h3>${kedListe(u.olcme)}`;
+  h += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:22px;font-size:11px;text-align:center">${["BEP Birimi Başkanı", "Sınıf Rehber Öğretmeni", "Rehber Öğretmen / PDR", "Ders Öğretmeni", "Ders Öğretmeni", "Veli"].map(r => `<div style="border-top:1px solid #94A3B8;padding-top:4px;margin-top:26px">${r}</div>`).join("")}</div>`;
+  return h;
+}
+function kedUyarlamaHtml(kayit, bilgi) {
+  const v = kayit.veri || {};
+  const u = kedUyarlamalar(v.tanilar);
+  let h = kedBaslikHtml("Öğretmenler İçin Uyarlama Önerileri", bilgi, (v.tanilar || []).join(", "));
+  h += `<div style="font-size:12px;color:#555;margin-bottom:8px">Bu öğrencinin derslerine giren tüm öğretmenlerle paylaşılmak üzere hazırlanmıştır. Sınav uyarlamaları BEP geliştirme biriminin kararıyla uygulanır.</div>`;
+  h += `<h3 style="font-size:14px;color:#4C1D95">🏫 Sınıf ortamı</h3>${kedListe(u.ortam)}<h3 style="font-size:14px;color:#4C1D95">👩‍🏫 Öğretim</h3>${kedListe(u.ogretim)}<h3 style="font-size:14px;color:#4C1D95">📝 Ölçme ve değerlendirme</h3>${kedListe(u.olcme)}`;
+  if ((v.ogrenme || []).length || v.guclu || v.pekistirec) h += `<h3 style="font-size:14px;color:#4C1D95">💡 Bu öğrenciye özgü</h3>${kedListe([...(v.ogrenme || []), v.guclu ? "Güçlü yönleri: " + v.guclu : "", v.pekistirec ? "Motive eden: " + v.pekistirec : ""].filter(Boolean))}`;
+  h += `<div style="font-size:11px;color:#666;margin-top:10px">Not: Kaynaştırma öğrencisinin BEP'e alınan derslerdeki sınavları BEP hedeflerine göre hazırlanır; ders öğretmeninin kişisel değerlendirmesi resmî raporun yerine geçmez.</div>`;
+  return h;
+}
+function kedBgrHtml(kayit, bilgi, kaynak, onceki) {
+  const v = kayit.veri || {};
+  const kaz = kedKazanimlar(onceki ? onceki.veri : null, v);
+  let h = kedBaslikHtml("Bireysel Gelişim Raporu — Taslak", bilgi, v.donem);
+  h += `<div style="font-size:11px;color:#92400E;background:#FFFBEB;padding:6px 8px;border-radius:6px;margin-bottom:8px">Taslaktır. Bilgileri resmî Bireysel Gelişim Raporu (S.Y.5.A) formuna aktarınız; form sınıf rehber öğretmeni tarafından BEP birimi ve öğrenciye derse giren öğretmenlerin bilgisiyle doldurulur.</div>`;
+  h += kedBilgiTablo(v);
+  h += `<h3 style="font-size:14px;color:#4C1D95;margin:10px 0 4px">Akademik gelişim</h3><table style="width:100%;border-collapse:collapse;font-size:12px"><tr><th style="${KED_TH}">Ders</th><th style="${KED_TH}">İşlevsel düzey</th><th style="${KED_TH}">Bağımsız / destekle / yapamıyor</th></tr>
+  ${KED_DERSLER.map(d => { const o = kedDersOzet(v, d); if (!o.n) return ""; const i = kedIslevselDuzey(v, d, kaynak); return `<tr><td style="${KED_TD}">${d.ad}</td><td style="${KED_TD}">${i.metin || "—"}</td><td style="${KED_TD}">${o.bagimsiz.length} / ${o.destekle.length} / ${o.yapamiyor.length}</td></tr>`; }).join("")}</table>`;
+  if (onceki) h += `<h3 style="font-size:14px;color:#4C1D95;margin:10px 0 4px">Önceki değerlendirmeden (${oyEsc(onceki.tarih)}) bu yana kazanılan beceriler</h3>${kedListe(kaz)}`;
+  const gel = kedGelisimOzet(v).filter(a => a.n);
+  const gelOnce = onceki ? kedGelisimOzet(onceki.veri) : [];
+  if (gel.length) h += `<h3 style="font-size:14px;color:#4C1D95;margin:10px 0 4px">Gelişim alanları</h3><table style="width:100%;border-collapse:collapse;font-size:12px"><tr><th style="${KED_TH}">Alan</th>${onceki ? `<th style="${KED_TH}">Önceki</th>` : ""}<th style="${KED_TH}">Şimdi</th><th style="${KED_TH}">Destek gereken</th></tr>${gel.map(a => `<tr><td style="${KED_TD}">${a.ad}</td>${onceki ? `<td style="${KED_TD};text-align:center">${gelOnce.find(x => x.k === a.k)?.ort ?? "—"}</td>` : ""}<td style="${KED_TD};text-align:center"><b>${a.ort}</b></td><td style="${KED_TD}">${a.zayif.map(oyEsc).join("; ") || "—"}</td></tr>`).join("")}</table>`;
+  h += `<h3 style="font-size:14px;color:#4C1D95;margin:10px 0 4px">Görüş ve öneriler</h3><div style="font-size:12px;min-height:60px;border:1px solid #CBD5E1;border-radius:6px;padding:6px">${oyEsc(kayit.not || "")}</div>`;
+  h += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:22px;font-size:11px;text-align:center">${["Sınıf Rehber Öğretmeni", "Rehber Öğretmen / PDR", "Okul Müdürü"].map(r => `<div style="border-top:1px solid #94A3B8;padding-top:4px;margin-top:26px">${r}</div>`).join("")}</div>`;
+  return h;
+}
+function kedOgretmenFormHtml(dersK, bilgi) {
+  const d = KED_DERSLER.find(x => x.k === dersK);
+  let h = kedBaslikHtml(`Kaba Değerlendirme Formu — ${d.ad}`, bilgi, "ders öğretmeni doldurur");
+  h += `<div style="font-size:12px;color:#555;margin-bottom:8px">Öğrencinin her beceriyi sınıf içinde nasıl yaptığını işaretleyiniz. Formu rehberlik servisine teslim ediniz; BEP'teki eğitsel performans ve amaçlar bu bilgilere göre hazırlanacaktır.</div>`;
+  h += `<table style="width:100%;border-collapse:collapse;font-size:12px"><tr><th style="${KED_TH}">Beceri</th><th style="${KED_TH};width:44px">Düzey</th><th style="${KED_TH};width:62px">Yapamıyor</th><th style="${KED_TH};width:62px">Destekle</th><th style="${KED_TH};width:62px">Bağımsız</th></tr>${d.maddeler.map(m => `<tr><td style="${KED_TD}">${oyEsc(m[0])}</td><td style="${KED_TD};text-align:center">${m[1]}</td><td style="${KED_TD};text-align:center">☐</td><td style="${KED_TD};text-align:center">☐</td><td style="${KED_TD};text-align:center">☐</td></tr>`).join("")}</table>`;
+  h += `<div style="font-size:12px;margin-top:10px">Diğer gözlemler: ……………………………………………………………………………………………………</div><div style="font-size:12px;margin-top:22px">Ders öğretmeni: ……………………………… İmza: …………… Tarih: …………</div>`;
+  return h;
+}
+
+// ── KED arayüzü ──
+const KED_RENK = "#6D28D9";
+function kedVarsayilanDonem() {
+  const d = new Date(), y = d.getFullYear(), ay = d.getMonth() + 1;
+  const yil = ay >= 9 ? `${y}-${y + 1}` : `${y - 1}-${y}`;
+  return `${yil} ${ay >= 2 && ay <= 8 ? "2. dönem" : "1. dönem"}`;
+}
+function kedTarihGiris(t) { const m = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(t || ""); return m ? `${m[3]}-${m[2]}-${m[1]}` : ""; }
+function kedTarihCikis(t) { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t || ""); return m ? `${m[3]}.${m[2]}.${m[1]}` : ""; }
+
+function KEDPaneli({ seciliAd, seciliSinif, seciliNumara, ogrenciler, testKayitlari, setTestKayitlari, akademikTaramalar, ilkokulTaramalar, onKategori }) {
+  const [taslak, setTaslak] = useState(null);   // { id?, tarih?, veri, not }
+  const [sekme, setSekme] = useState("bilgi");
+  const [ders, setDers] = useState("turkce");
+  const [durum, setDurum] = useState("");
+  useEffect(() => { setTaslak(null); setSekme("bilgi"); setDurum(""); }, [seciliAd, seciliSinif]);
+  const ogr = (ogrenciler || []).find(o => pdrAyniOgrenci(o.studentName, o.className, seciliAd, seciliSinif, o.numara, seciliNumara));
+  const tumKayitlar = pdrSozlukOku(testKayitlari, seciliAd, seciliSinif, seciliNumara) || [];
+  const kayitlar = tumKayitlar.filter(k => k.tip === "kaynastirma_ed").sort((a, b) => pdrTarihMs(b.tarih) - pdrTarihMs(a.tarih) || String(b.id).localeCompare(String(a.id)));
+  // Programdaki diğer ölçümlerden işlevsel düzey kaynakları
+  const kaynak = (() => {
+    const ak = (akademikTaramalar || []).find(o => pdrAyniOgrenci(o.studentName, o.className, seciliAd, seciliSinif, o.numara, seciliNumara));
+    const ik = (ilkokulTaramalar || []).find(o => pdrAyniOgrenci(o.studentName, o.className, seciliAd, seciliSinif, o.numara, seciliNumara));
+    const ok = tumKayitlar.filter(k => k.tip === "okuma_degerlendirme").sort((a, b) => pdrTarihMs(b.tarih) - pdrTarihMs(a.tarih))[0];
+    const okP = ok ? oyProfil(ok.veri, ok.veri.sinifNo, ok.tarih) : null;
+    let ilk = null; try { ilk = ik ? ilkokulTaramaSonucHesapla(ik.cevaplar || {}, seciliSinif) : null; } catch (e) { ilk = null; }
+    let akd = null; try { akd = ak ? (ak.sonuc || akademikTaramaSonucHesapla(ak.cevaplar || {})) : null; } catch (e) { akd = null; }
+    return { akademik: akd, akademikTarih: ak ? ak.date : null, ilkokul: ilk && !ilk.hicUygulanmadi ? ilk : null, ilkokulTarih: ik ? ik.date : null, okuma: okP && okP.akicilik ? okP.akicilik.isDuzey : null, okumaTarih: ok ? ok.tarih : null };
+  })();
+  const bilgi = { ogrenci: seciliAd, sinif: seciliSinif, tarih: today() };
+  const dosyaAd = (on) => on + "_" + String(seciliAd || "").replace(/\s+/g, "_");
+
+  async function kaydetKayit(yeni) {
+    const liste = [yeni, ...tumKayitlar.filter(k => k.id !== yeni.id)];
+    const guncel = pdrSozlukYaz(testKayitlari, seciliAd, seciliSinif, liste, seciliNumara);
+    setTestKayitlari(guncel);
+    try { await saveTestKayitlari(guncel); setDurum("✓ Kaydedildi"); } catch (e) { setDurum("⚠ Kaydedilirken sorun oluştu — bağlantıyı kontrol edin."); }
+    setTimeout(() => setDurum(""), 2500);
+  }
+  function yeniTaslak(kaynakKayit) {
+    const temel = kaynakKayit ? JSON.parse(JSON.stringify(kaynakKayit.veri)) : { tanilar: ogr?.kaynastirma || [], ogrenme: [], dersler: {}, dersDuzey: {}, gelisim: {}, bepDersler: ["turkce", "matematik"], destekDersler: [] };
+    temel.donem = kedVarsayilanDonem();
+    if (!temel.tanilar || !temel.tanilar.length) temel.tanilar = ogr?.kaynastirma || [];
+    setTaslak({ veri: temel, not: "" }); setSekme("bilgi");
+  }
+  function kaydet() {
+    const k = { id: taslak.id || uid(), kategori: "objektif", testAdi: "Kaynaştırma Eğitsel Değerlendirme", tip: "kaynastirma_ed", tarih: taslak.tarih || today(), not: taslak.not || "", veri: taslak.veri };
+    kaydetKayit(k); setTaslak(null);
+  }
+  const V = taslak ? taslak.veri : null;
+  const set = (alan, deger) => setTaslak(t => ({ ...t, veri: { ...t.veri, [alan]: deger } }));
+  const girdi = { width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: `1px solid ${BORDER}`, fontSize: 12.5, fontFamily: "inherit" };
+  const etiket = (t) => <div style={{ fontSize: 11, fontWeight: 800, color: MUTED, margin: "10px 0 4px" }}>{t}</div>;
+
+  if (!seciliAd) return <div style={{ fontSize: 12.5, color: MUTED, padding: 10 }}>Önce yukarıdan bir öğrenci seçin.</div>;
+  const ust = (
+    <div style={oyKart({ background: "linear-gradient(135deg,#F5F3FF 0%,#FFFFFF 70%)", borderColor: "#DDD6FE" })}>
+      <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+        <div style={{ fontSize: 36 }}>🧩</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 15, fontWeight: 900, color: "#4C1D95" }}>Kaynaştırma Eğitsel Değerlendirme</div>
+          <div style={{ fontSize: 11.5, color: MUTED, marginTop: 2 }}>Eğitsel performans → BEP taslağı → öğretmen uyarlamaları → Bireysel Gelişim Raporu</div>
+          <div style={{ marginTop: 5, display: "flex", gap: 4, flexWrap: "wrap" }}>{(ogr?.kaynastirma || []).length ? ogr.kaynastirma.map(t => <span key={t} style={{ fontSize: 11, fontWeight: 800, color: KED_RENK, background: "#EDE9FE", borderRadius: 20, padding: "2px 8px" }}>{t}</span>) : <span style={{ fontSize: 11, color: "#92400E" }}>Öğrenci kaydında tanı işaretli değil (Sınıf ekranındaki "Tanı Düzenle"den eklenebilir; burada da seçebilirsiniz).</span>}</div>
+        </div>
+      </div>
+    </div>
+  );
+
+  if (taslak) {
+    const dersObj = KED_DERSLER.find(d => d.k === ders);
+    const dersVeri = (V.dersler || {})[ders] || {};
+    const isl = kedIslevselDuzey(V, dersObj, kaynak);
+    return (
+      <div>
+        {ust}
+        <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+          {[["bilgi", "1. Bilgi"], ["akademik", "2. Akademik"], ["gelisim", "3. Gelişim alanları"], ["cikti", "4. Özet ve çıktılar"]].map(([k, a]) => <button key={k} onClick={() => setSekme(k)} style={oyBtn(KED_RENK, sekme === k)}>{a}</button>)}
+        </div>
+        {sekme === "bilgi" && (
+          <div style={oyKart()}>
+            {etiket("DÖNEM")}<input value={V.donem || ""} onChange={e => set("donem", e.target.value)} style={girdi} />
+            {etiket("TANI / YETERSİZLİK TÜRÜ")}
+            <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>{KAYNASTIRMA_TANILAR.map(t => <button key={t} onClick={() => set("tanilar", (V.tanilar || []).includes(t) ? V.tanilar.filter(x => x !== t) : [...(V.tanilar || []), t])} style={oyBtn(KED_RENK, (V.tanilar || []).includes(t), { padding: "5px 9px", fontSize: 11.5 })}>{t}</button>)}</div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ flex: "1 1 140px" }}>{etiket("RAM RAPOR TARİHİ")}<input type="date" value={kedTarihGiris(V.ramTarih)} onChange={e => set("ramTarih", kedTarihCikis(e.target.value))} style={girdi} /></div>
+              <div style={{ flex: "1 1 140px" }}>{etiket("RAPOR GEÇERLİLİK BİTİŞİ")}<input type="date" value={kedTarihGiris(V.ramBitis)} onChange={e => set("ramBitis", kedTarihCikis(e.target.value))} style={girdi} /></div>
+            </div>
+            {etiket("EĞİTİM ORTAMI")}
+            <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>{["Tam zamanlı kaynaştırma/bütünleştirme", "Yarı zamanlı (özel eğitim sınıfı + genel sınıf)"].map(t => <button key={t} onClick={() => set("ortam", t)} style={oyBtn(KED_RENK, V.ortam === t, { padding: "5px 9px", fontSize: 11.5 })}>{t}</button>)}</div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ flex: "0 0 150px" }}>{etiket("DESTEK EĞİTİM (SAAT/HAFTA)")}<input inputMode="numeric" value={V.destekSaat || ""} onChange={e => set("destekSaat", e.target.value.replace(/\D/g, ""))} style={girdi} /></div>
+              <div style={{ flex: "1 1 200px" }}>{etiket("DESTEK EĞİTİM DERSLERİ")}<div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>{KED_DERSLER.map(d => <button key={d.k} onClick={() => set("destekDersler", (V.destekDersler || []).includes(d.k) ? V.destekDersler.filter(x => x !== d.k) : [...(V.destekDersler || []), d.k])} style={oyBtn(KED_RENK, (V.destekDersler || []).includes(d.k), { padding: "5px 9px", fontSize: 11.5 })}>{d.ad}</button>)}</div></div>
+            </div>
+            {etiket("GÜÇLÜ YÖNLERİ")}<textarea rows={2} value={V.guclu || ""} onChange={e => set("guclu", e.target.value)} style={girdi} placeholder="Örn. görsel hafızası iyi, resim yapmayı seviyor, arkadaşlarına yardım ediyor" />
+            {etiket("İLGİ ALANLARI")}<input value={V.ilgiler || ""} onChange={e => set("ilgiler", e.target.value)} style={girdi} />
+            {etiket("ONU NE MOTİVE EDİYOR (PEKİŞTİREÇLER)")}<input value={V.pekistirec || ""} onChange={e => set("pekistirec", e.target.value)} style={girdi} placeholder="Örn. övgü, sınıfta görev alma, çıkartma, bilgisayarda serbest zaman" />
+            {etiket("ÖĞRENME ÖZELLİKLERİ")}
+            {KED_OGRENME.map(t => <label key={t} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, padding: "2px 0", cursor: "pointer" }}><input type="checkbox" checked={(V.ogrenme || []).includes(t)} onChange={e => set("ogrenme", e.target.checked ? [...(V.ogrenme || []), t] : (V.ogrenme || []).filter(x => x !== t))} />{t}</label>)}
+            {etiket("SAĞLIK / İLAÇ (VARSA)")}<input value={V.saglik || ""} onChange={e => set("saglik", e.target.value)} style={girdi} />
+            {etiket("AİLE BİLGİSİ VE BEKLENTİLERİ")}<textarea rows={2} value={V.aile || ""} onChange={e => set("aile", e.target.value)} style={girdi} />
+          </div>
+        )}
+        {sekme === "akademik" && (
+          <div style={oyKart()}>
+            <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 10 }}>{KED_DERSLER.map(d => { const o = kedDersOzet(V, d); return <button key={d.k} onClick={() => setDers(d.k)} style={oyBtn(KED_RENK, ders === d.k, { padding: "6px 10px" })}>{d.ikon} {d.ad}{o.n ? ` (${o.n})` : ""}</button>; })}</div>
+            <div style={{ fontSize: 12, lineHeight: 1.6, background: "#F5F3FF", borderRadius: 8, padding: "8px 10px", marginBottom: 10 }}>
+              <b>İşlevsel düzey:</b> {isl.metin || "henüz belirlenmedi"}{isl.kaynak ? <span style={{ color: MUTED }}> ({isl.kaynak})</span> : ""}
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center", marginTop: 4 }}>
+                <span style={{ fontSize: 11, color: MUTED }}>Elle belirle:</span>
+                {[null, 1, 2, 3, 4, 5, 6, 7, 8].map(n => <button key={String(n)} onClick={() => set("dersDuzey", { ...(V.dersDuzey || {}), [ders]: n })} style={oyBtn(KED_RENK, ((V.dersDuzey || {})[ders] || null) === n, { padding: "3px 8px", fontSize: 11 })}>{n || "otomatik"}</button>)}
+              </div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                {dersObj.akademik && <button onClick={() => onKategori && onKategori("akademik")} style={oyBtn("#8B5A00", false, { padding: "4px 8px", fontSize: 11 })}>📚 Akademik Düzey Taraması{kaynak.akademikTarih ? " ✓" : ""}</button>}
+                <button onClick={() => onKategori && onKategori("ilkokul")} style={oyBtn("#C2410C", false, { padding: "4px 8px", fontSize: 11 })}>🎒 İlkokul Düzey Taraması{kaynak.ilkokulTarih ? " ✓" : ""}</button>
+                {ders === "turkce" && <button onClick={() => onKategori && onKategori("oy")} style={oyBtn("#0E7490", false, { padding: "4px 8px", fontSize: 11 })}>📖 Okuma-Yazma değerlendirmesi{kaynak.okumaTarih ? " ✓" : ""}</button>}
+              </div>
+              <div style={{ fontSize: 10.5, color: MUTED, marginTop: 4 }}>Taslağınız saklanmaz; başka bir araca geçmeden önce kaydedin.</div>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
+              <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5, fontWeight: 800, cursor: "pointer" }}><input type="checkbox" checked={(V.bepDersler || []).includes(ders)} onChange={e => set("bepDersler", e.target.checked ? [...(V.bepDersler || []), ders] : (V.bepDersler || []).filter(x => x !== ders))} />Bu ders BEP'e alınsın</label>
+              <button onClick={() => oyYazdir(kedOgretmenFormHtml(ders, bilgi), dosyaAd("Kaba_Degerlendirme_" + ders))} style={oyBtn("#475569", false, { padding: "5px 9px", fontSize: 11.5 })}>🖨 Öğretmen formu</button>
+            </div>
+            <div style={{ fontSize: 11.5, color: MUTED, marginBottom: 6 }}>Ders öğretmeninin gözlemine göre işaretleyin. Parantezdeki sayı becerinin yaklaşık sınıf düzeyidir; değerlendirilmeyen beceriyi boş bırakın.</div>
+            {dersObj.maddeler.map((m, i) => (
+              <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", padding: "6px 0", borderTop: `1px solid ${BORDER}`, flexWrap: "wrap" }}>
+                <div style={{ flex: "1 1 180px", fontSize: 12.5, color: TEXT }}>{m[0]} <span style={{ fontSize: 10.5, color: MUTED }}>({m[1]})</span></div>
+                <div style={{ display: "flex", gap: 4 }}>{KED_PERF.map(([ad, renk, zemin], v) => <button key={v} onClick={() => set("dersler", { ...(V.dersler || {}), [ders]: { ...dersVeri, [i]: dersVeri[i] === v ? undefined : v } })} style={{ padding: "5px 8px", borderRadius: 8, fontSize: 11, fontWeight: 800, cursor: "pointer", border: `1.5px solid ${renk}`, background: dersVeri[i] === v ? renk : zemin, color: dersVeri[i] === v ? "#fff" : renk }}>{ad}</button>)}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        {sekme === "gelisim" && (
+          <div style={oyKart()}>
+            <div style={{ fontSize: 11.5, color: MUTED, marginBottom: 6 }}>1 = henüz yapamıyor · 2 = sık destekle · 3 = büyük ölçüde (ara sıra destek) · 4 = bağımsız</div>
+            {KED_GELISIM.map(a => (
+              <div key={a.k} style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 13, fontWeight: 900, color: KED_RENK, margin: "6px 0 2px" }}>{a.ikon} {a.ad}</div>
+                {a.maddeler.map((m, i) => { const v = ((V.gelisim || {})[a.k] || {})[i]; return (
+                  <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", padding: "5px 0", borderTop: `1px dashed ${BORDER}`, flexWrap: "wrap" }}>
+                    <div style={{ flex: "1 1 180px", fontSize: 12.5 }}>{m}</div>
+                    <div style={{ display: "flex", gap: 4 }}>{[1, 2, 3, 4].map(n => <button key={n} title={KED_GELISIM_OLCEK[n - 1]} onClick={() => set("gelisim", { ...(V.gelisim || {}), [a.k]: { ...((V.gelisim || {})[a.k] || {}), [i]: v === n ? undefined : n } })} style={oyBtn(n <= 2 ? "#B45309" : "#15803D", v === n, { minWidth: 34, padding: "5px 6px" })}>{n}</button>)}</div>
+                  </div>); })}
+              </div>
+            ))}
+          </div>
+        )}
+        {sekme === "cikti" && (
+          <div style={oyKart()}>
+            <div style={{ fontSize: 13, fontWeight: 900, color: KED_RENK, marginBottom: 6 }}>Özet</div>
+            {KED_DERSLER.map(d => { const o = kedDersOzet(V, d); if (!o.n) return null; const i = kedIslevselDuzey(V, d, kaynak); return <div key={d.k} style={{ fontSize: 12.5, padding: "4px 0", borderBottom: `1px dashed ${BORDER}` }}>{d.ikon} <b>{d.ad}</b>{i.metin ? ` · ${i.metin}` : ""} · <span style={{ color: "#15803D" }}>{o.bagimsiz.length} bağımsız</span> · <span style={{ color: "#B45309" }}>{o.destekle.length} destekle</span> · <span style={{ color: "#B91C1C" }}>{o.yapamiyor.length} yapamıyor</span>{(V.bepDersler || []).includes(d.k) ? " · BEP" : ""}</div>; })}
+            {kedGelisimOzet(V).filter(a => a.n).map(a => <div key={a.k} style={{ fontSize: 12.5, padding: "4px 0", borderBottom: `1px dashed ${BORDER}` }}>{a.ikon} {a.ad}: <b>{a.ort}</b>/4{a.zayif.length ? <span style={{ color: "#B45309" }}> · destek: {a.zayif.length} davranış</span> : ""}</div>)}
+            {etiket("GÖZLEM VE NOTLAR (raporlara girer)")}<textarea rows={3} value={taslak.not || ""} onChange={e => setTaslak(t => ({ ...t, not: e.target.value }))} style={girdi} />
+            {etiket("BEP UYGULAMA TARİHLERİ")}
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <input type="date" value={kedTarihGiris(V.bepBaslangic)} onChange={e => set("bepBaslangic", kedTarihCikis(e.target.value))} style={{ ...girdi, flex: "1 1 140px", width: "auto" }} />
+              <input type="date" value={kedTarihGiris(V.bepBitis)} onChange={e => set("bepBitis", kedTarihCikis(e.target.value))} style={{ ...girdi, flex: "1 1 140px", width: "auto" }} />
+            </div>
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button onClick={kaydet} style={oyBtn("#15803D", true, { padding: "11px 16px", fontSize: 14 })}>💾 Kaydet</button>
+          <button onClick={() => { if (window.confirm("Kaydedilmemiş değişiklikler silinsin mi?")) setTaslak(null); }} style={oyBtn("#64748B")}>Vazgeç</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {ust}
+      {durum && <div style={{ fontSize: 12, fontWeight: 700, color: durum.startsWith("✓") ? "#15803D" : "#B45309", marginBottom: 8 }}>{durum}</div>}
+      <div style={oyKart()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
+          <div style={{ fontSize: 13, fontWeight: 900, color: TEXT }}>📋 Değerlendirmeler</div>
+          <button onClick={() => yeniTaslak(kayitlar[0] || null)} style={oyBtn(KED_RENK, true)}>＋ {kayitlar.length ? "Yeni dönem (öncekinden başla)" : "Değerlendirme başlat"}</button>
+        </div>
+        {!kayitlar.length && <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.6 }}>
+          Önerilen sıra: <b>1)</b> Bilgi toplama ve tanı; <b>2)</b> Akademik düzey için Akademik/İlkokul Düzey Taraması ve Türkçe için Okuma-Yazma değerlendirmesi; ders öğretmenlerine "Öğretmen formu"nu verip kaba değerlendirmeyi işaretleme; <b>3)</b> gelişim alanları gözlemi; <b>4)</b> çıktıları BEP toplantısına götürme.
+        </div>}
+        {kayitlar.map((k, idx) => {
+          const onceki = kayitlar[idx + 1] || null;
+          const gun = kedRaporBitisGun(k.veri);
+          return (
+            <div key={k.id} style={{ padding: "9px 0", borderTop: `1px solid ${BORDER}` }}>
+              <div style={{ fontSize: 12.5, color: TEXT, lineHeight: 1.5 }}><b>{k.tarih}</b> — {kedKisaOzet(k.veri)}</div>
+              {gun !== null && gun <= 60 && <div style={{ fontSize: 11.5, fontWeight: 800, color: gun < 0 ? "#B91C1C" : "#B45309", marginTop: 2 }}>⏰ RAM raporunun geçerlilik süresi {gun < 0 ? `${-gun} gün önce doldu` : `${gun} gün içinde doluyor`} — Bireysel Gelişim Raporu ile yeniden değerlendirme isteyin.</div>}
+              <div style={{ display: "flex", gap: 5, marginTop: 6, flexWrap: "wrap" }}>
+                <button onClick={() => { setTaslak({ id: k.id, tarih: k.tarih, veri: JSON.parse(JSON.stringify(k.veri)), not: k.not || "" }); setSekme("bilgi"); }} style={oyBtn(KED_RENK)}>✎ Düzenle</button>
+                <button onClick={() => oyYazdir(kedRaporHtml(k, bilgi, kaynak), dosyaAd("Egitsel_Performans_Raporu"))} style={oyBtn("#4C1D95", true)}>🖨 Eğitsel Performans</button>
+                <button onClick={() => oyYazdir(kedBepHtml(k, bilgi, kaynak), dosyaAd("BEP_Taslagi"))} style={oyBtn("#15803D", true)}>🖨 BEP taslağı</button>
+                <button onClick={() => oyYazdir(kedUyarlamaHtml(k, bilgi), dosyaAd("Ogretmen_Uyarlamalari"))} style={oyBtn("#0E7490")}>🖨 Öğretmen uyarlamaları</button>
+                <button onClick={() => oyYazdir(kedBgrHtml(k, bilgi, kaynak, onceki), dosyaAd("Bireysel_Gelisim_Raporu"))} style={oyBtn("#B45309")}>🖨 Bireysel Gelişim Raporu</button>
+              </div>
+              {onceki && kedKazanimlar(onceki.veri, k.veri).length > 0 && <div style={{ fontSize: 11.5, color: "#15803D", marginTop: 5 }}>✨ Önceki değerlendirmeden bu yana {kedKazanimlar(onceki.veri, k.veri).length} beceri kazanıldı.</div>}
+            </div>
+          );
+        })}
+      </div>
+      <div style={oyKart({ background: "#FAFAF9" })}>
+        <div style={{ fontSize: 12, color: TEXT, lineHeight: 1.6 }}>
+          <b>Bilmekte yarar var:</b> Resmî eğitsel değerlendirme ve tanılama RAM'ın görevidir; okulda yapılan, BEP için <b>eğitsel performans belirleme</b>dir. BEP; okul müdürü/yardımcısı başkanlığında veli, sınıf/ders öğretmenleri ve rehber öğretmenden oluşan BEP geliştirme biriminde hazırlanır. Destek eğitim haftalık ders saatinin %40'ını geçemez, birebir ya da benzer düzeyde en çok 3 öğrenciyle yapılır. Raporu dolmak üzere olan öğrenci için Bireysel Gelişim Raporu (S.Y.5.A) hazırlanıp RAM'a yeniden değerlendirme istenir.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 // ── Dikkat Güçlendirme Programı (DGP) ────────────────────────────────────────
 // Kuramsal temel: Sohlberg & Mateer klinik dikkat modeli (odaklanma → sürdürme →
 // seçici → değişken → bölünmüş) ve bu modelin çocuk uyarlaması "Pay Attention!"
@@ -22023,6 +22550,7 @@ function testSonucOzeti(k) {
     case "dikkat_egitim": return dgKisaOzet(v);
     case "okuma_degerlendirme": return oyKisaOzetDeg({ ...v, tarih: k.tarih });
     case "okuma_programi": return oyKisaOzetProgram(v);
+    case "kaynastirma_ed": return kedKisaOzet(v);
     case "insan_ciz": return iczKisaOzet(v);
     case "scas_cocuk": {
       const cevaplar = v.cevaplar || [];
@@ -22369,7 +22897,7 @@ function D2Paneli({ seciliAd, seciliSinif, seciliNumara, profiles2, setProfiles2
   );
 }
 
-function TestlerEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, testKayitlari, setTestKayitlari, profiles2, setProfiles2, oogDegerlendirmeler, setOogDegerlendirmeler, castDegerlendirmeler, setCastDegerlendirmeler, pasDegerlendirmeler, setPasDegerlendirmeler, pasPerformanslar, setPasPerformanslar, akademikTaramalar, setAkademikTaramalar, ilkokulTaramalar, setIlkokulTaramalar, liseTaramalar, setLiseTaramalar, benlikOlcekleri, setBenlikOlcekleri, bilproDegerlendirmeler, setBilproDegerlendirmeler, mudahalePlan, setMudahalePlan, setTab, kademe }) {
+function TestlerEkrani({ kayitliListesi, ogrenciler, aktifOgrenci, setAktifOgrenci, testKayitlari, setTestKayitlari, profiles2, setProfiles2, oogDegerlendirmeler, setOogDegerlendirmeler, castDegerlendirmeler, setCastDegerlendirmeler, pasDegerlendirmeler, setPasDegerlendirmeler, pasPerformanslar, setPasPerformanslar, akademikTaramalar, setAkademikTaramalar, ilkokulTaramalar, setIlkokulTaramalar, liseTaramalar, setLiseTaramalar, benlikOlcekleri, setBenlikOlcekleri, bilproDegerlendirmeler, setBilproDegerlendirmeler, mudahalePlan, setMudahalePlan, setTab, kademe }) {
   const [seciliAd, setSeciliAd] = useState(aktifOgrenci?.name || "");
   const [ogrenciArama, setOgrenciArama] = useState("");
   const [kategori, setKategori] = useState(null); // "objektif" | "projektif" | null
@@ -22698,6 +23226,9 @@ KURALLAR:
                     <button onClick={()=>setKategori("dg")} style={{ flex:1, padding:"14px 8px", borderRadius:12, border:`2px solid #4F46E5`, background:"linear-gradient(135deg,#EEF2FF,#FFFFFF)", color:"#312E81", fontSize:13, fontWeight:800, cursor:"pointer" }}>🦉 Dikkat Güçlendirme Programı</button>
                   </div>
                   <div style={{ display:"flex", gap:8, marginTop:8 }}>
+                    <button data-asistan="test-kaynastirma" onClick={()=>setKategori("ked")} style={{ flex:1, padding:"14px 8px", borderRadius:12, border:`2px solid #6D28D9`, background:"linear-gradient(135deg,#F5F3FF,#FFFFFF)", color:"#4C1D95", fontSize:13, fontWeight:800, cursor:"pointer" }}>🧩 Kaynaştırma Eğitsel Değerlendirme (BEP)</button>
+                  </div>
+                  <div style={{ display:"flex", gap:8, marginTop:8 }}>
                     <button data-asistan="test-okuma" onClick={()=>setKategori("oy")} style={{ flex:1, padding:"14px 8px", borderRadius:12, border:`2px solid #0E7490`, background:"linear-gradient(135deg,#ECFEFF,#FFFFFF)", color:"#155E75", fontSize:13, fontWeight:800, cursor:"pointer" }}>📖 Okuma-Yazma Destek Programı</button>
                   </div>
                   <div style={{ display:"flex", gap:8, marginTop:8 }}>
@@ -22735,6 +23266,11 @@ KURALLAR:
                   <div style={{ display:"flex", gap:8, marginTop:8 }}>
                     <button onClick={()=>setKategori("bilpro")} style={{ flex:1, padding:"14px 8px", borderRadius:12, border:`2px solid #6A4C93`, background:"#F3EEFB", color:"#6A4C93", fontSize:13, fontWeight:800, cursor:"pointer" }}>🧠 BİLPRO — Bilişsel Profil Değerlendirmesi</button>
                   </div>
+                </div>
+              ) : kategori === "ked" ? (
+                <div>
+                  <button onClick={()=>setKategori(null)} style={{ background:"none", border:"none", color:MUTED, fontSize:12, cursor:"pointer", marginBottom:8, padding:0 }}>← Kategoriyi değiştir</button>
+                  <KEDPaneli seciliAd={seciliAd} seciliSinif={seciliSinif} seciliNumara={seciliNumara} ogrenciler={ogrenciler} testKayitlari={testKayitlari} setTestKayitlari={setTestKayitlari} akademikTaramalar={akademikTaramalar} ilkokulTaramalar={ilkokulTaramalar} onKategori={setKategori} />
                 </div>
               ) : kategori === "oy" ? (
                 <div>
@@ -36811,7 +37347,7 @@ const SEMA_ICERIK = {
   konu_haritasi: [["LGS konu bazlı çalışma takibi"]],
   deneme: [["Deneme sonuçları, toplu Excel"], ["Geçmiş dönem ortalaması"], ["Yüzdelik dilim tahmini"]],
   kazanimlar: [["Etkinlik kartından ilgili PDF sayfasına git"]],
-  testler: [["Bir İnsan Çiz Testi (fotoğrafla, AI destekli)", true], ["Çeldiricili Dikkat Testi (ÇDT)"], ["Dikkat Güçlendirme Programı"], ["Okuma-Yazma Destek Programı", true], ["Veli bilgilendirme raporu (dikkat)", true], ["D2, SCAS-Çocuk, BEİER, Mesleki Eğilim"], ["BİLPRO, CAS, Otizm taraması, ÖÖG ön-tarama"], ["Düzey taramaları, Benlik, Bütünleşik"]],
+  testler: [["Bir İnsan Çiz Testi (fotoğrafla, AI destekli)", true], ["Çeldiricili Dikkat Testi (ÇDT)"], ["Dikkat Güçlendirme Programı"], ["Okuma-Yazma Destek Programı", true], ["Kaynaştırma Eğitsel Değerlendirme (BEP)", true], ["Veli bilgilendirme raporu (dikkat)", true], ["D2, SCAS-Çocuk, BEİER, Mesleki Eğilim"], ["BİLPRO, CAS, Otizm taraması, ÖÖG ön-tarama"], ["Düzey taramaları, Benlik, Bütünleşik"]],
   risk: [["Risk listesi ve vaka adımları"], ["Birleşik Sinyal, Takip Boşluğu, Veli Görüşülmedi"], ["AI / Manuel sonuç değerlendirmesi"]],
   uyum_izleme: [["Uyum taraması (6 gösterge, 37 madde)"], ["Görüşme notundan otomatik öneri"]],
   kutuphane: [["Yönetmelik / makale yükle — AI referansı"]],
@@ -38012,7 +38548,7 @@ const SEKME_ACIKLAMALARI = {
   deneme: "Deneme (D1, D2, …) sonuçlarını gir; toplu Excel yükleme de burada.",
   net_haritasi: "Öğrencinin net gelişimini görsel takip et; ayrıntılı deneme sonucu girildiyse konu bazlı tamamlanma analizini de burada görürsün.",
   konu_haritasi: "Öğrencinin hangi konuları tamamladığını / tekrar etmesi gerektiğini kaydet.",
-  testler: "Standart test sonuçlarını gir ve programdaki araçları uygula: Bir İnsan Çiz (fotoğrafla), ÇDT dikkat testi, Dikkat Güçlendirme Programı, Okuma-Yazma Destek Programı (değerlendirme, bireysel plan, haftalık akıcılık izleme), SCAS, BEİER, Mesleki Eğilim, BİLPRO, düzey taramaları — hepsi rapora otomatik eklenir.",
+  testler: "Standart test sonuçlarını gir ve programdaki araçları uygula: Bir İnsan Çiz (fotoğrafla), ÇDT dikkat testi, Dikkat Güçlendirme Programı, Okuma-Yazma Destek Programı (değerlendirme, bireysel plan, haftalık akıcılık izleme), Kaynaştırma Eğitsel Değerlendirme (eğitsel performans, BEP taslağı, öğretmen uyarlamaları, Bireysel Gelişim Raporu), SCAS, BEİER, Mesleki Eğilim, BİLPRO, düzey taramaları — hepsi rapora otomatik eklenir.",
   sinif_sunumu: "Sınıfın geneline dair sunum ve kurum raporu hazırlar (Deneme Net Trendi dahil).",
   hatirlatici: "Kendine bıraktığın hatırlatma / yapılacaklar listesi.",
   gorusme_takvimi: "Planlanan ve geçmiş görüşmeleri takvim görünümünde gösterir.",
@@ -38798,6 +39334,7 @@ function pdrBaslangicSekmesi() {
         {tab === "testler" && (
           <TestlerEkrani
             kayitliListesi={kayitliListesi}
+            ogrenciler={ogrenciler}
             aktifOgrenci={aktifOgrenci}
             setAktifOgrenci={setAktifOgrenci}
             testKayitlari={testKayitlari}

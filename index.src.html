@@ -11078,7 +11078,7 @@ function ksAsistanDogrudanYanit(ad, sonuc) {
 const KS_YEREL_EKRAN = [
   ["gorusmeler", /gorusme (not|kayit)\w*|gorusmeleri\w*|\bnotlari\w*/], ["dosya", /\bdosya\w*/], ["profil", /\bprofil\w*/],
   ["mudahale", /mudahale\w*/], ["risk", /\brisk\b/], ["hatirlatici", /hatirlatici\w*|hatirlatma ekran\w*/],
-  ["takvim", /takvim\w*/], ["deneme", /\bdeneme (ekran|sayfa|sekme|sonuclari)\w*/], ["testler", /\btest(ler|leri)?\b/], ["devamsizlik", /devamsizlik\w*/],
+  ["takvim", /takvim\w*/], ["deneme", /\bdeneme (ekran|sayfa|sekme|sonuclari)\w*/], ["testler", /\btest\w*/], ["devamsizlik", /devamsizlik\w*/],
   ["sosyometri", /sosyometri\w*/], ["kriz", /\bkriz\w*/], ["uyum_izleme", /uyum izleme\w*/], ["istatistik", /istatistik\w*/], ["belgeler", /\bbelge\w*/],
   ["sinif_profili", /sinif profil\w*/], ["prof_danisma", /prof\.? hakan|supervizyon ekran\w*/], ["sema", /\bsema\b|semayi/],
 ];
@@ -13524,7 +13524,7 @@ function pdrGunlukOzetHesapla(hatirlatmalar, ogrenciler, riskListesi, sosyometri
   return { gecikenler, bugunkuler, oncelikliler };
 }
 
-function pdrVeriBekcisiTara(riskListesi, uyumIzleme, ogrenciler, sosyometri, aktifYil, krizKayitlari) {
+function pdrVeriBekcisiTara(riskListesi, uyumIzleme, ogrenciler, sosyometri, aktifYil, krizKayitlari, testKayitlari) {
   const bulgular = [];
 
   // 1) Açık risk kaydı, 21+ gündür hiç sonuç değerlendirmesi almamış
@@ -13581,6 +13581,24 @@ function pdrVeriBekcisiTara(riskListesi, uyumIzleme, ogrenciler, sosyometri, akt
         mesaj: `${k.etkilenen || "Bir kriz kaydı"} — izlem tarihi ${gun} gün önceydi, kayıt hâlâ "Açık" durumda.` });
     }
   });
+
+  // 6) Okuma-Yazma Destek Programı sürüyor ama 14+ gündür ne oturum ne ilerleme ölçümü girilmiş
+  if (testKayitlari) {
+    (ogrenciler || []).filter(o => !o.yil || o.yil === aktifYil).forEach(o => {
+      const liste = pdrSozlukOku(testKayitlari, o.studentName, o.className, o.numara) || [];
+      const prg = liste.filter(k => k.tip === "okuma_programi").sort((a, b) => String(b.id).localeCompare(String(a.id)))[0];
+      if (!prg || !prg.veri) return;
+      const v = prg.veri, n = (v.haftaSayisi || 10) * (v.haftalik || 3);
+      if ((v.oturumlar || []).filter(x => x.tamam).length >= n) return;
+      const tarihler = [prg.tarih, ...(v.oturumlar || []).map(x => x.tarih), ...(v.izleme || []).map(x => x.tarih)].filter(Boolean);
+      const sonMs = Math.max(...tarihler.map(t => pdrTarihMs(t) || 0));
+      const gun = sonMs ? Math.floor((Date.now() - sonMs) / 86400000) : null;
+      if (gun !== null && gun >= 14) {
+        bulgular.push({ tur: "okuma_programi_durgun", ad: o.studentName, sinif: o.className, numara: o.numara,
+          mesaj: `${o.studentName} — Okuma-Yazma Destek Programı ${gun} gündür ilerlemiyor (oturum ya da haftalık ölçüm girilmemiş).` });
+      }
+    });
+  }
 
   return bulgular;
 }
@@ -13658,10 +13676,10 @@ function pdrOtomatikTakipOner(riskListesi, hatirlatmalar) {
   return oneriler;
 }
 
-function IsciRaporuEkrani({ hatirlatmalar, setHatirlatmalar, ogrenciler, riskListesi, sosyometri, aktifYil, uyumIzleme, krizKayitlari, denemeler, sinavTuru, setTab, setAktifOgrenci }) {
+function IsciRaporuEkrani({ hatirlatmalar, setHatirlatmalar, ogrenciler, riskListesi, sosyometri, aktifYil, uyumIzleme, krizKayitlari, denemeler, sinavTuru, setTab, setAktifOgrenci, testKayitlari }) {
   const [acikBolum, setAcikBolum] = useState("ozet");
   const ozet = pdrGunlukOzetHesapla(hatirlatmalar, ogrenciler, riskListesi, sosyometri, aktifYil, uyumIzleme);
-  const bekci = pdrVeriBekcisiTara(riskListesi, uyumIzleme, ogrenciler, sosyometri, aktifYil, krizKayitlari);
+  const bekci = pdrVeriBekcisiTara(riskListesi, uyumIzleme, ogrenciler, sosyometri, aktifYil, krizKayitlari, testKayitlari);
   const takip = pdrOtomatikTakipOner(riskListesi, hatirlatmalar);
   const akademik = pdrAkademikUyarilariTara(ogrenciler, denemeler, sinavTuru);
 
@@ -18857,6 +18875,1135 @@ function CDTPaneli({ seciliAd, seciliSinif, seciliNumara, testKayitlari, setTest
 
 
 // ===== DG BAŞLANGIÇ =====
+// ── Okuma-Yazma Destek Programı (OYDP) ───────────────────────────────────────
+// Kuramsal temel: Ulusal Okuma Paneli'nin (NRP, 2000) beş bileşeni — fonolojik
+// farkındalık, ses bilgisi (kod çözme), akıcılık, sözcük bilgisi, anlama — ve
+// sesli okumada "Yanıta Müdahale" (RTI) kademeli destek modeli. Türkçe saydam
+// bir yazı sistemi olduğundan kod çözme hızla öğrenilir; güçlük çoğunlukla
+// akıcılık (heceleyerek, yavaş okuma) ve anlamada kalır.
+//  • Harf sırası: Türkiye Yüzyılı Maarif Modeli 1. sınıf ses grupları.
+//  • Doğruluk düzeyleri: ≥%96 bağımsız, %90-95 öğretimsel, ≤%89 endişe (Rasinski
+//    uyarlaması; Aşıkcan ve Saban, 2021). Anlama: ≥%90 / %75-89 / <%75 (Akyol).
+//  • Akıcılık hedef aralıkları: Rasinski (2010) dönem aralıkları (Türkçe
+//    çalışmalarda kullanılan uyarlama); Türkçe boylamsal ortalamalar: 1. sınıf
+//    bahar ≈55, 2. sınıf bahar ≈90 DDK (Kaya, 2016).
+//  • Prozodi: Okuma Prozodisi Rubriği, 4 boyut × 1-4 (Yıldırım, Yıldız ve Ateş,
+//    2009 uyarlaması); 8 ve üstü yeterli kabul edilir.
+//  • Müdahale: model okuma, yankılayıcı, eşli ve tekrarlı okuma (Akyol ve Kodal,
+//    2016), çok duyulu harf öğretimi, Elkonin ses kutuları, hikâye haritası.
+//  • İlerleme izleme: haftalık 1 dk sesli okuma ölçümü; hedef çizgisi Fuchs ve
+//    ark. (1993) iddialı haftalık artış oranlarıyla; "son 4 ölçüm" karar kuralı.
+// Metinler, sorular ve kelime listeleri bu programa özgüdür.
+
+const OY_HARF_GRUPLARI = [["a", "n", "e", "t", "i", "l"], ["o", "k", "u", "r", "ı", "m"], ["ü", "s", "ö", "y", "d", "z"], ["ç", "b", "g", "c", "ş"], ["p", "h", "v", "ğ", "f", "j"]];
+const OY_HARFLER = OY_HARF_GRUPLARI.flat();
+const OY_UNLULER = new Set(["a", "e", "ı", "i", "o", "ö", "u", "ü"]);
+
+// Rasinski (2010) dönem hedef aralıkları — dakikada doğru okunan kelime (DDK)
+const OY_NORM = {
+  1: { guz: null, kis: [10, 50], bahar: [30, 90] },
+  2: { guz: [30, 80], kis: [50, 100], bahar: [70, 130] },
+  3: { guz: [50, 110], kis: [70, 120], bahar: [80, 140] },
+  4: { guz: [70, 120], kis: [80, 130], bahar: [90, 140] },
+  5: { guz: [80, 130], kis: [90, 140], bahar: [100, 150] },
+};
+// Fuchs ve ark. (1993) — haftalık iddialı DDK artışı
+const OY_HAFTALIK_ARTIS = { 1: 3, 2: 2, 3: 1.5, 4: 1.1, 5: 0.8 };
+const OY_DONEM_AD = { guz: "Güz (Eyl-Kas)", kis: "Kış (Ara-Şub)", bahar: "Bahar (Mar-Haz)" };
+
+const OY_FONO = [
+  { k: "hece", ad: "Hece sayma", yonerge: "Kelimeyi söyleyin; öğrenci her hecede bir alkış yapsın: \"Kaç hece?\"", maddeler: [["araba", "3"], ["göz", "1"], ["kalem", "2"], ["kelebek", "3"], ["televizyon", "4"]] },
+  { k: "ilk", ad: "İlk sesi bulma", yonerge: "\"… kelimesi hangi sesle başlıyor?\" (harfin adı değil, sesi beklenir)", maddeler: [["masa", "/m/"], ["elma", "/e/"], ["top", "/t/"], ["kuş", "/k/"], ["sabun", "/s/"]] },
+  { k: "son", ad: "Son sesi bulma", yonerge: "\"… kelimesi hangi sesle bitiyor?\"", maddeler: [["kalem", "/m/"], ["kitap", "/p/"], ["arı", "/ı/"], ["göz", "/z/"], ["balon", "/n/"]] },
+  { k: "birlestir", ad: "Sesleri birleştirme", yonerge: "Sesleri yaklaşık birer saniye arayla tek tek söyleyin: \"Hangi kelime?\"", maddeler: [["s - u", "su"], ["t - o - p", "top"], ["a - r - ı", "arı"], ["k - e - d - i", "kedi"], ["b - a - l - ı - k", "balık"]] },
+  { k: "ayir", ad: "Sesleri ayırma", yonerge: "\"… kelimesindeki sesleri tek tek söyle.\"", maddeler: [["el", "e-l"], ["at", "a-t"], ["kuş", "k-u-ş"], ["masa", "m-a-s-a"], ["kalem", "k-a-l-e-m"]] },
+  { k: "degistir", ad: "Ses değiştirme", yonerge: "\"… kelimesinin ilk sesini değiştir; yeni kelime ne?\"", maddeler: [["kar: /k/ yerine /n/", "nar"], ["bal: /b/ yerine /d/", "dal"], ["masa: /m/ yerine /k/", "kasa"], ["kale: /k/ yerine /l/", "lale"], ["kuş: /k/ yerine /d/", "duş"]] },
+];
+
+const OY_HECE = ["la", "me", "ki", "so", "tu", "bı", "dö", "gü", "ça", "şe", "al", "en", "ok", "ür", "kar", "tel", "sım", "bük", "gör", "şap"];
+const OY_KELIME = ["at", "el", "anne", "okul", "kalem", "masa", "kitap", "bardak", "sabun", "çiçek", "pencere", "kelebek", "öğretmen", "bisiklet", "buzdolabı"];
+const OY_SOZDE = ["nemu", "tolu", "kesar", "mürek", "danip", "solika", "fersu", "gölim", "abret", "zünek"];
+
+const OY_DIKTE = {
+  harf: ["a", "e", "m", "k", "b", "d", "ş", "ç", "ğ", "p"],
+  hece: ["al", "ne", "ki", "tor", "bul", "gem", "ça", "şi", "dün", "pas"],
+  kelime: ["ev", "kuş", "masa", "kapı", "bulut", "çanta", "defter", "ağaç", "yumurta", "bahçe"],
+  cumle: ["Ali topu attı.", "Kedi süt içti.", "Bugün hava çok güzel."],
+};
+const OY_DIKTE_AD = { harf: "Harf", hece: "Hece", kelime: "Kelime", cumle: "Cümle" };
+const OY_YAZMA_HATA = [
+  ["karistirma", "Benzer harfleri karıştırma (b-d, p-b, m-n, ı-i)"],
+  ["ters", "Harfi ters / ayna görüntüsü yazma"],
+  ["atlama", "Harf ya da hece atlama"],
+  ["ekleme", "Harf ya da hece ekleme"],
+  ["sira", "Harflerin yerini değiştirme (kal → lak)"],
+  ["bitisik", "Kelimeleri bitişik yazma ya da kelimeyi bölme"],
+  ["buyuk", "Büyük harf ve noktalama hataları"],
+  ["bicim", "Harf biçimi/boyutu bozuk, satıra uymama"],
+  ["hiz", "Çok yavaş yazma, çabuk yorulma"],
+  ["kalem", "Kalemi yanlış ya da çok sıkı tutma"],
+];
+
+// Sesli okuma işaretleri — hata sayılanlar ve yalnızca not edilenler
+const OY_ISARET = {
+  y: { ad: "Yanlış okuma", hata: true, renk: "#DC2626" },
+  a: { ad: "Atlama", hata: true, renk: "#EA580C" },
+  t: { ad: "Ters çevirme", hata: true, renk: "#9F1239" },
+  h: { ad: "Heceleyerek", hata: false, renk: "#7C3AED" },
+  r: { ad: "Tekrar", hata: false, renk: "#2563EB" },
+  d: { ad: "Kendini düzeltti", hata: false, renk: "#16A34A" },
+};
+
+const OY_PROZODI = [
+  { k: "ifade", ad: "İfade ve ses yüksekliği", d: ["Monoton; ses kısık, anlamı yansıtmıyor", "Yer yer ifadeli, çoğunlukla düz", "Çoğunlukla anlama uygun ifade", "Anlama uygun ifade; ses metne göre değişiyor"] },
+  { k: "obek", ad: "Anlamlı öbekler / noktalama", d: ["Kelime kelime ya da heceleyerek", "İkişer-üçer kelimelik öbekler; noktalamaya dikkat az", "Çoğunlukla anlamlı öbekler; noktalamaya uyuyor", "Anlamlı söz öbekleri; durak ve tonlama yerinde"] },
+  { k: "puruz", ad: "Akış / pürüzsüzlük", d: ["Sık duraksama, tekrar, yeniden başlama", "Belirgin duraksamalar", "Ara sıra takılıyor, çoğunu kendi düzeltiyor", "Genelde pürüzsüz akış"] },
+  { k: "hiz", ad: "Okuma hızı", d: ["Çok yavaş, zorlanarak", "Yavaş ya da düzensiz", "Genelde uygun, yer yer yavaş/hızlı", "Konuşma hızına yakın, tutarlı"] },
+];
+
+const OY_SIK_KELIMELER = ["ve", "bir", "bu", "çok", "için", "ile", "gibi", "daha", "ne", "o", "de", "da", "ama", "sonra", "her", "ben", "sen", "biz", "var", "yok", "en", "kadar", "şey", "gün", "diye", "büyük", "küçük", "güzel", "nasıl", "şimdi"];
+
+// Okunabilir (kod çözülebilir) kelime bankası — bilinen harflere göre süzülür
+const OY_KELIME_BANKASI = ("at el en al ana ata ne ten tel tat nane lale ilan inat alet atlet anne nine nal tane telli elli etli ali nil ela nail lale tatil elle " +
+  "kol kum kar kır kat kim kel kil kuru kuzu kale kalem kelime kitap kova koku kırmızı kilim kule kural kutu mum muz mor mal mama mavi masa minik mektup " +
+  "oku okul okur oyun oda ok olta orman tok top tor tren tuz tura renk ırmak ılık uç uçak un uzun umut üzüm üç ütü üst süt söz söyle sus su sevgi " +
+  "yol yük yaz yat yaka yama yemek yumurta yüz yıl dal dam dede dere deniz duman duvar düz dört zil zar zeki zor zeytin " +
+  "çay çam çatı çatal çiçek çocuk çorba çanta bal baba balık bebek bulut buz bardak bahçe bilet bisiklet gece göl göz gül güneş gemi " +
+  "cam ceket cüzdan ceviz şeker şapka şemsiye şehir kuş kış taş baş iş diş aş peri para pasta pide pul pencere hava hamur halı hırka hediye " +
+  "vazo kova ev ağaç dağ bağ yağ sağ soğuk ağız fil fare fırın fındık jöle japon jilet ayna arı ayı arkadaş anahtar anlam araba armut aslan " +
+  "elma ekmek eldiven erik eşek ılık incir inek ipek kedi köpek kapı kurt kiraz kalp kaşık kutu keçi kirpi kitaplık limon lamba leylek " +
+  "maymun makas merdiven mektup nar not nehir okyanus oyuncak ördek örtü öğretmen papatya pamuk peynir radyo resim salı sabun saat sepet sincap sınıf " +
+  "tavşan tavuk tabak telefon tencere tilki tırtıl uçurtma uyku vapur yastık yıldız yaprak yağmur zebra zürafa").split(/\s+/).filter(Boolean).map(k => k.replace(/'.*$/, ""));
+
+// Değerlendirme metinleri: her düzeyde A ve B formu (ön/son: A, ara: B) + 2 alıştırma metni.
+// Soru puanı: 0 = cevap yok/yanlış, 1 = kısmen, 2 = tam. tur: "metin" (metinde açıkça var) | "cikarim".
+const OY_METINLER = [
+  { id: "d1a", duzey: 1, form: "A", baslik: "Minik Kedi", metin: "Elif'in minik bir kedisi var. Kedinin adı Pamuk. Pamuk bembeyaz ve çok tatlı. Sabah olunca Elif'in yatağına atlar. Elif gözlerini açar ve gülümser. Birlikte kahvaltı ederler. Elif süt içer, Pamuk mama yer. Sonra Pamuk bahçeye çıkar. Kelebeklerin peşinden koşar. Akşam olunca yorgun düşer ve Elif'in kucağında uyur.",
+    sorular: [["Kedinin adı ne?", "Pamuk", "metin"], ["Pamuk ne renk?", "Bembeyaz / beyaz", "metin"], ["Sabah olunca Pamuk ne yapar?", "Elif'in yatağına atlar", "metin"], ["Pamuk bahçede neyin peşinden koşar?", "Kelebeklerin", "metin"], ["Pamuk akşam neden hemen uyuyor?", "Gün boyu oynayıp koştuğu için yoruluyor", "cikarim"]] },
+  { id: "d1b", duzey: 1, form: "B", baslik: "Yağmurlu Gün", metin: "Bugün hava çok bulutlu. Ali pencereden dışarı bakıyor. Birden yağmur başlıyor. Damlalar cama vurup kayıyor. Ali yağmur botlarını giyiyor. Annesiyle birlikte dışarı çıkıyor. Su birikintilerine basıp zıplıyor. Şemsiyesi rüzgârda sallanıyor. Eve dönünce sıcak bir çorba içiyorlar. Ali yağmurlu günleri çok seviyor.",
+    sorular: [["Ali dışarıya nereden bakıyor?", "Pencereden", "metin"], ["Yağmur başlayınca Ali ne giyiyor?", "Yağmur botlarını", "metin"], ["Ali kiminle dışarı çıkıyor?", "Annesiyle", "metin"], ["Eve dönünce ne içiyorlar?", "Sıcak çorba", "metin"], ["Ali yağmurlu günleri neden seviyor olabilir?", "Su birikintilerinde zıplamak eğlenceli olduğu için (makul her cevap)", "cikarim"]] },
+  { id: "d1p1", duzey: 1, form: "P", baslik: "Top", metin: "Ela topu aldı. Top kırmızı ve büyük. Ela topu Nil'e attı. Nil topu tuttu. İkisi de güldü. Sonra top ağaca takıldı. Babası topu indirdi. Kızlar yeniden oynadı." },
+  { id: "d1p2", duzey: 1, form: "P", baslik: "Balık", metin: "Ali'nin bir balığı var. Balık küçük ve turuncu. Kavanozda yüzer. Ali her sabah ona yem verir. Balık hemen yukarı çıkar. Ali balığına Pırıl adını verdi. Pırıl çok mutlu." },
+
+  { id: "d2a", duzey: 2, form: "A", baslik: "Okul Bahçesindeki Fidan", metin: "Sınıfımız bu bahar okul bahçesine bir fidan dikti. Öğretmenimiz önce toprağı nasıl kazacağımızı gösterdi. Zeynep ile Mert küçük kürekleriyle çukuru açtılar. Ben de fidanı dikkatle çukura yerleştirdim. Sonra hep birlikte toprağı bastırdık ve fidanı suladık. Her sabah teneffüste fidanın yanına gidiyoruz. Yapraklarını sayıyor, defterimize not alıyoruz. Bir hafta sonra fidanda üç yeni yaprak çıktığını gördük. Çok sevindik. Öğretmenimiz, ağaçların bize temiz hava verdiğini anlattı. Artık fidanımız büyüdükçe biz de onunla birlikte büyüyeceğiz.",
+    sorular: [["Fidanı kim dikti?", "Sınıf / öğrenciler hep birlikte", "metin"], ["Çukuru kimler açtı?", "Zeynep ile Mert", "metin"], ["Öğrenciler her sabah teneffüste ne yapıyor?", "Fidanın yanına gidip yapraklarını sayıyor, not alıyor", "metin"], ["Bir hafta sonra ne gördüler?", "Üç yeni yaprak çıktığını", "metin"], ["Son cümlede ne anlatılmak isteniyor?", "Fidanla birlikte zaman geçecek, onlar da büyüyecek; fidana bağlandılar", "cikarim"]] },
+  { id: "d2b", duzey: 2, form: "B", baslik: "Kayıp Top", metin: "Emre ile arkadaşları parkta top oynuyordu. Emre topa öyle sert vurdu ki top çitin üzerinden aşıp gözden kayboldu. Çocuklar hemen çitin öbür tarafına koştular. Çalıların arasına baktılar ama topu bulamadılar. Tam umutlarını kaybedecekken yaşlı bir amca yanlarına geldi. Elinde onların topu vardı. Top, amcanın bahçesindeki domateslerin arasına düşmüştü. Emre amcadan özür diledi. Amca gülümsedi ve \"Önemli değil, ama bir dahaki sefere daha dikkatli olun.\" dedi. Çocuklar teşekkür edip oyunlarına parkın diğer ucunda devam ettiler.",
+    sorular: [["Çocuklar nerede oynuyordu?", "Parkta", "metin"], ["Top neden kayboldu?", "Emre çok sert vurdu, top çitin üzerinden aştı", "metin"], ["Topu kim buldu?", "Yaşlı bir amca", "metin"], ["Top nereye düşmüştü?", "Amcanın bahçesindeki domateslerin arasına", "metin"], ["Çocuklar neden oyuna parkın diğer ucunda devam etti?", "Topun yine amcanın bahçesine düşmemesi için", "cikarim"]] },
+  { id: "d2p1", duzey: 2, form: "P", baslik: "Pazar Günü", metin: "Pazar sabahı erkenden kalktım. Annem ve babamla pazara gittik. Pazarda renk renk meyve ve sebzeler vardı. Babam domates ve biber aldı. Annem en tatlı çilekleri seçti. Ben de bir avuç fındık istedim. Satıcı amca bana gülümseyip bir de elma verdi. Eve dönünce hep birlikte salata hazırladık. Öğle yemeği her zamankinden lezzetliydi." },
+  { id: "d2p2", duzey: 2, form: "P", baslik: "Kardan Adam", metin: "Gece boyunca kar yağdı. Sabah pencereden baktığımda her yer bembeyazdı. Kardeşimle hemen montlarımızı giyip bahçeye çıktık. Önce büyük bir kar topu yuvarladık. Sonra daha küçük bir top yapıp üstüne koyduk. Gözleri için iki taş, burnu için bir havuç bulduk. Annem eski atkısını getirdi. Kardan adamımız sonunda hazırdı. Ona Pamuk Bey adını verdik." },
+
+  { id: "d3a", duzey: 3, form: "A", baslik: "Arıların Dansı", metin: "Arılar, çiçeklerden topladıkları nektarla bal yapar. Peki bir arı, güzel çiçeklerin nerede olduğunu arkadaşlarına nasıl anlatır? Bilim insanları bu sorunun cevabını arıları uzun süre izleyerek bulmuşlardır. Yiyecek bulan arı kovana döner ve özel bir dans yapar. Eğer çiçekler yakındaysa daireler çizerek döner. Çiçekler uzaktaysa sekiz rakamına benzeyen bir şekil çizer ve bu sırada karnını hızlı hızlı sallar. Dansın yönü, çiçeklerin güneşe göre hangi tarafta olduğunu gösterir. Dans ne kadar uzun sürerse çiçekler de o kadar uzaktadır. Diğer arılar bu dansı izler ve hemen yola çıkar. Böylece tek bir arının bulduğu yiyecekten bütün kovan yararlanır. Küçük bir böceğin bu kadar akıllıca bir yol bulması gerçekten şaşırtıcıdır.",
+    sorular: [["Arılar bal yapmak için ne toplar?", "Çiçeklerden nektar", "metin"], ["Çiçekler yakındaysa arı nasıl dans eder?", "Daireler çizerek döner", "metin"], ["Dansın yönü neyi gösterir?", "Çiçeklerin güneşe göre hangi tarafta olduğunu", "metin"], ["Dans uzun sürerse bu ne anlama gelir?", "Çiçekler uzaktadır", "metin"], ["Bu dans bütün kovana nasıl yarar sağlar?", "Bir arının bulduğu yiyeceği hepsi bulabilir; zaman/emek kazanılır", "cikarim"]] },
+  { id: "d3b", duzey: 3, form: "B", baslik: "Dedemin Saati", metin: "Dedemin çalışma masasının üzerinde eski bir cep saati durur. Saatin kapağı gümüş renklidir ve üzerinde küçük bir kuş resmi vardır. Dedem bu saati gençken ilk maaşıyla almış. Yıllar boyunca saati hiç yanından ayırmamış. Geçen hafta saat birden durdu. Dedem çok üzüldü çünkü saatin içindeki küçük parçaları onarabilecek usta artık çok azdı. Ertesi gün birlikte çarşıya gittik. Dar bir sokağın sonunda küçük bir saatçi dükkânı bulduk. Usta, büyüteciyle saatin içine uzun uzun baktı. Sonra minik bir yayın kırıldığını söyledi. İki gün sonra saati almaya gittiğimizde tik tak sesini duyunca dedemin gözleri parladı. O gün bir şeyi daha iyi anladım: Bazı eşyalar, taşıdıkları anılar yüzünden çok değerlidir.",
+    sorular: [["Saatin kapağında ne resmi var?", "Küçük bir kuş", "metin"], ["Dede saati ne zaman almış?", "Gençken, ilk maaşıyla", "metin"], ["Saat durunca dede neden çok üzüldü?", "Onarabilecek usta çok azdı (ve saat onun için anlamlıydı)", "metin"], ["Saatin bozulma nedeni neydi?", "Minik bir yayın kırılması", "metin"], ["Son cümlede anlatılmak istenen nedir?", "Eşyaların değeri parasından değil, taşıdığı anılardan gelebilir", "cikarim"]] },
+  { id: "d3p1", duzey: 3, form: "P", baslik: "Göçmen Kuşlar", metin: "Sonbahar gelince bazı kuşlar sıcak ülkelere doğru uzun bir yolculuğa çıkar. Bu kuşlara göçmen kuşlar denir. Leylekler, kırlangıçlar ve turnalar göçmen kuşlardandır. Kuşlar yollarını bulmak için güneşi, yıldızları ve yeryüzündeki dağları, nehirleri kullanır. Uzun yolculuk sırasında dinlenmek için göllerde ve sulak alanlarda mola verirler. Bu alanlar onlar için bir durak gibidir. İlkbaharda havalar ısınınca aynı kuşlar geri döner ve çoğu zaman eski yuvalarını bile bulur." },
+  { id: "d3p2", duzey: 3, form: "P", baslik: "Sınıf Gazetesi", metin: "Bu dönem sınıfımızda bir gazete çıkarmaya karar verdik. Öğretmenimiz bizi gruplara ayırdı. Bir grup okulda olan haberleri yazdı, bir grup bulmaca hazırladı, bir grup da resim çizdi. Ben haber grubundaydım. Okul bahçesine dikilen ağaçlarla ilgili kısa bir yazı yazdım. Yazımı iki kez okuyup yanlışlarımı düzelttim. Sonra bütün sayfaları birleştirip panoya astık. Teneffüste diğer sınıflardan öğrenciler gazetemizi okumaya geldi. Emeğimizin beğenildiğini görmek hepimizi çok mutlu etti." },
+
+  { id: "d4a", duzey: 4, form: "A", baslik: "Plastik Denizler", metin: "Her yıl milyonlarca ton plastik atık denizlere karışıyor. Bu atıkların bir kısmı kıyılara vuruyor, büyük bir kısmı ise suyun içinde yıllarca kalıyor. Plastik, doğada kolayca yok olmaz; güneş ve dalgaların etkisiyle küçük parçalara ayrılır. Gözle zor görülen bu parçalara mikroplastik denir. Balıklar ve kaplumbağalar, mikroplastikleri yiyecek sanarak yutabilir. Özellikle deniz kaplumbağaları, suda süzülen naylon poşetleri en sevdikleri yiyecek olan denizanasına benzettiği için tehlike altındadır. Bu sorun yalnızca deniz canlılarını değil, insanları da etkiler; çünkü yediğimiz balıklar da bu parçaları taşıyabilir. Peki biz neler yapabiliriz? Alışverişe giderken bez çanta kullanabilir, tek kullanımlık pipet ve bardaklardan uzak durabiliriz. Atıklarımızı ayrıştırarak geri dönüşüm kutularına atabiliriz. Kıyı temizliği etkinliklerine katılmak da önemli bir adımdır. Unutmayalım ki denizleri korumak, aslında kendi geleceğimizi korumak demektir.",
+    sorular: [["Mikroplastik nedir?", "Plastiğin gözle zor görülen küçük parçaları", "metin"], ["Plastik doğada nasıl parçalanır?", "Güneş ve dalgaların etkisiyle küçük parçalara ayrılır", "metin"], ["Kaplumbağalar naylon poşetleri neden yutar?", "Denizanasına benzettikleri için", "metin"], ["Bu sorun insanları nasıl etkiler?", "Yediğimiz balıklar mikroplastik taşıyabilir", "metin"], ["Metnin ana fikri nedir?", "Plastik kirliliği tüm canlıları etkiler; denizleri korumak hepimizin görevi", "cikarim"]] },
+  { id: "d4b", duzey: 4, form: "B", baslik: "Ormandaki Ders", metin: "Ormanın yaşlı baykuşu bir gün hayvanları büyük çınarın altında topladı. \"Bu yıl kışın çok sert geçeceğini düşünüyorum,\" dedi. \"Herkes kendi yöntemiyle hazırlık yapsın; bahar geldiğinde kimin ne öğrendiğini konuşacağız.\" Sincap hemen işe koyuldu. Her gün fındık ve palamut toplayıp ağaç kovuklarına sakladı. Kunduz, derenin kenarına sağlam bir yuva yaptı ve girişini dallarla kapattı. Tavşan ise vaktinin çoğunu çayırda oyun oynayarak geçirdi. \"Daha çok zaman var,\" diyordu her seferinde. Sonbaharın son günlerinde ilk kar yağdığında tavşan ne yiyecek bulabildi ne de sığınacak bir yer. Titreyerek sincabın kapısını çaldı. Sincap ona hem yiyecek hem de sıcak bir köşe verdi. Bahar geldiğinde baykuş hayvanlara ne öğrendiklerini sordu. Tavşan öne çıktı: \"Hazırlığı son güne bırakmamayı ve yardımlaşmanın değerini öğrendim,\" dedi. Baykuş başını salladı; bu yıl en değerli dersi tavşanın aldığını düşünüyordu.",
+    sorular: [["Baykuş hayvanları neden topladı?", "Kışın sert geçeceğini düşündüğü için hazırlık yapmalarını istedi", "metin"], ["Sincap kışa nasıl hazırlandı?", "Fındık ve palamut toplayıp kovuklara sakladı", "metin"], ["Tavşan neden hazırlık yapmadı?", "Daha çok zaman olduğunu düşündü, oyun oynadı", "metin"], ["Kar yağınca tavşana kim yardım etti?", "Sincap", "metin"], ["Baykuş neden en değerli dersi tavşanın aldığını düşündü?", "Tavşan hatasından ders çıkardı, hem plan yapmayı hem yardımlaşmayı öğrendi", "cikarim"]] },
+  { id: "d4p1", duzey: 4, form: "P", baslik: "Su Döngüsü", metin: "Dünyadaki su sürekli hareket hâlindedir ve buna su döngüsü denir. Güneş denizleri, gölleri ve nehirleri ısıttığında suyun bir kısmı buharlaşarak havaya yükselir. Yükseklerde hava soğuk olduğu için su buharı yoğunlaşır ve küçük damlacıklar hâlinde bulutları oluşturur. Bulutlardaki damlacıklar birleşip ağırlaştıkça yağmur, kar ya da dolu olarak yeryüzüne düşer. Yağan suyun bir bölümü toprağa süzülerek yer altı sularına karışır, bir bölümü ise akarsular aracılığıyla yeniden denizlere ulaşır. Böylece döngü baştan başlar. Bu nedenle bugün içtiğimiz su, milyonlarca yıl önce bir dinozorun içtiği suyla aynı olabilir." },
+  { id: "d4p2", duzey: 4, form: "P", baslik: "Satranç Turnuvası", metin: "Deniz, okulun satranç turnuvasına katılmak için haftalarca çalışmıştı. İlk iki maçı kolayca kazandı. Üçüncü maçta ise kendisinden daha deneyimli bir rakiple karşılaştı. Oyunun ortasında acele edip vezirini kaybetti. Bir an her şeyin bittiğini düşündü ve gözleri doldu. Sonra antrenörünün sözlerini hatırladı: \"Bir hata oyunu kaybettirmez; vazgeçmek kaybettirir.\" Derin bir nefes aldı ve her hamleden önce dikkatlice düşünmeye başladı. Kalan taşlarını akıllıca kullanarak oyunu berabere bitirmeyi başardı. Turnuvayı birinci bitiremedi ama o gün hatalarından ders çıkarmanın bir zaferden daha değerli olabileceğini öğrendi." },
+];
+
+// Müdahale etkinlik kütüphanesi (modül → etkinlikler)
+const OY_MODULLER = {
+  harf: { ad: "Harf-ses bilgisi", ikon: "🔤", renk: "#B45309" },
+  fono: { ad: "Fonolojik farkındalık", ikon: "👂", renk: "#7C3AED" },
+  kod: { ad: "Kod çözme (hece-kelime)", ikon: "🧩", renk: "#0E7490" },
+  akicilik: { ad: "Akıcı okuma", ikon: "🏃", renk: "#15803D" },
+  anlama: { ad: "Okuduğunu anlama", ikon: "💡", renk: "#1D4ED8" },
+  yazma: { ad: "Yazma", ikon: "✏️", renk: "#BE185D" },
+};
+const OY_ETKINLIKLER = {
+  harf: [
+    { ad: "Çok duyulu harf öğretimi", adimlar: ["Harfi gösterin, sesini söyleyin (adını değil); öğrenci üç kez tekrar etsin.", "Sesi kelimelerde arayın: başta, ortada, sonda (\"lale\" kelimesinde /l/ nerede?).", "Harfi önce havada kocaman, sonra masada parmakla, sonra kum/tuz tepsisinde yazdırın; yazarken sesini söylesin.", "Harf kartını bu sesle başlayan resim ya da nesneyle eşleştirin.", "Yeni harfle iki hece okuyup defterde bir satır yazsın."] },
+    { ad: "Harf-ses hızlı tekrar", adimlar: ["Öğrenilen tüm harf kartlarını karıştırın.", "Kartı gösterin, öğrenci sesini söylesin (3 sn içinde).", "Takılınan kartı ayrı desteye koyun; sonda o desteyi bir kez daha çalışın."] },
+    { ad: "Harf avı", adimlar: ["Bir gazete ya da metin sayfasında hedef harfi daire içine aldırın.", "Bulduğu her harfte sesini söylesin.", "En sonda içinde o harf geçen üç kelimeyi birlikte okuyun."] },
+  ],
+  fono: [
+    { k: "hece", ad: "Hece alkışı", adimlar: ["Kelimeyi söyleyin; öğrenci her hecede alkışlasın ve kaç hece olduğunu söylesin.", "Bir, iki, üç ve dört heceli kelimelerle sıralayın (göz, ka-lem, a-ra-ba, te-le-viz-yon).", "Ters oyun: öğrenci bir hece sayısı söylesin, siz kelime bulun."] },
+    { k: "ayir", ad: "Elkonin ses kutuları", adimlar: ["Yazdırdığınız ses kutuları sayfasından bir resim seçin.", "Kelimeyi yavaşça söyleyin; öğrenci her seste bir pulu kutuya itsin.", "Pullar dizildikten sonra her pulun yerine o sesin harfini yazsın.", "Kelimeyi parmağıyla kutuları izleyerek okusun."] },
+    { k: "birlestir", ad: "Robot konuşması (ses birleştirme)", adimlar: ["\"Ben robotum, sesleri tek tek söylüyorum: k-e-d-i. Ne dedim?\"", "Önce 2-3 sesli, sonra 4-5 sesli kelimelere geçin.", "Rol değiştirin: öğrenci robot olsun, siz bulun."] },
+    { k: "degistir", ad: "Ses değiştirme zinciri", adimlar: ["Bir kelimeyle başlayın (kar).", "Tek bir sesi değiştirerek yeni kelime bulun: kar → nar → var → vur → kur.", "Her yeni kelimeyi harf kartlarıyla da kurun."] },
+    { k: "ilk", ad: "Ses treni (ilk ses - son ses)", adimlar: ["Bir kelime söyleyin (kalem).", "Öğrenci son sesi bulsun (/m/) ve o sesle başlayan yeni kelime söylesin (masa).", "Zinciri 6-8 kelime sürdürün; ilk sesi bulamazsa kelimeyi uzatarak söyleyin (mmmasa)."] },
+    { k: "son", ad: "Ses avcısı", adimlar: ["Hedef bir ses seçin (/s/).", "Kelimeler söyleyin; ses başta mı, ortada mı, sonda mı? Öğrenci kartı ilgili kutuya koysun.", "Sonunda hedef sesi içeren bir cümle kursun."] },
+  ],
+  kod: [
+    { ad: "Hece tablosu okuma", adimlar: ["Programın ürettiği hece tablosunu yazdırın (bilinen harflerle).", "Önce satır satır yavaşça, sonra sütun sütun okutun.", "Tabloyu bir kez daha akıcı okutun; takıldığı heceleri işaretleyin, oturum sonunda tekrar edin."] },
+    { ad: "Hece kaydırağı", adimlar: ["Ünsüz harf kartını solda, ünlüyü sağda tutun.", "Öğrenci ünsüzün sesini uzatarak kaydırıp ünlüyle birleştirsin (lllla → la).", "Kapalı heceler için ünlü + ünsüz kaydırın (a-lll → al)."] },
+    { ad: "Kelime merdiveni", adimlar: ["Kısa bir kelimeyle başlayın (kal).", "Her basamakta bir harfi değiştirip yeni kelimeyi okusun: kal → kar → kır → kış.", "Merdiveni yukarıdan aşağı akıcı biçimde okusun."] },
+    { ad: "Görerek tanıma kartları", adimlar: ["Sık kullanılan kelime kartlarını (ve, bir, bu, çok, için…) karıştırın.", "Kartı 2 sn gösterin; öğrenci kelimeyi heceleyerek değil bütün olarak okusun.", "Üç oturum üst üste hatasız okunan kart \"öğrendim\" zarfına girsin."] },
+    { ad: "Heceden bütün okumaya", adimlar: ["Kelimeyi önce gözüyle hecelere ayırsın (sesli değil, kalemle hafif çizgi).", "Sonra kelimeyi tek nefeste bütün olarak sesli okusun.", "Okunabilir kelime listesindeki 10 kelimeyle sürdürün; hız değil doğruluk hedeflensin."] },
+  ],
+  akicilik_on: [
+    { ad: "Model okuma", adimlar: ["Metni siz akıcı ve anlamlı biçimde okuyun; öğrenci parmağıyla izlesin.", "Noktalama işaretlerinde nasıl durduğunuza, sesinizi nasıl değiştirdiğinize dikkat çekin."] },
+    { ad: "Yankılayıcı okuma", adimlar: ["Bir cümleyi siz okuyun, öğrenci aynı tonlamayla yinelesin.", "Metin bitene kadar cümle cümle sürdürün; uzun cümleleri ikiye bölün."] },
+    { ad: "Eşli okuma", adimlar: ["Metni birlikte, aynı anda sesli okuyun.", "Öğrenci masaya dokununca yalnız okusun; takılırsa 3 sn bekleyin, sonra birlikte devam edin."] },
+    { ad: "Koro okuma", adimlar: ["Metni birlikte koro hâlinde okuyun; hızı öğrencinin rahat edeceği düzeyde tutun.", "İkinci okumada sesinizi azaltın, öğrenci öne çıksın."] },
+    { ad: "Okuyucu tiyatrosu", adimlar: ["Diyaloglu bir bölüm seçin, rolleri paylaşın.", "Kahramanın duygusuna uygun ses tonuyla okumasını isteyin (sevinçli, şaşkın, üzgün).", "Prozodiyi destekler; ezber değil, metinden okuma yapılır."] },
+  ],
+  akicilik_ana: { ad: "Tekrarlı okuma (ana çalışma)", adimlar: ["Öğretimsel düzeydeki metni öğrenci 1 dakika sesli okusun; doğru okunan kelimeyi sayın.", "Hataları birlikte konuşun, zorlanılan kelimeleri ayrıca 2-3 kez okutun.", "Aynı metni 3-4 kez okutun; her okumanın DDK'sını tekrarlı okuma grafiğine işaretlesin.", "Hedef: her okumada bir öncekini geçmek. Metin hedefe ulaşınca bir sonraki metne geçin."] },
+  anlama: [
+    { ad: "Okuma öncesi tahmin", adimlar: ["Başlığa ve varsa resme bakarak \"Sence bu metin ne anlatıyor?\" diye sorun.", "Tahmini bir kâğıda yazın; okuduktan sonra doğrulayın ya da düzeltin."] },
+    { ad: "5N1K", adimlar: ["Okuduktan sonra Kim? Ne? Nerede? Ne zaman? Nasıl? Neden? sorularını sorun.", "Cevabı metinde bulup parmağıyla göstersin.", "Bir \"neden\" sorusunu metinde yazmayan, düşünerek bulunacak biçimde sorun."] },
+    { ad: "Hikâye haritası", adimlar: ["Kişiler, yer, zaman, sorun, çözüm kutularını birlikte doldurun.", "Haritaya bakarak hikâyeyi kendi cümleleriyle anlatsın."] },
+    { ad: "Ana fikir ve başlık", adimlar: ["\"Yazar bize ne söylemek istiyor?\" diye sorun.", "Metne yeni bir başlık bulsun ve nedenini açıklasın."] },
+    { ad: "Üç cümlede özet", adimlar: ["Başta ne oldu, sonra ne oldu, en sonunda ne oldu? Her birini tek cümleyle söylesin.", "Özeti siz yazın, öğrenci sesli okusun."] },
+    { ad: "Okurken sorgulama", adimlar: ["Anlamadığı kelimenin altını çizmesini isteyin.", "Kelimenin anlamını cümleden tahmin etmeye çalışın, sonra birlikte doğrulayın.", "Yeni kelimeyle kendi cümlesini kursun."] },
+  ],
+  yazma: [
+    { ad: "Bak-Söyle-Kapat-Yaz-Kontrol et", adimlar: ["Kelimeye bakıp hecelerini söylesin.", "Kelimeyi kapatın, ezberden yazsın.", "Açıp harf harf karşılaştırsın; hata varsa doğrusunu bir kez daha yazsın."] },
+    { ad: "Harf biçimlendirme", adimlar: ["Hedef harfi önce iz sürerek, sonra noktalı, sonra bağımsız yazdırın.", "Harfin satır çizgisine nerede değdiğini gösterin.", "Kalem tutuşunu kontrol edin; gerekirse kalem tutacağı önerin."] },
+    { ad: "Oturum kelimeleriyle dikte", adimlar: ["O gün okunan kelimelerden 5-8'ini dikte edin.", "Öğrenci yazdıktan sonra kendi kontrol etsin (öz denetim).", "Hata türünü birlikte adlandırın: harf atlama mı, karıştırma mı?"] },
+    { ad: "Cümle kurma ve genişletme", adimlar: ["Kısa bir cümleyle başlayın: \"Kedi uyudu.\"", "Kim? Nerede? Ne zaman? Nasıl? sorularıyla genişletsin: \"Beyaz kedi akşam kanepede mışıl mışıl uyudu.\"", "Cümleyi büyük harf ve noktaya dikkat ederek yazsın."] },
+    { ad: "Kontrol listesiyle yazma", adimlar: ["3-4 cümlelik kısa bir yazı yazsın (resim ya da gününü anlatma).", "Kontrol listesi: cümle büyük harfle başladı mı, kelimeler arasında boşluk var mı, nokta konuldu mu?", "Listeyi kendi işaretlesin, sonra birlikte bakın."] },
+  ],
+};
+
+// ── OYDP yardımcıları ──
+function oySinifNo(sinif) { const m = /^\s*(\d{1,2})/.exec(String(sinif || "")); return m ? parseInt(m[1], 10) : 0; }
+function oyDonem(tarihStr) {
+  const ms = pdrTarihMs(tarihStr) || Date.now();
+  const ay = new Date(ms).getMonth() + 1;
+  if (ay >= 9 && ay <= 11) return "guz";
+  if (ay === 12 || ay <= 2) return "kis";
+  return "bahar";
+}
+// Öğrencinin sınıfı ve tarih için hedef DDK aralığı (5. sınıf ve üstü için 5. sınıf aralığı kullanılır)
+function oyHedefAralik(sinifNo, tarihStr) {
+  const s = Math.min(5, Math.max(1, sinifNo || 1));
+  const d = oyDonem(tarihStr);
+  const a = OY_NORM[s][d] || OY_NORM[s].kis;
+  return { sinif: s, donem: d, aralik: a };
+}
+function oyKelimeler(metin) { return String(metin || "").split(/\s+/).filter(Boolean); }
+function oyMetinBul(id) { return OY_METINLER.find(m => m.id === id) || null; }
+function oyDogrulukDuzey(y) { return y == null ? null : y >= 96 ? "Bağımsız" : y >= 90 ? "Öğretimsel" : "Endişe"; }
+function oyAnlamaDuzey(y) { return y == null ? null : y >= 90 ? "Bağımsız" : y >= 75 ? "Öğretimsel" : "Endişe"; }
+const OY_DUZEY_RENK = { "Bağımsız": "#15803D", "Öğretimsel": "#B45309", "Endişe": "#B91C1C" };
+
+// Tek bir sesli okuma ölçümünün sonuçları
+function oyAkicilikSonuc(o) {
+  if (!o || !o.metinId) return null;
+  const metin = oyMetinBul(o.metinId);
+  const okunan = Math.max(0, (o.sonIdx ?? -1) + 1);
+  if (!okunan) return null;
+  const isaret = o.isaretler || {};
+  let kelimeHata = 0, heceleme = 0, tekrar = 0, duzeltme = 0;
+  Object.entries(isaret).forEach(([i, t]) => {
+    if (+i > o.sonIdx) return;
+    if (OY_ISARET[t]?.hata) kelimeHata++;
+    if (t === "h") heceleme++; if (t === "r") tekrar++; if (t === "d") duzeltme++;
+  });
+  const ekleme = o.ekleme || 0;
+  const dogru = Math.max(0, okunan - kelimeHata);
+  const sure = Math.max(1, o.sureSn || 60);
+  const ddk = Math.round(dogru * 60 / sure);
+  const dogruluk = Math.round(1000 * dogru / (okunan + ekleme)) / 10;
+  const anlamaPuan = Array.isArray(o.anlama) && o.anlama.some(x => x != null) ? o.anlama.reduce((s, x) => s + (x || 0), 0) : null;
+  const anlamaMax = metin && metin.sorular ? metin.sorular.length * 2 : 10;
+  const anlama = anlamaPuan == null ? null : Math.round(100 * anlamaPuan / anlamaMax);
+  const prozodi = Array.isArray(o.prozodi) && o.prozodi.every(x => x) ? o.prozodi.reduce((s, x) => s + x, 0) : null;
+  return {
+    metinId: o.metinId, duzey: metin ? metin.duzey : 0, baslik: metin ? metin.baslik : "", okunan, dogru, kelimeHata, ekleme, heceleme, tekrar, duzeltme,
+    sure, ddk, dogruluk, dogrulukDuzey: oyDogrulukDuzey(dogruluk), anlama, anlamaDuzey: oyAnlamaDuzey(anlama), prozodi,
+    hecelemeOrani: Math.round(100 * heceleme / okunan), tamamini: !!o.tamamini,
+  };
+}
+
+// Değerlendirmenin bütününden profil, işlevsel düzey ve önerilen modüller
+function oyProfil(veri, sinifNo, tarihStr) {
+  const v = veri || {};
+  const p = { moduller: [], notlar: [] };
+  // Harf-ses
+  if (v.harf && Object.keys(v.harf).length) {
+    const bilinen = OY_HARFLER.filter(h => v.harf[h] === 1);
+    const isaretli = OY_HARFLER.filter(h => v.harf[h] === 1 || v.harf[h] === 0);
+    p.harf = { bilinen: bilinen.length, toplam: OY_HARFLER.length, isaretli: isaretli.length, bilinmeyen: OY_HARFLER.filter(h => v.harf[h] !== 1) };
+    if (bilinen.length < OY_HARFLER.length) p.moduller.push({ k: "harf", neden: `${OY_HARFLER.length - bilinen.length} harfin sesi henüz bilinmiyor (${p.harf.bilinmeyen.slice(0, 8).join(", ")}${p.harf.bilinmeyen.length > 8 ? "…" : ""})` });
+  }
+  // Fonolojik farkındalık
+  if (v.fono && Object.keys(v.fono).length) {
+    const alt = OY_FONO.map(f => { const c = (v.fono[f.k] || []); const n = c.filter(x => x === 1 || x === 0).length; return { k: f.k, ad: f.ad, dogru: c.filter(x => x === 1).length, n }; }).filter(a => a.n);
+    const top = alt.reduce((s, a) => s + a.dogru, 0), n = alt.reduce((s, a) => s + a.n, 0);
+    p.fono = { alt, yuzde: n ? Math.round(100 * top / n) : null, zayif: alt.filter(a => a.dogru / a.n < 0.6).map(a => a.k) };
+    if (p.fono.yuzde != null && p.fono.yuzde < 80) p.moduller.push({ k: "fono", neden: `Fonolojik farkındalık %${p.fono.yuzde}${p.fono.zayif.length ? " — zayıf: " + alt.filter(a => p.fono.zayif.includes(a.k)).map(a => a.ad.toLocaleLowerCase("tr")).join(", ") : ""}` });
+  }
+  // Hece / kelime / sözde kelime
+  const oran = (arr, uz) => { const c = (arr || []).filter(x => x === 1 || x === 0); return c.length ? Math.round(100 * c.filter(x => x === 1).length / c.length) : null; };
+  if (v.kod) {
+    p.kod = { hece: oran(v.kod.hece), kelime: oran(v.kod.kelime), sozde: oran(v.kod.sozde) };
+    const zayif = (p.kod.hece != null && p.kod.hece < 85) || (p.kod.sozde != null && p.kod.sozde < 80) || (p.kod.kelime != null && p.kod.kelime < 85);
+    if (zayif) p.moduller.push({ k: "kod", neden: `Kod çözme: hece %${p.kod.hece ?? "—"}, kelime %${p.kod.kelime ?? "—"}, anlamsız kelime %${p.kod.sozde ?? "—"}` });
+  }
+  // Akıcılık ve anlama
+  const olc = (v.akicilik || []).map(oyAkicilikSonuc).filter(Boolean);
+  if (olc.length) {
+    const hedef = oyHedefAralik(sinifNo, tarihStr);
+    const beklenen = Math.min(4, Math.max(1, sinifNo || 1));
+    // İşlevsel düzey: doğruluğu ≥%90 ve (varsa) anlaması ≥%75 olan en yüksek metin düzeyi
+    const gecen = olc.filter(o => o.dogruluk >= 90 && (o.anlama == null || o.anlama >= 75)).map(o => o.duzey);
+    const enAlt = Math.min(...olc.map(o => o.duzey));
+    const isDuzey = gecen.length ? Math.max(...gecen) : Math.max(0, enAlt - 1);
+    const altBelirsiz = !gecen.length && enAlt > 1;   // daha alt düzey okutulmadı
+    // Hedefle karşılaştırılacak ölçüm: sınıf düzeyindeki metin, yoksa en yüksek düzey
+    const ana = olc.find(o => o.duzey === beklenen) || [...olc].sort((a, b) => b.duzey - a.duzey)[0];
+    const durum = !hedef.aralik ? "—" : ana.ddk < hedef.aralik[0] ? "Hedefin altında" : ana.ddk > hedef.aralik[1] ? "Hedefin üstünde" : "Hedef aralığında";
+    p.akicilik = { olcumler: olc, ana, isDuzey, beklenen, hedef, durum, altBelirsiz };
+    const anlamaZayif = olc.some(o => o.anlama != null && o.anlama < 75);
+    if (ana.ddk < (hedef.aralik ? hedef.aralik[0] : 0) || ana.dogruluk < 96 || ana.hecelemeOrani >= 10 || (ana.prozodi != null && ana.prozodi < 8))
+      p.moduller.push({ k: "akicilik", neden: `${ana.ddk} DDK (hedef ${hedef.aralik ? hedef.aralik.join("-") : "—"}), doğruluk %${ana.dogruluk}${ana.hecelemeOrani >= 10 ? `, kelimelerin %${ana.hecelemeOrani}'i heceleyerek` : ""}${ana.prozodi != null ? `, prozodi ${ana.prozodi}/16` : ""}` });
+    if (anlamaZayif) p.moduller.push({ k: "anlama", neden: `Okuduğunu anlama: ${olc.filter(o => o.anlama != null).map(o => `${o.duzey}. düzey %${o.anlama}`).join(", ")}` });
+    if (altBelirsiz) p.notlar.push(`${enAlt}. düzey metinde doğruluk ya da anlama yetersiz; işlevsel düzeyi kesinleştirmek için ${enAlt - 1}. düzey metni de okutun.`);
+    else if (isDuzey < beklenen) p.notlar.push(`İşlevsel okuma düzeyi ${isDuzey ? isDuzey + ". sınıf" : "1. sınıf metninin altında"}; beklenen ${beklenen}. sınıf${sinifNo > 4 ? " (metinler 4. sınıf düzeyine kadardır)" : ""}.`);
+    if (ana.hecelemeOrani >= 10) p.notlar.push("Heceleyerek okuma alışkanlığı belirgin: görerek tanıma ve bütün kelime okuma çalışmaları öne alınmalı.");
+  }
+  // Yazma
+  if (v.yazma) {
+    const d = v.yazma.dikte || {};
+    const top = Object.keys(OY_DIKTE).reduce((s, k) => s + (d[k] || 0), 0);
+    const max = Object.keys(OY_DIKTE).reduce((s, k) => s + OY_DIKTE[k].length, 0);
+    const uygulandi = Object.keys(OY_DIKTE).some(k => d[k] != null);
+    const hatalar = (v.yazma.hatalar || []).filter(h => OY_YAZMA_HATA.some(x => x[0] === h));
+    p.yazma = { yuzde: uygulandi ? Math.round(100 * top / max) : null, hatalar };
+    if ((p.yazma.yuzde != null && p.yazma.yuzde < 80) || hatalar.length >= 3) p.moduller.push({ k: "yazma", neden: `Dikte %${p.yazma.yuzde ?? "—"}${hatalar.length ? "; " + hatalar.length + " hata türü gözlendi" : ""}` });
+  }
+  // Yoğunluk önerisi (Yanıta Müdahale kademesi)
+  const geride = p.akicilik ? p.akicilik.beklenen - p.akicilik.isDuzey : 0;
+  p.yogun = p.moduller.length >= 3 || geride >= 2 || (p.harf && p.harf.bilinen < 20);
+  p.kademe = !p.moduller.length ? null : p.yogun ? "Yoğun destek (3. kademe)" : "Hedefli destek (2. kademe)";
+  return p;
+}
+
+// Alıştırma metni düzeyi: işlevsel düzey; o düzeyde bağımsızsa bir üstü (en çok 4)
+function oyAlistirmaDuzeyi(profil) {
+  if (!profil || !profil.akicilik) return 1;
+  const a = profil.akicilik;
+  const o = a.olcumler.find(x => x.duzey === a.isDuzey);
+  let d = Math.max(1, a.isDuzey || 1);
+  if (o && o.dogrulukDuzey === "Bağımsız" && (o.anlama == null || o.anlama >= 90)) d = Math.min(4, d + 1);
+  return d;
+}
+
+// Bilinen harflerle okunabilir kelimeler
+function oyOkunabilirKelimeler(harfler, adet = 40) {
+  const set = new Set(harfler);
+  const uygun = [...new Set(OY_KELIME_BANKASI)].filter(k => [...k.toLocaleLowerCase("tr")].every(c => set.has(c)));
+  return uygun.sort((a, b) => a.length - b.length || a.localeCompare(b, "tr")).slice(0, adet);
+}
+// Hece tablosu: her ünsüz için açık (ünsüz+ünlü) ve kapalı (ünlü+ünsüz) heceler
+function oyHeceTablosu(harfler) {
+  const unlu = OY_HARFLER.filter(h => OY_UNLULER.has(h) && harfler.includes(h));
+  const unsuz = OY_HARFLER.filter(h => !OY_UNLULER.has(h) && harfler.includes(h) && h !== "ğ");
+  return { unlu, unsuz, satirlar: unsuz.map(c => ({ c, acik: unlu.map(u => c + u), kapali: unlu.map(u => u + c) })) };
+}
+
+// Program oturum planı
+function oyPlanOlustur(pv) {
+  const mods = pv.moduller || [];
+  const n = (pv.haftaSayisi || 10) * (pv.haftalik || 3);
+  const sira = ["harf", "fono", "kod", "akicilik", "anlama", "yazma"].filter(k => mods.includes(k));
+  const bilinmeyen = (pv.bilinmeyenHarf || []).slice();
+  const fonoSira = [...OY_ETKINLIKLER.fono].sort((a, b) => ((pv.fonoZayif || []).includes(b.k) ? 1 : 0) - ((pv.fonoZayif || []).includes(a.k) ? 1 : 0));
+  const pratik = OY_METINLER.filter(m => m.form === "P" && m.duzey === (pv.alistirmaDuzeyi || 1));
+  const plan = [];
+  // Süre dağılımı (≈35 dk): açılış 2 + kapanış 3; kalan modüllere
+  const pay = { harf: 7, fono: 6, kod: 7, akicilik: 12, anlama: 7, yazma: 6 };
+  const toplam = sira.reduce((s, k) => s + pay[k], 0) || 1;
+  const dk = k => Math.max(4, Math.round(pay[k] * 30 / toplam));
+  for (let i = 0; i < n; i++) {
+    const no = i + 1, hafta = Math.floor(i / (pv.haftalik || 3)) + 1;
+    const bolumler = [];
+    sira.forEach(k => {
+      if (k === "harf") {
+        const yeni = bilinmeyen[i];
+        if (yeni) bolumler.push({ k, ad: `Yeni ses: "${yeni}" — ${OY_ETKINLIKLER.harf[0].ad}`, sure: dk(k), adimlar: OY_ETKINLIKLER.harf[0].adimlar, hedefHarf: yeni });
+        else bolumler.push({ k, ad: OY_ETKINLIKLER.harf[1 + (i % 2)].ad + " (tekrar)", sure: Math.max(3, dk(k) - 3), adimlar: OY_ETKINLIKLER.harf[1 + (i % 2)].adimlar });
+      } else if (k === "fono") {
+        const e = fonoSira[i % fonoSira.length]; bolumler.push({ k, ad: e.ad, sure: dk(k), adimlar: e.adimlar });
+      } else if (k === "kod") {
+        const e = OY_ETKINLIKLER.kod[i % OY_ETKINLIKLER.kod.length]; bolumler.push({ k, ad: e.ad, sure: dk(k), adimlar: e.adimlar });
+      } else if (k === "akicilik") {
+        const on = OY_ETKINLIKLER.akicilik_on[i % OY_ETKINLIKLER.akicilik_on.length];
+        const metin = pratik.length ? pratik[Math.floor(i / 3) % pratik.length] : null;
+        bolumler.push({ k, ad: `${on.ad} + ${OY_ETKINLIKLER.akicilik_ana.ad}`, sure: dk(k), adimlar: [...on.adimlar, ...OY_ETKINLIKLER.akicilik_ana.adimlar], metinId: metin ? metin.id : null, metinNot: Math.floor(i / 3) >= pratik.length ? "Alıştırma metinleri bitti: sınıf kitaplığından aynı düzeyde (doğruluk %90-95) bir metin seçin." : "" });
+      } else if (k === "anlama") {
+        const e = OY_ETKINLIKLER.anlama[i % OY_ETKINLIKLER.anlama.length]; bolumler.push({ k, ad: e.ad, sure: dk(k), adimlar: e.adimlar });
+      } else if (k === "yazma") {
+        const e = OY_ETKINLIKLER.yazma[i % OY_ETKINLIKLER.yazma.length]; bolumler.push({ k, ad: e.ad, sure: dk(k), adimlar: e.adimlar });
+      }
+    });
+    const araOlcum = (pv.haftalik || 3) > 0 && (i + 1) % (pv.haftalik || 3) === 0;
+    plan.push({ no, hafta, bolumler, araOlcum, araDegerlendirme: no === Math.round(n / 2), sonDegerlendirme: no === n });
+  }
+  return plan;
+}
+
+// İlerleme izleme: hedef çizgisi ve karar kuralı
+function oyIzlemeAnaliz(pv) {
+  const iz = (pv.izleme || []).slice().sort((a, b) => pdrTarihMs(a.tarih) - pdrTarihMs(b.tarih));
+  const bas = pv.baslangicDdk;
+  if (bas == null) return { iz, karar: null };
+  const sNo = Math.min(5, Math.max(1, pv.sinifNo || 1));
+  const artis = OY_HAFTALIK_ARTIS[sNo];
+  const t0 = pdrTarihMs(pv.baslangicTarih) || Date.now();
+  const hedefAt = (tarih) => bas + artis * Math.max(0, (pdrTarihMs(tarih) - t0) / (7 * 86400000));
+  const hedefSon = Math.round(bas + artis * (pv.haftaSayisi || 10));
+  const son4 = iz.slice(-4);
+  let karar = { k: "devam", metin: "Veri toplanıyor: karar için en az 4 haftalık ölçüm gerekir." };
+  if (son4.length === 4) {
+    const alt = son4.filter(x => x.ddk < hedefAt(x.tarih)).length;
+    if (alt === 4) karar = { k: "degistir", metin: "Son 4 ölçümün hepsi hedef çizgisinin altında: programı değiştirin (oturum sıklığını/süresini artırın, alıştırma metnini bir düzey kolaylaştırın ya da yöntemi değiştirin)." };
+    else if (alt === 0) karar = { k: "yukselt", metin: "Son 4 ölçümün hepsi hedef çizgisinin üstünde: hedefi yükseltin ya da bir üst düzey metne geçin." };
+    else karar = { k: "devam", metin: "Ölçümler hedef çizgisinin çevresinde: programı aynen sürdürün." };
+  }
+  return { iz, karar, artis, hedefSon, hedefAt };
+}
+
+function oyKisaOzetDeg(v) {
+  const p = oyProfil(v, v.sinifNo, v.tarih);
+  const parca = [];
+  if (p.akicilik) parca.push(`${p.akicilik.ana.ddk} DDK (${p.akicilik.durum.toLocaleLowerCase("tr")}), doğruluk %${p.akicilik.ana.dogruluk}${p.akicilik.ana.anlama != null ? `, anlama %${p.akicilik.ana.anlama}` : ""}, işlevsel düzey ${p.akicilik.altBelirsiz ? "≤" + p.akicilik.isDuzey + " (kesinleşmedi)" : p.akicilik.isDuzey || "<1"}`);
+  if (p.harf) parca.push(`harf ${p.harf.bilinen}/29`);
+  if (p.fono && p.fono.yuzde != null) parca.push(`fonolojik %${p.fono.yuzde}`);
+  if (p.yazma && p.yazma.yuzde != null) parca.push(`dikte %${p.yazma.yuzde}`);
+  const tur = { on: "Ön", ara: "Ara", son: "Son", tarama: "Tarama" }[v.tur] || "";
+  return `${tur ? tur + " değerlendirme · " : ""}${parca.join(" · ") || "veri girilmedi"}${p.moduller.length ? " · destek: " + p.moduller.map(m => OY_MODULLER[m.k].ad).join(", ") : ""}`;
+}
+function oyKisaOzetProgram(v) {
+  const n = (v.haftaSayisi || 10) * (v.haftalik || 3);
+  const t = (v.oturumlar || []).filter(o => o.tamam).length;
+  const iz = (v.izleme || []).slice().sort((a, b) => pdrTarihMs(a.tarih) - pdrTarihMs(b.tarih));
+  const son = iz[iz.length - 1];
+  return `${t}/${n} oturum · ${(v.moduller || []).map(k => OY_MODULLER[k].ad).join(", ")}${v.baslangicDdk != null ? ` · başlangıç ${v.baslangicDdk} DDK` : ""}${son ? ` → son ${son.ddk} DDK (${son.tarih})` : ""}`;
+}
+
+// ── OYDP yazdırılabilir sayfalar ──
+function oyEsc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+function oyBaslikHtml(baslik, bilgi, alt) {
+  return `<div style="display:flex;align-items:center;gap:14px;border-bottom:3px solid #0E7490;padding-bottom:10px;margin-bottom:14px">
+    <div style="font-size:34px">📖</div>
+    <div style="flex:1"><div style="font-size:19px;font-weight:700;color:#155E75">${oyEsc(baslik)}</div>
+    <div style="font-size:12px;color:#555;margin-top:3px">${bilgi && bilgi.ogrenci ? `${oyEsc(bilgi.ogrenci)}${bilgi.sinif ? " · " + oyEsc(bilgi.sinif) : ""} · ` : ""}${oyEsc(bilgi && bilgi.tarih || today())}${alt ? " · " + oyEsc(alt) : ""}</div></div></div>`;
+}
+const OY_TABLO = "width:100%;border-collapse:collapse;font-size:12px;margin:6px 0 12px";
+const OY_TD = "border:1px solid #CBD5E1;padding:5px 7px;vertical-align:top";
+const OY_TH = OY_TD + ";background:#ECFEFF;color:#155E75;text-align:left";
+
+function oyRaporHtml(kayit, bilgi) {
+  const v = kayit.veri || {};
+  const p = oyProfil(v, v.sinifNo, kayit.tarih);
+  const tur = { on: "Ön değerlendirme", ara: "Ara değerlendirme", son: "Son değerlendirme", tarama: "Tarama" }[v.tur] || "Değerlendirme";
+  let h = oyBaslikHtml("Okuma-Yazma Becerileri Değerlendirme Raporu", { ...bilgi, tarih: kayit.tarih }, tur);
+  if (p.akicilik) {
+    const a = p.akicilik;
+    h += `<h3 style="color:#155E75;font-size:14px;margin:10px 0 4px">Sesli okuma ve anlama</h3>
+    <table style="${OY_TABLO}"><tr><th style="${OY_TH}">Metin</th><th style="${OY_TH}">DDK</th><th style="${OY_TH}">Doğruluk</th><th style="${OY_TH}">Heceleyerek</th><th style="${OY_TH}">Prozodi</th><th style="${OY_TH}">Anlama</th></tr>
+    ${a.olcumler.map(o => `<tr><td style="${OY_TD}">${o.duzey}. düzey — ${oyEsc(o.baslik)}${o.tamamini ? " (metnin tamamı)" : ""}</td><td style="${OY_TD}"><b>${o.ddk}</b></td><td style="${OY_TD}">%${o.dogruluk} — ${o.dogrulukDuzey}</td><td style="${OY_TD}">%${o.hecelemeOrani}</td><td style="${OY_TD}">${o.prozodi != null ? o.prozodi + "/16" : "—"}</td><td style="${OY_TD}">${o.anlama != null ? `%${o.anlama} — ${o.anlamaDuzey}` : "—"}</td></tr>`).join("")}</table>
+    <div style="font-size:12.5px;line-height:1.6">Hedef aralık (${a.hedef.sinif}. sınıf, ${OY_DONEM_AD[a.hedef.donem]}): <b>${a.hedef.aralik ? a.hedef.aralik.join("–") + " DDK" : "bu dönem için hedef yok (ilk okuma süreci)"}</b> → ${a.durum}.<br/>İşlevsel okuma düzeyi: <b>${a.altBelirsiz ? a.isDuzey + ". sınıf ya da altı (alt düzey okutulmadı)" : a.isDuzey ? a.isDuzey + ". sınıf" : "1. sınıf metninin altında"}</b> (beklenen ${a.beklenen}. sınıf).</div>`;
+  }
+  if (p.harf) h += `<h3 style="color:#155E75;font-size:14px;margin:12px 0 4px">Harf-ses bilgisi</h3><div style="font-size:12.5px">${p.harf.bilinen}/29 harfin sesi biliniyor.${p.harf.bilinmeyen.length ? " Bilinmeyen: <b>" + p.harf.bilinmeyen.join(", ") + "</b>" : ""}</div>`;
+  if (p.fono) h += `<h3 style="color:#155E75;font-size:14px;margin:12px 0 4px">Fonolojik farkındalık — %${p.fono.yuzde}</h3><table style="${OY_TABLO}"><tr>${p.fono.alt.map(a => `<th style="${OY_TH}">${oyEsc(a.ad)}</th>`).join("")}</tr><tr>${p.fono.alt.map(a => `<td style="${OY_TD}">${a.dogru}/${a.n}</td>`).join("")}</tr></table>`;
+  if (p.kod) h += `<h3 style="color:#155E75;font-size:14px;margin:12px 0 4px">Kod çözme</h3><div style="font-size:12.5px">Hece %${p.kod.hece ?? "—"} · Gerçek kelime %${p.kod.kelime ?? "—"} · Anlamsız kelime %${p.kod.sozde ?? "—"}</div>`;
+  if (p.yazma) h += `<h3 style="color:#155E75;font-size:14px;margin:12px 0 4px">Yazma (dikte)</h3><div style="font-size:12.5px">Doğru yazım %${p.yazma.yuzde ?? "—"} (${Object.keys(OY_DIKTE).map(k => `${OY_DIKTE_AD[k]} ${(v.yazma.dikte || {})[k] ?? "—"}/${OY_DIKTE[k].length}`).join(", ")})${p.yazma.hatalar.length ? "<br/>Gözlenen hatalar: " + p.yazma.hatalar.map(k => OY_YAZMA_HATA.find(x => x[0] === k)[1]).join("; ") : ""}</div>`;
+  h += `<h3 style="color:#155E75;font-size:14px;margin:14px 0 4px">Sonuç ve öneri</h3>`;
+  h += p.moduller.length ? `<div style="font-size:12.5px;margin-bottom:6px">Önerilen destek düzeyi: <b>${p.kademe}</b></div><ul style="font-size:12.5px;line-height:1.6;margin:0 0 6px;padding-left:18px">${p.moduller.map(m => `<li><b>${OY_MODULLER[m.k].ad}</b> — ${oyEsc(m.neden)}</li>`).join("")}</ul>` : `<div style="font-size:12.5px">Değerlendirilen alanlarda destek gerektiren bir bulgu yok.</div>`;
+  if (p.notlar.length) h += `<ul style="font-size:12.5px;line-height:1.6;padding-left:18px">${p.notlar.map(n => `<li>${oyEsc(n)}</li>`).join("")}</ul>`;
+  if (kayit.not) h += `<div style="font-size:12.5px;margin-top:6px"><b>Danışman notu:</b> ${oyEsc(kayit.not)}</div>`;
+  h += `<div style="font-size:10.5px;color:#666;margin-top:16px;line-height:1.5;border-top:1px solid #ddd;padding-top:8px">DDK: dakikada doğru okunan kelime. Doğruluk düzeyleri: ≥%96 bağımsız, %90-95 öğretimsel, ≤%89 endişe; anlama: ≥%90 bağımsız, %75-89 öğretimsel, &lt;%75 endişe. Hedef aralıklar Rasinski (2010) dönem aralıklarının Türkçe çalışmalarda kullanılan uyarlamasıdır ve yaklaşık değerlerdir; Türkçe boylamsal bir çalışmada 1. sınıf bahar ortalaması ≈55, 2. sınıf ≈90 DDK bulunmuştur (Kaya, 2016). Prozodi: Okuma Prozodisi Rubriği (4-16; 8 ve üstü yeterli). Bu değerlendirme tanı koymaz; özel öğrenme güçlüğü şüphesinde müdahaleye yanıt izlenir ve gerekirse RAM'a yönlendirilir.</div>`;
+  return h;
+}
+
+function oyPlanHtml(pv, bilgi) {
+  const plan = oyPlanOlustur(pv);
+  const kullanilan = {};
+  plan.forEach(o => o.bolumler.forEach(b => { if (!kullanilan[b.ad]) kullanilan[b.ad] = b; }));
+  let h = oyBaslikHtml("Okuma-Yazma Destek Programı — Kişisel Plan", bilgi, `${pv.haftaSayisi} hafta × haftada ${pv.haftalik} oturum`);
+  h += `<div style="font-size:12.5px;line-height:1.6;margin-bottom:8px"><b>Çalışma alanları:</b> ${(pv.moduller || []).map(k => OY_MODULLER[k].ikon + " " + OY_MODULLER[k].ad).join(", ")}<br/><b>Alıştırma metni düzeyi:</b> ${pv.alistirmaDuzeyi}. sınıf · <b>Başlangıç:</b> ${pv.baslangicDdk != null ? pv.baslangicDdk + " DDK" : "—"} · <b>Program sonu hedefi:</b> ${pv.baslangicDdk != null ? Math.round(pv.baslangicDdk + OY_HAFTALIK_ARTIS[Math.min(5, Math.max(1, pv.sinifNo || 1))] * pv.haftaSayisi) + " DDK" : "—"}<br/><b>Her oturum (~35 dk):</b> açılış (2 dk: önceki çalışmayı bir kez okuma) → aşağıdaki bölümler → kapanış (3 dk: grafiğe işaretleme, ev görevi). Her haftanın son oturumunda 1 dakikalık ilerleme ölçümü yapılır.</div>`;
+  h += `<table style="${OY_TABLO}"><tr><th style="${OY_TH}">Oturum</th><th style="${OY_TH}">Çalışmalar</th><th style="${OY_TH};width:70px">Tarih / ✓</th></tr>
+  ${plan.map(o => `<tr><td style="${OY_TD};white-space:nowrap">${o.no}<br/><span style="color:#888">${o.hafta}. hafta</span></td><td style="${OY_TD}">${o.bolumler.map(b => `${OY_MODULLER[b.k].ikon} ${oyEsc(b.ad)} <span style="color:#888">(${b.sure} dk)</span>${b.metinId ? ` — metin: <i>${oyEsc(oyMetinBul(b.metinId).baslik)}</i>` : ""}`).join("<br/>")}${o.araOlcum ? `<br/><b style="color:#0E7490">⏱ Haftalık 1 dk ilerleme ölçümü</b>` : ""}${o.araDegerlendirme ? `<br/><b style="color:#B45309">📋 Ara değerlendirme (B formu)</b>` : ""}${o.sonDegerlendirme ? `<br/><b style="color:#B91C1C">📋 Son değerlendirme (A formu)</b>` : ""}</td><td style="${OY_TD}"></td></tr>`).join("")}</table>`;
+  h += `<h3 style="color:#155E75;font-size:14px;margin:14px 0 4px;page-break-before:always">Etkinlik kılavuzu</h3>`;
+  Object.values(kullanilan).forEach(b => { h += `<div style="font-size:12px;margin:8px 0 2px"><b>${OY_MODULLER[b.k].ikon} ${oyEsc(b.ad.replace(/^Yeni ses: "."\s—\s/, ""))}</b></div><ol style="font-size:12px;line-height:1.5;margin:0;padding-left:20px">${b.adimlar.map(a => `<li>${oyEsc(a)}</li>`).join("")}</ol>`; });
+  h += `<div style="font-size:11.5px;line-height:1.55;margin-top:12px;background:#ECFEFF;padding:8px 10px;border-radius:6px"><b>Karar kuralı:</b> Haftalık ölçümlerden son 4'ü hedef çizgisinin altındaysa program değiştirilir (sıklık/süre artırılır, metin kolaylaştırılır ya da yöntem değiştirilir); son 4'ü üstündeyse hedef yükseltilir. Hedef çizgisi, başlangıç DDK'sından haftalık ${OY_HAFTALIK_ARTIS[Math.min(5, Math.max(1, pv.sinifNo || 1))]} kelime artışla çizilir (Fuchs ve ark., 1993).</div>`;
+  return h;
+}
+
+function oyHeceTablosuHtml(harfler, bilgi) {
+  const t = oyHeceTablosu(harfler);
+  let h = oyBaslikHtml("Hece Tablosu", bilgi, "bilinen harflerle");
+  if (!t.unlu.length || !t.unsuz.length) return h + `<div>Tablo için en az bir ünlü ve bir ünsüz harf bilinmelidir.</div>`;
+  const hucre = "border:1px solid #94A3B8;padding:8px 6px;text-align:center;font-size:26px;font-family:Arial";
+  h += `<div style="font-size:12px;color:#555;margin-bottom:6px">Önce satır satır, sonra sütun sütun okunur. Takılınan heceler işaretlenip oturum sonunda yeniden okunur.</div>`;
+  h += `<table style="border-collapse:collapse;width:100%"><tr>${t.unlu.map(u => `<th style="${hucre};background:#FEF3C7">${u}</th>`).join("")}<th style="width:14px"></th>${t.unlu.map(u => `<th style="${hucre};background:#E0F2FE">${u}</th>`).join("")}</tr>
+  ${t.satirlar.map(s => `<tr>${s.acik.map(x => `<td style="${hucre}">${x}</td>`).join("")}<td></td>${s.kapali.map(x => `<td style="${hucre}">${x}</td>`).join("")}</tr>`).join("")}</table>
+  <div style="font-size:11px;color:#666;margin-top:6px">Sol: açık heceler (ünsüz + ünlü) · Sağ: kapalı heceler (ünlü + ünsüz)</div>`;
+  return h;
+}
+function oyKelimeListesiHtml(harfler, bilgi) {
+  const k = oyOkunabilirKelimeler(harfler, 60);
+  let h = oyBaslikHtml("Okunabilir Kelimeler", bilgi, `${harfler.length} bilinen harf`);
+  h += `<div style="font-size:12px;color:#555;margin-bottom:8px">Yalnızca öğrencinin bildiği harflerden oluşan kelimeler. Önce heceleyerek değil, kelimeyi bütün olarak okumaya çalışsın.</div>`;
+  h += k.length ? `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">${k.map(x => `<div style="border:1px solid #CBD5E1;border-radius:8px;padding:10px 4px;text-align:center;font-size:24px">${oyEsc(x)}</div>`).join("")}</div>` : `<div>Bu harflerle kelime listesi oluşturulamadı; önce birkaç harf daha öğretilmeli.</div>`;
+  return h;
+}
+function oyKartlarHtml(bilgi) {
+  let h = oyBaslikHtml("Görerek Tanıma Kartları", bilgi, "sık kullanılan kelimeler");
+  h += `<div style="font-size:12px;color:#555;margin-bottom:8px">Kesip kart yapın. Kart 2 saniye gösterilir; kelime bütün olarak okunur. Üç oturum üst üste hatasız okunan kart "öğrendim" zarfına girer.</div>`;
+  h += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0">${OY_SIK_KELIMELER.map(x => `<div style="border:1px dashed #94A3B8;height:90px;display:flex;align-items:center;justify-content:center;font-size:34px;font-family:Arial">${oyEsc(x)}</div>`).join("")}</div>`;
+  return h;
+}
+function oyElkoninHtml(bilgi) {
+  const k = [["🐱", "kedi", 4], ["⚽", "top", 3], ["🐝", "arı", 3], ["🐟", "balık", 5], ["🍎", "elma", 4], ["🏠", "ev", 2], ["🐦", "kuş", 3], ["🐻", "ayı", 3], ["🌙", "ay", 2], ["🍯", "bal", 3]];
+  let h = oyBaslikHtml("Elkonin Ses Kutuları", bilgi);
+  h += `<div style="font-size:12px;color:#555;margin-bottom:8px">Kelimeyi yavaşça söyleyin; öğrenci duyduğu her ses için bir pulu (fasulye, düğme) bir kutuya itsin. Sonra pulların yerine harfleri yazsın.</div>`;
+  h += k.map(([e, w, n]) => `<div style="display:flex;align-items:center;gap:14px;margin:10px 0"><div style="font-size:40px;width:56px;text-align:center">${e}</div><div style="display:flex;gap:6px">${Array.from({ length: n }).map(() => `<div style="width:54px;height:54px;border:2px solid #334155;border-radius:6px"></div>`).join("")}</div><div style="font-size:11px;color:#94A3B8">(${w})</div></div>`).join("");
+  return h;
+}
+function oyTekrarliGrafikHtml(bilgi) {
+  const sut = 10, max = 150, adim = 10;
+  let h = oyBaslikHtml("Tekrarlı Okuma Grafiğim", bilgi);
+  h += `<div style="font-size:12px;color:#555;margin-bottom:8px">Her okumadan sonra 1 dakikada doğru okuduğun kelime sayısına kadar sütunu boya. Hedef: bir önceki okumayı geçmek!</div>`;
+  h += `<table style="border-collapse:collapse;margin:0 auto">${Array.from({ length: max / adim }).map((_, r) => { const deger = max - r * adim; return `<tr><td style="font-size:10px;color:#64748B;padding-right:4px;text-align:right">${deger}</td>${Array.from({ length: sut }).map(() => `<td style="border:1px solid #CBD5E1;width:52px;height:24px"></td>`).join("")}</tr>`; }).join("")}
+  <tr><td></td>${Array.from({ length: sut }).map((_, i) => `<td style="font-size:10px;text-align:center;color:#64748B;padding-top:3px">${i + 1}. okuma<br/>___/___</td>`).join("")}</tr></table>`;
+  return h;
+}
+function oyMetinHtml(m, bilgi, danisman) {
+  let h = oyBaslikHtml(danisman ? `Değerlendirme metni (danışman kopyası) — ${m.duzey}. düzey ${m.form === "P" ? "alıştırma" : m.form + " formu"}` : m.baslik, bilgi);
+  if (!danisman) return h + `<div style="font-size:26px;line-height:1.9;font-family:Arial;text-align:left">${oyEsc(m.metin)}</div>`;
+  const w = oyKelimeler(m.metin); let satir = [], say = 0, sat = "";
+  w.forEach((x, i) => { satir.push(x); if (satir.length === 10 || i === w.length - 1) { say += satir.length; sat += `<tr><td style="${OY_TD};font-size:15px;line-height:1.7">${oyEsc(satir.join(" "))}</td><td style="${OY_TD};width:40px;text-align:right;color:#64748B">${say}</td></tr>`; satir = []; } });
+  h += `<div style="font-size:12px;margin-bottom:4px"><b>${oyEsc(m.baslik)}</b> — ${w.length} kelime. Sağdaki sayı satır sonuna kadarki toplam kelimedir.</div><table style="${OY_TABLO}">${sat}</table>`;
+  if (m.sorular) h += `<h3 style="font-size:13px;color:#155E75">Anlama soruları (0 / 1 / 2)</h3><ol style="font-size:12.5px;line-height:1.6;padding-left:18px">${m.sorular.map(s => `<li>${oyEsc(s[0])} <span style="color:#64748B">— beklenen: ${oyEsc(s[1])}${s[2] === "cikarim" ? " (çıkarım)" : ""}</span> &nbsp; ☐0 ☐1 ☐2</li>`).join("")}</ol>`;
+  h += `<div style="font-size:11.5px;margin-top:8px">Süre: ______ sn · Okunan kelime: ______ · Hata: ______ · DDK: ______ · Doğruluk: %______ · Prozodi: ___/16</div>`;
+  return h;
+}
+function oyKagitFormHtml(bilgi) {
+  let h = oyBaslikHtml("Okuma-Yazma Değerlendirme Formu (kâğıt uygulama)", bilgi);
+  h += `<h3 style="font-size:13px;color:#155E75">1. Harf-ses bilgisi (harfin sesi sorulur) — ✓ / ✗</h3><div style="display:grid;grid-template-columns:repeat(10,1fr);gap:4px">${OY_HARFLER.map(x => `<div style="border:1px solid #94A3B8;text-align:center;font-size:20px;padding:4px 0">${x}<div style="font-size:9px;color:#94A3B8">☐</div></div>`).join("")}</div>`;
+  h += `<h3 style="font-size:13px;color:#155E75;margin-top:12px">2. Fonolojik farkındalık</h3>${OY_FONO.map(f => `<div style="font-size:12px;margin:4px 0"><b>${f.ad}</b> — ${oyEsc(f.yonerge)}<br/>${f.maddeler.map(m => `${oyEsc(m[0])} <span style="color:#64748B">(${oyEsc(m[1])})</span> ☐`).join(" · ")}</div>`).join("")}`;
+  h += `<h3 style="font-size:13px;color:#155E75;margin-top:12px">3. Hece / kelime / anlamsız kelime okuma — ✓ / ✗</h3>`;
+  [["Heceler", OY_HECE], ["Kelimeler", OY_KELIME], ["Anlamsız kelimeler", OY_SOZDE]].forEach(([ad, l]) => { h += `<div style="font-size:12px;margin-top:4px"><b>${ad}:</b> ${l.map(x => `${oyEsc(x)} ☐`).join(" · ")}</div>`; });
+  h += `<h3 style="font-size:13px;color:#155E75;margin-top:12px">4. Dikte (öğrenci ayrı kâğıda yazar)</h3>${Object.keys(OY_DIKTE).map(k => `<div style="font-size:12px;margin-top:3px"><b>${OY_DIKTE_AD[k]}:</b> ${OY_DIKTE[k].map(oyEsc).join(" · ")} &nbsp; Doğru: ___/${OY_DIKTE[k].length}</div>`).join("")}`;
+  h += `<div style="font-size:12px;margin-top:6px">${OY_YAZMA_HATA.map(x => `☐ ${oyEsc(x[1])}`).join("<br/>")}</div>`;
+  h += `<div style="font-size:11.5px;margin-top:10px;color:#555">5. Sesli okuma için sınıf düzeyindeki metnin danışman kopyasını ayrıca yazdırın. Sonuçları programa girerek profil ve planı oluşturun.</div>`;
+  return h;
+}
+function oyVeliHtml(bilgi, pv) {
+  let h = oyBaslikHtml("Evde Okuma Desteği — Veli Kılavuzu", bilgi);
+  h += `<div style="font-size:13px;line-height:1.7">
+  <p>Çocuğunuz okulda okuma becerilerini güçlendiren bir programa katılıyor${pv ? ` (${(pv.moduller || []).map(k => OY_MODULLER[k].ad.toLocaleLowerCase("tr")).join(", ")})` : ""}. Evde her gün yapılacak kısa çalışmalar ilerlemeyi belirgin biçimde hızlandırır.</p>
+  <h3 style="font-size:14px;color:#155E75">Her gün 10-15 dakika: Eşli okuma</h3>
+  <ol><li>Sakin bir köşede, ekranlar kapalıyken yan yana oturun.</li><li>Çocuğunuzun seçtiği, kolay okuyabildiği bir kitabı birlikte, aynı anda sesli okuyun.</li><li>Çocuğunuz masaya dokununca susun; o yalnız okusun.</li><li>Bir kelimede takılırsa 3 saniye bekleyin. Okuyamazsa kelimeyi siz doğru okuyun, o tekrar etsin ve birlikte devam edin.</li><li>Okuma bitince "En çok neresi hoşuna gitti?" gibi bir iki soru sorun.</li></ol>
+  <h3 style="font-size:14px;color:#155E75">Yapın</h3><ul><li>Çabayı övün: "Bu zor kelimeyi kendin çözdün!"</li><li>Aynı kısa metni birkaç gün üst üste okumasına izin verin; tekrar akıcılığı artırır.</li><li>Okulun gönderdiği kelime kartlarıyla günde 2-3 dakika oyun oynayın.</li><li>Siz de çocuğunuzun yanında kitap okuyun.</li></ul>
+  <h3 style="font-size:14px;color:#155E75">Kaçının</h3><ul><li>Her hatada durdurup düzeltmekten; anlamı bozmayan küçük hataları geçin.</li><li>Kardeşleriyle ya da arkadaşlarıyla kıyaslamaktan.</li><li>Okumayı ceza olarak kullanmaktan.</li><li>Uzun, yorucu oturumlardan; kısa ve her gün, uzun ve ara sıradan daha etkilidir.</li></ul>
+  <p style="margin-top:10px">Takıldığınız bir konu olursa okul rehberlik servisiyle görüşebilirsiniz.</p></div>`;
+  return h;
+}
+
+// ── OYDP arayüzü ──
+const OY_RENK = "#0E7490";
+function oyKart(ek) { return { background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 14, marginBottom: 12, boxShadow: "0 4px 12px rgba(20,40,32,0.10)", ...(ek || {}) }; }
+function oyBtn(renk, dolu, ek) { return { padding: "8px 12px", borderRadius: 9, border: dolu ? "none" : `1px solid ${renk}55`, background: dolu ? renk : "#fff", color: dolu ? "#fff" : renk, fontSize: 12.5, fontWeight: 800, cursor: "pointer", ...(ek || {}) }; }
+function oyYazdir(html, ad) {
+  const tmpId = "oy-yazdir-" + Date.now();
+  const tmp = document.createElement("div"); tmp.id = tmpId;
+  Object.assign(tmp.style, { position: "absolute", left: "-9999px", top: "0", width: "800px", fontFamily: "Arial, sans-serif" });
+  tmp.innerHTML = html; document.body.appendChild(tmp);
+  raporIndir(tmpId, ad);
+  setTimeout(() => { const el = document.getElementById(tmpId); if (el) el.remove(); }, 8000);
+}
+
+// ✓ / ✗ / boş döngüsü olan küçük düğme
+function OYIsaretDugme({ deger, onChange, etiket, buyuk, ipucu }) {
+  const renk = deger === 1 ? "#15803D" : deger === 0 ? "#B91C1C" : "#94A3B8";
+  return (
+    <button onClick={() => onChange(deger === 1 ? 0 : deger === 0 ? undefined : 1)} title={ipucu || ""}
+      style={{ minWidth: buyuk ? 52 : 44, padding: buyuk ? "8px 6px" : "6px 8px", borderRadius: 9, border: `2px solid ${renk}`, background: deger === 1 ? "#DCFCE7" : deger === 0 ? "#FEE2E2" : "#fff", color: TEXT, fontSize: buyuk ? 22 : 14, fontWeight: 800, cursor: "pointer", lineHeight: 1.1 }}>
+      {etiket}<div style={{ fontSize: 10, color: renk, fontWeight: 900 }}>{deger === 1 ? "✓" : deger === 0 ? "✗" : "·"}</div>
+    </button>
+  );
+}
+
+// Sesli okuma ölçümü: süre tutma, kelimeye dokunarak hata işaretleme, prozodi ve anlama
+function OYAkicilikOlcum({ metinId, onBitti, onIptal, sade, baslangicMod }) {
+  const metin = oyMetinBul(metinId);
+  const kelimeler = oyKelimeler(metin ? metin.metin : "");
+  const [faz, setFaz] = useState("hazir");           // hazir | okuyor | son | prozodi | anlama
+  const [mod, setMod] = useState(baslangicMod || "dakika");
+  const [gecen, setGecen] = useState(0);
+  const [isaretler, setIsaretler] = useState({});
+  const [aktif, setAktif] = useState("y");
+  const [ekleme, setEkleme] = useState(0);
+  const [sonIdx, setSonIdx] = useState(null);
+  const [sure, setSure] = useState(null);
+  const [prozodi, setProzodi] = useState([null, null, null, null]);
+  const [anlama, setAnlama] = useState(() => (metin && metin.sorular ? metin.sorular.map(() => null) : []));
+  const basRef = useRef(0);
+  useEffect(() => {
+    if (faz !== "okuyor") return;
+    const t = setInterval(() => {
+      const s = Math.floor((Date.now() - basRef.current) / 1000);
+      setGecen(s);
+      if (mod === "dakika" && s >= 60) { setSure(60); setFaz("son"); try { navigator.vibrate && navigator.vibrate(200); } catch (e) {} }
+    }, 250);
+    return () => clearInterval(t);
+  }, [faz, mod]);
+  if (!metin) return null;
+  function kelimeDokun(i) {
+    if (faz === "son") { setSonIdx(i); return; }
+    if (faz !== "okuyor" && faz !== "son2") return;
+    setIsaretler(o => { const y = { ...o }; if (y[i] === aktif) delete y[i]; else y[i] = aktif; return y; });
+  }
+  function bitti() { // öğrenci metni bitirdi
+    const s = Math.max(1, Math.round((Date.now() - basRef.current) / 1000));
+    setSure(mod === "dakika" ? Math.min(60, s) : s); setSonIdx(kelimeler.length - 1); setFaz("son");
+  }
+  function sonuc() { return { metinId, sureSn: sure || 60, sonIdx, isaretler, ekleme, prozodi: sade ? [] : prozodi, anlama: sade ? [] : anlama, tamamini: mod === "tamami" }; }
+  const onizleme = sonIdx != null ? oyAkicilikSonuc(sonuc()) : null;
+  const kelimeStil = (i) => {
+    const t = isaretler[i]; const geride = sonIdx != null && i > sonIdx;
+    return { display: "inline-block", padding: "3px 4px", margin: "2px 1px", borderRadius: 6, fontSize: 18, lineHeight: 1.35, cursor: faz === "hazir" ? "default" : "pointer",
+      background: t ? OY_ISARET[t].renk + "22" : i === sonIdx ? "#FEF08A" : "transparent", color: geride ? "#CBD5E1" : TEXT,
+      borderBottom: t ? `3px solid ${OY_ISARET[t].renk}` : "3px solid transparent", textDecoration: t === "a" ? "line-through" : "none" };
+  };
+  return (
+    <div style={oyKart({ borderColor: OY_RENK + "66" })}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+        <div><div style={{ fontSize: 14, fontWeight: 900, color: OY_RENK }}>{metin.baslik}</div><div style={{ fontSize: 11, color: MUTED }}>{metin.duzey}. düzey · {metin.form === "P" ? "alıştırma" : metin.form + " formu"} · {kelimeler.length} kelime</div></div>
+        <div style={{ fontSize: 26, fontWeight: 900, color: faz === "okuyor" ? (mod === "dakika" && gecen >= 50 ? "#B91C1C" : OY_RENK) : MUTED, fontVariantNumeric: "tabular-nums" }}>
+          {faz === "okuyor" ? (mod === "dakika" ? `${Math.max(0, 60 - gecen)} sn` : `${gecen} sn`) : sure ? `${sure} sn` : "—"}
+        </div>
+      </div>
+      {faz === "hazir" && (
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
+            <button onClick={() => setMod("dakika")} style={oyBtn(OY_RENK, mod === "dakika")}>⏱ 1 dakika</button>
+            <button onClick={() => setMod("tamami")} style={oyBtn(OY_RENK, mod === "tamami")}>📄 Metnin tamamı</button>
+            <button onClick={() => oyYazdir(oyMetinHtml(metin, {}, false), "Okuma_Metni_" + metin.id)} style={oyBtn("#475569")}>🖨 Öğrenci kopyası</button>
+          </div>
+          <div style={{ fontSize: 12, color: TEXT, lineHeight: 1.5, background: "#ECFEFF", borderRadius: 8, padding: "8px 10px" }}>
+            Yönerge: "Bu metni sesli olarak, her zamanki gibi oku. Bilmediğin bir kelime olursa okumaya çalış, olmazsa devam et." Öğrenci okumaya başlayınca <b>Başlat</b>'a basın; okurken hatalı kelimelere dokunun. {mod === "dakika" ? "1 dakika dolunca öğrencinin okuduğu son kelimeye dokunacaksınız." : "Öğrenci bitirince Bitti'ye basın."}
+          </div>
+        </div>
+      )}
+      {(faz === "okuyor" || faz === "son2") && (
+        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 8, alignItems: "center" }}>
+          {Object.entries(OY_ISARET).map(([k, t]) => (
+            <button key={k} onClick={() => setAktif(k)} style={{ padding: "5px 8px", borderRadius: 8, fontSize: 11.5, fontWeight: 800, cursor: "pointer", border: `2px solid ${t.renk}`, background: aktif === k ? t.renk : "#fff", color: aktif === k ? "#fff" : t.renk }}>{t.ad}{t.hata ? "" : " ⓘ"}</button>
+          ))}
+          <button onClick={() => setEkleme(e => e + 1)} style={{ padding: "5px 8px", borderRadius: 8, fontSize: 11.5, fontWeight: 800, cursor: "pointer", border: "2px solid #A16207", background: "#fff", color: "#A16207" }}>+ Ekleme ({ekleme})</button>
+          {ekleme > 0 && <button onClick={() => setEkleme(e => Math.max(0, e - 1))} style={{ padding: "5px 8px", borderRadius: 8, fontSize: 11.5, border: `1px solid ${BORDER}`, background: "#fff", cursor: "pointer" }}>−</button>}
+        </div>
+      )}
+      {faz === "son" && <div style={{ fontSize: 12.5, fontWeight: 800, color: "#92400E", background: "#FEF3C7", borderRadius: 8, padding: "7px 10px", marginBottom: 8 }}>{sonIdx == null ? "Süre doldu — öğrencinin okuduğu SON kelimeye dokunun." : "Son kelime işaretlendi (sarı). Gerekirse başka kelimeye dokunarak değiştirin; ardından devam edin."}</div>}
+      <div style={{ background: "#fff", border: `1px solid ${BORDER}`, borderRadius: 10, padding: "8px 8px", maxHeight: faz === "prozodi" || faz === "anlama" ? 120 : 360, overflowY: "auto", marginBottom: 10 }}>
+        {kelimeler.map((k, i) => <span key={i} onClick={() => faz === "son" ? setSonIdx(i) : (faz === "okuyor" || faz === "son2") && kelimeDokun(i)} style={kelimeStil(i)}>{k}</span>)}
+      </div>
+      {faz === "hazir" && <div style={{ display: "flex", gap: 8 }}><button onClick={() => { basRef.current = Date.now(); setGecen(0); setFaz("okuyor"); }} style={oyBtn("#15803D", true, { padding: "11px 18px", fontSize: 14 })}>▶ Başlat</button><button onClick={onIptal} style={oyBtn("#64748B")}>Vazgeç</button></div>}
+      {faz === "okuyor" && <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button onClick={bitti} style={oyBtn(OY_RENK, true, { padding: "10px 16px" })}>🏁 Öğrenci bitirdi</button><button onClick={() => { setSure(Math.max(1, Math.round((Date.now() - basRef.current) / 1000))); setFaz("son"); }} style={oyBtn("#B45309")}>⏹ Durdur</button></div>}
+      {faz === "son" && (
+        <div>
+          {onizleme && <div style={{ fontSize: 12.5, marginBottom: 8 }}>Okunan <b>{onizleme.okunan}</b> · hata <b>{onizleme.kelimeHata + onizleme.ekleme}</b> · <b>{onizleme.ddk} DDK</b> · doğruluk <b style={{ color: OY_DUZEY_RENK[onizleme.dogrulukDuzey] }}>%{onizleme.dogruluk} ({onizleme.dogrulukDuzey})</b>{onizleme.heceleme ? ` · heceleyerek ${onizleme.heceleme}` : ""}</div>}
+          <div style={{ fontSize: 11, color: MUTED, marginBottom: 6 }}>Hata işaretlerini düzeltmek için "İşaret modu"na geçin.</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button disabled={sonIdx == null} onClick={() => sade ? onBitti(sonuc()) : setFaz("prozodi")} style={oyBtn("#15803D", sonIdx != null, { opacity: sonIdx == null ? 0.5 : 1 })}>{sade ? "✓ Kaydet" : "Devam → prozodi"}</button>
+            <button onClick={() => setFaz("son2")} style={oyBtn("#7C3AED")}>✎ İşaret modu</button>
+            <button onClick={onIptal} style={oyBtn("#64748B")}>Vazgeç</button>
+          </div>
+        </div>
+      )}
+      {faz === "son2" && (
+        <div>
+          <div style={{ fontSize: 12, color: "#6D28D9", marginBottom: 6 }}>İşaret modu: üstten türü seçip metindeki kelimelere dokunun.</div>
+          <button onClick={() => setFaz("son")} style={oyBtn("#15803D", true)}>✓ Tamam</button>
+        </div>
+      )}
+      {faz === "prozodi" && (
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 900, color: OY_RENK, marginBottom: 6 }}>Prozodi (her boyut 1-4)</div>
+          {OY_PROZODI.map((b, bi) => (
+            <div key={b.k} style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: TEXT }}>{b.ad}</div>
+              <div style={{ display: "flex", gap: 5, marginTop: 3 }}>{[1, 2, 3, 4].map(n => <button key={n} onClick={() => setProzodi(p => p.map((x, j) => j === bi ? n : x))} style={oyBtn(OY_RENK, prozodi[bi] === n, { minWidth: 40 })}>{n}</button>)}</div>
+              {prozodi[bi] && <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>{b.d[prozodi[bi] - 1]}</div>}
+            </div>
+          ))}
+          <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+            <button onClick={() => (metin.sorular ? setFaz("anlama") : onBitti(sonuc()))} style={oyBtn("#15803D", true)}>{metin.sorular ? "Devam → anlama soruları" : "✓ Kaydet"}</button>
+            <button onClick={() => (metin.sorular ? setFaz("anlama") : onBitti(sonuc()))} style={oyBtn("#64748B")}>Prozodiyi atla</button>
+          </div>
+        </div>
+      )}
+      {faz === "anlama" && (
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 900, color: OY_RENK, marginBottom: 4 }}>Anlama soruları</div>
+          <div style={{ fontSize: 11.5, color: MUTED, marginBottom: 8 }}>Metni kaldırın, soruları sözlü sorun. 2 = tam, 1 = kısmen, 0 = yanlış/cevap yok.</div>
+          {metin.sorular.map((s, si) => (
+            <div key={si} style={{ padding: "7px 0", borderTop: `1px solid ${BORDER}` }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: TEXT }}>{si + 1}. {s[0]} {s[2] === "cikarim" && <span style={{ fontSize: 10, color: "#7C3AED", fontWeight: 800 }}>ÇIKARIM</span>}</div>
+              <div style={{ fontSize: 11.5, color: MUTED }}>Beklenen: {s[1]}</div>
+              <div style={{ display: "flex", gap: 5, marginTop: 4 }}>{[0, 1, 2].map(n => <button key={n} onClick={() => setAnlama(a => a.map((x, j) => j === si ? n : x))} style={oyBtn(n === 2 ? "#15803D" : n === 1 ? "#B45309" : "#B91C1C", anlama[si] === n, { minWidth: 40 })}>{n}</button>)}</div>
+            </div>
+          ))}
+          <button onClick={() => onBitti(sonuc())} style={oyBtn("#15803D", true, { marginTop: 8, padding: "10px 16px" })}>✓ Ölçümü kaydet</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Değerlendirme sihirbazı
+function OYDegerlendirme({ sinifNo, onKaydet, onIptal, varsayilanTur }) {
+  const ilk = sinifNo <= 2;
+  const [tur, setTur] = useState(varsayilanTur || "on");
+  const [bolumler, setBolumler] = useState({ harf: ilk, fono: ilk, kod: sinifNo <= 4, akicilik: true, yazma: true });
+  const [adim, setAdim] = useState("secim");
+  const [harf, setHarf] = useState({});
+  const [fono, setFono] = useState({});
+  const [kod, setKod] = useState({ hece: [], kelime: [], sozde: [] });
+  const [akicilik, setAkicilik] = useState([]);
+  const [olcumMetin, setOlcumMetin] = useState(null);
+  const [dikte, setDikte] = useState({});
+  const [hatalar, setHatalar] = useState([]);
+  const [not, setNot] = useState("");
+  const beklenen = Math.min(4, Math.max(1, sinifNo || 1));
+  const form = tur === "ara" ? "B" : "A";
+  const veri = { tur, sinifNo, tarih: today(),
+    ...(bolumler.harf ? { harf } : {}), ...(bolumler.fono ? { fono } : {}), ...(bolumler.kod ? { kod } : {}),
+    ...(bolumler.akicilik ? { akicilik } : {}), ...(bolumler.yazma ? { yazma: { dikte, hatalar } } : {}) };
+  const profil = oyProfil(veri, sinifNo, today());
+  const adimlar = ["secim", ...["harf", "fono", "kod", "akicilik", "yazma"].filter(k => bolumler[k]), "ozet"];
+  const ai = adimlar.indexOf(adim);
+  const ADI = { secim: "Bölümler", harf: "Harf-ses", fono: "Fonolojik", kod: "Hece-kelime", akicilik: "Sesli okuma", yazma: "Yazma", ozet: "Özet" };
+  const ileri = () => setAdim(adimlar[Math.min(adimlar.length - 1, ai + 1)]);
+  const geri = () => setAdim(adimlar[Math.max(0, ai - 1)]);
+  const liste = (anahtar, ogeler) => (
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      {ogeler.map((x, i) => <OYIsaretDugme key={i} buyuk etiket={x} deger={kod[anahtar][i]} onChange={d => setKod(k => { const a = [...k[anahtar]]; a[i] = d; return { ...k, [anahtar]: a }; })} />)}
+    </div>
+  );
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 10 }}>
+        {adimlar.map((a, i) => <button key={a} onClick={() => setAdim(a)} style={{ padding: "5px 9px", borderRadius: 20, fontSize: 11.5, fontWeight: 800, cursor: "pointer", border: `1px solid ${a === adim ? OY_RENK : BORDER}`, background: a === adim ? OY_RENK : "#fff", color: a === adim ? "#fff" : i < ai ? OY_RENK : MUTED }}>{i + 1}. {ADI[a]}</button>)}
+      </div>
+      {adim === "secim" && (
+        <div style={oyKart()}>
+          <div style={{ fontSize: 13, fontWeight: 900, color: OY_RENK, marginBottom: 8 }}>Değerlendirme türü</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+            {[["on", "Ön (program öncesi)"], ["ara", "Ara"], ["son", "Son"], ["tarama", "Tarama"]].map(([k, a]) => <button key={k} onClick={() => setTur(k)} style={oyBtn(OY_RENK, tur === k)}>{a}</button>)}
+          </div>
+          <div style={{ fontSize: 13, fontWeight: 900, color: OY_RENK, marginBottom: 6 }}>Uygulanacak bölümler</div>
+          {[["harf", "🔤 Harf-ses bilgisi (29 harf)", "Özellikle 1-2. sınıf ve harfleri henüz oturmamış öğrenciler"], ["fono", "👂 Fonolojik farkındalık (30 madde)", "Ses farkındalığı; okumanın en güçlü erken göstergesi"], ["kod", "🧩 Hece, kelime ve anlamsız kelime okuma", "Kod çözme becerisi; anlamsız kelimeler ezberi değil çözümlemeyi ölçer"], ["akicilik", "🏃 Sesli okuma: akıcılık, prozodi, anlama", "Her sınıf için ana ölçüm"], ["yazma", "✏️ Dikte ve yazma hataları", "Öğrenci kâğıda yazar, siz sonucu girersiniz"]].map(([k, a, alt]) => (
+            <label key={k} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "6px 0", cursor: "pointer" }}>
+              <input type="checkbox" checked={!!bolumler[k]} onChange={e => setBolumler(b => ({ ...b, [k]: e.target.checked }))} style={{ marginTop: 3 }} />
+              <div><div style={{ fontSize: 12.5, fontWeight: 800, color: TEXT }}>{a}</div><div style={{ fontSize: 11, color: MUTED }}>{alt}</div></div>
+            </label>
+          ))}
+          <div style={{ fontSize: 11.5, color: MUTED, marginTop: 6 }}>Süre: tüm bölümler ≈ 25-35 dk. Kâğıt üzerinde uygulamak isterseniz <button onClick={() => oyYazdir(oyKagitFormHtml({}), "Okuma_Yazma_Formu")} style={{ background: "none", border: "none", color: OY_RENK, fontWeight: 800, cursor: "pointer", padding: 0, fontSize: 11.5 }}>formu yazdırın</button>.</div>
+        </div>
+      )}
+      {adim === "harf" && (
+        <div style={oyKart()}>
+          <div style={{ fontSize: 13, fontWeight: 900, color: OY_RENK }}>Harf-ses bilgisi</div>
+          <div style={{ fontSize: 11.5, color: MUTED, margin: "3px 0 8px" }}>Harfi gösterin: "Bu harfin sesi ne?" Bir kez dokunmak ✓, iki kez ✗. Harfler Maarif Modeli ses gruplarına göre sıralıdır.</div>
+          {OY_HARF_GRUPLARI.map((g, gi) => (
+            <div key={gi} style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 10.5, fontWeight: 800, color: MUTED, marginBottom: 3 }}>{gi + 1}. GRUP</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{g.map(h => <OYIsaretDugme key={h} buyuk etiket={h} deger={harf[h]} onChange={d => setHarf(x => ({ ...x, [h]: d }))} />)}</div>
+            </div>
+          ))}
+          <button onClick={() => setHarf(Object.fromEntries(OY_HARFLER.map(h => [h, harf[h] === 0 ? 0 : 1])))} style={oyBtn("#15803D")}>İşaretlenmeyenlerin hepsi ✓</button>
+        </div>
+      )}
+      {adim === "fono" && (
+        <div style={oyKart()}>
+          <div style={{ fontSize: 13, fontWeight: 900, color: OY_RENK, marginBottom: 6 }}>Fonolojik farkındalık</div>
+          {OY_FONO.map(f => (
+            <div key={f.k} style={{ padding: "8px 0", borderTop: `1px solid ${BORDER}` }}>
+              <div style={{ fontSize: 12.5, fontWeight: 800, color: TEXT }}>{f.ad}</div>
+              <div style={{ fontSize: 11.5, color: MUTED, marginBottom: 5 }}>{f.yonerge}</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {f.maddeler.map((m, i) => <OYIsaretDugme key={i} etiket={m[0]} ipucu={"Beklenen: " + m[1]} deger={(fono[f.k] || [])[i]} onChange={d => setFono(x => { const a = [...(x[f.k] || [])]; a[i] = d; return { ...x, [f.k]: a }; })} />)}
+              </div>
+              <div style={{ fontSize: 10.5, color: "#94A3B8", marginTop: 3 }}>Beklenen: {f.maddeler.map(m => m[1]).join(" · ")}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      {adim === "kod" && (
+        <div style={oyKart()}>
+          <div style={{ fontSize: 13, fontWeight: 900, color: OY_RENK, marginBottom: 4 }}>Hece, kelime ve anlamsız kelime okuma</div>
+          <div style={{ fontSize: 11.5, color: MUTED, marginBottom: 8 }}>Öğrenci ekrandaki ya da kâğıttaki öğeleri sırayla okur; doğru okunana bir kez, yanlışa iki kez dokunun. 3 sn içinde okunamayan öğe yanlış sayılır.</div>
+          <div style={{ fontSize: 12, fontWeight: 800, margin: "4px 0" }}>Heceler</div>{liste("hece", OY_HECE)}
+          <div style={{ fontSize: 12, fontWeight: 800, margin: "10px 0 4px" }}>Gerçek kelimeler</div>{liste("kelime", OY_KELIME)}
+          <div style={{ fontSize: 12, fontWeight: 800, margin: "10px 0 4px" }}>Anlamsız kelimeler <span style={{ fontWeight: 600, color: MUTED }}>(öğrenciye "uydurma kelimeler" olduğunu söyleyin)</span></div>{liste("sozde", OY_SOZDE)}
+        </div>
+      )}
+      {adim === "akicilik" && (
+        <div>
+          {olcumMetin ? (
+            <OYAkicilikOlcum metinId={olcumMetin} onIptal={() => setOlcumMetin(null)} onBitti={o => { setAkicilik(a => [...a.filter(x => x.metinId !== o.metinId), o]); setOlcumMetin(null); }} />
+          ) : (
+            <div style={oyKart()}>
+              <div style={{ fontSize: 13, fontWeight: 900, color: OY_RENK, marginBottom: 4 }}>Sesli okuma</div>
+              <div style={{ fontSize: 11.5, color: MUTED, marginBottom: 8, lineHeight: 1.5 }}>Önce sınıf düzeyindeki metinle başlayın ({beklenen}. düzey, {form} formu). Doğruluk %90'ın altındaysa bir alt düzeyi; %96 ve üstüyse ve anlama iyiyse bir üst düzeyi de okutarak işlevsel düzeyi bulun.</div>
+              {akicilik.map(o => { const s = oyAkicilikSonuc(o); return s && (
+                <div key={o.metinId} style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", padding: "7px 0", borderTop: `1px solid ${BORDER}`, flexWrap: "wrap" }}>
+                  <div style={{ fontSize: 12.5 }}><b>{s.duzey}. düzey — {s.baslik}</b><br /><span style={{ color: MUTED }}>{s.ddk} DDK · doğruluk <b style={{ color: OY_DUZEY_RENK[s.dogrulukDuzey] }}>%{s.dogruluk}</b>{s.anlama != null ? <> · anlama <b style={{ color: OY_DUZEY_RENK[s.anlamaDuzey] }}>%{s.anlama}</b></> : ""}{s.prozodi != null ? ` · prozodi ${s.prozodi}/16` : ""}</span></div>
+                  <button onClick={() => setAkicilik(a => a.filter(x => x.metinId !== o.metinId))} style={oyBtn("#B91C1C")}>Sil</button>
+                </div>); })}
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                {[1, 2, 3, 4].map(d => { const m = OY_METINLER.find(x => x.duzey === d && x.form === form); const yapildi = akicilik.some(x => x.metinId === m.id); return <button key={d} onClick={() => setOlcumMetin(m.id)} style={oyBtn(OY_RENK, d === beklenen && !yapildi, { opacity: yapildi ? 0.55 : 1 })}>{yapildi ? "✓ " : "▶ "}{d}. düzey · {m.baslik}</button>; })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      {adim === "yazma" && (
+        <div style={oyKart()}>
+          <div style={{ fontSize: 13, fontWeight: 900, color: OY_RENK, marginBottom: 4 }}>Dikte ve yazma</div>
+          <div style={{ fontSize: 11.5, color: MUTED, marginBottom: 8 }}>Öğeleri tek tek, doğal hızda okuyun; öğrenci ayrı kâğıda yazsın. Sonra doğru yazılanları sayıp girin.</div>
+          {Object.keys(OY_DIKTE).map(k => (
+            <div key={k} style={{ padding: "7px 0", borderTop: `1px solid ${BORDER}` }}>
+              <div style={{ fontSize: 12.5, fontWeight: 800, color: TEXT }}>{OY_DIKTE_AD[k]} <span style={{ fontWeight: 600, color: MUTED }}>— {OY_DIKTE[k].join(" · ")}</span></div>
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 4, alignItems: "center" }}>
+                <span style={{ fontSize: 11.5, color: MUTED, marginRight: 4 }}>Doğru:</span>
+                {Array.from({ length: OY_DIKTE[k].length + 1 }).map((_, n) => <button key={n} onClick={() => setDikte(d => ({ ...d, [k]: n }))} style={oyBtn(OY_RENK, dikte[k] === n, { padding: "5px 8px", minWidth: 32 })}>{n}</button>)}
+              </div>
+            </div>
+          ))}
+          <div style={{ fontSize: 12.5, fontWeight: 800, color: TEXT, margin: "10px 0 4px" }}>Gözlenen yazma hataları</div>
+          {OY_YAZMA_HATA.map(([k, a]) => <label key={k} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, padding: "3px 0", cursor: "pointer" }}><input type="checkbox" checked={hatalar.includes(k)} onChange={e => setHatalar(h => e.target.checked ? [...h, k] : h.filter(x => x !== k))} />{a}</label>)}
+        </div>
+      )}
+      {adim === "ozet" && (
+        <div style={oyKart()}>
+          <div style={{ fontSize: 13, fontWeight: 900, color: OY_RENK, marginBottom: 6 }}>Özet</div>
+          <OYProfilGoster profil={profil} />
+          <textarea value={not} onChange={e => setNot(e.target.value)} rows={2} placeholder="Gözlem notu (dikkat, motivasyon, kaygı, göz takibi, parmakla izleme…)" style={{ width: "100%", boxSizing: "border-box", marginTop: 8, padding: 8, borderRadius: 8, border: `1px solid ${BORDER}`, fontSize: 12.5, fontFamily: "inherit" }} />
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <button onClick={() => onKaydet(veri, not)} style={oyBtn("#15803D", true, { padding: "11px 16px", fontSize: 14 })}>💾 Değerlendirmeyi kaydet</button>
+            <button onClick={onIptal} style={oyBtn("#64748B")}>Vazgeç</button>
+          </div>
+        </div>
+      )}
+      {adim !== "ozet" && !(adim === "akicilik" && olcumMetin) && (
+        <div style={{ display: "flex", gap: 8, justifyContent: "space-between" }}>
+          <button onClick={ai === 0 ? onIptal : geri} style={oyBtn("#64748B")}>{ai === 0 ? "Vazgeç" : "← Geri"}</button>
+          <button onClick={ileri} style={oyBtn(OY_RENK, true)}>İleri →</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OYProfilGoster({ profil }) {
+  const p = profil;
+  const satir = (a, b, renk) => <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5, padding: "4px 0", borderBottom: `1px dashed ${BORDER}` }}><span style={{ color: MUTED }}>{a}</span><b style={{ color: renk || TEXT, textAlign: "right" }}>{b}</b></div>;
+  return (
+    <div>
+      {p.akicilik && <>
+        {satir("Sesli okuma (ana ölçüm)", `${p.akicilik.ana.ddk} DDK · ${p.akicilik.durum}`, p.akicilik.durum === "Hedefin altında" ? "#B91C1C" : "#15803D")}
+        {satir("Hedef aralık", p.akicilik.hedef.aralik ? `${p.akicilik.hedef.aralik.join("–")} DDK (${p.akicilik.hedef.sinif}. sınıf, ${OY_DONEM_AD[p.akicilik.hedef.donem]})` : "bu dönem için yok")}
+        {satir("Doğruluk", `%${p.akicilik.ana.dogruluk} — ${p.akicilik.ana.dogrulukDuzey}`, OY_DUZEY_RENK[p.akicilik.ana.dogrulukDuzey])}
+        {p.akicilik.ana.anlama != null && satir("Anlama", `%${p.akicilik.ana.anlama} — ${p.akicilik.ana.anlamaDuzey}`, OY_DUZEY_RENK[p.akicilik.ana.anlamaDuzey])}
+        {p.akicilik.ana.prozodi != null && satir("Prozodi", `${p.akicilik.ana.prozodi}/16`, p.akicilik.ana.prozodi < 8 ? "#B91C1C" : "#15803D")}
+        {satir("İşlevsel okuma düzeyi", p.akicilik.altBelirsiz ? `${p.akicilik.isDuzey}. sınıf ya da altı (kesinleşmedi)` : p.akicilik.isDuzey ? `${p.akicilik.isDuzey}. sınıf (beklenen ${p.akicilik.beklenen})` : "1. sınıf metninin altında", p.akicilik.isDuzey < p.akicilik.beklenen ? "#B45309" : "#15803D")}
+      </>}
+      {p.harf && satir("Harf-ses", `${p.harf.bilinen}/29`)}
+      {p.fono && p.fono.yuzde != null && satir("Fonolojik farkındalık", `%${p.fono.yuzde}`)}
+      {p.kod && satir("Hece / kelime / anlamsız", `%${p.kod.hece ?? "—"} / %${p.kod.kelime ?? "—"} / %${p.kod.sozde ?? "—"}`)}
+      {p.yazma && p.yazma.yuzde != null && satir("Dikte", `%${p.yazma.yuzde}${p.yazma.hatalar.length ? ` · ${p.yazma.hatalar.length} hata türü` : ""}`)}
+      <div style={{ marginTop: 8 }}>
+        {p.moduller.length ? <>
+          <div style={{ fontSize: 12.5, fontWeight: 900, color: TEXT, marginBottom: 4 }}>Önerilen: {p.kademe}</div>
+          {p.moduller.map(m => <div key={m.k} style={{ fontSize: 12, lineHeight: 1.5, marginBottom: 3 }}><span style={{ fontWeight: 800, color: OY_MODULLER[m.k].renk }}>{OY_MODULLER[m.k].ikon} {OY_MODULLER[m.k].ad}</span> — {m.neden}</div>)}
+        </> : <div style={{ fontSize: 12, color: "#15803D", fontWeight: 700 }}>Değerlendirilen alanlarda destek gerektiren bulgu yok.</div>}
+        {p.notlar.map((n, i) => <div key={i} style={{ fontSize: 11.5, color: "#92400E", marginTop: 3 }}>• {n}</div>)}
+      </div>
+    </div>
+  );
+}
+
+// İlerleme grafiği (SVG)
+function OYIzlemeGrafik({ pv }) {
+  const an = oyIzlemeAnaliz(pv);
+  const W = 520, H = 220, sol = 36, sag = 10, ust = 14, alt = 28;
+  const hafta = pv.haftaSayisi || 10;
+  const t0 = pdrTarihMs(pv.baslangicTarih) || Date.now();
+  const noktalar = [{ h: 0, ddk: pv.baslangicDdk }, ...an.iz.map(x => ({ h: Math.max(0, (pdrTarihMs(x.tarih) - t0) / (7 * 86400000)), ddk: x.ddk }))].filter(n => n.ddk != null);
+  const hedefSon = an.hedefSon || pv.baslangicDdk || 0;
+  const norm = oyHedefAralik(pv.sinifNo, today());
+  const ymax = Math.max(40, ...noktalar.map(n => n.ddk), hedefSon, norm.aralik ? norm.aralik[0] : 0) * 1.15;
+  const gx = h => sol + (Math.min(h, hafta) / hafta) * (W - sol - sag), gy = v => ust + (1 - v / ymax) * (H - ust - alt);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: "block", maxWidth: W }}>
+      {[0, 0.25, 0.5, 0.75, 1].map(f => { const v = Math.round(ymax * f); return <g key={f}><line x1={sol} x2={W - sag} y1={gy(v)} y2={gy(v)} stroke="#EEF2F7" /><text x={sol - 5} y={gy(v) + 3} fontSize="9" textAnchor="end" fill="#94A3B8">{v}</text></g>; })}
+      {norm.aralik && <rect x={sol} width={W - sol - sag} y={gy(norm.aralik[1])} height={Math.max(0, gy(norm.aralik[0]) - gy(norm.aralik[1]))} fill="#DCFCE7" opacity="0.55" />}
+      {pv.baslangicDdk != null && <line x1={gx(0)} y1={gy(pv.baslangicDdk)} x2={gx(hafta)} y2={gy(hedefSon)} stroke="#F59E0B" strokeWidth="2" strokeDasharray="6 4" />}
+      {noktalar.length > 1 && <polyline points={noktalar.map(n => `${gx(n.h)},${gy(n.ddk)}`).join(" ")} fill="none" stroke={OY_RENK} strokeWidth="2.4" />}
+      {noktalar.map((n, i) => <circle key={i} cx={gx(n.h)} cy={gy(n.ddk)} r="4" fill={i === 0 ? "#64748B" : OY_RENK} />)}
+      {Array.from({ length: hafta + 1 }).map((_, h) => h % 2 === 0 && <text key={h} x={gx(h)} y={H - 12} fontSize="9" textAnchor="middle" fill="#94A3B8">{h}</text>)}
+      <text x={W / 2} y={H - 1} fontSize="9" textAnchor="middle" fill="#64748B">hafta · yeşil bant: sınıf hedef aralığı · kesikli: hedef çizgisi</text>
+    </svg>
+  );
+}
+
+function OYPaneli({ seciliAd, seciliSinif, seciliNumara, testKayitlari, setTestKayitlari }) {
+  const [gorunum, setGorunum] = useState("ana");   // ana | degerlendir | olcum | alistirma
+  const [degTur, setDegTur] = useState("on");
+  const [sekme, setSekme] = useState("oturum");
+  const [seciliOturum, setSeciliOturum] = useState(null);
+  const [not, setNot] = useState("");
+  const [tekrar, setTekrar] = useState(["", "", "", ""]);
+  const [olcumMetin, setOlcumMetin] = useState(null);
+  const [durum, setDurum] = useState("");
+  const [kurulum, setKurulum] = useState(null);
+  useEffect(() => { setGorunum("ana"); setSeciliOturum(null); setKurulum(null); setDurum(""); }, [seciliAd, seciliSinif]);
+  const sinifNo = oySinifNo(seciliSinif);
+  const tumKayitlar = pdrSozlukOku(testKayitlari, seciliAd, seciliSinif, seciliNumara) || [];
+  const degler = tumKayitlar.filter(k => k.tip === "okuma_degerlendirme").sort((a, b) => pdrTarihMs(b.tarih) - pdrTarihMs(a.tarih) || String(b.id).localeCompare(String(a.id)));
+  const program = tumKayitlar.filter(k => k.tip === "okuma_programi").sort((a, b) => String(b.id).localeCompare(String(a.id)))[0] || null;
+  const bilgi = { ogrenci: seciliAd, sinif: seciliSinif, tarih: today() };
+  const dosyaAd = (on) => on + "_" + String(seciliAd || "").replace(/\s+/g, "_");
+
+  async function kaydetKayit(yeni) {
+    const liste = [yeni, ...tumKayitlar.filter(k => k.id !== yeni.id)];
+    const guncel = pdrSozlukYaz(testKayitlari, seciliAd, seciliSinif, liste, seciliNumara);
+    setTestKayitlari(guncel);
+    try { await saveTestKayitlari(guncel); setDurum("✓ Kaydedildi"); } catch (e) { setDurum("⚠ Kaydedilirken sorun oluştu — bağlantıyı kontrol edin."); }
+    setTimeout(() => setDurum(""), 2500);
+  }
+  function degKaydet(veri, n) {
+    kaydetKayit({ id: uid(), kategori: "objektif", testAdi: "Okuma-Yazma Değerlendirmesi", tip: "okuma_degerlendirme", tarih: today(), not: n || "", veri });
+    setGorunum("ana");
+  }
+  function kurulumBaslat(kayit) {
+    const p = oyProfil(kayit.veri, kayit.veri.sinifNo || sinifNo, kayit.tarih);
+    setKurulum({ kaynakId: kayit.id, moduller: p.moduller.map(m => m.k), haftaSayisi: 10, haftalik: p.yogun ? 4 : 3, profil: p });
+  }
+  function programOlustur() {
+    const p = kurulum.profil;
+    if (program && !window.confirm("Mevcut program arşivlenip yeni program başlatılsın mı? (Eski kayıt silinmez.)")) return;
+    const veri = { surum: 1, kaynakId: kurulum.kaynakId, moduller: kurulum.moduller, haftaSayisi: kurulum.haftaSayisi, haftalik: kurulum.haftalik,
+      bilinmeyenHarf: p.harf ? p.harf.bilinmeyen : [], fonoZayif: p.fono ? p.fono.zayif : [], alistirmaDuzeyi: oyAlistirmaDuzeyi(p),
+      baslangicDdk: p.akicilik ? p.akicilik.ana.ddk : null, baslangicTarih: today(), sinifNo, oturumlar: [], izleme: [] };
+    kaydetKayit({ id: uid(), kategori: "objektif", testAdi: "Okuma-Yazma Destek Programı", tip: "okuma_programi", tarih: today(), not: "", veri });
+    setKurulum(null); setSekme("oturum");
+  }
+
+  if (!seciliAd) return <div style={{ fontSize: 12.5, color: MUTED, padding: 10 }}>Önce yukarıdan bir öğrenci seçin.</div>;
+  const ust = (
+    <div style={oyKart({ background: "linear-gradient(135deg,#ECFEFF 0%,#FFFFFF 70%)", borderColor: "#A5F3FC" })}>
+      <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+        <div style={{ fontSize: 38 }}>📖</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 15, fontWeight: 900, color: "#155E75" }}>Okuma-Yazma Destek Programı</div>
+          <div style={{ fontSize: 11.5, color: MUTED, marginTop: 2 }}>Değerlendir → bireysel plan → oturumlar → haftalık 1 dk ölçümle ilerleme izleme · {sinifNo ? `${sinifNo}. sınıf` : "sınıf bilinmiyor"}</div>
+        </div>
+      </div>
+      {sinifNo >= 5 && <div style={{ fontSize: 11.5, color: "#92400E", marginTop: 8 }}>Ortaokul öğrencisi: metinler 1-4. sınıf düzeyindedir; işlevsel okuma düzeyini bulmak ve okuma güçlüğü olan/kaynaştırma öğrencileriyle çalışmak için uygundur. Hedef aralık 5. sınıf aralığıyla karşılaştırılır.</div>}
+    </div>
+  );
+
+  if (gorunum === "degerlendir") return <div>{ust}<OYDegerlendirme sinifNo={sinifNo} varsayilanTur={degTur} onKaydet={degKaydet} onIptal={() => setGorunum("ana")} /></div>;
+
+  const pv = program ? program.veri : null;
+  const plan = pv ? oyPlanOlustur(pv) : [];
+  const tamamlar = new Set((pv?.oturumlar || []).filter(o => o.tamam).map(o => o.no));
+  const siradaki = plan.find(o => !tamamlar.has(o.no)) || null;
+  const gosterilen = plan.find(o => o.no === (seciliOturum || (siradaki && siradaki.no))) || plan[plan.length - 1];
+  const bilinenHarf = (() => { const kay = degler.find(d => d.veri && d.veri.harf); if (!kay) return OY_HARFLER; const ogrenilen = new Set((pv?.oturumlar || []).filter(o => o.tamam).map(o => plan[o.no - 1]?.bolumler.find(b => b.hedefHarf)?.hedefHarf).filter(Boolean)); return OY_HARFLER.filter(h => kay.veri.harf[h] === 1 || ogrenilen.has(h)); })();
+  const an = pv ? oyIzlemeAnaliz(pv) : null;
+  const izlemeMetinleri = pv ? OY_METINLER.filter(m => m.duzey === pv.alistirmaDuzeyi) : [];
+  const sonrakiIzlemeMetni = pv ? izlemeMetinleri[(pv.izleme || []).length % izlemeMetinleri.length] : null;
+  const onDeg = pv ? degler.find(d => d.id === pv.kaynakId) : null;
+  const sonDeg = pv ? degler.find(d => d.id !== pv.kaynakId && pdrTarihMs(d.tarih) >= pdrTarihMs(program.tarih) && (d.veri.tur === "son" || d.veri.tur === "ara")) : null;
+
+  function oturumTamamla(no) {
+    const tk = tekrar.map(x => parseInt(x, 10)).filter(x => !isNaN(x));
+    const oturumlar = [...(pv.oturumlar || []).filter(x => x.no !== no), { no, tarih: today(), tamam: true, not: not.trim(), tekrarli: tk }].sort((a, b) => a.no - b.no);
+    kaydetKayit({ ...program, veri: { ...pv, oturumlar } });
+    setNot(""); setTekrar(["", "", "", ""]); setSeciliOturum(null);
+  }
+  function izlemeKaydet(o) {
+    const s = oyAkicilikSonuc(o);
+    if (olcumMetin && olcumMetin.amac === "tekrar") {
+      setTekrar(t => { const a = [...t]; const i = a.findIndex(x => x === ""); a[i < 0 ? 3 : i] = String(s.ddk); return a; });
+    } else if (s) {
+      kaydetKayit({ ...program, veri: { ...pv, izleme: [...(pv.izleme || []), { tarih: today(), ddk: s.ddk, dogruluk: s.dogruluk, metinId: o.metinId }] } });
+    }
+    setOlcumMetin(null);
+  }
+  if (olcumMetin) return <div>{ust}<OYAkicilikOlcum metinId={olcumMetin.id} sade baslangicMod="dakika" onIptal={() => setOlcumMetin(null)} onBitti={izlemeKaydet} /></div>;
+
+  const adim = (ikon, baslik, icerik, sag) => (
+    <div style={{ display: "flex", gap: 10, padding: "9px 0", borderTop: `1px solid ${BORDER}` }}>
+      <div style={{ fontSize: 20, width: 28, textAlign: "center", flexShrink: 0 }}>{ikon}</div>
+      <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 12.5, fontWeight: 800, color: TEXT }}>{baslik}</div><div style={{ fontSize: 12, color: TEXT, lineHeight: 1.5, marginTop: 2 }}>{icerik}</div></div>
+      {sag && <div style={{ flexShrink: 0, alignSelf: "center" }}>{sag}</div>}
+    </div>
+  );
+
+  return (
+    <div>
+      {ust}
+      {durum && <div style={{ fontSize: 12, fontWeight: 700, color: durum.startsWith("✓") ? "#15803D" : "#B45309", marginBottom: 8 }}>{durum}</div>}
+      {/* Değerlendirmeler */}
+      <div style={oyKart()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
+          <div style={{ fontSize: 13, fontWeight: 900, color: TEXT }}>📋 Değerlendirmeler</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <button onClick={() => { setDegTur(program ? (sonDeg ? "son" : "ara") : "on"); setGorunum("degerlendir"); }} style={oyBtn(OY_RENK, true)}>＋ Yeni değerlendirme</button>
+            <button onClick={() => oyYazdir(oyKagitFormHtml(bilgi), dosyaAd("Okuma_Yazma_Formu"))} style={oyBtn("#475569")}>🖨 Kâğıt form</button>
+          </div>
+        </div>
+        {!degler.length && <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.5 }}>Henüz değerlendirme yok. Programa başlamadan önce bir ön değerlendirme yapın: sonuçlara göre çalışma alanları, alıştırma metni düzeyi ve oturum planı kendiliğinden oluşur.</div>}
+        {degler.map(d => (
+          <div key={d.id} style={{ padding: "8px 0", borderTop: `1px solid ${BORDER}` }}>
+            <div style={{ fontSize: 12.5, color: TEXT, lineHeight: 1.5 }}><b>{d.tarih}</b> — {oyKisaOzetDeg({ ...d.veri, tarih: d.tarih })}</div>
+            <div style={{ display: "flex", gap: 6, marginTop: 5, flexWrap: "wrap" }}>
+              <button onClick={() => oyYazdir(oyRaporHtml(d, bilgi), dosyaAd("Okuma_Degerlendirme_Raporu"))} style={oyBtn("#155E75")}>🖨 Rapor</button>
+              {(!program || program.veri.kaynakId !== d.id) && oyProfil(d.veri, d.veri.sinifNo || sinifNo, d.tarih).moduller.length > 0 && <button onClick={() => kurulumBaslat(d)} style={oyBtn("#15803D", true)}>🧭 Bu değerlendirmeyle program oluştur</button>}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {kurulum && (
+        <div style={oyKart({ borderColor: "#86EFAC" })}>
+          <div style={{ fontSize: 13, fontWeight: 900, color: "#166534", marginBottom: 6 }}>🧭 Program oluştur</div>
+          <OYProfilGoster profil={kurulum.profil} />
+          <div style={{ fontSize: 12, fontWeight: 800, color: TEXT, margin: "10px 0 4px" }}>Çalışma alanları (değiştirebilirsiniz)</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{Object.entries(OY_MODULLER).map(([k, m]) => <button key={k} onClick={() => setKurulum(x => ({ ...x, moduller: x.moduller.includes(k) ? x.moduller.filter(y => y !== k) : [...x.moduller, k] }))} style={oyBtn(m.renk, kurulum.moduller.includes(k))}>{m.ikon} {m.ad}</button>)}</div>
+          <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 10 }}>
+            <div><div style={{ fontSize: 11, fontWeight: 800, color: MUTED }}>SÜRE</div><div style={{ display: "flex", gap: 5, marginTop: 3 }}>{[8, 10, 12].map(n => <button key={n} onClick={() => setKurulum(x => ({ ...x, haftaSayisi: n }))} style={oyBtn(OY_RENK, kurulum.haftaSayisi === n)}>{n} hafta</button>)}</div></div>
+            <div><div style={{ fontSize: 11, fontWeight: 800, color: MUTED }}>HAFTADA</div><div style={{ display: "flex", gap: 5, marginTop: 3 }}>{[2, 3, 4, 5].map(n => <button key={n} onClick={() => setKurulum(x => ({ ...x, haftalik: n }))} style={oyBtn(OY_RENK, kurulum.haftalik === n)}>{n} oturum</button>)}</div></div>
+          </div>
+          <div style={{ fontSize: 11.5, color: MUTED, marginTop: 8, lineHeight: 1.5 }}>Öneri: hedefli destekte haftada 3, yoğun destekte 4-5 oturum (her biri ~35 dk, bireysel ya da benzer düzeyde en çok 3 öğrenci). Kısa ve sık oturumlar, uzun ve seyrek oturumlardan daha etkilidir.</div>
+          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+            <button disabled={!kurulum.moduller.length} onClick={programOlustur} style={oyBtn("#15803D", true, { padding: "11px 16px", fontSize: 14, opacity: kurulum.moduller.length ? 1 : 0.5 })}>📖 Programı oluştur</button>
+            <button onClick={() => setKurulum(null)} style={oyBtn("#64748B")}>Vazgeç</button>
+          </div>
+        </div>
+      )}
+
+      {pv && (
+        <>
+          <div style={oyKart({ padding: "10px 14px" })}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ fontSize: 12.5, color: TEXT, lineHeight: 1.5 }}>
+                <b>{tamamlar.size}/{plan.length}</b> oturum · {pv.haftaSayisi} hafta × {pv.haftalik} · alıştırma {pv.alistirmaDuzeyi}. düzey · başlangıç {program.tarih}
+                <div style={{ marginTop: 4, display: "flex", gap: 4, flexWrap: "wrap" }}>{(pv.moduller || []).map(k => <span key={k} style={{ fontSize: 11, fontWeight: 800, color: OY_MODULLER[k].renk, background: OY_MODULLER[k].renk + "14", border: `1px solid ${OY_MODULLER[k].renk}44`, borderRadius: 20, padding: "2px 8px" }}>{OY_MODULLER[k].ikon} {OY_MODULLER[k].ad}</span>)}</div>
+              </div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <button onClick={() => oyYazdir(oyPlanHtml(pv, { ...bilgi, tarih: program.tarih }), dosyaAd("Okuma_Programi"))} style={oyBtn("#155E75", true)}>🖨 Kişisel plan</button>
+                <button onClick={() => oyYazdir(oyVeliHtml(bilgi, pv), dosyaAd("Okuma_Veli_Kilavuzu"))} style={oyBtn("#047857")}>👪 Veli kılavuzu</button>
+              </div>
+            </div>
+            <div style={{ height: 8, background: "#CFFAFE", borderRadius: 4, marginTop: 8, overflow: "hidden" }}><div style={{ width: `${plan.length ? tamamlar.size / plan.length * 100 : 0}%`, height: "100%", background: OY_RENK }} /></div>
+          </div>
+          <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+            {[["oturum", "📋 Oturumlar"], ["ilerleme", "📈 İlerleme"], ["materyal", "🖨 Materyaller"], ["bilgi", "ℹ️ Yöntem"]].map(([k, a]) => <button key={k} onClick={() => setSekme(k)} style={oyBtn(OY_RENK, sekme === k)}>{a}</button>)}
+          </div>
+
+          {sekme === "oturum" && gosterilen && (
+            <div style={oyKart()}>
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 10 }}>
+                {plan.map(o => <button key={o.no} onClick={() => setSeciliOturum(o.no)} title={`${o.hafta}. hafta`} style={{ width: 32, height: 32, borderRadius: "50%", border: gosterilen.no === o.no ? `2px solid #155E75` : `1px solid ${BORDER}`, background: tamamlar.has(o.no) ? "#16A34A" : o.no === (siradaki && siradaki.no) ? "#CFFAFE" : "#fff", color: tamamlar.has(o.no) ? "#fff" : TEXT, fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>{o.no}</button>)}
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 900, color: "#155E75" }}>Oturum {gosterilen.no} <span style={{ fontSize: 12, color: MUTED, fontWeight: 700 }}>· {gosterilen.hafta}. hafta</span>{tamamlar.has(gosterilen.no) && <span style={{ fontSize: 11, color: "#16A34A", marginLeft: 8 }}>✓ tamamlandı</span>}</div>
+              {adim("👋", "Açılış (2 dk)", "Geçen oturumun metnini ya da kelime kartlarını bir kez okuyun; ilerleme grafiğine birlikte bakın.")}
+              {gosterilen.bolumler.map((b, i) => (
+                <React.Fragment key={i}>{adim(OY_MODULLER[b.k].ikon, `${b.ad} (${b.sure} dk)`, <>
+                  <ol style={{ margin: "2px 0 0", paddingLeft: 18 }}>{b.adimlar.map((a, j) => <li key={j} style={{ marginBottom: 2 }}>{a}</li>)}</ol>
+                  {b.metinId && <div style={{ marginTop: 4, color: OY_RENK, fontWeight: 700 }}>Metin: {oyMetinBul(b.metinId).baslik} ({oyKelimeler(oyMetinBul(b.metinId).metin).length} kelime)</div>}
+                  {b.metinNot && <div style={{ marginTop: 3, color: "#92400E" }}>{b.metinNot}</div>}
+                </>, b.k === "kod" ? <button onClick={() => oyYazdir(i % 2 ? oyKelimeListesiHtml(bilinenHarf, bilgi) : oyHeceTablosuHtml(bilinenHarf, bilgi), dosyaAd("Okuma_Kod_Cozme"))} style={oyBtn("#0E7490")}>🖨</button>
+                  : b.metinId ? <div style={{ display: "flex", flexDirection: "column", gap: 4 }}><button onClick={() => oyYazdir(oyMetinHtml(oyMetinBul(b.metinId), bilgi, false), dosyaAd("Okuma_Metni"))} style={oyBtn("#0E7490")}>🖨</button><button onClick={() => setOlcumMetin({ id: b.metinId, amac: "tekrar" })} style={oyBtn("#15803D")}>⏱</button></div>
+                  : b.k === "fono" && /Elkonin/.test(b.ad) ? <button onClick={() => oyYazdir(oyElkoninHtml(bilgi), dosyaAd("Elkonin"))} style={oyBtn("#0E7490")}>🖨</button> : null)}</React.Fragment>
+              ))}
+              {adim("🏁", "Kapanış (3 dk)", <>Tekrarlı okuma sonuçlarını grafiğe işaretleyin, öğrencinin çabasını somut olarak övün. Ev görevi: veliyle 10-15 dk eşli okuma{(pv.moduller || []).includes("kod") ? " + 5 kelime kartı" : ""}.{gosterilen.araOlcum && <b style={{ color: OY_RENK }}> Bu haftanın ilerleme ölçümünü "📈 İlerleme" sekmesinden yapın.</b>}{gosterilen.araDegerlendirme && <b style={{ color: "#B45309" }}> Ara değerlendirme zamanı.</b>}{gosterilen.sonDegerlendirme && <b style={{ color: "#B91C1C" }}> Son değerlendirmeyi yapın.</b>}</>)}
+              {!tamamlar.has(gosterilen.no) ? (
+                <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 10, marginTop: 4 }}>
+                  {(pv.moduller || []).includes("akicilik") && <div style={{ marginBottom: 8 }}>
+                    <div style={{ fontSize: 11.5, fontWeight: 800, color: MUTED, marginBottom: 4 }}>TEKRARLI OKUMA DDK (isteğe bağlı) — ⏱ ile ölçünce kendiliğinden dolar</div>
+                    <div style={{ display: "flex", gap: 6 }}>{tekrar.map((x, i) => <input key={i} inputMode="numeric" value={x} onChange={e => setTekrar(t => t.map((y, j) => j === i ? e.target.value.replace(/\D/g, "") : y))} placeholder={`${i + 1}.`} style={{ width: 54, padding: 7, borderRadius: 8, border: `1px solid ${BORDER}`, fontSize: 13, textAlign: "center" }} />)}</div>
+                  </div>}
+                  <textarea value={not} onChange={e => setNot(e.target.value)} rows={2} placeholder="Oturum notu (zorlandığı harf/kelimeler, motivasyon, ev görevinin yapılıp yapılmadığı)…" style={{ width: "100%", boxSizing: "border-box", padding: 8, borderRadius: 8, border: `1px solid ${BORDER}`, fontSize: 12.5, fontFamily: "inherit" }} />
+                  <button onClick={() => oturumTamamla(gosterilen.no)} style={oyBtn("#16A34A", true, { marginTop: 6 })}>✓ Oturumu tamamla</button>
+                </div>
+              ) : (() => { const o = (pv.oturumlar || []).find(x => x.no === gosterilen.no); return o && (o.not || (o.tekrarli || []).length) ? <div style={{ fontSize: 12, color: MUTED, marginTop: 8 }}>{(o.tekrarli || []).length ? `Tekrarlı okuma: ${o.tekrarli.join(" → ")} DDK. ` : ""}{o.not ? "Not: " + o.not : ""}</div> : null; })()}
+            </div>
+          )}
+
+          {sekme === "ilerleme" && (
+            <div style={oyKart()}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
+                <div style={{ fontSize: 13, fontWeight: 900, color: TEXT }}>📈 Haftalık ilerleme (1 dk sesli okuma)</div>
+                {sonrakiIzlemeMetni && <button onClick={() => setOlcumMetin({ id: sonrakiIzlemeMetni.id, amac: "izleme" })} style={oyBtn(OY_RENK, true)}>⏱ Ölçüm yap — {sonrakiIzlemeMetni.baslik}</button>}
+              </div>
+              {pv.baslangicDdk == null ? <div style={{ fontSize: 12, color: MUTED }}>Ön değerlendirmede sesli okuma yapılmadığı için başlangıç DDK'sı yok; ilk ölçüm başlangıç kabul edilir.</div> : <OYIzlemeGrafik pv={pv} />}
+              {an && an.karar && <div style={{ fontSize: 12.5, fontWeight: 700, lineHeight: 1.5, marginTop: 8, padding: "8px 10px", borderRadius: 8, background: an.karar.k === "degistir" ? "#FEE2E2" : an.karar.k === "yukselt" ? "#DCFCE7" : "#F1F5F9", color: an.karar.k === "degistir" ? "#991B1B" : an.karar.k === "yukselt" ? "#166534" : TEXT }}>{an.karar.metin}</div>}
+              {an && an.hedefSon != null && <div style={{ fontSize: 11.5, color: MUTED, marginTop: 6 }}>Program sonu hedefi: {an.hedefSon} DDK (haftada +{an.artis}). Ölçümlerde aynı düzeydeki metinler sırayla kullanılır.</div>}
+              {(an?.iz || []).length > 0 && <div style={{ marginTop: 8 }}>{an.iz.slice().reverse().map((x, i) => <div key={i} style={{ fontSize: 12, padding: "4px 0", borderTop: `1px dashed ${BORDER}` }}>{x.tarih} — <b>{x.ddk} DDK</b> · doğruluk %{x.dogruluk} · {oyMetinBul(x.metinId)?.baslik || ""}</div>)}</div>}
+              {onDeg && sonDeg && (() => {
+                const a = oyProfil(onDeg.veri, onDeg.veri.sinifNo, onDeg.tarih), b = oyProfil(sonDeg.veri, sonDeg.veri.sinifNo, sonDeg.tarih);
+                const sat = (ad, x, y, birim = "") => <tr><td style={{ padding: "4px 6px", fontSize: 12 }}>{ad}</td><td style={{ padding: "4px 6px", fontSize: 12, textAlign: "center" }}>{x ?? "—"}{x != null ? birim : ""}</td><td style={{ padding: "4px 6px", fontSize: 12, textAlign: "center", fontWeight: 800 }}>{y ?? "—"}{y != null ? birim : ""}</td><td style={{ padding: "4px 6px", fontSize: 12, textAlign: "center", color: x != null && y != null ? (y > x ? "#15803D" : y < x ? "#B91C1C" : MUTED) : MUTED }}>{x != null && y != null ? (y - x > 0 ? "+" : "") + Math.round((y - x) * 10) / 10 : ""}</td></tr>;
+                return (
+                  <div style={{ marginTop: 12 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 900, color: TEXT, marginBottom: 4 }}>Ön ({onDeg.tarih}) ↔ {sonDeg.veri.tur === "son" ? "Son" : "Ara"} ({sonDeg.tarih})</div>
+                    <table style={{ width: "100%", borderCollapse: "collapse" }}><tbody>
+                      {sat("DDK", a.akicilik?.ana.ddk, b.akicilik?.ana.ddk)}{sat("Doğruluk", a.akicilik?.ana.dogruluk, b.akicilik?.ana.dogruluk, "%")}{sat("Anlama", a.akicilik?.ana.anlama, b.akicilik?.ana.anlama, "%")}{sat("Prozodi", a.akicilik?.ana.prozodi, b.akicilik?.ana.prozodi)}{sat("İşlevsel düzey", a.akicilik?.isDuzey, b.akicilik?.isDuzey)}{sat("Harf-ses", a.harf?.bilinen, b.harf?.bilinen)}{sat("Fonolojik", a.fono?.yuzde, b.fono?.yuzde, "%")}{sat("Dikte", a.yazma?.yuzde, b.yazma?.yuzde, "%")}
+                    </tbody></table>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
+          {sekme === "materyal" && (
+            <div style={oyKart()}>
+              <div style={{ fontSize: 13, fontWeight: 900, color: TEXT, marginBottom: 8 }}>🖨 Yazdırılabilir materyaller</div>
+              {[
+                ["🔡", "Hece tablosu", `Bilinen ${bilinenHarf.length} harfle açık ve kapalı heceler`, () => oyYazdir(oyHeceTablosuHtml(bilinenHarf, bilgi), dosyaAd("Hece_Tablosu"))],
+                ["📝", "Okunabilir kelimeler", "Yalnızca bilinen harflerden oluşan kelime listesi", () => oyYazdir(oyKelimeListesiHtml(bilinenHarf, bilgi), dosyaAd("Okunabilir_Kelimeler"))],
+                ["🃏", "Görerek tanıma kartları", "30 sık kullanılan kelime", () => oyYazdir(oyKartlarHtml(bilgi), dosyaAd("Kelime_Kartlari"))],
+                ["🟦", "Elkonin ses kutuları", "Resimli ses ayırma sayfası", () => oyYazdir(oyElkoninHtml(bilgi), dosyaAd("Elkonin"))],
+                ["📊", "Tekrarlı okuma grafiğim", "Öğrencinin kendi boyayacağı grafik", () => oyYazdir(oyTekrarliGrafikHtml(bilgi), dosyaAd("Tekrarli_Okuma_Grafigi"))],
+              ].map(([i, a, alt, f]) => adim(i, a, alt, <button onClick={f} style={oyBtn("#0E7490")}>🖨</button>))}
+              <div style={{ fontSize: 12, fontWeight: 800, color: TEXT, margin: "10px 0 4px" }}>Metinler (öğrenci kopyası / danışman kopyası)</div>
+              {OY_METINLER.map(m => (
+                <div key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, padding: "5px 0", borderTop: `1px dashed ${BORDER}` }}>
+                  <div style={{ fontSize: 12 }}>{m.duzey}. düzey · {m.form === "P" ? "alıştırma" : m.form + " formu"} — <b>{m.baslik}</b></div>
+                  <div style={{ display: "flex", gap: 4 }}><button onClick={() => oyYazdir(oyMetinHtml(m, bilgi, false), dosyaAd("Metin_" + m.id))} style={oyBtn("#0E7490", false, { padding: "4px 8px", fontSize: 11 })}>Öğrenci</button><button onClick={() => oyYazdir(oyMetinHtml(m, bilgi, true), dosyaAd("Metin_Danisman_" + m.id))} style={oyBtn("#475569", false, { padding: "4px 8px", fontSize: 11 })}>Danışman</button></div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {sekme === "bilgi" && (
+            <div style={oyKart()}>
+              <div style={{ fontSize: 13, fontWeight: 900, color: TEXT, marginBottom: 6 }}>ℹ️ Yöntem ve kaynaklar</div>
+              <div style={{ fontSize: 12, color: TEXT, lineHeight: 1.6 }}>
+                <p style={{ margin: "0 0 6px" }}><b>Yapı:</b> Okumanın beş temel bileşeni (fonolojik farkındalık, ses bilgisi/kod çözme, akıcılık, kelime bilgisi, anlama; Ulusal Okuma Paneli, 2000) ve yazma. Program yalnızca değerlendirmede zayıf çıkan alanları içerir; harfler Maarif Modeli ses grupları sırasıyla öğretilir.</p>
+                <p style={{ margin: "0 0 6px" }}><b>Akıcılık:</b> Model, yankılayıcı, eşli ve tekrarlı okuma; Türkçe vaka çalışmalarında okuma güçlüğü çeken öğrencilerde kelime tanıma ve akıcılığı belirgin artırdığı gösterilmiştir (Akyol ve Kodal, 2016; Aşıkcan ve Saban, 2021).</p>
+                <p style={{ margin: "0 0 6px" }}><b>Ölçüt:</b> Doğruluk ≥%96 bağımsız, %90-95 öğretimsel, ≤%89 endişe; anlama ≥%90 / %75-89 / &lt;%75. Hedef DDK aralıkları Rasinski (2010) uyarlamasıdır, yaklaşık değerlerdir. Prozodi: Okuma Prozodisi Rubriği (Yıldırım, Yıldız ve Ateş, 2009).</p>
+                <p style={{ margin: "0 0 6px" }}><b>İzleme:</b> Haftada bir, aynı düzeyde farklı metinle 1 dk ölçüm; hedef çizgisi Fuchs ve ark. (1993) haftalık artış oranlarıyla. Son 4 ölçüm kuralıyla program sürdürülür, değiştirilir ya da hedef yükseltilir.</p>
+                <p style={{ margin: 0, color: "#92400E" }}><b>Not:</b> Bu araç tanı koymaz. Yoğun ve nitelikli desteğe rağmen ilerleme çok sınırlı kalıyorsa (müdahaleye yetersiz yanıt) özel öğrenme güçlüğü açısından RAM'a yönlendirme değerlendirilmelidir; ilerleme grafiği ve oturum kayıtları bu başvuruda kanıt olarak kullanılabilir.</p>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+
 // ── Dikkat Güçlendirme Programı (DGP) ────────────────────────────────────────
 // Kuramsal temel: Sohlberg & Mateer klinik dikkat modeli (odaklanma → sürdürme →
 // seçici → değişken → bölünmüş) ve bu modelin çocuk uyarlaması "Pay Attention!"
@@ -20874,6 +22021,8 @@ function testSonucOzeti(k) {
     }
     case "dikkat_cdt": return cdtKisaOzet(v);
     case "dikkat_egitim": return dgKisaOzet(v);
+    case "okuma_degerlendirme": return oyKisaOzetDeg({ ...v, tarih: k.tarih });
+    case "okuma_programi": return oyKisaOzetProgram(v);
     case "insan_ciz": return iczKisaOzet(v);
     case "scas_cocuk": {
       const cevaplar = v.cevaplar || [];
@@ -21549,6 +22698,9 @@ KURALLAR:
                     <button onClick={()=>setKategori("dg")} style={{ flex:1, padding:"14px 8px", borderRadius:12, border:`2px solid #4F46E5`, background:"linear-gradient(135deg,#EEF2FF,#FFFFFF)", color:"#312E81", fontSize:13, fontWeight:800, cursor:"pointer" }}>🦉 Dikkat Güçlendirme Programı</button>
                   </div>
                   <div style={{ display:"flex", gap:8, marginTop:8 }}>
+                    <button data-asistan="test-okuma" onClick={()=>setKategori("oy")} style={{ flex:1, padding:"14px 8px", borderRadius:12, border:`2px solid #0E7490`, background:"linear-gradient(135deg,#ECFEFF,#FFFFFF)", color:"#155E75", fontSize:13, fontWeight:800, cursor:"pointer" }}>📖 Okuma-Yazma Destek Programı</button>
+                  </div>
+                  <div style={{ display:"flex", gap:8, marginTop:8 }}>
                     <button onClick={()=>setKategori("cast")} style={{ flex:1, padding:"14px 8px", borderRadius:12, border:`2px solid #2A6F77`, background:"#E7F5F6", color:"#2A6F77", fontSize:13, fontWeight:800, cursor:"pointer" }}>🔬 Otizm Spektrumu Kapsamlı Taraması</button>
                   </div>
                   <div style={{ display:"flex", gap:8, marginTop:8 }}>
@@ -21583,6 +22735,11 @@ KURALLAR:
                   <div style={{ display:"flex", gap:8, marginTop:8 }}>
                     <button onClick={()=>setKategori("bilpro")} style={{ flex:1, padding:"14px 8px", borderRadius:12, border:`2px solid #6A4C93`, background:"#F3EEFB", color:"#6A4C93", fontSize:13, fontWeight:800, cursor:"pointer" }}>🧠 BİLPRO — Bilişsel Profil Değerlendirmesi</button>
                   </div>
+                </div>
+              ) : kategori === "oy" ? (
+                <div>
+                  <button onClick={()=>setKategori(null)} style={{ background:"none", border:"none", color:MUTED, fontSize:12, cursor:"pointer", marginBottom:8, padding:0 }}>← Kategoriyi değiştir</button>
+                  <OYPaneli seciliAd={seciliAd} seciliSinif={seciliSinif} seciliNumara={seciliNumara} testKayitlari={testKayitlari} setTestKayitlari={setTestKayitlari} />
                 </div>
               ) : kategori === "dg" ? (
                 <div>
@@ -35654,7 +36811,7 @@ const SEMA_ICERIK = {
   konu_haritasi: [["LGS konu bazlı çalışma takibi"]],
   deneme: [["Deneme sonuçları, toplu Excel"], ["Geçmiş dönem ortalaması"], ["Yüzdelik dilim tahmini"]],
   kazanimlar: [["Etkinlik kartından ilgili PDF sayfasına git"]],
-  testler: [["Bir İnsan Çiz Testi (fotoğrafla, AI destekli)", true], ["Çeldiricili Dikkat Testi (ÇDT)"], ["Dikkat Güçlendirme Programı"], ["Veli bilgilendirme raporu (dikkat)", true], ["D2, SCAS-Çocuk, BEİER, Mesleki Eğilim"], ["BİLPRO, CAS, Otizm taraması, ÖÖG ön-tarama"], ["Düzey taramaları, Benlik, Bütünleşik"]],
+  testler: [["Bir İnsan Çiz Testi (fotoğrafla, AI destekli)", true], ["Çeldiricili Dikkat Testi (ÇDT)"], ["Dikkat Güçlendirme Programı"], ["Okuma-Yazma Destek Programı", true], ["Veli bilgilendirme raporu (dikkat)", true], ["D2, SCAS-Çocuk, BEİER, Mesleki Eğilim"], ["BİLPRO, CAS, Otizm taraması, ÖÖG ön-tarama"], ["Düzey taramaları, Benlik, Bütünleşik"]],
   risk: [["Risk listesi ve vaka adımları"], ["Birleşik Sinyal, Takip Boşluğu, Veli Görüşülmedi"], ["AI / Manuel sonuç değerlendirmesi"]],
   uyum_izleme: [["Uyum taraması (6 gösterge, 37 madde)"], ["Görüşme notundan otomatik öneri"]],
   kutuphane: [["Yönetmelik / makale yükle — AI referansı"]],
@@ -36855,7 +38012,7 @@ const SEKME_ACIKLAMALARI = {
   deneme: "Deneme (D1, D2, …) sonuçlarını gir; toplu Excel yükleme de burada.",
   net_haritasi: "Öğrencinin net gelişimini görsel takip et; ayrıntılı deneme sonucu girildiyse konu bazlı tamamlanma analizini de burada görürsün.",
   konu_haritasi: "Öğrencinin hangi konuları tamamladığını / tekrar etmesi gerektiğini kaydet.",
-  testler: "Standart test sonuçlarını gir ve programdaki araçları uygula: Bir İnsan Çiz (fotoğrafla), ÇDT dikkat testi, Dikkat Güçlendirme Programı, SCAS, BEİER, Mesleki Eğilim, BİLPRO, düzey taramaları — hepsi rapora otomatik eklenir.",
+  testler: "Standart test sonuçlarını gir ve programdaki araçları uygula: Bir İnsan Çiz (fotoğrafla), ÇDT dikkat testi, Dikkat Güçlendirme Programı, Okuma-Yazma Destek Programı (değerlendirme, bireysel plan, haftalık akıcılık izleme), SCAS, BEİER, Mesleki Eğilim, BİLPRO, düzey taramaları — hepsi rapora otomatik eklenir.",
   sinif_sunumu: "Sınıfın geneline dair sunum ve kurum raporu hazırlar (Deneme Net Trendi dahil).",
   hatirlatici: "Kendine bıraktığın hatırlatma / yapılacaklar listesi.",
   gorusme_takvimi: "Planlanan ve geçmiş görüşmeleri takvim görünümünde gösterir.",
@@ -38757,6 +39914,7 @@ function pdrBaslangicSekmesi() {
             sinavTuru={sinavTuru}
             setTab={setTab}
             setAktifOgrenci={setAktifOgrenci}
+            testKayitlari={testKayitlari}
           />
         )}
 

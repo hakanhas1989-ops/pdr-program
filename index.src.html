@@ -29797,6 +29797,8 @@ function OgrenciYonetim({
   ), [tumOgrenciler, aramaDebounce]);
 
   async function handleOgrenciSil(studentName, className, numara) {
+    const gorusmeSay = (records || []).filter(r => pdrAyniOgrenci(studentName, className, r.studentName, r.className, numara, r.numara)).length;
+    if (gorusmeSay && !confirm(`Bu öğrenciyle birlikte ${gorusmeSay} görüşme notu ve diğer tüm kayıtları da silinecek.\n\nSilinen görüşmeler Ayarlar → Kayıp Kayıt Bul → "Son silinenler"den geri getirilebilir. Devam edilsin mi?`)) return;
     await onOgrenciSil(studentName, className, numara);
     if (aktifOgrenci?.name === studentName) setAktifOgrenci({ name: "", className: "" });
     setSeciliOgrenci(null);
@@ -36174,7 +36176,7 @@ function SinifProfili({ ogrenciler, setOgrenciler, records, riskListesi, aktifYi
               {sinifSilOnay === sube ? (
                 <div style={{position:"absolute", top:6, right:6, left:6, zIndex:3, background:"#FDECEA", border:"1px solid #F28B82", borderRadius:8, padding:8}}>
                   <div style={{fontSize:10, color:"#C0392B", fontWeight:600, marginBottom:6, lineHeight:1.5}}>
-                    <b>{st.ogr.length} öğrenci</b> ve tüm görüşme/risk/profil/deneme verisi silinecek.
+                    <b>{st.ogr.length} öğrenci</b> ve tüm görüşme/risk/profil/deneme verisi silinecek{(() => { const n = (records || []).filter(r => st.ogr.some(o => pdrAyniOgrenci(o.studentName, o.className, r.studentName, r.className, o.numara, r.numara))).length; return n ? <> — <b>{n} görüşme notu dahil</b></> : null; })()}. Liste yenilemek için silme; yeni listeyi yükle, var olanlar korunur.
                   </div>
                   <div style={{display:"flex", gap:4}}>
                     <button disabled={sinifSiliniyor} onClick={(e)=>{e.stopPropagation(); handleSinifSil(sube);}} style={{flex:1, background:"#C0392B",color:"#fff",border:"none",borderRadius:6,padding:"4px 7px",fontSize:10,fontWeight:800,cursor:sinifSiliniyor?"default":"pointer",opacity:sinifSiliniyor?0.6:1}}>{sinifSiliniyor?"Siliniyor…":"Evet, Sil"}</button>

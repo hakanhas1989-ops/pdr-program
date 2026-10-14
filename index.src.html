@@ -30681,8 +30681,10 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
                       </div>
                     ))}
                     <div style={{flex:1,textAlign:"right",fontSize:11,color:MUTED}}>
-                      <div>İlk: <b style={{color:TEXT}}>{ogrRec[ogrRec.length-1]?.date}</b></div>
-                      <div>Son: <b style={{color:TEXT}}>{ogrRec[0]?.date}</b></div>
+                      {(() => { const sirali = [...ogrRec].filter(r => r.date).sort((x, y) => pdrTarihMs(x.date) - pdrTarihMs(y.date)); return (<>
+                      <div>İlk: <b style={{color:TEXT}}>{sirali[0]?.date}</b></div>
+                      <div>Son: <b style={{color:TEXT}}>{sirali[sirali.length-1]?.date}</b></div>
+                      </>); })()}
                     </div>
                   </div>
 
@@ -36478,7 +36480,9 @@ function KutuphaneEkle({ kutuphane, setKutuphane }) {
 function Badge({ label, type }) {
   const color = type === "Veli" ? ORANGE : ACCENT;
   const bg = type === "Veli" ? "#FDEBD0" : ACCENT_LIGHT;
-  return <span style={{ background: bg, color, borderRadius: 20, padding: "2px 10px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>{label}</span>;
+  // Uzun etiketler ("Akademik · Motivasyon Artırma") dar ekranda taşmasın diye
+  // kısaltılır; tam metin üzerine basılı tutunca/gelince görünür.
+  return <span title={label} style={{ background: bg, color, borderRadius: 20, padding: "2px 10px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", display: "inline-block", verticalAlign: "middle", boxSizing: "border-box" }}>{label}</span>;
 }
 function StatBar({ label, value, max, color = ACCENT }) {
   const pct = max > 0 ? Math.round((value / max) * 100) : 0;
@@ -36679,16 +36683,16 @@ function RecordCard({ rec, records, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz,
   return (
     <div style={{ background: CARD, border: `1px solid ${duzenle ? ACCENT : BORDER}`, borderRadius: 12, marginBottom: 10, overflow: "hidden", transition: "border .2s" }}>
       <div data-asistan="kart-ac" data-acik={open ? "1" : "0"} onClick={() => { if (!duzenle) setOpen(o => !o); }} style={{
-        display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", cursor: duzenle ? "default" : "pointer",
+        display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, padding: "12px 16px", cursor: duzenle ? "default" : "pointer",
         borderBottom: open ? `1px solid ${BORDER}` : "none"
       }}>
         <div style={{
-          width: 36, height: 36, borderRadius: "50%",
+          width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
           background: isVeli ? "#FDEBD0" : ACCENT_LIGHT, color: isVeli ? ORANGE : ACCENT,
           display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 15
         }}>{rec.studentName.charAt(0).toUpperCase()}</div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 700, fontSize: 14, color: TEXT }}>{rec.studentName}</div>
+        <div style={{ flex: "1 1 150px", minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: 14, color: TEXT, overflowWrap: "anywhere" }}>{rec.studentName}</div>
           <div style={{ fontSize: 12, color: MUTED }}>{rec.date}{rec.saat ? ` · ${rec.saat}` : ""} · {rec.className}</div>
           {pdrGunAdi(rec.date) && <div style={{ fontSize: 9.5, color: MUTED, opacity: 0.75, marginTop: 1 }}>{pdrGunAdi(rec.date)}</div>}
           {rec.grupKatilimcilari?.length > 0 && (
@@ -36697,11 +36701,11 @@ function RecordCard({ rec, records, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz,
             </div>
           )}
         </div>
-        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, flex: "0 1 auto", minWidth: 0, maxWidth: "100%", marginLeft: "auto", justifyContent: "flex-end" }}>
           <Badge label={rec.meetingType || "Öğrenci"} type={rec.meetingType} />
           {(editForm.topic || rec.topic) && <Badge label={konuGoster(editForm.topic ? editForm : rec)} />}
         </div>
-        {!duzenle && <span style={{ color: MUTED, fontSize: 18 }}>{open ? "▲" : "▼"}</span>}
+        {!duzenle && <span style={{ color: MUTED, fontSize: 18, flexShrink: 0 }}>{open ? "▲" : "▼"}</span>}
       </div>
 
       {open && !duzenle && (

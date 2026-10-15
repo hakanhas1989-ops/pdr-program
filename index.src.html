@@ -1554,6 +1554,8 @@ const MUDAHALE_PDF_MAP = {
   "sosyal-duygusal": "https://raw.githubusercontent.com/hakanhas1989-ops/pdr-program/main/mudahale-sosyal-duygusal.pdf",
   "psikolojik-saglamlik": "https://raw.githubusercontent.com/hakanhas1989-ops/pdr-program/main/mudahale-psikolojik-saglamlik.pdf",
   "akran-nezaketi": "https://raw.githubusercontent.com/hakanhas1989-ops/pdr-program/main/mudahale-akran-nezaketi.pdf",
+  "sdb-psikoegitim": "https://raw.githubusercontent.com/hakanhas1989-ops/pdr-program/main/mudahale-sdb-psikoegitim.pdf",
+  "sdb-farkindalik": "https://raw.githubusercontent.com/hakanhas1989-ops/pdr-program/main/mudahale-sdb-farkindalik.pdf",
 };
 // Kütüphane ekranındaki program filtre butonlarında kullanılan kısa adlar —
 // tam adlar (MUDAHALE_PROGRAMLARI[].ad) çok uzun olduğu için buton üzerinde
@@ -1562,9 +1564,11 @@ const MUDAHALE_PROGRAM_KISA_ADLAR = {
   "akademik-beceriler": "Akademik Beceriler",
   "zorbalik-yapan": "Zorbalık Yapan",
   "zorbalik-maruz-kalan": "Zorbalığa Maruz Kalan",
-  "sosyal-duygusal": "Sosyal Duygusal",
+  "sosyal-duygusal": "Sosyal Duygusal (Müdahale)",
   "psikolojik-saglamlik": "Psikolojik Sağlamlık",
   "akran-nezaketi": "Akran Nezaketi",
+  "sdb-psikoegitim": "SDB Psikoeğitim (Grup)",
+  "sdb-farkindalik": "SDB Farkındalık (Sınıf)",
 };
 const MUDAHALE_PROGRAMLARI = [
   {
@@ -1726,6 +1730,35 @@ const MUDAHALE_PROGRAMLARI = [
       { modul: "Tema 4 · Kültürde ve İnançta Akran Nezaketi — Aile katılımlı", baslik: "Ailem Anlatıyor", sayfa: 95, ozet: "Aile hikâyeleri üzerinden nezaket değerini pekiştirir. (80 dk)" },
     ]
   },
+  {
+    key: "sdb-psikoegitim",
+    ad: "Ortaokul Öğrencilerine Yönelik Sosyal Duygusal Beceriler Psikoeğitim Programı",
+    hedefKitle: "Sosyal duygusal becerilerde risk altındaki öğrenciler (2. düzey, önleyici); 8-12 kişilik gönüllü küçük grup, haftada bir oturum (CASEL modeli)",
+    oturumlar: [
+      { modul: "Tanışma", baslik: "Yolculuğa Başla", sayfa: 28, ozet: "Programa katılma amaçlarını açıklama, grup üyeleriyle tanışma ve grup kurallarını birlikte oluşturma. (90 dk)" },
+      { modul: "Öz Farkındalık", baslik: "Kendini Tanı", sayfa: 39, ozet: "Kendi özelliklerini gerçekçi değerlendirerek güçlü ve geliştirilebilir yönlerini fark etme. (90 dk)" },
+      { modul: "Öz Farkındalık", baslik: "Duygunu Tanı", sayfa: 51, ozet: "Duygu, düşünce ve davranış arasında bağ kurma; yeni durumlara ilişkin duyguları tanımlama. (80 dk)" },
+      { modul: "Sosyal Farkındalık", baslik: "Başkalarını Tanı", sayfa: 65, ozet: "Başkalarının duygu, deneyim ve bakış açılarını anlama ve önemseme (empati). (80 dk)" },
+      { modul: "Sosyal Farkındalık", baslik: "Farklılıkları Kutla", sayfa: 77, ozet: "Farklı bakış açılarına ve kültürel çeşitliliğe saygı; farklılıkları zenginlik olarak görme, gönüllülük. (80 dk)" },
+      { modul: "Öz Yönetim", baslik: "Amaç Belirle", sayfa: 90, ozet: "Amaca ulaşmak için içsel kaynakları fark ederek eylem planı hazırlama ve zorlukta çabayı sürdürme. (80 dk)" },
+      { modul: "Öz Yönetim", baslik: "Kontrolü Eline Al", sayfa: 100, ozet: "Zamanı etkili kullanma; kişisel zaman ile sorumluluklar arasında denge kurma. (80 dk)" },
+      { modul: "Sorumlu Karar Verme", baslik: "Strateji Belirle", sayfa: 109, ozet: "Problemlerin ortaya çıkma nedenlerini araştırma ve etkili problem çözme stratejileri kullanma. (90 dk)" },
+      { modul: "Sorumlu Karar Verme", baslik: "Kararını Ver", sayfa: 135, ozet: "Karar vermeyi engelleyen duygu ve düşünceleri fark etme; sorumlu karar verme basamaklarını izleme. (90 dk)" },
+      { modul: "İlişki Geliştirme Becerileri", baslik: "Etkili Sosyal Bağlar Kur", sayfa: 155, ozet: "Etkili iletişimle kendini ifade etme, sağlıklı ilişki kurma ve gerektiğinde yardım alma-verme. (90 dk)" },
+      { modul: "İlişki Geliştirme Becerileri", baslik: "İlişkileri Yönet", sayfa: 166, ozet: "Çatışmaya yol açan tutum ve davranışları fark etme, uygun çatışma çözme stratejileri kullanma. (90 dk)" },
+      { modul: "Sonlandırma", baslik: "Yolculuktan Ayrıl", sayfa: 176, ozet: "Kazanılan farkındalığı gözden geçirme, öğrenilenleri günlük yaşama aktarma ve gruptan olumlu duygularla ayrılma. (90 dk)" },
+    ]
+  },
+  {
+    key: "sdb-farkindalik",
+    ad: "Ortaokul Öğrencilerine Yönelik Sosyal Duygusal Beceriler Farkındalık Programı",
+    hedefKitle: "Tüm öğrenciler (1. düzey, genel önleyici); sınıf / büyük grup ya da küçük grup rehberliği, haftada bir oturum",
+    oturumlar: [
+      { modul: "Farkındalık", baslik: "Sosyal Duygusal Becerilerle Tanışma", sayfa: 15, ozet: "Programın amacını ve önemini fark etme; öz farkındalık, öz yönetim, sosyal farkındalık, ilişki becerileri ve sorumlu karar vermenin içeriğini tanıma. (40-50 dk)" },
+      { modul: "Farkındalık", baslik: "Kendimi Değerlendiriyorum", sayfa: 35, ozet: "Sosyal duygusal beceriler açısından kendini değerlendirme. (40-50 dk)" },
+      { modul: "Farkındalık", baslik: "Gelişim İçin Eylem Planım", sayfa: 46, ozet: "Sosyal duygusal becerileri geliştirmeye yönelik olumlu tutum kazanma ve kişisel eylem planı oluşturma. (40-50 dk)" },
+    ]
+  },
 ];
 // Tüm programların oturumlarını tek düz listede toplar — arama ve AI eşleştirme
 // için. Her satıra programAdi/dosyaKey eklenir ki tıklanınca doğru PDF açılsın.
@@ -1880,7 +1913,7 @@ function MudahaleKutuphanesiEkrani({ kayitliListesi, records, aktifOgrenci, setA
     <div style={{ padding: 16, maxWidth: 640 }}>
       <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 4, color:PURPLE }}>📁 Müdahale Programları</div>
       <div style={{ fontSize: 12, color: MUTED, marginBottom: 16, lineHeight: 1.5 }}>
-        6 kaynak programdan (Akademik Beceriler, Akran Zorbalığı Yapan/Maruz Kalan, Sosyal Duygusal Beceriler, Psikolojik Sağlamlık, Akran Nezaketi) toplam {havuz.length} oturum. Anahtar kelime ara ya da bir öğrenci seçip AI'ın görüşme notlarına göre önermesini iste — her iki yolda da sonuca tıklayınca PDF'in ilgili sayfası açılır.
+        {MUDAHALE_PROGRAMLARI.length} kaynak programdan (Akademik Beceriler, Akran Zorbalığı Yapan/Maruz Kalan, Sosyal Duygusal Beceriler — Farkındalık/Psikoeğitim/Müdahale, Psikolojik Sağlamlık, Akran Nezaketi) toplam {havuz.length} oturum. Anahtar kelime ara ya da bir öğrenci seçip AI'ın görüşme notlarına göre önermesini iste — her iki yolda da sonuca tıklayınca PDF'in ilgili sayfası açılır.
       </div>
 
       {/* AI ile Ara */}

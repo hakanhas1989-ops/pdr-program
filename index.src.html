@@ -3155,7 +3155,7 @@ function BenlikOlcegiPaneli({ seciliAd, seciliSinif, seciliNumara, kademe,
     } else if (olcekKademe === "lise") {
       const k = (liseTaramalar || []).find(o => pdrAyniOgrenci(o.studentName, o.className, seciliAd, seciliSinif, o.numara, seciliNumara));
       if (k && k.cevaplar) {
-        const s = k.sonuc || liseTaramaSonucHesapla(k.cevaplar, seciliSinif);
+        const s = k.sonuc || liseTaramaSonucHesapla(k.cevaplar, seciliSinif, k.date);
         dersler.forEach(d => {
           const ds = (s.dersSonuclari || {})[d.taramaKey];
           out[d.taramaKey] = ds ? ds.genelYuzde : null;
@@ -3374,7 +3374,7 @@ function butunlesikPerformans(kademe, akademikTaramalar, liseTaramalar, ad, sini
   if (kademe === "lise") {
     const k = (liseTaramalar || []).find(o => pdrAyniOgrenci(o.studentName, o.className, ad, sinif, o.numara, numara));
     if (!k || !k.cevaplar) return bos;
-    const s = k.sonuc || liseTaramaSonucHesapla(k.cevaplar, sinif);
+    const s = k.sonuc || liseTaramaSonucHesapla(k.cevaplar, sinif, k.date);
     const out = {};
     LISE_DERSLER.forEach(d => {
       const ds = (s.dersSonuclari || {})[d.key];
@@ -4853,7 +4853,7 @@ function liseSinifDuzeyiCikar(sinifAdi) {
   return n >= 9 && n <= 12 ? n : null;
 }
 
-function liseTaramaSonucHesapla(cevaplar, ogrenciSinifAdi) {
+function liseTaramaSonucHesapla(cevaplar, ogrenciSinifAdi, tarih) {
   const dersSonuclari = {};
   let uygulananToplam = 0;
 
@@ -4925,12 +4925,13 @@ function liseTaramaSonucHesapla(cevaplar, ogrenciSinifAdi) {
   } else {
     genelMetin = `Ortak derslerdeki işlevsel düzeyi yaklaşık ${genelIslevsel}. sınıf kazanımları civarında.`;
     if (bulunduguSinif !== null) {
-      fark = bulunduguSinif - genelIslevsel;
-      if (fark >= 3) genelMetin += ` Öğrenci ${bulunduguSinif}. sınıfta olduğu hâlde işlevsel düzeyi ${fark} yıl geride. Bu, ders içi destekle kapanması güç bir açıktır; devamsızlık, okul dışı çalışma koşulları ve varsa öğrenme güçlüğü birlikte değerlendirilmeli.`;
-      else if (fark === 2) genelMetin += ` Öğrenci ${bulunduguSinif}. sınıfta; iki yıllık bir gecikme var. Hedefli ve planlı bir telafi çalışması gerekir.`;
-      else if (fark === 1) genelMetin += ` Öğrenci ${bulunduguSinif}. sınıfta; bir yıllık bir gecikme var, kapatılabilir bir açıktır.`;
-      else if (fark === 0) genelMetin += ` Bulunduğu sınıf düzeyiyle uyumlu.`;
-      else genelMetin += ` Bulunduğu sınıf düzeyinin üzerinde performans gösteriyor.`;
+      const ref = duzeyBeklenen(bulunduguSinif, tarih).beklenen ?? bulunduguSinif, refAd = ref > 0 ? `${ref}. sınıf` : "hazırlık düzeyi";
+      fark = ref - genelIslevsel;
+      if (fark >= 3) genelMetin += ` Öğrenci ${bulunduguSinif}. sınıfta (beklenen düzey: ${refAd}); işlevsel düzeyi ${fark} yıl geride. Bu, ders içi destekle kapanması güç bir açıktır; devamsızlık, okul dışı çalışma koşulları ve varsa öğrenme güçlüğü birlikte değerlendirilmeli.`;
+      else if (fark === 2) genelMetin += ` Öğrenci ${bulunduguSinif}. sınıfta (beklenen düzey: ${refAd}); iki yıllık bir gecikme var. Hedefli ve planlı bir telafi çalışması gerekir.`;
+      else if (fark === 1) genelMetin += ` Öğrenci ${bulunduguSinif}. sınıfta (beklenen düzey: ${refAd}); bir yıllık bir gecikme var, kapatılabilir bir açıktır.`;
+      else if (fark === 0) genelMetin += ` Beklenen düzeyle (${refAd}) uyumlu.`;
+      else genelMetin += ` Beklenen düzeyin (${refAd}) üzerinde performans gösteriyor.`;
     }
   }
 
@@ -5128,6 +5129,8 @@ function LiseTaramaPaneli({ seciliAd, seciliSinif, seciliNumara, liseTaramalar, 
           </div>
         </div>
       )}
+
+      <DuzeyAnalizKarti kademe="lise" cevaplar={cevaplar} sinifAdi={seciliSinif} tarih={today()} />
 
       <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:10}}>
         {LISE_DERSLER.map(d => (
@@ -5452,7 +5455,7 @@ function ilkokulSinifDuzeyiCikar(sinifAdi) {
   return n >= 1 && n <= 4 ? n : null;
 }
 
-function ilkokulTaramaSonucHesapla(cevaplar, ogrenciSinifAdi) {
+function ilkokulTaramaSonucHesapla(cevaplar, ogrenciSinifAdi, tarih) {
   const sinifSonuclari = {};
   let uygulananToplam = 0;
   const zayifAlanlar = [], gucluAlanlar = [];
@@ -5509,11 +5512,12 @@ function ilkokulTaramaSonucHesapla(cevaplar, ogrenciSinifAdi) {
   } else {
     seviyeMetni = `İşlevsel düzeyi ${islevselSinif}. sınıf kazanımları civarında görünüyor.`;
     if (bulunduguSinif !== null) {
-      fark = bulunduguSinif - islevselSinif;
-      if (fark >= 2) seviyeMetni += ` Öğrenci ${bulunduguSinif}. sınıfta olduğu hâlde işlevsel düzeyi ${fark} yıl geride — bu, sınıf içi destekle kapatılması zor bir açıktır ve bireysel/yoğunlaştırılmış destek gerektirir.`;
-      else if (fark === 1) seviyeMetni += ` Öğrenci ${bulunduguSinif}. sınıfta; bir yıllık bir gecikme var. Erken ve hedefli destekle kapanabilecek bir açıktır.`;
-      else if (fark === 0) seviyeMetni += ` Bulunduğu sınıf düzeyiyle uyumlu.`;
-      else seviyeMetni += ` Bulunduğu sınıf düzeyinin üzerinde performans gösteriyor.`;
+      const ref = duzeyBeklenen(bulunduguSinif, tarih).beklenen ?? bulunduguSinif, refAd = ref > 0 ? `${ref}. sınıf` : "hazırlık düzeyi";
+      fark = ref - islevselSinif;
+      if (fark >= 2) seviyeMetni += ` Öğrenci ${bulunduguSinif}. sınıfta (beklenen düzey: ${refAd}); işlevsel düzeyi ${fark} yıl geride — bu, sınıf içi destekle kapatılması zor bir açıktır ve bireysel/yoğunlaştırılmış destek gerektirir.`;
+      else if (fark === 1) seviyeMetni += ` Öğrenci ${bulunduguSinif}. sınıfta (beklenen düzey: ${refAd}); bir yıllık bir gecikme var. Erken ve hedefli destekle kapanabilecek bir açıktır.`;
+      else if (fark === 0) seviyeMetni += ` Beklenen düzeyle (${refAd}) uyumlu.`;
+      else seviyeMetni += ` Beklenen düzeyin (${refAd}) üzerinde performans gösteriyor.`;
     }
   }
 
@@ -5850,6 +5854,8 @@ function IlkokulTaramaPaneli({ seciliAd, seciliSinif, seciliNumara, ilkokulTaram
           </div>
         </div>
       )}
+
+      <DuzeyAnalizKarti kademe="ilkokul" cevaplar={cevaplar} sinifAdi={seciliSinif} tarih={today()} />
 
       <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:10}}>
         {ILKOKUL_TARAMA.siniflar.map(st => (
@@ -11023,6 +11029,19 @@ async function ksAsistanProgramOturumu(g) {
   else b.push("(Kitabın tam metni şu an yüklenemedi; yalnız özet verildi. Danışman PDF'i Müdahale Programları ekranından açabilir.)");
   return b.join("\n");
 }
+// Düzey taraması (ilkokul/ortaokul/lise): kayıtlı sonucun analizi ya da uygulama rehberi
+function ksAsistanDuzeyTaramasi(g, ctx, o) {
+  if (g.ogrenci && !o) return `"${g.ogrenci}" adında kayıtlı öğrenci bulunamadı; ogrenci_ara ile ara.`;
+  const no = o ? ((/(\d+)/.exec(String(o.className || "")) || [])[1] | 0) : 0;
+  const kademe = ["ilkokul", "ortaokul", "lise"].includes(g.kademe) ? g.kademe : no >= 9 ? "lise" : no >= 5 ? "ortaokul" : no >= 1 ? "ilkokul" : (ctx.kademe || "ortaokul");
+  if (!o) return duzeyUygulamaRehberi(kademe, null, today());
+  const liste = { ilkokul: ctx.ilkokulTaramalar, ortaokul: ctx.akademikTaramalar, lise: ctx.liseTaramalar }[kademe] || [];
+  const k = liste.find(x => pdrAyniOgrenci(x.studentName, x.className, o.name, o.className, x.numara, o.numara));
+  const rehber = duzeyUygulamaRehberi(kademe, no || null, today());
+  if (!k || !k.cevaplar || !Object.keys(k.cevaplar).length) return `${ksAsistanEtiket(o)} için kayıtlı ${kademe} düzey taraması yok.\n\n${rehber}`;
+  const an = duzeyTaramaAnaliz(kademe, k.cevaplar, o.className, k.date);
+  return `${duzeyAnalizMetni(an, ksAsistanEtiket(o) + (k.date ? `, uygulama ${k.date}` : ""))}\n\n${g.rehber ? rehber : "(Uygulama kuralları gerekirse rehber:true ile istenebilir.)"}`;
+}
 // LGS konu önceliği: Konu Haritası işaretleri × LGS'de konu başına beklenen soru
 function ksAsistanLgsOncelik(g, ctx, o) {
   if (g.ogrenci && !o) return `"${g.ogrenci}" adında kayıtlı öğrenci bulunamadı; ogrenci_ara ile ara.`;
@@ -11196,6 +11215,11 @@ const KS_ASISTAN_ARACLAR = {
     aciklama: "Müdahale programı kitabından bir oturumun TAM içeriğini getirir: amaç, kazanımlar, süre, materyal, uygulama basamakları, yönergeler, çalışma yaprakları. program: kitap anahtarı ya da adı (psikolojik-saglamlik, akademik-beceriler, zorbalik-yapan, zorbalik-maruz-kalan, sosyal-duygusal, akran-nezaketi, sdb-psikoegitim, sdb-farkindalik). oturum: numara ya da başlık; 0 ya da boş = kitabın giriş bölümü (hedef kitle, uygulama ilkeleri). Uzun oturumlar parçalıdır: parca 2, 3… ile devamı. program boşsa bütün kitapların oturum listesini verir.",
     girdi: '{"program": "sdb-psikoegitim", "oturum": 3, "parca": 1}', yontem: "hepsi",
     calistir: (g) => ksAsistanProgramOturumu(g),
+  },
+  duzey_taramasi: {
+    aciklama: "Akademik düzey taramaları (ilkokul 1-4, ortaokul 5-8, lise 9-12). ogrenci verirsen kayıtlı sonucunu programın kendi analiziyle getirir: ders ders işlevsel düzey, beklenen düzeyle karşılaştırma (öğretim yılı içinde beklenen = tamamladığı sınıf), kural tabanlı çıkarımlar (\"şuna işaret ediyor olabilir\"), yanlış yapılan kazanımlar. Kayıt yoksa ya da \"nasıl uygularım\" sorulursa o öğrenciye göre hangi setlerin hangi sırayla uygulanacağını anlatan rehberi verir. rehber:true ise analizle birlikte rehberi de ekler. kademe: isteğe bağlı (ilkokul | ortaokul | lise).",
+    girdi: '{"ogrenci": "isteğe bağlı", "sinif": "isteğe bağlı", "kademe": "", "rehber": false}', yontem: "hepsi",
+    calistir: (g, ctx, o) => ksAsistanDuzeyTaramasi(g, ctx, o),
   },
   lgs_konu_onceligi: {
     aciklama: "LGS konu önceliği (yerelde hesaplanır). ogrenci verirsen öğrencinin Konu Haritası'ndaki tamamlanma yüzdelerini LGS'de konu başına beklenen soru sayısıyla birleştirip 'önce bunlara çalış' listesini ve tahmini kazanılabilir neti verir. ogrenci vermezsen derslere göre LGS'de en çok soru çıkan konuları verir. ders: isteğe bağlı (Türkçe, Matematik, Fen Bilimleri, İnkılap Tarihi, Din Kültürü, İngilizce).",
@@ -11502,6 +11526,11 @@ function ksAsistanOgrenciDosyasi(ctx, o) {
       b.push(`• ${t.testAdi || t.tip} (${t.tarih || "?"})${sayi.length ? ": " + sayi.join(", ") : ""}${yazi.length ? " — " + yazi[0] : ""}${t.not ? " · not: " + K(t.not, 80) : ""}`);
     });
   } else b.push("\nTESTLER: uygulanmış test kaydı yok.");
+  try {
+    const no2 = ((/(\d+)/.exec(String(sinif || "")) || [])[1] | 0), kd = no2 >= 9 ? "lise" : no2 >= 5 ? "ortaokul" : no2 >= 1 ? "ilkokul" : null;
+    const dl = kd && ({ ilkokul: ctx.ilkokulTaramalar, ortaokul: ctx.akademikTaramalar, lise: ctx.liseTaramalar }[kd] || []).find(x => pdrAyniOgrenci(x.studentName, x.className, ad, sinif, x.numara, no));
+    if (dl && dl.cevaplar && Object.keys(dl.cevaplar).length) { const an = duzeyTaramaAnaliz(kd, dl.cevaplar, sinif, dl.date); b.push(`DÜZEY TARAMASI (${dl.date || "?"}): ${an.uygulanan.map(d => `${d.kisa} ${d.duzey !== null ? d.duzey : d.belirsiz ? "≤" + (d.ilkSet - 1) : an.alt + " altı"}${d.fark !== null && d.fark > 0 ? ` (${d.fark} yıl geride)` : ""}`).join(", ")}${an.beklenen !== null ? ` · beklenen ${an.beklenen}` : ""} — ayrıntı için duzey_taramasi`); }
+  } catch (e) {}
   // Devamsızlık ve olaylar
   const ogr = (ctx.ogrenciler || []).find(x => pdrAyniOgrenci(x.studentName, x.className, ad, sinif));
   const dv = ogr && ogr.devamsizlikGecmisi || [];
@@ -11587,6 +11616,7 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - "Bugün ne yapmalıyım", "bugün kimlerle ilgilenmeliyim", "öncelikler" gibi sorularda İLK bugun_brifing aracını çağır; program öncelik sırasını kendisi çıkarır, sen sırayı bozmadan kısa anlat. Gerekirse liste aracıyla ayrıntıya in.
 - Sınıf, okul ya da öğrenci düzeyinde "hangi konular konuşulmuş", "kaç veli görüşmesi", "en çok hangi sınıfla", "eğilim", "karşılaştır", "dönem özeti", "kaç öğrencide zorbalık geçti" gibi sayı/analiz sorularında gorusme_analizi kullan; sayıları kendin tahmin etme. Yorum yaparken bulguyu, olası anlamını ve somut bir sonraki adımı söyle (örn. sınıf rehberlik etkinliği, veli toplantısı, grup çalışması).
 - Test sonucu sorulduğunda ya da test sonucuna göre plan/veli anlatımı istendiğinde test_sonucu kullan.
+- Akademik düzey taraması (ilkokul/ortaokul/lise) sonucu, yorumu ya da "nasıl uygularım, hangi setleri sorayım" sorulduğunda duzey_taramasi kullan. Öğretim yılı içinde beklenen düzeyin TAMAMLADIĞI sınıf olduğunu unutma (8. sınıfın başındaki öğrencide 7 çıkması normaldir); çıkarımları "işaret ediyor olabilir" diliyle aktar.
 - Müdahale Programları kütüphanesindeki kitaplar (8 kitap, tam metin) senin başvuru kaynağın: bir konu/beceri için etkinlik, oturum ya da program önerirken, grup ya da bireysel çalışma planlarken veya danışman bir kitap/oturum sorduğunda önce program_ara, ayrıntı için program_oturumu kullan. Önerinde kitabın adını, oturum numarasını ve PDF sayfasını belirt; kitapta olmayan bir şeyi kitaptaymış gibi söyleme.
 - LGS'ye hazırlık, "hangi konuya öncelik vermeli", "LGS'de en çok hangi konudan soru çıkıyor", "kaç net artırabilir" gibi sorularda lgs_konu_onceligi kullan; kazanılabilir neti "en fazla/yaklaşık" diye temkinli söyle.
 - Uyum izleme, bireyi tanıma, BDT çarpıtması ve sevk kaydı için uyum_kaydet, bireyi_tanima_ekle, bdt_ekle, sevk_kaydet, sevk_sonuc araçları vardır; hepsi danışmanın onayından geçer.
@@ -16602,7 +16632,7 @@ function RaporModalIc({ rapor, onKapat }) {
               if (ilkKademe && ilkKademe !== "ilkokul") return null;
               const ilkKayit = (rapor.ilkokulTaramalar||[]).find(o => pdrAyniOgrenci(o.studentName, o.className, ogrenci, ogrenciSinif));
               if (!ilkKayit || !ilkKayit.cevaplar || Object.keys(ilkKayit.cevaplar).length === 0) return null;
-              const s = ilkKayit.sonuc || ilkokulTaramaSonucHesapla(ilkKayit.cevaplar, ogrenciSinif);
+              const s = ilkKayit.sonuc || ilkokulTaramaSonucHesapla(ilkKayit.cevaplar, ogrenciSinif, ilkKayit.date);
               if (!s || s.hicUygulanmadi) return null;
               return (
                 <div style={{ marginTop:10, pageBreakInside:"avoid" }}>
@@ -16649,7 +16679,7 @@ function RaporModalIc({ rapor, onKapat }) {
               if (liseKademe && liseKademe !== "lise") return null;
               const liseKayit = (rapor.liseTaramalar||[]).find(o => pdrAyniOgrenci(o.studentName, o.className, ogrenci, ogrenciSinif));
               if (!liseKayit || !liseKayit.cevaplar || Object.keys(liseKayit.cevaplar).length === 0) return null;
-              const s = liseKayit.sonuc || liseTaramaSonucHesapla(liseKayit.cevaplar, ogrenciSinif);
+              const s = liseKayit.sonuc || liseTaramaSonucHesapla(liseKayit.cevaplar, ogrenciSinif, liseKayit.date);
               if (!s || s.hicUygulanmadi) return null;
               return (
                 <div style={{ marginTop:10, pageBreakInside:"avoid" }}>
@@ -22499,7 +22529,7 @@ function KEDPaneli({ seciliAd, seciliSinif, seciliNumara, ogrenciler, testKayitl
     const ik = (ilkokulTaramalar || []).find(o => pdrAyniOgrenci(o.studentName, o.className, seciliAd, seciliSinif, o.numara, seciliNumara));
     const ok = tumKayitlar.filter(k => k.tip === "okuma_degerlendirme").sort((a, b) => pdrTarihMs(b.tarih) - pdrTarihMs(a.tarih))[0];
     const okP = ok ? oyProfil(ok.veri, ok.veri.sinifNo, ok.tarih) : null;
-    let ilk = null; try { ilk = ik ? ilkokulTaramaSonucHesapla(ik.cevaplar || {}, seciliSinif) : null; } catch (e) { ilk = null; }
+    let ilk = null; try { ilk = ik ? ilkokulTaramaSonucHesapla(ik.cevaplar || {}, seciliSinif, ik.date) : null; } catch (e) { ilk = null; }
     let akd = null; try { akd = ak ? (ak.sonuc || akademikTaramaSonucHesapla(ak.cevaplar || {})) : null; } catch (e) { akd = null; }
     return { akademik: akd, akademikTarih: ak ? ak.date : null, ilkokul: ilk && !ilk.hicUygulanmadi ? ilk : null, ilkokulTarih: ik ? ik.date : null, okuma: okP && okP.akicilik ? okP.akicilik.isDuzey : null, okumaTarih: ok ? ok.tarih : null };
   })();
@@ -30250,7 +30280,7 @@ function pdrAsistanCtx(p) {
     profiles: p.profiles, profiles2: p.profiles2, denemeler: p.denemeler, sevkler: p.sevkler, testKayitlari: p.testKayitlari,
     akademikTaramalar: p.akademikTaramalar, liseTaramalar: p.liseTaramalar, benlikOlcekleri: p.benlikOlcekleri,
     sinavTuru: p.sinavTuru, aktifYil: p.aktifYil, ogrenciListesi: p.kayitliListesi,
-    bdtAnaliz: p.bdtAnaliz, bireyiTanima: p.bireyiTanima, ogrenciler: p.ogrenciler, uyumIzleme: p.uyumIzleme, kademe: p.kademe || "", konuHaritasiVerisi: p.konuHaritasiVerisi || {},
+    bdtAnaliz: p.bdtAnaliz, bireyiTanima: p.bireyiTanima, ogrenciler: p.ogrenciler, uyumIzleme: p.uyumIzleme, kademe: p.kademe || "", konuHaritasiVerisi: p.konuHaritasiVerisi || {}, ilkokulTaramalar: p.ilkokulTaramalar || [],
     kaydet: {
       records: async (l) => { p.setRecords(l); await saveRecords(l); },
       hatirlatmalar: async (l) => { p.setHatirlatmalar(l); await saveHatirlatmalar(l); },
@@ -30352,7 +30382,7 @@ function AsistanEkrani({
   kayitliListesi, records, setRecords, riskListesi, setRiskListesi, hatirlatmalar, setHatirlatmalar,
   mudahalePlan, setMudahalePlan, profiles, profiles2, denemeler, sevkler, testKayitlari,
   akademikTaramalar, liseTaramalar, benlikOlcekleri, sinavTuru, aktifYil, setTab,
-  bdtAnaliz, bireyiTanima, ogrenciler, uyumIzleme, setBdtAnaliz, setBireyiTanima, setUyumIzleme, kademe, setSevkler, konuHaritasiVerisi
+  bdtAnaliz, bireyiTanima, ogrenciler, uyumIzleme, setBdtAnaliz, setBireyiTanima, setUyumIzleme, kademe, setSevkler, konuHaritasiVerisi, ilkokulTaramalar
 }) {
   const S = PDR_ASISTAN_SOHBET;
   const [, yenile] = useState(0);
@@ -30427,7 +30457,7 @@ function AsistanEkrani({
     return pdrAsistanCtx({ kayitliListesi, records, setRecords, riskListesi, setRiskListesi, hatirlatmalar, setHatirlatmalar,
       mudahalePlan, setMudahalePlan, profiles, profiles2, denemeler, sevkler, testKayitlari,
       akademikTaramalar, liseTaramalar, benlikOlcekleri, sinavTuru, aktifYil, bdtAnaliz, bireyiTanima, ogrenciler, uyumIzleme,
-      setBdtAnaliz, setBireyiTanima, setUyumIzleme, kademe, setSevkler, konuHaritasiVerisi });
+      setBdtAnaliz, setBireyiTanima, setUyumIzleme, kademe, setSevkler, konuHaritasiVerisi, ilkokulTaramalar });
   }
 
   function gonder(metinVer) { return gonderAyar(metinVer, ayar); }
@@ -34527,6 +34557,206 @@ function AkademikDuzeyProfili({ dersSonuclari, ogrenciSinif, esik }) {
   );
 }
 
+// ===== DÜZEY TARAMASI ANALİZİ (ilkokul / ortaokul / lise ortak) =====
+// Üç düzey taramasının sonucunu aynı biçime getirir, öğrencinin "beklenen"
+// düzeyiyle karşılaştırır ve kural tabanlı çıkarımlar üretir (AI yok, cihazda).
+// BEKLENEN DÜZEY: Öğretim yılı içinde (Eylül–Mayıs) öğrencinin bulunduğu
+// sınıfın konuları henüz bitmemiştir; karşılaştırma TAMAMLADIĞI sınıfla
+// yapılır (8. sınıfın ilk haftasındaki öğrenci için beklenen = 7). Haziran–
+// Ağustos arasında bulunduğu sınıf tamamlanmış sayılır.
+function duzeyTarihAy(tarih) {
+  const m = /^(\d{1,2})[./](\d{1,2})[./](\d{4})/.exec(String(tarih || ""));
+  return m ? parseInt(m[2], 10) : (new Date().getMonth() + 1);
+}
+function duzeyBeklenen(bulundugu, tarih) {
+  if (!bulundugu) return { beklenen: null, donem: null, not: "Öğrencinin sınıfı okunamadığı için beklenen düzeyle karşılaştırma yapılmadı." };
+  const ay = duzeyTarihAy(tarih);
+  if (ay >= 6 && ay <= 8) return { beklenen: bulundugu, donem: "yil_sonu", not: `Yıl sonu: öğrenci ${bulundugu}. sınıfı tamamlamış sayılır; beklenen düzey ${bulundugu}. sınıf.` };
+  const ikinci = ay >= 2 && ay <= 5;
+  return { beklenen: bulundugu - 1, donem: ikinci ? "2" : "1",
+    not: `Öğretim yılı içinde (${ikinci ? "2" : "1"}. dönem) beklenen düzey, tamamladığı sınıf olan ${bulundugu - 1 > 0 ? (bulundugu - 1) + ". sınıf" : "okul öncesi/hazırlık"}tır. ${bulundugu}. sınıf konuları ${ikinci ? "kısmen işlendi; o seti geçmesi sınıf düzeyinin önünde ilerlediğini gösterir" : "henüz işlenmedi; o set şimdi uygulanmaz ya da düşük çıkması beklenir"}.` };
+}
+// Uygulama rehberi: hangi setler, hangi sırayla (asistan ve ekran için)
+function duzeyUygulamaRehberi(kademe, bulundugu, tarih) {
+  const K = kademe === "lise" ? { ad: "Lise Düzey Taraması", alt: 9, ust: 12, ders: "Edebiyat ve Matematik (ortak) her öğrenciye; Fen ve Sosyal alan dersleri — 11-12 setleri yalnız o alanın öğrencisine" }
+    : kademe === "ilkokul" ? { ad: "İlkokul Düzey Taraması", alt: 1, ust: 4, ders: "her sınıf setinde 3 alan (okuma-dil, matematik, kavram/bilgi); 1. sınıfta hiçbir madde çocuğa okutulmaz" }
+    : { ad: "Akademik Düzey Taraması (ortaokul)", alt: 5, ust: 8, ders: "Türkçe, Matematik, Fen, İnkılap/Sosyal Bilgiler, Din Kültürü — her ders ayrı" };
+  const b = duzeyBeklenen(bulundugu, tarih);
+  const s = [`${K.ad} — uygulama rehberi${bulundugu ? ` (${bulundugu}. sınıf öğrencisi, bugün ${today()})` : ""}:`];
+  s.push(`• Dersler/alanlar: ${K.ders}.`);
+  if (kademe === "ortaokul" || !kademe) {
+    s.push(`• Her derste ${K.alt}. sınıf setinden başla, yukarı doğru ilerle. Bir sette 5 sorudan en az 3 doğru (%60) → üst sete geç; 2 ya da daha az → o derste dur.`);
+  } else {
+    s.push(`• Öğrencinin tamamladığı sınıf setinden başla. Setin %60'ını geçerse bir üst seti dene; geçemezse bir alt sete in. İşlevsel düzey = eşiği geçtiği en yüksek ardışık set.`);
+  }
+  if (bulundugu && b.beklenen !== null) {
+    const son = Math.min(K.ust, b.donem === "yil_sonu" ? bulundugu : (b.donem === "2" ? bulundugu : bulundugu - 1));
+    const ilk = kademe === "ortaokul" || !kademe ? K.alt : Math.max(K.alt, b.beklenen);
+    const setMetni = (kademe === "ortaokul" || !kademe) ? `Uygulanacak setler: ${ilk}–${Math.max(ilk, son)}.` : (ilk >= K.alt ? `Başlangıç seti: ${ilk}. sınıf; geçemezse ${ilk > K.alt ? (ilk - 1) + ". sınıf setine in" : "sonuç \"" + K.alt + ". sınıf altı\" olur"}.` : `Başlangıç seti: ${K.alt}. sınıf.`);
+    if (b.donem === "1") s.push(`• Şu an 1. dönem: ${bulundugu}. sınıf seti henüz işlenmedi → UYGULAMA, "Uygulanmadı" işaretle. ${setMetni}`);
+    else if (b.donem === "2") s.push(`• Şu an 2. dönem: ${bulundugu}. sınıf seti isteğe bağlı (konuların bir kısmı işlendi); geçerse sınıf düzeyinin önünde demektir.`);
+    else s.push(`• Yıl sonu: ${bulundugu}. sınıf seti de uygulanabilir.`);
+    s.push(`• Beklenen düzey: ${b.beklenen > 0 ? b.beklenen + ". sınıf" : "hazırlık düzeyi"}. ${b.not}`);
+  }
+  s.push(`• Süre: ders/alan başına 10–15 dk; yorulursa iki oturuma böl. Aynı öğrenciye en erken 2–3 ay sonra tekrar uygulanır.`);
+  s.push(`• Sonuç tanı değildir; not, deneme, devamsızlık ve öğretmen gözlemiyle birlikte yorumlanır.`);
+  return s.join("\n");
+}
+// Üç aracın sonucunu ortak biçime getirir
+function duzeyNormalize(kademe, cevaplar, sinifAdi) {
+  cevaplar = cevaplar || {};
+  const n = (x) => { const m = /(\d+)/.exec(String(x || "")); return m ? parseInt(m[1], 10) : null; };
+  const sinifNo = n(sinifAdi);
+  if (kademe === "lise") {
+    const s = liseTaramaSonucHesapla(cevaplar, sinifAdi);
+    const rol = { edebiyat: "dil", matematik: "mat", fen: "bilgi", sosyal: "bilgi" };
+    return { kademe, alt: 9, ust: 12, siniflar: LISE_SINIFLAR, bulundugu: sinifNo >= 9 && sinifNo <= 12 ? sinifNo : null,
+      dersler: LISE_DERSLER.map(d => { const ds = s.dersSonuclari[d.key]; const yanlis = [];
+        LISE_SINIFLAR.forEach(si => ((LISE_SORU_HAVUZU[d.key] || {})[si] || []).forEach((q, i) => { if (cevaplar[`${d.key}_${si}_${i}`] === false) yanlis.push(`${q.kazanim} (${si}. sınıf)`); }));
+        return { key: d.key, ad: d.label.replace(/^\S+\s/, ""), kisa: (d.kisa || d.label).replace(/^\S+\s/, ""), rol: rol[d.key], tip: d.tip, uygulandi: !ds.hicUygulanmadi, duzey: ds.islevselSinif,
+          setler: Object.fromEntries(LISE_SINIFLAR.map(si => [si, ds.sinifPuanlari[si] ? { yuzde: ds.sinifPuanlari[si].yuzde, dogru: ds.sinifPuanlari[si].dogru, n: ds.sinifPuanlari[si].uygulanan } : null])),
+          yuzde: ds.genelYuzde, yanlis }; }) };
+  }
+  if (kademe === "ilkokul") {
+    const s = ilkokulTaramaSonucHesapla(cevaplar, sinifAdi);
+    const roller = ["dil", "mat", "bilgi"], adlar = ["Okuma ve Dil", "Matematik", "Kavram ve Bilgi"];
+    const dersler = roller.map((rol, ri) => {
+      const setler = {}; let duzey = null, zincir = true, top = 0, uyg = 0; const yanlis = [];
+      ILKOKUL_TARAMA.siniflar.forEach(st => {
+        const alan = st.alanlar[ri]; const as = s.sinifSonuclari[st.sinif].alanSonuclari[alan.key];
+        setler[st.sinif] = as && as.yuzde !== null ? { yuzde: as.yuzde, dogru: as.dogru, n: as.uygulanan, alan: alan.ad } : null;
+        if (as && as.uygulanan) { top += as.dogru; uyg += as.uygulanan; alan.maddeler.forEach((m, i) => { if (cevaplar[`${alan.key}_${i}`] === false) yanlis.push(`${alan.ad} (${st.sinif}. sınıf)`); }); }
+        if (setler[st.sinif] && zincir) { if (setler[st.sinif].yuzde >= ILKOKUL_ESIK_YUZDE) duzey = st.sinif; else zincir = false; }
+      });
+      return { key: rol, ad: adlar[ri], kisa: adlar[ri], rol, uygulandi: uyg > 0, duzey, setler, yuzde: uyg ? Math.round(100 * top / uyg) : null, yanlis: [...new Set(yanlis)] };
+    });
+    return { kademe, alt: 1, ust: 4, siniflar: ILKOKUL_TARAMA.siniflar.map(x => x.sinif), bulundugu: sinifNo >= 1 && sinifNo <= 4 ? sinifNo : null, dersler, ilkokulSonuc: s };
+  }
+  const s = akademikTaramaSonucHesapla(cevaplar);
+  const rol = { turkce: "dil", matematik: "mat", fen: "bilgi", inkilap: "bilgi", din: "bilgi" };
+  return { kademe: "ortaokul", alt: 5, ust: 8, siniflar: AKADEMIK_SINIFLAR, bulundugu: sinifNo >= 5 && sinifNo <= 8 ? sinifNo : null,
+    dersler: AKADEMIK_DERSLER.map(d => { const ds = s[d.key]; let top = 0, uyg = 0; const yanlis = [];
+      AKADEMIK_SINIFLAR.forEach(si => { const kp = ds.kademePuanlari[si]; if (kp) { top += kp.dogruSayisi; uyg += kp.cevaplananSayisi; }
+        ((AKADEMIK_SORU_HAVUZU[d.key] || {})[si] || []).forEach((q, i) => { if (cevaplar[`${d.key}_${si}_${i}`] === false) yanlis.push(`${q.kazanim} (${si}. sınıf)`); }); });
+      return { key: d.key, ad: d.label.replace(/^\S+\s/, ""), kisa: (d.kisa || d.label).replace(/^\S+\s/, ""), rol: rol[d.key], uygulandi: !ds.hicUygulanmadi, duzey: ds.islevselSeviye,
+        setler: Object.fromEntries(AKADEMIK_SINIFLAR.map(si => [si, ds.kademePuanlari[si] ? { yuzde: ds.kademePuanlari[si].yuzde, dogru: ds.kademePuanlari[si].dogruSayisi, n: ds.kademePuanlari[si].cevaplananSayisi } : null])),
+        yuzde: uyg ? Math.round(100 * top / uyg) : null, yanlis }; }) };
+}
+// Analiz: beklenen düzeyle karşılaştırma + "şuna işaret ediyor olabilir" çıkarımları
+function duzeyTaramaAnaliz(kademe, cevaplar, sinifAdi, tarih) {
+  const N = duzeyNormalize(kademe, cevaplar, sinifAdi);
+  const B = duzeyBeklenen(N.bulundugu, tarih);
+  const altDuzey = N.alt - 1;
+  const A = N.dersler.filter(d => d.uygulandi).map(d => {
+    // Geçilemeyen en alt set öğrencinin en alt seti değilse düzey kesinleşmemiştir (alt sete inilmemiş)
+    const ilkSet = N.siniflar.find(s => d.setler[s]);
+    const belirsiz = d.duzey === null && ilkSet > N.alt;
+    return { ...d, belirsiz, ilkSet, duzeyNo: d.duzey === null ? (belirsiz ? ilkSet - 1 : altDuzey) : d.duzey };
+  });
+  const dEtiket = (d) => d.duzey !== null ? `${d.duzey}. sınıf` : d.belirsiz ? `en fazla ${d.ilkSet - 1}. sınıf (kesinleşmedi)` : `${N.alt}. sınıf altı`;
+  A.forEach(d => { d.fark = B.beklenen === null ? null : B.beklenen - d.duzeyNo; });
+  const bulgular = [];
+  const ekle = (tur, baslik, metin) => bulgular.push({ tur, baslik, metin });
+  const adlar = (l) => ootListe(l.map(d => d.kisa));
+  if (!A.length) return { ...N, ...B, uygulanan: [], bulgular, kazanimlar: [] };
+  const geride = A.filter(d => d.fark !== null && d.fark >= 1), cokGeride = A.filter(d => d.fark !== null && d.fark >= 2), ileride = A.filter(d => d.fark !== null && d.fark <= -1);
+  const dil = A.find(d => d.rol === "dil"), mat = A.find(d => d.rol === "mat"), bilgi = A.filter(d => d.rol === "bilgi");
+  const g = (d) => d && d.fark !== null && d.fark >= 1;
+  // 1) Genel tablo
+  if (B.beklenen !== null) {
+    if (!geride.length) ekle("guclu", "Beklenen düzeyde", `Uygulanan ${A.length} ders/alanın hepsinde tamamladığı sınıf düzeyinde ya da üstünde. Akademik temel sağlam görünüyor; notları düşükse bu, bilgi eksikliğinden çok çalışma düzeni, motivasyon ya da sınav kaygısına işaret ediyor olabilir.`);
+    else if (geride.length === A.length && A.length >= 3) ekle("dikkat", "Genel akademik gerilik", `Uygulanan bütün derslerde beklenen düzeyin altında (${adlar(geride)}). Tek bir derse özgü değil, genel bir tablo; bu, devamsızlık ya da okul değişikliği nedeniyle konu kaçırma, okuma-anlama güçlüğü, dil yeterliği (iki dillilik), görme-işitme, dikkat sorunları ya da aile koşullarıyla ilişkili olabilir. Bunların birlikte değerlendirilmesi önerilir.`);
+    else ekle("dikkat", "Beklenenin altında kalanlar", `${geride.map(d => `${d.kisa} ${dEtiket(d)} (beklenen ${B.beklenen > 0 ? B.beklenen + ". sınıf" : "hazırlık"})`).join("; ")}.`);
+  }
+  // 2) Okuma-dil merkezli örüntüler
+  const bilgiGeride = bilgi.filter(g);
+  if (g(dil) && (g(mat) || bilgiGeride.length >= 2) && !(geride.length === A.length && A.length >= 3)) ekle("dikkat", "Okuduğunu anlama diğer dersleri etkiliyor olabilir", `${dil.kisa} geride ve ${ootListe([...(g(mat) ? [mat] : []), ...bilgiGeride].map(d => d.kisa))} da beklenenin altında. Sorular metin temelli olduğu için okuduğunu anlamadaki güçlük öteki derslerdeki sonuçları da aşağı çekiyor olabilir. Önce okuma-anlama desteği; belirginse ÖÖG Ön-Tarama düşünülebilir.`);
+  else if (g(dil) && !g(mat)) ekle("dikkat", "Dile/okumaya özgü güçlük olabilir", `${dil.kisa} beklenenin altında, ${mat ? mat.kisa + " ise yerinde" : "matematik uygulanmadı"}. Bu, dil ve okuma alanına özgü bir güçlüğe işaret ediyor olabilir (sözcük dağarcığı, okuma akıcılığı, çıkarım). ${dil.fark >= 2 ? "Fark 2 yıl ve üzeri olduğu için ÖÖG Ön-Tarama önerilir." : "Okuma çalışması ve izleme yeterli olabilir."}`);
+  if (g(mat) && !g(dil)) ekle("dikkat", "Matematikte basamak boşluğu olabilir", `${mat.kisa} beklenenin altında, ${dil ? dil.kisa + " ise yerinde" : ""}. Matematik basamaklı bir derstir; sorun çoğu zaman üst konu değil, takıldığı setteki temel kavramdır (${mat.duzey === null ? N.alt : mat.duzey + 1}. sınıf). Telafi o basamaktan başlamalı. ${mat.fark >= 2 ? "2 yıl ve üzeri farkta diskalkuli açısından ÖÖG Ön-Tarama da düşünülebilir." : ""}`.trim());
+  if (!g(dil) && !g(mat) && bilgiGeride.length && dil && mat) ekle("oneri", "Temel beceriler yerinde, bilgi dersleri geride", `Okuma ve matematik yerinde; ${adlar(bilgiGeride)} beklenenin altında. Bu, öğrenme güçlüğünden çok ders çalışma düzeni, ilgi/motivasyon ya da devamsızlık nedeniyle konu kaçırmayla ilişkili olabilir.${kademe === "lise" ? " Lisede alan dışı derste 11–12 setinin düşük çıkması beklenen bir durumdur." : ""}`);
+  // 3) Dersler arası fark ve güçlü alan
+  const duz = A.map(d => d.duzeyNo);
+  if (A.length >= 2 && Math.max(...duz) - Math.min(...duz) >= 2) {
+    const enIyi = A.filter(d => d.duzeyNo === Math.max(...duz)), enZayif = A.filter(d => d.duzeyNo === Math.min(...duz));
+    ekle("oneri", "Belirgin düzey farkı", `${adlar(enIyi)} ile ${adlar(enZayif)} arasında en az iki sınıf düzeyi fark var. Güçlü alan, motivasyon ve öz yeterlik için bir dayanak olarak kullanılabilir; bu kadar keskin fark bazen özgül bir güçlüğe de işaret edebilir.`);
+  }
+  if (ileride.length) ekle("guclu", "Beklenenin üstünde olanlar", `${adlar(ileride)}: tamamladığı sınıfın ötesinde. Bu alanlarda zenginleştirme ve sorumluluk (akran desteği, proje) verilebilir.`);
+  // 4) Basamak tutarsızlığı
+  const tutarsiz = A.filter(d => { const s = N.siniflar; for (let i = 0; i < s.length - 1; i++) { const a = d.setler[s[i]], b = d.setler[s[i + 1]]; if (a && b && a.yuzde < 60 && b.yuzde >= 60) return true; } return false; });
+  if (tutarsiz.length) ekle("bilgi", "Basamaklarda tutarsızlık", `${adlar(tutarsiz)}: alt seti geçemediği hâlde üst seti geçmiş. Bu; dikkat dalgalanması, tahmin/şans ya da o alt setteki konuların özel olarak eksik olmasıyla ilişkili olabilir. O ders birkaç hafta sonra tekrar uygulanabilir.`);
+  // 5) Sevk eşiği
+  if (cokGeride.length) ekle("dikkat", "Sonraki adım", `${adlar(cokGeride)}: 2 yıl ve üzeri fark var. Aile görüşmesi, devamsızlık kaydı ve ders notlarıyla birlikte değerlendirilip gerekirse RAM'a eğitsel değerlendirme sevki konuşulabilir.`);
+  // 6) Kesinleşmeyen düzeyler
+  const belirsizler = A.filter(d => d.belirsiz);
+  if (belirsizler.length) ekle("bilgi", "Düzey kesinleşmedi — alt set uygulanmalı", belirsizler.map(d => `${d.kisa}: ${d.ilkSet}. sınıf setinde eşik geçilemedi ama ${d.ilkSet - 1}. sınıf seti uygulanmadı. Gerçek düzeyi bulmak için ${d.ilkSet - 1}. sınıf setini de uygulayın; o zamana kadar düzey "en fazla ${d.ilkSet - 1}" sayıldı.`).join(" "));
+  // 7) Uygulanmayanlar
+  const uygYok = N.dersler.filter(d => !d.uygulandi);
+  if (uygYok.length && uygYok.length < N.dersler.length) ekle("bilgi", "Henüz uygulanmayanlar", `${ootListe(uygYok.map(d => d.kisa))} henüz uygulanmadı; tablo bu dersler eklendikçe netleşir.`);
+  const kazanimlar = A.filter(d => d.yanlis.length).map(d => ({ ders: d.kisa, liste: d.yanlis.slice(0, 6), fazla: Math.max(0, d.yanlis.length - 6) }));
+  return { ...N, ...B, uygulanan: A, bulgular, kazanimlar };
+}
+// Metin özeti (asistan ve rapor için)
+function duzeyAnalizMetni(an, ad) {
+  const s = [`DÜZEY TARAMASI (${an.kademe})${ad ? " — " + ad : ""}`];
+  if (!an.uygulanan.length) { s.push("Henüz hiçbir ders uygulanmamış."); return s.join("\n"); }
+  s.push(`Bulunduğu sınıf: ${an.bulundugu || "?"} · ${an.not}`);
+  an.uygulanan.forEach(d => s.push(`• ${d.ad}: işlevsel düzey ${d.duzey !== null ? d.duzey + ". sınıf" : d.belirsiz ? `en fazla ${d.ilkSet - 1}. sınıf (alt set uygulanmadı)` : an.alt + ". sınıf altı"}${d.fark !== null ? ` (${d.fark > 0 ? d.fark + " yıl geride" : d.fark < 0 ? -d.fark + " yıl önde" : "beklenen düzeyde"})` : ""}; doğru oranı %${d.yuzde}; setler: ${an.siniflar.map(si => d.setler[si] ? `${si}:${d.setler[si].dogru}/${d.setler[si].n}` : `${si}:—`).join(" ")}`));
+  if (an.bulgular.length) { s.push("ÇIKARIMLAR (kural tabanlı, olasılık dili):"); an.bulgular.forEach(b => s.push(`- ${b.baslik}: ${b.metin}`)); }
+  if (an.kazanimlar.length) s.push("Yanlış yapılan kazanımlar: " + an.kazanimlar.map(k => `${k.ders} → ${k.liste.join(", ")}${k.fazla ? ` (+${k.fazla})` : ""}`).join(" | "));
+  s.push("Not: tarama aracıdır, tanı koymaz; not, deneme, devamsızlık ve öğretmen gözlemiyle birlikte yorumlanmalı.");
+  return s.join("\n");
+}
+// Grafik + çıkarımlar kartı (üç panelde de kullanılır)
+function DuzeyAnalizKarti({ kademe, cevaplar, sinifAdi, tarih }) {
+  const an = duzeyTaramaAnaliz(kademe, cevaplar, sinifAdi, tarih);
+  if (!an.uygulanan.length) return null;
+  const W = 330, sol = 92, sag = 40, ust = 26, sat = 26, H = ust + an.uygulanan.length * sat + 22;
+  const min = an.alt - 1, max = an.ust, gw = W - sol - sag;
+  const X = (v) => sol + (v - min) / (max - min) * gw;
+  const renk = (d) => d.fark === null ? "#457B9D" : d.fark <= 0 ? "#1A8C5B" : d.fark === 1 ? "#D68910" : "#C0392B";
+  const tr = { dikkat: ["#FDECEA", "#C0392B", "⚠"], guclu: ["#E6F5EE", "#1A8C5B", "✓"], oneri: ["#EEF2FF", "#3D5A80", "💡"], bilgi: ["#F4F4F2", "#5C6B64", "ℹ"] };
+  return (
+    <div data-testid="duzey-analiz" style={{ background: "#fff", border: `1px solid ${BORDER}`, borderRadius: 12, padding: 14, marginBottom: 16 }}>
+      <div style={{ fontSize: 12.5, fontWeight: 900, color: ACCENT, marginBottom: 2 }}>🔎 Analiz ve Çıkarımlar</div>
+      <div style={{ fontSize: 10, color: MUTED, lineHeight: 1.5, marginBottom: 8 }}>{an.not}</div>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: "block", maxWidth: 520 }} role="img" aria-label="Derslere göre işlevsel düzey ve beklenen düzey">
+        {Array.from({ length: max - min + 1 }, (_, i) => min + i).map(v => (
+          <g key={v}><line x1={X(v)} y1={ust - 4} x2={X(v)} y2={H - 18} stroke="#EEE" />
+            <text x={X(v)} y={H - 6} textAnchor="middle" fontSize="8.5" fill="#7A7A72">{v < an.alt ? `${an.alt} altı` : `${v}.`}</text></g>
+        ))}
+        {an.beklenen !== null && an.beklenen >= min && (
+          <g><line x1={X(an.beklenen)} y1={ust - 8} x2={X(an.beklenen)} y2={H - 18} stroke="#6A4C93" strokeWidth="1.6" strokeDasharray="4 3" />
+            <text x={X(an.beklenen)} y={ust - 11} textAnchor="middle" fontSize="8.5" fontWeight="800" fill="#6A4C93">beklenen</text></g>
+        )}
+        {an.uygulanan.map((d, i) => {
+          const y = ust + i * sat;
+          return (<g key={d.key}>
+            <text x={0} y={y + 13} fontSize="9" fontWeight="700" fill="#1F2421">{ksAsistanKisalt(d.kisa, 16)}</text>
+            <rect x={sol} y={y + 3} width={Math.max(3, X(d.duzeyNo) - sol)} height={sat - 10} rx="4" fill={renk(d)} opacity="0.88" />
+            <text x={Math.max(sol, X(d.duzeyNo)) + 4} y={y + 13} fontSize="8.5" fontWeight="800" fill={renk(d)}>%{d.yuzde}{d.belirsiz ? " ?" : ""}</text>
+          </g>);
+        })}
+      </svg>
+      <div style={{ fontSize: 9, color: MUTED, margin: "2px 0 10px" }}>Çubuk: işlevsel düzey (eşiği art arda geçtiği en yüksek sınıf) · yüzde: o derste uygulanan soruların doğru oranı · yeşil: beklenen düzeyde/üstünde, turuncu: 1 yıl, kırmızı: 2+ yıl geride</div>
+      {an.bulgular.map((b, i) => {
+        const [bg, c, ik] = tr[b.tur] || tr.bilgi;
+        return (<div key={i} style={{ background: bg, border: `1px solid ${c}33`, borderRadius: 9, padding: "8px 10px", marginBottom: 6 }}>
+          <div style={{ fontSize: 11.5, fontWeight: 900, color: c, marginBottom: 2 }}>{ik} {b.baslik}</div>
+          <div style={{ fontSize: 11, color: TEXT, lineHeight: 1.55 }}>{b.metin}</div>
+        </div>);
+      })}
+      {an.kazanimlar.length > 0 && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ fontSize: 11, fontWeight: 900, color: TEXT, marginBottom: 4 }}>📌 Yanlış yapılan kazanımlar (çalışma önceliği)</div>
+          {an.kazanimlar.map(k => <div key={k.ders} style={{ fontSize: 10.5, color: TEXT, lineHeight: 1.55, marginBottom: 3 }}><b>{k.ders}:</b> {k.liste.join(", ")}{k.fazla ? ` (+${k.fazla})` : ""}</div>)}
+        </div>
+      )}
+      <div style={{ fontSize: 9.5, color: MUTED, marginTop: 8, lineHeight: 1.5 }}>Çıkarımlar kural tabanlıdır ve olasılık bildirir; tanı değildir. Not, deneme, devamsızlık ve öğretmen gözlemiyle birlikte yorumlayın.</div>
+    </div>
+  );
+}
+// ===== DÜZEY TARAMASI ANALİZİ BİTİŞ =====
+
 function AkademikTaramaPaneli({ seciliAd, seciliSinif, seciliNumara, akademikTaramalar, setAkademikTaramalar }) {
   const mevcut = akademikTaramalar.find(o => pdrAyniOgrenci(o.studentName, o.className, seciliAd, seciliSinif, o.numara, seciliNumara));
   const [cevaplar, setCevaplar] = useState(mevcut?.cevaplar || {});
@@ -34615,6 +34845,8 @@ function AkademikTaramaPaneli({ seciliAd, seciliSinif, seciliNumara, akademikTar
           </div>
         </div>
       )}
+
+      <DuzeyAnalizKarti kademe="ortaokul" cevaplar={cevaplar} sinifAdi={seciliSinif} tarih={today()} />
 
       <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:10}}>
         {AKADEMIK_DERSLER.map(ders => (
@@ -42100,7 +42332,7 @@ function pdrBaslangicSekmesi() {
             sinavTuru={sinavTuru} aktifYil={aktifYil} setTab={setTab}
             bdtAnaliz={bdtAnaliz} bireyiTanima={bireyiTanima} ogrenciler={ogrenciler} uyumIzleme={uyumIzleme}
             setBdtAnaliz={setBdtAnaliz} setBireyiTanima={setBireyiTanima} setUyumIzleme={setUyumIzleme}
-            kademe={kademe} setSevkler={setSevkler} konuHaritasiVerisi={konuHaritasiVerisi}
+            kademe={kademe} setSevkler={setSevkler} konuHaritasiVerisi={konuHaritasiVerisi} ilkokulTaramalar={ilkokulTaramalar}
           />
         )}
         {/* ── PDR ASİSTANI: her ekranda bas-konuş düğmesi ── */}
@@ -42117,7 +42349,7 @@ function pdrBaslangicSekmesi() {
             sinavTuru={sinavTuru} aktifYil={aktifYil} setTab={setTab}
             bdtAnaliz={bdtAnaliz} bireyiTanima={bireyiTanima} ogrenciler={ogrenciler} uyumIzleme={uyumIzleme}
             setBdtAnaliz={setBdtAnaliz} setBireyiTanima={setBireyiTanima} setUyumIzleme={setUyumIzleme}
-            kademe={kademe} setSevkler={setSevkler} konuHaritasiVerisi={konuHaritasiVerisi}
+            kademe={kademe} setSevkler={setSevkler} konuHaritasiVerisi={konuHaritasiVerisi} ilkokulTaramalar={ilkokulTaramalar}
           />
         )}
 

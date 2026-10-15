@@ -34881,11 +34881,22 @@ function AkademikTaramaPaneli({ seciliAd, seciliSinif, seciliNumara, akademikTar
               {(() => {
                 const kp = sonuc[aktifDers] && sonuc[aktifDers].kademePuanlari[sinif];
                 if (!kp) return null;
-                const gecti = kp.yuzde >= AKADEMIK_ESIK_YUZDE;
+                // Set bitmeden karar verilmez: kalan sorularla eşik hâlâ geçilebilir/kaçırılabilir.
+                // Erken karar yalnızca sonuç kesinleşince: 3 doğru olduysa geçti, kalanların hepsi doğru olsa bile eşiğe ulaşamıyorsa geçemez.
+                const isaretli = sorular.filter((_, i) => cevaplar[`${aktifDers}_${sinif}_${i}`] !== undefined).length;
+                const kalan = sorular.length - isaretli;
+                const enCok = kp.cevaplananSayisi + kalan;
+                const kesinGecti = enCok > 0 && kp.dogruSayisi / enCok * 100 >= AKADEMIK_ESIK_YUZDE;
+                const kesinKaldi = enCok > 0 && (kp.dogruSayisi + kalan) / enCok * 100 < AKADEMIK_ESIK_YUZDE;
+                const gerekli = Math.max(0, Math.ceil(enCok * AKADEMIK_ESIK_YUZDE / 100) - kp.dogruSayisi);
+                const [bg, renk, metin] = kesinGecti
+                  ? ["#E6F5EE", "#1A8C5B", kalan ? `eşik geçildi — kalan ${kalan} soruyu sormak isteğe bağlı; sonra üst sete geç` : "set geçildi — üst sete geç"]
+                  : kesinKaldi
+                  ? ["#FDECEA", "#C0392B", kalan ? `eşiğe artık ulaşılamaz — bu derste üst sete geçme (kalan ${kalan} soru isteğe bağlı)` : "set geçilemedi — bu derste üst sete geçme"]
+                  : ["#FFF4E5", "#8B5A00", `devam: ${isaretli}/${sorular.length} işaretlendi · geçmek için ${gerekli} doğru daha gerekiyor`];
                 return (
-                  <span style={{fontSize:10, fontWeight:800, padding:"2px 8px", borderRadius:10,
-                    background: gecti ? "#E6F5EE" : "#FDECEA", color: gecti ? "#1A8C5B" : "#C0392B"}}>
-                    {kp.dogruSayisi}/{kp.cevaplananSayisi} · %{kp.yuzde} · {gecti ? "geçti — üst kademeye devam et" : "eşiğin altında — burada dur"}
+                  <span style={{fontSize:10, fontWeight:800, padding:"2px 8px", borderRadius:10, background: bg, color: renk}}>
+                    {kp.dogruSayisi}/{kp.cevaplananSayisi} doğru · {metin}
                   </span>
                 );
               })()}

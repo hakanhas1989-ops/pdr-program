@@ -19970,6 +19970,750 @@ function OYIzlemeGrafik({ pv }) {
   );
 }
 
+// ===== OKUL OLGUNLUĞU TARAMASI (OOT) — VERİ =====
+// ÖZGÜN bir tarama aracıdır. Metropolitan Okul Olgunluğu Testi ve Marmara
+// İlköğretime Hazır Oluş Ölçeği'nin ÖLÇTÜĞÜ ALANLARDAN (genel bilgi, dil-kavram,
+// sayı, görsel eşleştirme, kopya etme) ve okula hazırbulunuşluk araştırmalarında
+// sonraki başarıyı en iyi yordayan becerilerden (sesbilgisel farkındalık, erken
+// sayı becerisi, dikkat-yürütücü işlevler, sosyal-duygusal gelişim) yola çıkılarak
+// yazılmıştır; o testlerin hiçbir maddesi kullanılmamıştır. Norm çalışması yoktur:
+// ölçüt dayanaklıdır (çocuğun beklenen becerilerin ne kadarını gösterdiği), tanı
+// koymaz, tek başına okula başlatma/erteleme kararı verdirmez.
+const OOT_SURUM = 1;
+// tur: "secim" = resimden gösterir (doğru seçenek harfi `dogru`), "sozlu" = sözlü yanıt
+// (kabul edilen yanıtlar `kabul`), "kopya"/"yol" = 0-1-2 puanlanan kalem işi.
+const OOT_ALT_TESTLER = [
+  { k: "gb", ad: "Genel Bilgi ve Günlük Yaşam", kisa: "Genel bilgi", renk: "#2563EB", alan: "dil",
+    aciklama: "Kendini tanıtma ve günlük yaşamla ilgili temel bilgi; dili anlama ve derdini anlatabilme.",
+    maddeler: [
+      { tur: "sozlu", yonerge: "Adın ne? Soyadın ne?", kabul: "Adını ve soyadını söyler (soyadı yaklaşık söylenebilir)." },
+      { tur: "sozlu", yonerge: "Kaç yaşındasın?", kabul: "Yaşını söyler ya da parmaklarıyla doğru gösterir." },
+      { tur: "sozlu", yonerge: "Yağmur yağarken dışarı çıkacağız. Ne kullanırız?", kabul: "Şemsiye, yağmurluk, bot, mont gibi uygun bir şey." },
+      { tur: "sozlu", yonerge: "Karnın acıkınca ne yaparsın?", kabul: "Yemek yerim / anneme-öğretmenime söylerim." },
+      { tur: "sozlu", yonerge: "Ellerimizi neden yıkarız?", kabul: "Temiz olmak, mikrop, hastalanmamak için." },
+      { tur: "sozlu", yonerge: "Karşıdan karşıya geçerken ışık kırmızı yanıyor. Ne yapmalıyız?", kabul: "Dururuz / bekleriz / yeşili bekleriz." },
+    ] },
+  { k: "dk", ad: "Dil ve Kavramlar", kisa: "Dil-kavram", renk: "#7C3AED", alan: "dil",
+    aciklama: "Okulda öğretmenin sık kullandığı yer-yön, büyüklük, miktar ve şekil kavramlarını anlama.",
+    maddeler: [
+      { tur: "secim", resim: "dk1", yonerge: "Kutunun ÜSTÜNDE olan topu göster.", dogru: "A" },
+      { tur: "secim", resim: "dk2", yonerge: "Masanın ALTINDA olan topu göster.", dogru: "C" },
+      { tur: "secim", resim: "dk3", yonerge: "EN BÜYÜK ağacı göster.", dogru: "B" },
+      { tur: "secim", resim: "dk4", yonerge: "EN KISA kalemi göster.", dogru: "C" },
+      { tur: "secim", resim: "dk5", yonerge: "BOŞ olan bardağı göster.", dogru: "A" },
+      { tur: "secim", resim: "dk6", yonerge: "Hangi tabakta EN AZ elma var? Göster.", dogru: "C" },
+      { tur: "secim", resim: "dk7", yonerge: "ORTADAKİ resmi göster.", dogru: "B" },
+      { tur: "secim", resim: "dk8", yonerge: "Evin ÖNÜNDE olan topu göster.", dogru: "B" },
+      { tur: "secim", resim: "dk9", yonerge: "ÜÇGENİ göster.", dogru: "C" },
+      { tur: "secim", resim: "dk10", yonerge: "Kırmızı karenin YANINDAKİ mavi daireyi göster.", dogru: "D" },
+    ] },
+  { k: "sf", ad: "Sesbilgisel Farkındalık", kisa: "Ses farkındalığı", renk: "#DB2777", alan: "dil",
+    aciklama: "Sözcüklerin hece ve seslerden oluştuğunu fark etme — okuma-yazmaya hazırlığın en güçlü göstergelerinden biri.",
+    maddeler: [
+      { tur: "sozlu", resim: "sf1", yonerge: "Bu bir TOP. Her parçası için bir el çırpalım: TOP. Kaç kere çırptın?", kabul: "ÖRNEK MADDE — puanlanmaz. Çocukla birlikte bir kez çırpın; anlamadıysa bir kez daha gösterin.", ornek: true },
+      { tur: "sozlu", resim: "sf2", yonerge: "Bu bir ELMA. Her parçası için el çırp: EL-MA.", kabul: "2 kez çırpar." },
+      { tur: "sozlu", resim: "sf3", yonerge: "Bu bir BALIK. Her parçası için el çırp.", kabul: "2 kez çırpar." },
+      { tur: "sozlu", resim: "sf4", yonerge: "Bu bir ŞEMSİYE. Her parçası için el çırp.", kabul: "3 kez çırpar." },
+      { tur: "secim", resim: "sf5", yonerge: "Bunlar BALIK, EV, GÜNEŞ. Hangisi /b/ sesiyle başlıyor? Göster.", dogru: "A" },
+      { tur: "secim", resim: "sf6", yonerge: "Bunlar AĞAÇ, KALP, TOP. Hangisi /k/ sesiyle başlıyor? Göster.", dogru: "B" },
+      { tur: "secim", resim: "sf7", yonerge: "Bunlar ELMA, AY, ŞEMSİYE. Hangisi /ş/ sesiyle başlıyor? Göster.", dogru: "C" },
+      { tur: "sozlu", yonerge: "KAZ sözcüğüne benzeyen, sonu aynı biten hangisi: YAZ mı, KOL mu, SÜT mü?", kabul: "YAZ." },
+    ] },
+  { k: "sn", ad: "Sayı ve Nicelik", kisa: "Sayı", renk: "#059669", alan: "sayi",
+    aciklama: "Ritmik sayma, nesne sayma, çokluk karşılaştırma, rakam tanıma ve basit ekleme-çıkarma — okul başarısının en güçlü erken yordayıcısı.",
+    maddeler: [
+      { tur: "sozlu", yonerge: "Birden başlayarak sayabildiğin kadar say.", kabul: "1'den 10'a kadar hatasız sayar." },
+      { tur: "sozlu", resim: "sn2", yonerge: "Kaç elma var? Parmağınla göstererek say.", kabul: "5." },
+      { tur: "sozlu", resim: "sn3", yonerge: "Kaç yıldız var? Say.", kabul: "8." },
+      { tur: "secim", resim: "sn4", yonerge: "Hangi tabakta DAHA ÇOK kurabiye var? Göster.", dogru: "B" },
+      { tur: "secim", resim: "sn5", yonerge: "3 rakamını göster.", dogru: "C" },
+      { tur: "secim", resim: "sn6", yonerge: "7 rakamını göster.", dogru: "B" },
+      { tur: "sozlu", yonerge: "Beşten sonra hangi sayı gelir?", kabul: "6." },
+      { tur: "sozlu", resim: "sn8", yonerge: "Sende 2 balon var. Ben sana 1 balon daha verdim. Şimdi kaç balonun oldu?", kabul: "3." },
+      { tur: "sozlu", resim: "sn9", yonerge: "Dalda 4 kuş vardı. 1 tanesi uçup gitti. Kaç kuş kaldı?", kabul: "3." },
+      { tur: "sozlu", resim: "sn10", yonerge: "(Resmi 2 saniye göster, sonra kapat.) Kaç nokta vardı?", kabul: "3 (saymadan, bakar bakmaz)." },
+    ] },
+  { k: "ga", ad: "Görsel Algı ve Ayırt Etme", kisa: "Görsel algı", renk: "#D97706", alan: "algi",
+    aciklama: "Şekil, yön ve ayrıntı farkını görme, örüntüyü sürdürme — harf ve rakamları ayırt etmenin temeli.",
+    maddeler: [
+      { tur: "secim", resim: "ga1", yonerge: "Üstteki resmin AYNISINI aşağıda bul, göster.", dogru: "C" },
+      { tur: "secim", resim: "ga2", yonerge: "Üstteki okun AYNISINI bul. Aynı yöne bakmalı.", dogru: "D" },
+      { tur: "secim", resim: "ga3", yonerge: "Üstteki şeklin AYNISINI bul.", dogru: "A" },
+      { tur: "secim", resim: "ga4", yonerge: "Üstteki noktaların AYNISINI bul.", dogru: "B" },
+      { tur: "secim", resim: "ga5", yonerge: "Üstteki işaretin AYNISINI bul.", dogru: "B" },
+      { tur: "secim", resim: "ga6", yonerge: "Üstteki resmin AYNISINI bul.", dogru: "D" },
+      { tur: "secim", resim: "ga7", yonerge: "Bunlardan biri ötekilerden FARKLI. Farklı olanı göster.", dogru: "C" },
+      { tur: "secim", resim: "ga8", yonerge: "Sırayla gidiyor. Soru işaretinin yerine hangisi gelmeli? Göster.", dogru: "A" },
+    ] },
+  { k: "gm", ad: "Görsel-Motor (Kopya Etme ve Kalem Kontrolü)", kisa: "Görsel-motor", renk: "#B45309", alan: "algi", puanAralik: 2,
+    aciklama: "Gördüğünü kâğıda aktarma, el-göz koordinasyonu, kalem kontrolü — yazmaya hazırlık.",
+    maddeler: [
+      { tur: "kopya", sekil: "dikey", yonerge: "Bu çizginin aynısını yanındaki kutuya çiz.", yas: 36, olcut: "2: dikey, kesintisiz, sapma 20°'den az · 1: belirgin eğik ya da kesik · 0: çizgi yok/karalama" },
+      { tur: "kopya", sekil: "daire", yonerge: "Bunun aynısını çiz.", yas: 36, olcut: "2: kapalı, yuvarlak · 1: kapanmamış ya da çok basık · 0: tanınmıyor" },
+      { tur: "kopya", sekil: "arti", yonerge: "Bunun aynısını çiz.", yas: 48, olcut: "2: iki çizgi ortada kesişiyor · 1: kesişiyor ama çok kaymış · 0: kesişmiyor" },
+      { tur: "kopya", sekil: "kare", yonerge: "Bunun aynısını çiz.", yas: 54, olcut: "2: 4 köşe, köşeler belirgin, kapalı · 1: köşeler yuvarlak ya da açık kalmış · 0: tanınmıyor" },
+      { tur: "kopya", sekil: "ucgen", yonerge: "Bunun aynısını çiz.", yas: 60, olcut: "2: 3 köşe belirgin, kapalı · 1: köşelerden biri yuvarlak/açık · 0: tanınmıyor" },
+      { tur: "kopya", sekil: "carpi", yonerge: "Bunun aynısını çiz.", yas: 66, olcut: "2: iki çapraz çizgi ortada kesişiyor · 1: kesişiyor ama kaymış/dik · 0: kesişmiyor" },
+      { tur: "kopya", sekil: "karo", yonerge: "Bunun aynısını çiz.", yas: 78, ileri: true, olcut: "2: 4 köşe, karşılıklı sivri uçlar · 1: tanınır ama köşeler yuvarlak · 0: kare ya da daireye dönmüş" },
+      { tur: "yol", sekil: "yol1", yonerge: "Arabayı eve götür. Kalemi kaldırmadan, çizgilere değmeden yolun ortasından git.", yas: 54, olcut: "2: çizgilere en fazla 1 kez değer · 1: 2-3 kez değer · 0: 4+ kez ya da yarım bırakır" },
+      { tur: "yol", sekil: "yol2", yonerge: "Kelebeği çiçeğe götür. Kıvrımlı yoldan, çizgilere değmeden.", yas: 60, olcut: "2: en fazla 1 kez değer · 1: 2-3 kez · 0: 4+ kez ya da yarım bırakır" },
+    ] },
+  { k: "db", ad: "Dikkat ve İşitsel Bellek", kisa: "Dikkat-bellek", renk: "#0E7490", alan: "dikkat",
+    aciklama: "Duyduğunu akılda tutma, yönergeyi izleme — sınıfta öğretmeni dinleyip yapabilmenin temeli.",
+    maddeler: [
+      { tur: "sozlu", yonerge: "Söylediğim sayıları aynı sırayla tekrar et: 3 – 8", kabul: "3-8" },
+      { tur: "sozlu", yonerge: "Şimdi bunları: 6 – 1 – 4", kabul: "6-1-4" },
+      { tur: "sozlu", yonerge: "Şimdi bunları: 2 – 9 – 5 – 7", kabul: "2-9-5-7" },
+      { tur: "sozlu", yonerge: "Şimdi bunları: 8 – 3 – 6 – 1 – 4", kabul: "8-3-6-1-4" },
+      { tur: "sozlu", yonerge: "Bu cümleyi aynen tekrar et: Kedi bahçede top oynuyor.", kabul: "Sözcük atlamadan, sırası bozulmadan." },
+      { tur: "sozlu", yonerge: "Bu cümleyi aynen tekrar et: Annem pazardan kırmızı elma ve sarı muz aldı.", kabul: "En fazla 1 sözcük hatası." },
+      { tur: "sozlu", yonerge: "Ben bitirince yap: Kalemi kitabın üstüne koy, sonra ellerini çırp.", kabul: "İki adımı doğru sırayla yapar." },
+      { tur: "sozlu", yonerge: "Ben bitirince yap: Kapıyı göster, ayağa kalk, sonra yerine otur.", kabul: "Üç adımı doğru sırayla yapar." },
+    ] },
+];
+// Gözlem: uygulayıcı + sınıf/okul öncesi öğretmeni + veli bilgisi. 0 = henüz değil, 1 = bazen/destekle, 2 = genellikle bağımsız
+const OOT_GOZLEM = [
+  { grup: "Sosyal-duygusal", maddeler: [
+    "Ailesinden ayrılabiliyor; sınıfa/odaya uzun süre ağlamadan giriyor.",
+    "Akranlarıyla birlikte oynuyor, oyuncak paylaşıyor.",
+    "Sırasını bekleyebiliyor.",
+    "Duygularını ve ihtiyacını sözle anlatabiliyor.",
+    "Kızınca ya da üzülünce kısa sürede sakinleşebiliyor.",
+  ] },
+  { grup: "Öz düzenleme", maddeler: [
+    "Masa başı bir etkinliğe 10–15 dakika dikkatini verebiliyor.",
+    "Yetişkinin verdiği 2–3 adımlı yönergeyi izliyor.",
+    "Başladığı işi bitirmeden başka işe geçmiyor.",
+  ] },
+  { grup: "Öz bakım ve ince motor", maddeler: [
+    "Tuvalet ihtiyacını kendi başına karşılıyor.",
+    "Montunu giyip çıkarabiliyor (fermuar/düğme desteği olabilir).",
+    "Kalemi üç parmakla (başparmak-işaret-orta) tutuyor.",
+    "Makasla düz bir çizgi üzerinden kesebiliyor.",
+  ] },
+];
+// Puanlanmaz; yorum ve yönlendirmeyi değiştirir
+const OOT_BAYRAKLAR = [
+  { k: "konusma", ad: "Konuşması yabancılarca zor anlaşılıyor / sesleri belirgin bozuk" },
+  { k: "isitme", ad: "İşitme şüphesi (seslenince dönmüyor, tekrar istiyor)" },
+  { k: "gorme", ad: "Görme şüphesi (göz kısma, çok yakından bakma)" },
+  { k: "hareket", ad: "Yaşıtlarına göre belirgin hareketli/dürtüsel" },
+  { k: "gelisim", ad: "Gelişim geriliği öyküsü, prematüre doğum ya da süreğen hastalık" },
+  { k: "ikidil", ad: "Evde Türkçe dışında bir dil konuşuluyor" },
+  { k: "okulonce", ad: "Okul öncesi eğitim almadı" },
+];
+const OOT_ONERILER = {
+  gb: ["Günlük işleri (alışveriş, sofra kurma) çocuğa anlattırarak yapın; 'Ne yapıyoruz, neden?' diye sorun.", "Adını-soyadını, anne-baba adını, yaşını söyleme oyunları oynayın."],
+  dk: ["Oyuncakları 'üstüne, altına, önüne, arkasına, arasına' koyma oyunu oynayın.", "Evdeki eşyaları büyük-küçük, uzun-kısa, az-çok diye sıralatın.", "Resimli kitap okurken 'Ortadaki ne? En büyüğü hangisi?' diye sorun."],
+  sf: ["Her gün 5 dakika hece oyunu: adları el çırparak hecelere ayırın.", "'Bak bakalım, kim /m/ sesiyle başlıyor? Masa, makas, muz…' gibi ilk ses avı yapın.", "Tekerleme, sayışma ve uyaklı şarkıları birlikte söyleyin."],
+  sn: ["Merdiven, düğme, sofradaki çatal gibi gerçek nesneleri dokunarak sayın.", "Zar ve kart oyunları (ör. kızma birader) oynayın; 'Kaç fazla?' diye sorun.", "Alışverişte 'Bir elma daha koyarsak kaç olur?' gibi küçük sorular sorun."],
+  ga: ["Yapboz (12–24 parça), eşini bul ve fark bulmaca oyunları oynayın.", "Boncuk dizerek ya da renklerle örüntü kurun: 'Sırada ne gelir?'"],
+  gm: ["Oyun hamuru, yırtma-yapıştırma, mandal takma ile parmak kaslarını güçlendirin.", "Büyük kâğıda kalın kalemle şekil çizme, labirent ve noktaları birleştirme yaptırın.", "Kalemi üç parmakla tutmayı gösterin; kısa (yarım) kalem kullanmak tutuşu kolaylaştırır."],
+  db: ["'Annem pazara gitti, … aldı' gibi ekleme oyunları oynayın.", "2–3 adımlı görevler verin ('Ayakkabını dolaba koy, sonra elini yıka') ve tamamlayınca övün.", "Masa oyunlarında sıra bekleme ve kurala uyma çalışın."],
+  goz: ["Ayrılık kaygısı varsa vedalaşmayı kısa ve aynı ritüelle yapın, çocuğu kandırarak ayrılmayın.", "Giyinme, tuvalet, çantasını toplama gibi işleri kendi yapmasına fırsat verin.", "Akran oyunlarına (park, oyun grubu) düzenli katılmasını sağlayın."],
+};
+
+// ===== OKUL OLGUNLUĞU TARAMASI — RESİMLER (SVG, kitapçık için) =====
+// Tüm çizimler özgündür ve basit geometrik şekillerden oluşur; yazdırınca net
+// çıksın diye kalın kontur, az renk. Seçenekler soldan sağa A, B, C, D.
+const OOT_R = (() => {
+  const K = "#222", W = 560, H = 150;
+  const f = (n) => Math.round(n * 10) / 10;
+  const top = (x, y, r = 14, c = "#E74C3C") => `<circle cx="${f(x)}" cy="${f(y)}" r="${r}" fill="${c}" stroke="${K}" stroke-width="2.5"/><path d="M${f(x - r)} ${f(y)} Q${f(x)} ${f(y - r * 0.6)} ${f(x + r)} ${f(y)}" fill="none" stroke="${K}" stroke-width="2"/>`;
+  const kutu = (x, y, w = 50, h = 40) => `<rect x="${f(x)}" y="${f(y)}" width="${w}" height="${h}" fill="#F5CBA7" stroke="${K}" stroke-width="2.5"/><line x1="${f(x)}" y1="${f(y + 10)}" x2="${f(x + w)}" y2="${f(y + 10)}" stroke="${K}" stroke-width="2"/>`;
+  const masa = (x, y) => `<rect x="${f(x - 45)}" y="${f(y)}" width="90" height="9" fill="#C8A27A" stroke="${K}" stroke-width="2.5"/><line x1="${f(x - 38)}" y1="${f(y + 9)}" x2="${f(x - 38)}" y2="${f(y + 52)}" stroke="${K}" stroke-width="4"/><line x1="${f(x + 38)}" y1="${f(y + 9)}" x2="${f(x + 38)}" y2="${f(y + 52)}" stroke="${K}" stroke-width="4"/>`;
+  const zemin = (x, y, w = 110) => `<line x1="${f(x - w / 2)}" y1="${f(y)}" x2="${f(x + w / 2)}" y2="${f(y)}" stroke="#888" stroke-width="2"/>`;
+  const agac = (x, taban, s) => `<rect x="${f(x - 6 * s)}" y="${f(taban - 30 * s)}" width="${f(12 * s)}" height="${f(30 * s)}" fill="#8B5A2B" stroke="${K}" stroke-width="2"/><circle cx="${f(x)}" cy="${f(taban - 50 * s)}" r="${f(26 * s)}" fill="#58B368" stroke="${K}" stroke-width="2.5"/>`;
+  const kalem = (x, y, len) => `<rect x="${f(x)}" y="${f(y - 7)}" width="${f(len)}" height="14" fill="#F4D03F" stroke="${K}" stroke-width="2.5"/><path d="M${f(x + len)} ${f(y - 7)} L${f(x + len + 16)} ${f(y)} L${f(x + len)} ${f(y + 7)} Z" fill="#F5CBA7" stroke="${K}" stroke-width="2.5"/><path d="M${f(x + len + 11)} ${f(y - 2)} L${f(x + len + 16)} ${f(y)} L${f(x + len + 11)} ${f(y + 2)} Z" fill="${K}"/>`;
+  const bardak = (x, y, dol) => { const h = 70, w = 46, ic = h * dol; return `<path d="M${f(x - w / 2)} ${f(y)} L${f(x - w / 2 + 6)} ${f(y + h)} L${f(x + w / 2 - 6)} ${f(y + h)} L${f(x + w / 2)} ${f(y)}" fill="#EAF6FB" stroke="${K}" stroke-width="2.5"/>` + (dol > 0 ? `<path d="M${f(x - w / 2 + 6 * (1 - dol) + 1)} ${f(y + h - ic)} L${f(x - w / 2 + 6 + 1)} ${f(y + h - 1.5)} L${f(x + w / 2 - 6 - 1)} ${f(y + h - 1.5)} L${f(x + w / 2 - 6 * (1 - dol) - 1)} ${f(y + h - ic)} Z" fill="#5DADE2"/>` : ""); };
+  const elma = (x, y, r = 11) => `<circle cx="${f(x)}" cy="${f(y)}" r="${r}" fill="#E74C3C" stroke="${K}" stroke-width="2"/><line x1="${f(x)}" y1="${f(y - r)}" x2="${f(x + 2)}" y2="${f(y - r - 6)}" stroke="${K}" stroke-width="2.5"/><ellipse cx="${f(x + 6)}" cy="${f(y - r - 4)}" rx="5" ry="2.5" fill="#58B368" stroke="${K}" stroke-width="1.5"/>`;
+  const tabak = (x, y, n) => { let s = `<ellipse cx="${f(x)}" cy="${f(y + 18)}" rx="58" ry="14" fill="#FDFEFE" stroke="${K}" stroke-width="2.5"/>`; const pos = [[0, 0], [-22, 4], [22, 4], [-11, -14], [11, -14], [0, 8]]; for (let i = 0; i < n; i++) s += elma(x + pos[i][0], y + pos[i][1], 10); return s; };
+  const yildiz = (x, y, r = 14, c = "#F4D03F") => { let p = ""; for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * 0.45 : r; p += (i ? "L" : "M") + f(x + rr * Math.cos(a)) + " " + f(y + rr * Math.sin(a)); } return `<path d="${p}Z" fill="${c}" stroke="${K}" stroke-width="2"/>`; };
+  const kalp = (x, y, s = 1, c = "#E74C3C") => `<path d="M${f(x)} ${f(y + 14 * s)} C${f(x - 26 * s)} ${f(y - 4 * s)} ${f(x - 12 * s)} ${f(y - 22 * s)} ${f(x)} ${f(y - 9 * s)} C${f(x + 12 * s)} ${f(y - 22 * s)} ${f(x + 26 * s)} ${f(y - 4 * s)} ${f(x)} ${f(y + 14 * s)} Z" fill="${c}" stroke="${K}" stroke-width="2.5"/>`;
+  const daire = (x, y, r = 22, c = "#fff") => `<circle cx="${f(x)}" cy="${f(y)}" r="${r}" fill="${c}" stroke="${K}" stroke-width="3"/>`;
+  const kare = (x, y, a = 40, c = "#fff") => `<rect x="${f(x - a / 2)}" y="${f(y - a / 2)}" width="${a}" height="${a}" fill="${c}" stroke="${K}" stroke-width="3"/>`;
+  const ucgen = (x, y, a = 46, c = "#fff") => `<path d="M${f(x)} ${f(y - a / 2)} L${f(x + a / 2)} ${f(y + a / 2 - 4)} L${f(x - a / 2)} ${f(y + a / 2 - 4)} Z" fill="${c}" stroke="${K}" stroke-width="3"/>`;
+  const ev = (x, taban, s = 1) => `<rect x="${f(x - 30 * s)}" y="${f(taban - 46 * s)}" width="${f(60 * s)}" height="${f(46 * s)}" fill="#FAD7A0" stroke="${K}" stroke-width="2.5"/><path d="M${f(x - 38 * s)} ${f(taban - 44 * s)} L${f(x)} ${f(taban - 76 * s)} L${f(x + 38 * s)} ${f(taban - 44 * s)} Z" fill="#CD6155" stroke="${K}" stroke-width="2.5"/><rect x="${f(x - 8 * s)}" y="${f(taban - 24 * s)}" width="${f(16 * s)}" height="${f(24 * s)}" fill="#8B5A2B" stroke="${K}" stroke-width="2"/>`;
+  const balik = (x, y, s = 1) => `<ellipse cx="${f(x)}" cy="${f(y)}" rx="${f(26 * s)}" ry="${f(15 * s)}" fill="#5DADE2" stroke="${K}" stroke-width="2.5"/><path d="M${f(x + 24 * s)} ${f(y)} L${f(x + 42 * s)} ${f(y - 13 * s)} L${f(x + 42 * s)} ${f(y + 13 * s)} Z" fill="#5DADE2" stroke="${K}" stroke-width="2.5"/><circle cx="${f(x - 14 * s)}" cy="${f(y - 4 * s)}" r="3" fill="${K}"/>`;
+  const gunes = (x, y, r = 20) => { let s = ""; for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; s += `<line x1="${f(x + (r + 5) * Math.cos(a))}" y1="${f(y + (r + 5) * Math.sin(a))}" x2="${f(x + (r + 15) * Math.cos(a))}" y2="${f(y + (r + 15) * Math.sin(a))}" stroke="${K}" stroke-width="3"/>`; } return s + `<circle cx="${f(x)}" cy="${f(y)}" r="${r}" fill="#F4D03F" stroke="${K}" stroke-width="2.5"/>`; };
+  const semsiye = (x, y, s = 1) => `<path d="M${f(x - 40 * s)} ${f(y)} Q${f(x)} ${f(y - 50 * s)} ${f(x + 40 * s)} ${f(y)} Q${f(x + 27 * s)} ${f(y - 8 * s)} ${f(x + 13 * s)} ${f(y)} Q${f(x)} ${f(y - 8 * s)} ${f(x - 13 * s)} ${f(y)} Q${f(x - 27 * s)} ${f(y - 8 * s)} ${f(x - 40 * s)} ${f(y)} Z" fill="#AF7AC5" stroke="${K}" stroke-width="2.5"/><path d="M${f(x)} ${f(y - 2)} L${f(x)} ${f(y + 36 * s)} Q${f(x)} ${f(y + 44 * s)} ${f(x - 8 * s)} ${f(y + 40 * s)}" fill="none" stroke="${K}" stroke-width="3"/>`;
+  const ay = (x, y, r = 24) => `<circle cx="${f(x)}" cy="${f(y)}" r="${r}" fill="#F7DC6F" stroke="${K}" stroke-width="2.5"/><circle cx="${f(x + r * 0.55)}" cy="${f(y - r * 0.15)}" r="${f(r * 0.85)}" fill="#fff" stroke="none"/><path d="M${f(x + r * 0.55 - r * 0.85 * Math.cos(0.9))} ${f(y - r * 0.15 - r * 0.85 * Math.sin(0.9))} A${f(r * 0.85)} ${f(r * 0.85)} 0 0 0 ${f(x + r * 0.55 - r * 0.85 * Math.cos(0.75))} ${f(y - r * 0.15 + r * 0.85 * Math.sin(0.75))}" fill="none" stroke="${K}" stroke-width="2.5"/>`;
+  const kurabiye = (x, y, r = 11) => `<circle cx="${f(x)}" cy="${f(y)}" r="${r}" fill="#D4A15A" stroke="${K}" stroke-width="2"/><circle cx="${f(x - 3)}" cy="${f(y - 3)}" r="1.8" fill="${K}"/><circle cx="${f(x + 4)}" cy="${f(y + 2)}" r="1.8" fill="${K}"/>`;
+  const kus = (x, y, s = 1, ucuyor = false) => ucuyor
+    ? `<path d="M${f(x - 18 * s)} ${f(y)} Q${f(x - 9 * s)} ${f(y - 12 * s)} ${f(x)} ${f(y)} Q${f(x + 9 * s)} ${f(y - 12 * s)} ${f(x + 18 * s)} ${f(y)}" fill="none" stroke="${K}" stroke-width="3"/>`
+    : `<ellipse cx="${f(x)}" cy="${f(y)}" rx="${f(13 * s)}" ry="${f(10 * s)}" fill="#F0B27A" stroke="${K}" stroke-width="2"/><circle cx="${f(x + 10 * s)}" cy="${f(y - 8 * s)}" r="${f(6 * s)}" fill="#F0B27A" stroke="${K}" stroke-width="2"/><path d="M${f(x + 15 * s)} ${f(y - 9 * s)} L${f(x + 21 * s)} ${f(y - 7 * s)} L${f(x + 15 * s)} ${f(y - 5 * s)} Z" fill="#E67E22" stroke="${K}" stroke-width="1"/><circle cx="${f(x + 11 * s)}" cy="${f(y - 9 * s)}" r="1.4" fill="${K}"/>`;
+  const balon = (x, y, c) => `<ellipse cx="${f(x)}" cy="${f(y)}" rx="15" ry="19" fill="${c}" stroke="${K}" stroke-width="2.5"/><path d="M${f(x)} ${f(y + 19)} Q${f(x - 6)} ${f(y + 32)} ${f(x + 2)} ${f(y + 44)}" fill="none" stroke="${K}" stroke-width="1.8"/>`;
+  const yazi = (x, y, t, s = 44, c = K) => `<text x="${f(x)}" y="${f(y)}" font-family="DejaVu Sans, Arial, sans-serif" font-size="${s}" font-weight="700" text-anchor="middle" dominant-baseline="central" fill="${c}">${t}</text>`;
+  const ok = (x, y, yon) => { const a = { sag: 0, sol: 180, yukari: -90, asagi: 90 }[yon]; return `<g transform="rotate(${a} ${f(x)} ${f(y)})"><line x1="${f(x - 22)}" y1="${f(y)}" x2="${f(x + 14)}" y2="${f(y)}" stroke="${K}" stroke-width="5"/><path d="M${f(x + 24)} ${f(y)} L${f(x + 8)} ${f(y - 11)} L${f(x + 8)} ${f(y + 11)} Z" fill="${K}"/></g>`; };
+  const lSekil = (x, y, ayna, don) => `<g transform="translate(${f(x)} ${f(y)}) rotate(${don || 0}) scale(${ayna ? -1 : 1} 1)"><path d="M-14 -24 L-2 -24 L-2 8 L18 8 L18 20 L-14 20 Z" fill="#5DADE2" stroke="${K}" stroke-width="2.5"/></g>`;
+  const noktalar = (x, y, pos) => pos.map(([a, b]) => `<circle cx="${f(x + a * 16)}" cy="${f(y + b * 16)}" r="6" fill="${K}"/>`).join("");
+  const harf = (x, y, t) => yazi(x, y, t, 52);
+  const ciftSekil = (x, y, ust, alt) => ust(x, y - 18) + alt(x, y + 22);
+
+  // Seçenekli satır: n seçenek, her biri çizim fonksiyonu (cx, cy)
+  function secenekler(cizimler, model) {
+    const n = cizimler.length, ust = model ? 70 : 0, h = H + ust;
+    let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${h}" width="100%" style="max-width:${W}px">`;
+    if (model) s += `<rect x="${W / 2 - 60}" y="4" width="120" height="66" rx="8" fill="#FFF8E1" stroke="${K}" stroke-width="2.5"/>` + model(W / 2, 37);
+    cizimler.forEach((c, i) => {
+      const cx = (i + 0.5) * W / n, cy = ust + 62;
+      s += `<rect x="${f(cx - W / n / 2 + 6)}" y="${ust + 4}" width="${f(W / n - 12)}" height="${H - 34}" rx="8" fill="#fff" stroke="#BBB" stroke-width="1.5"/>`;
+      s += c(cx, cy);
+      s += `<text x="${f(cx)}" y="${ust + H - 12}" font-family="DejaVu Sans, Arial, sans-serif" font-size="17" font-weight="700" text-anchor="middle" fill="#555">${"ABCD"[i]}</text>`;
+    });
+    return s + "</svg>";
+  }
+  function tek(ciz, gen = 300, yuk = 130) {
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${gen} ${yuk}" width="100%" style="max-width:${gen}px">${ciz(gen / 2, yuk / 2)}</svg>`;
+  }
+  const kirmizi = "#E74C3C", mavi = "#3498DB", sari = "#F4D03F", yesil = "#58B368";
+  const R = {
+    dk1: () => secenekler([(x, y) => kutu(x - 25, y - 4, 50, 40) + top(x, y - 18) + zemin(x, y + 36), (x, y) => kutu(x - 40, y - 4, 50, 40) + top(x + 28, y + 22) + zemin(x, y + 36), (x, y) => kutu(x - 10, y - 4, 50, 40) + top(x - 28, y + 22) + zemin(x, y + 36)]),
+    dk2: () => secenekler([(x, y) => masa(x, y - 16) + top(x, y - 30), (x, y) => masa(x - 10, y - 16) + top(x + 50, y + 22), (x, y) => masa(x, y - 16) + top(x, y + 22)]),
+    dk3: () => secenekler([(x, y) => agac(x, y + 44, 0.75), (x, y) => agac(x, y + 44, 1.2), (x, y) => agac(x, y + 44, 0.95)]),
+    dk4: () => secenekler([(x, y) => kalem(x - 55, y, 80), (x, y) => kalem(x - 50, y, 64), (x, y) => kalem(x - 30, y, 26)]),
+    dk5: () => secenekler([(x, y) => bardak(x, y - 34, 0), (x, y) => bardak(x, y - 34, 0.95), (x, y) => bardak(x, y - 34, 0.5)]),
+    dk6: () => secenekler([(x, y) => tabak(x, y, 5), (x, y) => tabak(x, y, 3), (x, y) => tabak(x, y, 1)]),
+    dk7: () => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px"><rect x="20" y="10" width="${W - 40}" height="${H - 40}" rx="10" fill="#fff" stroke="#BBB" stroke-width="1.5"/>${yildiz(W * 0.25, 64, 30)}${kalp(W * 0.5, 66, 1.6)}${daire(W * 0.75, 64, 28, "#AED6F1")}${["A", "B", "C"].map((t, i) => `<text x="${W * (0.25 + i * 0.25)}" y="${H - 12}" font-family="DejaVu Sans, Arial, sans-serif" font-size="17" font-weight="700" text-anchor="middle" fill="#555">${t}</text>`).join("")}</svg>`,
+    dk8: () => secenekler([(x, y) => top(x + 24, y - 2, 15) + ev(x - 6, y + 40, 0.9) + zemin(x, y + 40), (x, y) => ev(x, y + 34, 0.9) + top(x + 12, y + 32, 13) + zemin(x, y + 46), (x, y) => ev(x - 18, y + 40, 0.9) + top(x + 42, y - 24, 11) + zemin(x, y + 40)]),
+    dk9: () => secenekler([(x, y) => daire(x, y), (x, y) => kare(x, y), (x, y) => ucgen(x, y), (x, y) => yildiz(x, y, 26, "#fff")]),
+    dk10: () => secenekler([(x, y) => kare(x - 24, y, 34, kirmizi) + daire(x + 24, y, 17, sari), (x, y) => kare(x - 24, y, 34, mavi) + daire(x + 24, y, 17, kirmizi), (x, y) => daire(x - 24, y, 17, mavi) + kare(x + 24, y, 34, sari) + `<text x="0" y="0"></text>`, (x, y) => kare(x - 24, y, 34, kirmizi) + daire(x + 24, y, 17, mavi)]),
+    sf1: () => tek((x, y) => top(x, y, 34)),
+    sf2: () => tek((x, y) => elma(x, y + 6, 36)),
+    sf3: () => tek((x, y) => balik(x - 10, y, 1.7)),
+    sf4: () => tek((x, y) => semsiye(x, y + 4, 1.4)),
+    sf5: () => secenekler([(x, y) => balik(x - 8, y, 1.2), (x, y) => ev(x, y + 38, 1), (x, y) => gunes(x, y, 22)]),
+    sf6: () => secenekler([(x, y) => agac(x, y + 48, 1), (x, y) => kalp(x, y, 2), (x, y) => top(x, y, 28)]),
+    sf7: () => secenekler([(x, y) => elma(x, y + 6, 28), (x, y) => ay(x, y, 30), (x, y) => semsiye(x, y + 6, 1.1)]),
+    sn2: () => tek((x, y) => [-80, -40, 0, 40, 80].map(d => elma(x + d, y + 6, 15)).join(""), 360),
+    sn3: () => tek((x, y) => [[-105, -22], [-60, 18], [-20, -26], [10, 22], [48, -18], [80, 24], [110, -24], [-100, 30]].map(([a, b]) => yildiz(x + a, y + b, 15)).join(""), 360),
+    sn4: () => secenekler([(x, y) => `<ellipse cx="${f(x)}" cy="${f(y + 20)}" rx="70" ry="16" fill="#fff" stroke="${K}" stroke-width="2.5"/>` + [[-24, 6], [0, -8], [24, 6]].map(([a, b]) => kurabiye(x + a, y + b, 12)).join(""), (x, y) => `<ellipse cx="${f(x)}" cy="${f(y + 20)}" rx="70" ry="16" fill="#fff" stroke="${K}" stroke-width="2.5"/>` + [[-36, 8], [-12, 8], [12, 8], [36, 8], [-24, -14], [24, -14]].map(([a, b]) => kurabiye(x + a, y + b, 12)).join("")]),
+    sn5: () => secenekler(["8", "5", "3", "1"].map(t => (x, y) => yazi(x, y, t, 56))),
+    sn6: () => secenekler(["1", "7", "4", "9"].map(t => (x, y) => yazi(x, y, t, 56))),
+    sn8: () => tek((x, y) => balon(x - 70, y - 18, kirmizi) + balon(x - 30, y - 18, mavi) + yazi(x + 16, y - 10, "+", 40) + balon(x + 66, y - 18, sari), 300),
+    sn9: () => tek((x, y) => `<line x1="${f(x - 120)}" y1="${f(y + 16)}" x2="${f(x + 60)}" y2="${f(y + 16)}" stroke="#8B5A2B" stroke-width="6" stroke-linecap="round"/>` + [-85, -45, -5].map(d => kus(x + d, y + 2, 1)).join("") + kus(x + 100, y - 34, 1.8, true), 320),
+    sn10: () => tek((x, y) => noktalar(x - 16, y - 16, [[0, 0], [2, 0.6], [0.8, 2]]), 200),
+    ga1: () => secenekler([(x, y) => daire(x, y, 20) + kare(x, y, 18), (x, y) => kare(x, y, 40) + daire(x, y, 10), (x, y) => kare(x, y, 40) + daire(x, y, 14, "#AED6F1"), (x, y) => daire(x, y, 22, "#AED6F1") + ucgen(x, y + 2, 22)], (x, y) => kare(x, y, 40) + daire(x, y, 14, "#AED6F1")),
+    ga2: () => secenekler([(x, y) => ok(x, y, "sol"), (x, y) => ok(x, y, "yukari"), (x, y) => ok(x, y, "asagi"), (x, y) => ok(x, y, "sag")], (x, y) => ok(x, y, "sag")),
+    ga3: () => secenekler([(x, y) => lSekil(x, y, false, 0), (x, y) => lSekil(x, y, true, 0), (x, y) => lSekil(x, y, false, 180), (x, y) => lSekil(x, y, false, 90)], (x, y) => lSekil(x, y + 2, false, 0)),
+    ga4: () => secenekler([(x, y) => noktalar(x - 16, y - 16, [[0, 0], [2, 0], [0, 2]]), (x, y) => noktalar(x - 16, y - 16, [[0, 0], [2, 0], [2, 2]]), (x, y) => noktalar(x - 16, y - 16, [[0, 0], [0, 2], [2, 2]]), (x, y) => noktalar(x - 16, y - 16, [[0, 0], [2, 0], [1, 1], [2, 2]])], (x, y) => noktalar(x - 16, y - 20, [[0, 0], [2, 0], [2, 2]])),
+    ga5: () => secenekler(["d", "b", "p", "q"].map(t => (x, y) => harf(x, y, t)), (x, y) => harf(x, y - 2, "b")),
+    ga6: () => secenekler([(x, y) => ciftSekil(x, y, (a, b) => daire(a, b, 14), (a, b) => ucgen(a, b, 30)), (x, y) => ciftSekil(x, y, (a, b) => ucgen(a, b, 30), (a, b) => kare(a, b, 26)), (x, y) => ciftSekil(x, y, (a, b) => kare(a, b, 26), (a, b) => daire(a, b, 14)), (x, y) => ciftSekil(x, y, (a, b) => ucgen(a, b, 30), (a, b) => daire(a, b, 14))], (x, y) => ucgen(x, y - 14, 22) + daire(x, y + 16, 11)),
+    ga7: () => secenekler([(x, y) => balik(x - 8, y, 1.1), (x, y) => balik(x - 8, y, 1.1), (x, y) => `<g transform="translate(${f(2 * x)} 0) scale(-1 1)">${balik(x - 8, y, 1.1)}</g>`, (x, y) => balik(x - 8, y, 1.1)]),
+    ga8: () => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H + 70}" width="100%" style="max-width:${W}px"><rect x="20" y="4" width="${W - 40}" height="62" rx="8" fill="#FFF8E1" stroke="${K}" stroke-width="2.5"/>${[daire, kare, daire, kare, daire].map((fn, i) => fn(70 + i * 82, 35, fn === daire ? 16 : 30, fn === daire ? kirmizi : mavi)).join("")}${yazi(70 + 5 * 82, 35, "?", 40)}` + secenekler([(x, y) => kare(x, y, 36, mavi), (x, y) => daire(x, y, 19, kirmizi), (x, y) => ucgen(x, y, 40, sari), (x, y) => yildiz(x, y, 24, yesil)]).replace(/^<svg[^>]*>/, `<g transform="translate(0 70)">`).replace(/<\/svg>$/, "</g>") + `</svg>`,
+  };
+  // Kopya modelleri (uygulayıcının çocuktan kopyalamasını istediği şekiller)
+  const KOPYA = {
+    dikey: (x, y) => `<line x1="${x}" y1="${y - 30}" x2="${x}" y2="${y + 30}" stroke="${K}" stroke-width="4"/>`,
+    daire: (x, y) => `<circle cx="${x}" cy="${y}" r="28" fill="none" stroke="${K}" stroke-width="4"/>`,
+    arti: (x, y) => `<line x1="${x}" y1="${y - 30}" x2="${x}" y2="${y + 30}" stroke="${K}" stroke-width="4"/><line x1="${x - 30}" y1="${y}" x2="${x + 30}" y2="${y}" stroke="${K}" stroke-width="4"/>`,
+    kare: (x, y) => `<rect x="${x - 27}" y="${y - 27}" width="54" height="54" fill="none" stroke="${K}" stroke-width="4"/>`,
+    ucgen: (x, y) => `<path d="M${x} ${y - 30} L${x + 32} ${y + 26} L${x - 32} ${y + 26} Z" fill="none" stroke="${K}" stroke-width="4" stroke-linejoin="miter"/>`,
+    carpi: (x, y) => `<line x1="${x - 24}" y1="${y - 28}" x2="${x + 24}" y2="${y + 28}" stroke="${K}" stroke-width="4"/><line x1="${x + 24}" y1="${y - 28}" x2="${x - 24}" y2="${y + 28}" stroke="${K}" stroke-width="4"/>`,
+    karo: (x, y) => `<path d="M${x} ${y - 32} L${x + 22} ${y} L${x} ${y + 32} L${x - 22} ${y} Z" fill="none" stroke="${K}" stroke-width="4" stroke-linejoin="miter"/>`,
+  };
+  function kopyaSatiri(sekil) {
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} 110" width="100%" style="max-width:${W}px"><rect x="10" y="5" width="130" height="100" rx="8" fill="#FFF8E1" stroke="#BBB" stroke-width="1.5"/>${KOPYA[sekil](75, 55)}<rect x="170" y="5" width="${W - 180}" height="100" rx="8" fill="#fff" stroke="${K}" stroke-width="2" stroke-dasharray="7 5"/></svg>`;
+  }
+  function yol(tip) {
+    const W2 = W, H2 = 120;
+    let yolD = tip === "yol1" ? `M70 60 L${W2 - 80} 60` : `M70 60 C150 0 210 120 280 60 S410 0 ${W2 - 80} 60`;
+    const bas = tip === "yol1"
+      ? `<rect x="22" y="44" width="40" height="22" rx="5" fill="${kirmizi}" stroke="${K}" stroke-width="2.5"/><circle cx="32" cy="70" r="6" fill="${K}"/><circle cx="54" cy="70" r="6" fill="${K}"/>`
+      : `<ellipse cx="34" cy="52" rx="12" ry="9" fill="#AF7AC5" stroke="${K}" stroke-width="2"/><ellipse cx="34" cy="70" rx="10" ry="7" fill="#AF7AC5" stroke="${K}" stroke-width="2"/><ellipse cx="50" cy="52" rx="12" ry="9" fill="#AF7AC5" stroke="${K}" stroke-width="2"/><ellipse cx="50" cy="70" rx="10" ry="7" fill="#AF7AC5" stroke="${K}" stroke-width="2"/><line x1="42" y1="46" x2="42" y2="76" stroke="${K}" stroke-width="3"/>`;
+    const son = tip === "yol1" ? ev(W2 - 40, 92, 0.75) : `<g>${[0, 72, 144, 216, 288].map(a => `<circle cx="${f(W2 - 40 + 13 * Math.cos(a * Math.PI / 180))}" cy="${f(52 + 13 * Math.sin(a * Math.PI / 180))}" r="9" fill="#F1948A" stroke="${K}" stroke-width="2"/>`).join("")}<circle cx="${W2 - 40}" cy="52" r="7" fill="${sari}" stroke="${K}" stroke-width="2"/><line x1="${W2 - 40}" y1="66" x2="${W2 - 40}" y2="100" stroke="#239B56" stroke-width="4"/></g>`;
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W2} ${H2}" width="100%" style="max-width:${W2}px"><path d="${yolD}" fill="none" stroke="${K}" stroke-width="34" stroke-linecap="round"/><path d="${yolD}" fill="none" stroke="#fff" stroke-width="28" stroke-linecap="round"/>${bas}${son}</svg>`;
+  }
+  return { resim: (id) => (R[id] ? R[id]() : ""), kopyaSatiri, yol, kopyaModel: (sekil) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" width="44" height="44">${KOPYA[sekil](40, 40)}</svg>` };
+})();
+
+// ===== OKUL OLGUNLUĞU TARAMASI — PUANLAMA VE YORUM =====
+function ootTarihNesne(t) {
+  if (!t) return null;
+  const m = String(t).match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/) || String(t).match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (!m) return null;
+  const d = m[3].length === 4 ? new Date(+m[3], +m[2] - 1, +m[1]) : new Date(+m[1], +m[2] - 1, +m[3]);
+  return isNaN(d) ? null : d;
+}
+function ootAyFarki(dogum, tarih) {
+  if (!dogum || !tarih) return null;
+  let ay = (tarih.getFullYear() - dogum.getFullYear()) * 12 + (tarih.getMonth() - dogum.getMonth());
+  if (tarih.getDate() < dogum.getDate()) ay--;
+  return ay;
+}
+// Yaş: uygulama günündeki ay ve okula başlanacak yılın 30 Eylül'ündeki ay (MEB yaş hesabı eylül sonuna göre yapılır)
+// birinciSinifta: çocuk zaten 1. sınıfta ise içinde bulunulan öğretim yılının eylülü esas alınır
+function ootYas(dogumTarihi, uygulamaTarihi, birinciSinifta) {
+  const d = ootTarihNesne(dogumTarihi), u = ootTarihNesne(uygulamaTarihi) || new Date();
+  if (!d) return null;
+  const ogretimYiliBasi = u.getMonth() >= 8 ? u.getFullYear() : u.getFullYear() - 1;
+  const basYil = birinciSinifta ? ogretimYiliBasi : (u.getMonth() > 8 ? u.getFullYear() + 1 : u.getFullYear()); // ekimden sonra uygulanırsa bir sonraki eylül
+  const eylul = new Date(basYil, 8, 30);
+  return { simdi: ootAyFarki(d, u), eylul: ootAyFarki(d, eylul), basYil, birinciSinifta: !!birinciSinifta };
+}
+function ootBant(y) {
+  if (y == null) return null;
+  if (y >= 80) return { ad: "Güçlü", renk: "#1A8C5B", bg: "#E6F5EE", d: 4 };
+  if (y >= 60) return { ad: "Yeterli", renk: "#2E86C1", bg: "#EBF5FB", d: 3 };
+  if (y >= 40) return { ad: "Sınırda", renk: "#B9770E", bg: "#FEF5E7", d: 2 };
+  return { ad: "Destek gerekli", renk: "#C0392B", bg: "#FDEDEC", d: 1 };
+}
+function ootAltTestPuan(at, cevaplar, yasAy) {
+  let ham = 0, maks = 0, cevaplanan = 0, bonus = 0;
+  const p = at.puanAralik || 1;
+  at.maddeler.forEach((m, i) => {
+    if (m.ornek) return;
+    const v = cevaplar[`${at.k}_${i}`];
+    // Yaşına göre henüz beklenmeyen ileri madde (ör. eşkenar dörtgen) maksimuma katılmaz; yaparsa ek puan
+    const ileriMi = m.ileri && (yasAy == null || yasAy < (m.yas || 78));
+    if (typeof v === "number") { cevaplanan++; if (ileriMi) bonus += v; else ham += v; }
+    if (!ileriMi) maks += p;
+  });
+  const toplam = Math.min(maks, ham + bonus);
+  const yuzde = cevaplanan && maks ? Math.round(100 * toplam / maks) : null;
+  return { k: at.k, ad: at.ad, kisa: at.kisa, alan: at.alan, renk: at.renk, ham: toplam, maks, cevaplanan, maddeSayisi: at.maddeler.filter(m => !m.ornek).length, yuzde, bant: ootBant(yuzde) };
+}
+function ootGozlemPuan(gozlem) {
+  let ham = 0, maks = 0, n = 0; const gruplar = [];
+  OOT_GOZLEM.forEach((g, gi) => {
+    let gh = 0, gm = 0, gn = 0;
+    g.maddeler.forEach((_, mi) => { const v = (gozlem || {})[`${gi}_${mi}`]; gm += 2; if (typeof v === "number") { gh += v; gn++; } });
+    ham += gh; maks += gm; n += gn;
+    gruplar.push({ ad: g.grup, ham: gh, maks: gm, cevaplanan: gn, yuzde: gn ? Math.round(100 * gh / gm) : null, bant: gn ? ootBant(Math.round(100 * gh / gm)) : null, zayif: g.maddeler.filter((_, mi) => (gozlem || {})[`${gi}_${mi}`] === 0) });
+  });
+  return { ham, maks, cevaplanan: n, yuzde: n ? Math.round(100 * ham / maks) : null, gruplar };
+}
+function ootSonuc(veri) {
+  const v = veri || {}, c = v.cevaplar || {};
+  const yas = ootYas(v.dogumTarihi, v.uygulamaTarihi, v.birinciSinifta);
+  const yasAy = yas ? yas.simdi : null;
+  const altlar = OOT_ALT_TESTLER.map(at => ootAltTestPuan(at, c, yasAy));
+  const dolu = altlar.filter(a => a.cevaplanan > 0);
+  const testHam = dolu.reduce((s, a) => s + a.ham, 0), testMaks = dolu.reduce((s, a) => s + a.maks, 0);
+  const testYuzde = testMaks ? Math.round(100 * testHam / testMaks) : null;
+  const goz = ootGozlemPuan(v.gozlem);
+  const bayrak = v.bayraklar || {};
+  const eksikAlt = altlar.filter(a => a.cevaplanan < a.maddeSayisi);
+  const zayif = dolu.filter(a => a.yuzde < 40), sinirda = dolu.filter(a => a.yuzde >= 40 && a.yuzde < 60);
+  const guclu = dolu.filter(a => a.yuzde >= 80);
+  // Karar ancak her alt testin en az yarısı puanlanınca verilir; yoksa eksik verilerle yanıltıcı olur
+  const yeterli = altlar.every(a => a.cevaplanan >= Math.ceil(a.maddeSayisi / 2));
+  let karar = null;
+  if (testYuzde != null && !yeterli) karar = { k: "eksik", ad: "Değerlendirme tamamlanmadı", renk: "#7F8C8D", bg: "#F2F3F4" };
+  else if (testYuzde != null) {
+    const g = goz.yuzde;
+    if (testYuzde >= 70 && (g == null || g >= 65) && zayif.length === 0) karar = { k: "hazir", ad: "Okula hazır görünüyor", renk: "#1A8C5B", bg: "#E6F5EE" };
+    else if (testYuzde >= 55 && (g == null || g >= 50) && zayif.length <= 1) karar = { k: "destekle", ad: "Okula başlayabilir — belirtilen alanlarda destekle izlenmeli", renk: "#2E86C1", bg: "#EBF5FB" };
+    else if (testYuzde >= 40 && zayif.length <= 3 && (g == null || g >= 35)) karar = { k: "sinirda", ad: "Hazırbulunuşluk sınırda", renk: "#B9770E", bg: "#FEF5E7" };
+    else karar = { k: "dusuk", ad: "Hazırbulunuşluk düşük — ayrıntılı gelişim değerlendirmesi önerilir", renk: "#C0392B", bg: "#FDEDEC" };
+  }
+  // 1. sınıfa başlamış çocukta "okula başlayabilir" ifadesi anlamsız; destek odaklı adlar kullanılır
+  if (karar && v.birinciSinifta) {
+    const ad1 = { hazir: "Hazırbulunuşluğu iyi", destekle: "Hazırbulunuşluğu yeterli — belirtilen alanlarda destekle izlenmeli" }[karar.k];
+    if (ad1) karar = { ...karar, ad: ad1 };
+  }
+  return { yas, altlar, testHam, testMaks, testYuzde, testBant: ootBant(testYuzde), goz, karar, zayif, sinirda, guclu, eksikAlt, bayrak, tamam: eksikAlt.length === 0 };
+}
+// MEB yaş kuralı (Temmuz 2026 itibarıyla): yaş eylül sonuna göre hesaplanır.
+// 66-68 ay: veli yazılı isteğiyle 1. sınıfa başlayabilir · 69-71 ay: kayıt yapılır,
+// veli yazılı talebiyle bir yıl erteleyip okul öncesine devam edebilir · 72+ ay: zorunlu, erteleme yok.
+function ootYasYorumu(s) {
+  const y = s.yas; if (!y || y.eylul == null) return "Doğum tarihi girilmediği için yaşa göre yorum yapılamadı.";
+  const a = y.eylul, k = s.karar ? s.karar.k : null, yil = y.basYil;
+  if (y.birinciSinifta) return `Çocuk 1. sınıfa ${Math.floor(a / 12)} yaş ${a % 12} ay (${a} ay) ile başladı. ` + (a < 69 ? "Erken başlayan (69 aydan küçük) çocuklarda hazırbulunuşluk farkı ilk yıl belirgin olabilir; " : "") + "Sonuç, sınıf öğretmeniyle birlikte hazırlanacak destek planı içindir; erteleme bu aşamada söz konusu değildir.";
+  const bas = `Çocuk ${yil} Eylül sonunda ${Math.floor(a / 12)} yaş ${a % 12} ay (${a} ay) olacak. `;
+  if (a < 66) return bas + "MEB kuralına göre bu yıl ilkokula başlama yaşında değildir; okul öncesi eğitime devam eder. Sonuçlar okul öncesi öğretmeniyle destek planı için kullanılabilir.";
+  if (a <= 68) return bas + "Veli yazılı isteğiyle erken başlayabilir. " + (k === "hazir" ? "Tarama sonucu erken başlamayı destekliyor; yine de sosyal-duygusal hazırlık ve velinin gözlemi birlikte değerlendirilmelidir." : "Tarama sonucu erken başlamayı desteklemiyor; bir yıl daha okul öncesine devam etmesi çocuğun yararına olabilir.");
+  if (a <= 71) return bas + "Kaydı yapılır; veli yazılı talebiyle bir yıl erteleyip okul öncesine devam ettirebilir. " + (k === "sinirda" || k === "dusuk" ? "Tarama sonucu düşük/sınırda olduğu için erteleme seçeneği veliyle konuşulabilir. Karar velinindir; danışman bilgilendirir." : "Tarama sonucu başlamayı destekliyor; erteleme için tarama açısından bir gerekçe görünmüyor.");
+  return bas + "İlkokula başlaması zorunludur, erteleme hakkı yoktur. " + (k === "hazir" ? "" : "Sonuçlar sınıf öğretmeniyle paylaşılacak bir destek planının temelidir; ilk dönem yakından izlenmelidir.");
+}
+function ootYorum(s) {
+  const satir = [];
+  if (!s.karar) return ["Henüz madde puanlanmadı."];
+  if (s.karar.k === "eksik") return [`Değerlendirme tamamlanmadı: ${s.altlar.filter(a => a.cevaplanan < Math.ceil(a.maddeSayisi / 2)).map(a => a.kisa).join(", ")} alt testlerinin en az yarısı puanlanınca yorum oluşur.`];
+  satir.push(`Genel sonuç: ${s.karar.ad}. Bireysel testteki toplam başarı: %${s.testYuzde}${s.goz.yuzde != null ? `; gözlem puanı: %${s.goz.yuzde}` : ""}.`);
+  if (s.guclu.length) satir.push(`Güçlü alanlar: ${s.guclu.map(a => a.kisa).join(", ")}.`);
+  if (s.zayif.length || s.sinirda.length) satir.push(`Desteklenecek alanlar: ${[...s.zayif, ...s.sinirda].map(a => `${a.kisa} (${a.bant.ad.toLocaleLowerCase("tr")})`).join(", ")}.`);
+  const gz = s.goz.gruplar.filter(g => g.bant && g.bant.d <= 2);
+  if (gz.length) satir.push(`Gözlemde zorlanılan alanlar: ${gz.map(g => g.ad.toLocaleLowerCase("tr")).join(", ")}${gz.some(g => g.ad === "Sosyal-duygusal") ? " — sosyal-duygusal hazırlık, akademik becerilerden bağımsız olarak okula uyumu güçlü biçimde etkiler" : ""}.`);
+  const sf = s.altlar.find(a => a.k === "sf"), sn = s.altlar.find(a => a.k === "sn"), db = s.altlar.find(a => a.k === "db"), gm = s.altlar.find(a => a.k === "gm");
+  if (sf && sf.yuzde != null && sf.yuzde < 60) satir.push("Ses farkındalığının düşük olması okuma-yazmaya geçişte zorlanma riskini artırır; ilk aylarda ses-hece oyunları ve öğretmen takibi önemlidir.");
+  if (sn && sn.yuzde != null && sn.yuzde < 60) satir.push("Erken sayı becerileri sonraki matematik başarısının en güçlü göstergelerindendir; somut nesnelerle sayma ve karşılaştırma çalışılmalıdır.");
+  if (db && db.yuzde != null && db.yuzde < 60) satir.push("Dikkat-bellek puanı düşük: yönergeleri kısa, tek tek ve göz teması kurarak vermek gerekir. Tek bir oturumdaki yorgunluk/kaygı da puanı düşürebilir; gerekirse başka bir gün tekrar bakın.");
+  if (gm && gm.yuzde != null && gm.yuzde < 60) satir.push("Görsel-motor puanı düşük: yazmaya geçişte el yorgunluğu ve harf biçimlendirme güçlüğü beklenebilir; ince motor etkinlikleri artırılmalıdır.");
+  const b = s.bayrak || {};
+  const yon = [];
+  if (b.isitme) yon.push("işitme taraması (KBB / odyolog)");
+  if (b.gorme) yon.push("göz muayenesi");
+  if (b.konusma) yon.push("dil ve konuşma terapisti değerlendirmesi");
+  if (b.gelisim || s.karar.k === "dusuk") yon.push("çocuk ruh sağlığı ya da gelişim pediatrisi değerlendirmesi ve gerekirse RAM'a yönlendirme");
+  if (b.hareket && db && db.yuzde != null && db.yuzde < 60) yon.push("dikkat ve hareketlilik için öğretmen-veli gözlem formlarıyla izlem, sürerse uzman değerlendirmesi");
+  if (yon.length) satir.push(`Önerilen yönlendirme: ${yon.join("; ")}.`);
+  if (b.ikidil) satir.push("Evde Türkçe dışında dil konuşuluyor: dil-kavram, genel bilgi ve ses farkındalığı puanları Türkçe deneyimini yansıtır, çocuğun kapasitesini değil. Kavramları ana dilinde bilip bilmediği veliyle kontrol edilmeli; düşük dil puanı tek başına 'hazır değil' gerekçesi sayılmamalıdır.");
+  if (b.okulonce) satir.push("Okul öncesi eğitim almamış: okul düzenine ve masa başı etkinliğe alışık olmaması sonucu etkileyebilir; uyum haftası ve ilk dönem destek önemlidir.");
+  if (!s.tamam) satir.push(`Not: ${s.eksikAlt.map(a => a.kisa).join(", ")} alt testlerinde puanlanmamış madde var; sonuç eksik verilere dayanıyor.`);
+  satir.push(ootYasYorumu(s));
+  satir.push("Bu bir tarama aracıdır: norm çalışması yoktur, tanı koymaz. Sonuç tek bir oturumu yansıtır; okul öncesi öğretmeni ve veli gözlemiyle birlikte yorumlanmalı, başlatma/erteleme kararı yalnızca bu puana dayandırılmamalıdır.");
+  return satir;
+}
+function ootOneriler(s) {
+  const liste = [];
+  [...s.zayif, ...s.sinirda].forEach(a => (OOT_ONERILER[a.k] || []).forEach(o => liste.push({ alan: a.kisa, metin: o })));
+  if (s.goz.gruplar.some(g => g.bant && g.bant.d <= 2)) OOT_ONERILER.goz.forEach(o => liste.push({ alan: "Sosyal-duygusal / öz bakım", metin: o }));
+  return liste;
+}
+function ootKisaOzet(v) {
+  const s = ootSonuc(v);
+  if (!s.karar) return "Henüz madde puanlanmadı";
+  if (s.karar.k === "eksik") return `Tamamlanmadı · ${s.altlar.filter(a => a.cevaplanan).length}/${s.altlar.length} alt test başladı`;
+  return `${s.karar.ad} · test %${s.testYuzde}${s.goz.yuzde != null ? ` · gözlem %${s.goz.yuzde}` : ""}${s.zayif.length ? ` · destek: ${s.zayif.map(a => a.kisa).join(", ")}` : ""}`;
+}
+
+// ===== OKUL OLGUNLUĞU TARAMASI — YAZDIRILABİLİR KİTAPÇIK VE KILAVUZ =====
+const OOT_CSS = `@page{size:A4;margin:11mm 12mm}*{box-sizing:border-box}body{font-family:"DejaVu Sans",Arial,sans-serif;color:#1a1a1a;margin:0;font-size:10pt}
+h1{font-size:17pt;margin:0 0 2mm;text-align:center}h2{font-size:12.5pt;margin:4mm 0 2mm;color:#0E5E41;border-bottom:2px solid #0E5E41;padding-bottom:1mm}
+h3{font-size:10.5pt;margin:3mm 0 1.5mm}.sayfa{page-break-before:always}.alt{text-align:center;color:#555;font-size:9pt;margin-bottom:4mm}
+.kutu{border:1.2px solid #127C56;border-radius:3mm;padding:2.5mm 3.5mm;background:#F2F8F5;margin:2mm 0;line-height:1.45}
+.uyari{border:1.2px solid #B9770E;background:#FEF5E7}table{width:100%;border-collapse:collapse;margin:1.5mm 0}th,td{border:1px solid #999;padding:1.4mm 2mm;vertical-align:top;font-size:9pt}
+th{background:#EDEDED;text-align:left}td.p{width:22mm;text-align:center;white-space:nowrap}td.no{width:8mm;text-align:center}.kare{display:inline-block;width:4.2mm;height:4.2mm;border:1.2px solid #333;border-radius:.8mm;margin:0 1mm;vertical-align:middle}
+.madde{page-break-inside:avoid;margin:0 0 4mm}.mno{display:inline-block;background:#127C56;color:#fff;font-weight:700;border-radius:2mm;padding:.6mm 2.4mm;font-size:10pt;margin-bottom:1mm}
+.kim{display:grid;grid-template-columns:2fr 1fr 1fr;gap:3mm;margin:3mm 0}.kim div{border-bottom:1px solid #333;padding:4mm 0 1mm;font-size:9.5pt}
+tr{page-break-inside:avoid}.kucuk{font-size:8.5pt;color:#555}.bant td{text-align:center}`;
+
+function ootKitapcikHtml() {
+  let h = `<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>Okul Olgunluğu Taraması — Çocuk Kitapçığı</title><style>${OOT_CSS}</style></head><body>`;
+  h += `<div style="text-align:center;padding-top:30mm"><svg viewBox="0 0 200 120" width="70mm">${'<circle cx="60" cy="60" r="34" fill="#F4D03F" stroke="#222" stroke-width="3"/><circle cx="48" cy="52" r="4" fill="#222"/><circle cx="72" cy="52" r="4" fill="#222"/><path d="M44 70 Q60 84 76 70" fill="none" stroke="#222" stroke-width="3"/><rect x="110" y="40" width="70" height="50" rx="6" fill="#5DADE2" stroke="#222" stroke-width="3"/><line x1="145" y1="40" x2="145" y2="90" stroke="#222" stroke-width="3"/>'}</svg>
+  <h1 style="font-size:24pt;margin-top:8mm">Okul Olgunluğu Taraması</h1><div class="alt" style="font-size:12pt">Çocuk Kitapçığı</div>
+  <div style="margin:22mm auto 0;width:120mm;font-size:13pt;text-align:left"><div style="border-bottom:1.5px solid #333;padding:8mm 0 1mm">Adım:</div><div style="border-bottom:1.5px solid #333;padding:8mm 0 1mm">Tarih:</div></div>
+  <div class="kucuk" style="margin-top:30mm">Bu kitapçık uygulayıcı kılavuzuyla birlikte, bireysel olarak kullanılır. Sayfalardaki harfler (A, B, C, D) uygulayıcının kayıt içindir.</div></div>`;
+  OOT_ALT_TESTLER.forEach(at => {
+    const resimli = at.maddeler.map((m, i) => ({ m, i })).filter(x => x.m.resim || x.m.tur === "kopya" || x.m.tur === "yol");
+    if (!resimli.length) return;
+    h += `<div class="sayfa"><h2>${at.ad}</h2>`;
+    if (at.k === "gm") {
+      h += `<div class="kucuk" style="margin-bottom:2mm">Soldaki şeklin aynısını yanındaki kesik çizgili kutuya çiz.</div>`;
+      resimli.filter(x => x.m.tur === "kopya").forEach(({ m, i }) => { h += `<div class="madde" style="margin-bottom:1.5mm"><div><span class="mno">${at.k.toUpperCase()}-${i + 1}</span></div><div>${OOT_R.kopyaSatiri(m.sekil)}</div></div>`; });
+      h += `</div><div class="sayfa"><h2>${at.ad} — Yol Bulma</h2>`;
+      resimli.filter(x => x.m.tur === "yol").forEach(({ m, i }) => { h += `<div class="madde" style="margin:8mm 0 22mm"><div><span class="mno">${at.k.toUpperCase()}-${i + 1}</span></div><div>${OOT_R.yol(m.sekil)}</div></div>`; });
+    } else {
+      resimli.forEach(({ m, i }) => { h += `<div class="madde"><span class="mno">${at.k.toUpperCase()}-${i + 1}${m.ornek ? " (örnek)" : ""}</span><div>${OOT_R.resim(m.resim)}</div></div>`; });
+    }
+    h += `</div>`;
+  });
+  return h + `</body></html>`;
+}
+
+function ootKilavuzHtml() {
+  const puanKutu = (at) => at.puanAralik === 2 ? `0<span class="kare"></span> 1<span class="kare"></span> 2<span class="kare"></span>` : `0<span class="kare"></span> 1<span class="kare"></span>`;
+  let h = `<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>Okul Olgunluğu Taraması — Uygulayıcı Kılavuzu ve Kayıt Formu</title><style>${OOT_CSS}</style></head><body>`;
+  h += `<h1>Okul Olgunluğu Taraması</h1><div class="alt">Uygulayıcı Kılavuzu ve Kayıt Formu · 60–84 aylık çocuklar · bireysel, 25–35 dakika</div>
+  <div class="kim"><div>Çocuğun adı:</div><div>Doğum tarihi:</div><div>Uygulama tarihi:</div><div>Okul / sınıf:</div><div>Uygulayan:</div><div>Yaş (ay):</div></div>
+  <div class="kutu"><b>Bu araç nedir?</b> Okula hazırbulunuşluğu yedi alanda ve bir gözlem formuyla tarayan, maddeleri özgün olarak yazılmış bir araçtır. Metropolitan ve Marmara okul olgunluğu testlerinin ölçtüğü alanlar (genel bilgi, dil-kavram, sayı, görsel eşleştirme, kopya etme) temel alınmış; araştırmalarda sonraki okul başarısını en iyi yordayan sesbilgisel farkındalık, erken sayı becerisi, dikkat-bellek ve sosyal-duygusal hazırlık eklenmiştir. Norm çalışması yoktur; puanlar çocuğun beklenen becerilerin ne kadarını gösterdiğini (ölçüt dayanaklı) anlatır. <b>Tanı koymaz</b>; okula başlatma ya da erteleme kararı yalnızca bu sonuca dayandırılmaz.</div>
+  <h2>Uygulama kuralları</h2><ol style="line-height:1.5;margin:0 0 0 5mm;padding:0">
+  <li>Sessiz, dikkat dağıtmayan bir odada, çocukla yan yana oturarak bireysel uygulayın. Kitapçık çocuğun önünde, bu form sizde olsun; çocuk formu görmesin.</li>
+  <li>Kısa bir sohbetle ısınma yapın. "Birlikte resimlere bakıp oyunlar oynayacağız" deyin; "test, sınav" sözcüklerini kullanmayın.</li>
+  <li>Yönergeleri <b>kalın yazıldığı gibi</b> okuyun. Bir kez tekrar edebilirsiniz; ipucu vermeyin, doğru/yanlış demeyin. Her yanıtta aynı nötr övgüyü kullanın ("Güzel çalışıyorsun").</li>
+  <li>Resimli maddelerde çocuğun gösterdiği harfi (A–D) yanına yazın, doğruysa 1, değilse 0 işaretleyin. Sözlü maddelerde "kabul edilen yanıt" sütununa göre puanlayın.</li>
+  <li>Bir alt testte çocuk art arda 4 maddede yanıt veremezse o alt testi bitirin, kalan maddeler 0 sayılır. Yorulursa kısa mola verin; isteksizlik belirginse başka bir gün tamamlayın ve not edin.</li>
+  <li>Kopya maddelerinde çocuk kurşun kalem kullanır, silgi verilmez; ikinci deneme isterse izin verin, iyi olanı puanlayın. Kalem tutuşunu ve el tercihini not edin.</li>
+  <li>Gözlem formunu kendi gözleminiz, okul öncesi öğretmeni ve veliyle yapacağınız kısa görüşmeyle doldurun.</li></ol>`;
+  OOT_ALT_TESTLER.forEach((at, ai) => {
+    h += `<h2${ai === 1 || ai === 4 || ai === 6 ? ' class="sayfa"' : ""}>${ai + 1}. ${at.ad}</h2><div class="kucuk" style="margin-bottom:1mm">${at.aciklama}${at.k === "gm" ? " Puanlama: 0-1-2 (ölçütler tabloda). Eşkenar dörtgen 78 aydan küçük çocukta toplam puana katılmaz; çizebilirse ek puan sayılır." : ""}</div>
+    <table><tr><th>No</th><th>Söylenecek / yapılacak</th><th>Doğru / kabul edilen yanıt</th><th>Puan</th></tr>`;
+    at.maddeler.forEach((m, i) => {
+      const kabul = m.tur === "secim" ? `<b>${m.dogru}</b>` + (m.resim ? ` <span class="kucuk">(kitapçıkta ${at.k.toUpperCase()}-${i + 1})</span>` : "") : (m.tur === "kopya" || m.tur === "yol") ? `<span class="kucuk">${m.olcut}</span>` : m.kabul + (m.resim ? ` <span class="kucuk">(resim: ${at.k.toUpperCase()}-${i + 1})</span>` : "");
+      h += `<tr><td class="no">${m.ornek ? "Ö" : i + 1}</td><td><b>${m.yonerge}</b>${m.tur === "kopya" ? ` <span class="kucuk">(kitapçıkta ${at.k.toUpperCase()}-${i + 1}; beklenen yaş ≈ ${m.yas} ay)</span>` : ""}</td><td>${kabul}</td><td class="p">${m.ornek ? "—" : puanKutu(at)}</td></tr>`;
+    });
+    const maks = at.maddeler.filter(m => !m.ornek).length * (at.puanAralik || 1);
+    h += `<tr><td colspan="3" style="text-align:right"><b>Alt test toplamı</b></td><td class="p">____ / ${maks}</td></tr></table>`;
+  });
+  h += `<h2 class="sayfa">8. Gözlem Formu (sosyal-duygusal, öz düzenleme, öz bakım)</h2><div class="kucuk">0 = henüz değil · 1 = bazen / destekle · 2 = genellikle, kendi başına. Bilgi kaynağı: uygulayıcı gözlemi + okul öncesi öğretmeni + veli.</div><table><tr><th>No</th><th>Davranış</th><th>Puan</th></tr>`;
+  let gn = 0;
+  OOT_GOZLEM.forEach(g => { h += `<tr><td colspan="3" style="background:#F2F8F5"><b>${g.grup}</b></td></tr>`; g.maddeler.forEach(m => { h += `<tr><td class="no">${++gn}</td><td>${m}</td><td class="p">0<span class="kare"></span> 1<span class="kare"></span> 2<span class="kare"></span></td></tr>`; }); });
+  h += `<tr><td colspan="2" style="text-align:right"><b>Gözlem toplamı</b></td><td class="p">____ / ${gn * 2}</td></tr></table>`;
+  h += `<h3>Dikkat edilecek durumlar (puanlanmaz, yorumu ve yönlendirmeyi değiştirir)</h3><table>${OOT_BAYRAKLAR.map(b => `<tr><td style="width:8mm"><span class="kare"></span></td><td>${b.ad}</td></tr>`).join("")}</table>`;
+  h += `<h2 class="sayfa">Puanlama ve yorum</h2><table><tr><th>Alt test</th><th style="width:22mm">Ham puan</th><th style="width:20mm">En yüksek</th><th style="width:18mm">Yüzde</th><th style="width:34mm">Düzey</th></tr>`;
+  OOT_ALT_TESTLER.forEach(at => { h += `<tr><td>${at.ad}</td><td></td><td style="text-align:center">${at.maddeler.filter(m => !m.ornek).length * (at.puanAralik || 1)}${at.k === "gm" ? "*" : ""}</td><td></td><td></td></tr>`; });
+  h += `<tr><td><b>Bireysel test toplamı</b></td><td></td><td style="text-align:center">67*</td><td></td><td></td></tr><tr><td><b>Gözlem</b></td><td></td><td style="text-align:center">24</td><td></td><td></td></tr></table>
+  <div class="kucuk">* 78 aydan küçük çocukta eşkenar dörtgen maddesi en yüksek puandan düşülür (görsel-motor 16, toplam 65). Yüzde = ham ÷ en yüksek × 100.</div>
+  <h3>Düzeyler (her alt test, toplam ve gözlem için)</h3><table class="bant"><tr><th style="text-align:center">%80 ve üzeri</th><th style="text-align:center">%60–79</th><th style="text-align:center">%40–59</th><th style="text-align:center">%40'ın altı</th></tr><tr><td>Güçlü</td><td>Yeterli</td><td>Sınırda</td><td>Destek gerekli</td></tr></table>
+  <h3>Genel karar</h3><table><tr><th>Sonuç</th><th>Ölçüt</th></tr>
+  <tr><td><b>Okula hazır görünüyor</b></td><td>Test toplamı %70 ve üzeri, gözlem %65 ve üzeri, hiçbir alt test %40'ın altında değil.</td></tr>
+  <tr><td><b>Okula başlayabilir — destekle izlenmeli</b></td><td>Test toplamı %55 ve üzeri, gözlem %50 ve üzeri, en fazla bir alt test %40'ın altında.</td></tr>
+  <tr><td><b>Hazırbulunuşluk sınırda</b></td><td>Test toplamı %40 ve üzeri, en fazla üç alt test %40'ın altında, gözlem %35 ve üzeri.</td></tr>
+  <tr><td><b>Hazırbulunuşluk düşük — ayrıntılı değerlendirme önerilir</b></td><td>Yukarıdakilerin hiçbiri karşılanmıyor.</td></tr></table>
+  <h3>Yaşa göre değerlendirme (MEB, Temmuz 2026 itibarıyla; yaş okula başlanacak yılın eylül sonuna göre hesaplanır)</h3><table>
+  <tr><td style="width:30mm"><b>66–68 ay</b></td><td>Veli yazılı isteğiyle 1. sınıfa başlayabilir. Erken başlama yalnızca "hazır" sonucunda ve sosyal-duygusal hazırlık da iyiyse desteklenir.</td></tr>
+  <tr><td><b>69–71 ay</b></td><td>Kayıt yapılır; veli yazılı talebiyle bir yıl erteleyip okul öncesine devam ettirebilir. "Sınırda" ya da "düşük" sonuçta bu seçenek veliyle konuşulabilir; karar velinindir.</td></tr>
+  <tr><td><b>72 ay ve üzeri</b></td><td>Başlamak zorunludur, erteleme yoktur. Sonuç sınıf öğretmeniyle destek planı için kullanılır.</td></tr></table>
+  <h3>Yorumlarken</h3><ul style="line-height:1.5;margin:0 0 0 5mm;padding:0">
+  <li>Ses farkındalığı ve sayı alt testleri okuma ve matematik başarısının en güçlü erken göstergeleridir; bu ikisindeki düşüklük ilk dönem yakın takip gerektirir.</li>
+  <li>Sosyal-duygusal ve öz düzenleme gözlemi düşükse akademik puan yüksek olsa bile uyum güçlüğü beklenebilir.</li>
+  <li>Evde Türkçe dışında dil konuşuluyorsa dil, genel bilgi ve ses puanları çocuğun kapasitesini değil Türkçe deneyimini yansıtır.</li>
+  <li>Konuşma bozukluğu, işitme/görme şüphesi, gelişim geriliği öyküsü ya da genel sonucun "düşük" çıkması durumunda ilgili sağlık birimine ve gerekirse RAM'a yönlendirin.</li>
+  <li>Tek oturum; yorgunluk, kaygı ve yabancı ortam puanı düşürebilir. Beklenmedik düşük sonuçta başka bir gün tekrar bakın.</li></ul>
+  <div class="kutu" style="margin-top:4mm"><b>Sonuç:</b> ..................................................................................... <br><br><b>Planlanan adım / öneriler:</b> ..............................................................................................................................<br><br>.............................................................................................................................................................................</div>`;
+  return h + `</body></html>`;
+}
+
+// ===== OKUL OLGUNLUĞU TARAMASI — EKRAN =====
+// Tamamen cihazda çalışır; yapay zekâ ya da internet kullanmaz.
+function ootBelgeAc(html, ad) {
+  const cubuk = `<div class="noprint" style="position:sticky;top:0;background:#127C56;color:#fff;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;gap:8px;font-family:Arial,sans-serif;z-index:9"><b style="font-size:14px">${ad}</b><span><button onclick="window.print()" style="background:#fff;color:#127C56;border:none;border-radius:8px;padding:7px 14px;font-weight:800;cursor:pointer">🖨️ Yazdır / PDF</button> <button onclick="try{window.close()}catch(e){};setTimeout(function(){if(!window.closed)history.back()},150)" style="background:rgba(255,255,255,.2);color:#fff;border:1px solid #fff;border-radius:8px;padding:7px 12px;font-weight:700;cursor:pointer">✕</button></span></div><style>@media print{.noprint{display:none!important}}</style>`;
+  const tam = html.replace(/<body([^>]*)>/, `<body$1>${cubuk}`);
+  const mobil = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  try {
+    if (!mobil) { const w = window.open("", "_blank"); if (w && !w.closed) { w.document.open(); w.document.write(tam); w.document.close(); return; } }
+    const url = URL.createObjectURL(new Blob([tam], { type: "text/html;charset=utf-8" }));
+    if (mobil) { window.location.href = url; return; }
+    const a = document.createElement("a"); a.href = url; a.download = ad + ".html"; document.body.appendChild(a); a.click(); a.remove();
+  } catch (e) { alert("Belge açılamadı: " + e.message); }
+}
+function ootTarihGoster(t) { const d = ootTarihNesne(t); return d ? d.toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" }) : (t || ""); }
+function ootTarihInput(t) { const d = ootTarihNesne(t); if (!d) return ""; const p = (n) => String(n).padStart(2, "0"); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; }
+function ootRaporHtml(s, veri, ogr) {
+  const esc = (t) => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  const bar = (y, renk) => `<div style="background:#eee;border-radius:4px;height:9px;width:100%"><div style="background:${renk};width:${y || 0}%;height:9px;border-radius:4px"></div></div>`;
+  return `<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Okul Olgunluğu Taraması Raporu</title><style>${OOT_CSS}body{padding:4mm}</style></head><body>
+  <h1>Okul Olgunluğu Taraması — Sonuç Raporu</h1><div class="alt">Gizlidir · rehberlik servisi içindir</div>
+  <table><tr><th>Öğrenci</th><td>${esc(ogr.ad)}</td><th>Sınıf</th><td>${esc(ogr.sinif)}</td></tr><tr><th>Doğum tarihi</th><td>${esc(ootTarihGoster(veri.dogumTarihi))}</td><th>Uygulama tarihi</th><td>${esc(ootTarihGoster(veri.uygulamaTarihi))}</td></tr><tr><th>Yaş (uygulama günü)</th><td>${s.yas ? `${s.yas.simdi} ay` : "—"}</td><th>Uygulayan</th><td>${esc(veri.uygulayan)}</td></tr></table>
+  <div class="kutu" style="background:${s.karar ? s.karar.bg : "#fff"};border-color:${s.karar ? s.karar.renk : "#999"}"><b style="color:${s.karar ? s.karar.renk : "#333"};font-size:12pt">${s.karar ? s.karar.ad : "—"}</b><br>Bireysel test: ${s.testHam}/${s.testMaks} (%${s.testYuzde ?? "—"})${s.goz.yuzde != null ? ` · Gözlem: ${s.goz.ham}/${s.goz.maks} (%${s.goz.yuzde})` : ""}</div>
+  <h2>Alt test profili</h2><table><tr><th>Alt test</th><th style="width:20mm">Puan</th><th style="width:16mm">%</th><th style="width:28mm">Düzey</th><th style="width:45mm"></th></tr>
+  ${s.altlar.map(a => `<tr><td>${a.ad}</td><td style="text-align:center">${a.cevaplanan ? `${a.ham}/${a.maks}` : "—"}</td><td style="text-align:center">${a.yuzde ?? "—"}</td><td style="color:${a.bant ? a.bant.renk : "#333"};font-weight:700">${a.bant ? a.bant.ad : "uygulanmadı"}</td><td>${bar(a.yuzde, a.bant ? a.bant.renk : "#ccc")}</td></tr>`).join("")}
+  ${s.goz.gruplar.map(g => `<tr><td>Gözlem — ${g.ad}</td><td style="text-align:center">${g.cevaplanan ? `${g.ham}/${g.maks}` : "—"}</td><td style="text-align:center">${g.yuzde ?? "—"}</td><td style="color:${g.bant ? g.bant.renk : "#333"};font-weight:700">${g.bant ? g.bant.ad : "—"}</td><td>${bar(g.yuzde, g.bant ? g.bant.renk : "#ccc")}</td></tr>`).join("")}</table>
+  <h2>Yorum</h2><ul style="line-height:1.5;margin:0 0 0 5mm;padding:0">${ootYorum(s).map(l => `<li>${esc(l)}</li>`).join("")}</ul>
+  ${ootOneriler(s).length ? `<h2>Öneriler</h2><ul style="line-height:1.5;margin:0 0 0 5mm;padding:0">${ootOneriler(s).map(o => `<li><b>${esc(o.alan)}:</b> ${esc(o.metin)}</li>`).join("")}</ul>` : ""}
+  ${veri.not ? `<h2>Uygulayıcı notu</h2><div>${esc(veri.not)}</div>` : ""}
+  <div class="kucuk" style="margin-top:6mm">Özgün tarama aracıdır; norm çalışması yoktur, tanı koymaz. Sonuç okul öncesi öğretmeni ve veli gözlemiyle birlikte yorumlanmalıdır.</div></body></html>`;
+}
+function ootVeliHtml(s, veri, ogr) {
+  const esc = (t) => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  const ilkAd = String(ogr.ad || "").split(" ")[0];
+  const guclu = s.altlar.filter(a => a.yuzde != null && a.yuzde >= 60).map(a => a.kisa.toLocaleLowerCase("tr"));
+  const destek = s.altlar.filter(a => a.yuzde != null && a.yuzde < 60).map(a => a.kisa.toLocaleLowerCase("tr"));
+  const oneriler = ootOneriler(s);
+  return `<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Veli Bilgilendirme</title><style>${OOT_CSS}body{padding:6mm;font-size:11pt;line-height:1.55}</style></head><body>
+  <div style="text-align:right">${esc(ootTarihGoster(veri.uygulamaTarihi) || today())}</div><h2 style="border:none">Sayın Veli,</h2>
+  <p>${esc(ilkAd)} ile okula hazırbulunuşluğunu tanımak amacıyla resimli etkinliklerden oluşan bir tarama çalışması yaptık. Bu çalışma bir sınav değildir; çocuğunuzun güçlü yanlarını ve biraz daha desteklenebilecek becerilerini görmemize yardımcı olur.</p>
+  ${guclu.length ? `<p><b>Rahat olduğu alanlar:</b> ${esc(guclu.join(", "))}.</p>` : ""}
+  ${destek.length ? `<p><b>Birlikte destekleyebileceğimiz alanlar:</b> ${esc(destek.join(", "))}. Bu becerilerin çoğu bu yaşta hızla gelişir; evde oyunla yapılan kısa çalışmalar çok fark yaratır.</p>` : `<p>Çalışmada yaşına uygun becerilerin büyük bölümünü rahatlıkla gösterdi.</p>`}
+  ${oneriler.length ? `<p><b>Evde yapabileceğiniz etkinlikler:</b></p><ul>${oneriler.slice(0, 8).map(o => `<li>${esc(o.metin)}</li>`).join("")}</ul>` : ""}
+  <p>Sonuçları ve sorularınızı yüz yüze konuşmak için sizi rehberlik servisine bekliyoruz. Tek bir oturuma dayanan bu çalışma tanı koymaz; çocuğunuzu en iyi tanıyan sizsiniz ve gözlemleriniz bizim için önemlidir.</p>
+  <p style="margin-top:10mm">Saygılarımla,<br>Okul Rehber Öğretmeni / Psikolojik Danışman</p></body></html>`;
+}
+
+function OOTPuanDugmeleri({ deger, maks, onChange }) {
+  const sec = (p) => onChange(deger === p ? undefined : p);
+  return (
+    <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
+      {Array.from({ length: maks + 1 }, (_, p) => (
+        <button key={p} onClick={() => sec(p)} style={{ minWidth: 34, height: 32, borderRadius: 8, fontWeight: 800, fontSize: 14, cursor: "pointer",
+          border: `2px solid ${deger === p ? (p === 0 ? "#C0392B" : "#1A8C5B") : BORDER}`, background: deger === p ? (p === 0 ? "#FDEDEC" : "#E6F5EE") : CARD, color: deger === p ? (p === 0 ? "#C0392B" : "#1A8C5B") : MUTED }}>{p}</button>
+      ))}
+    </div>
+  );
+}
+
+function OOTUygulama({ ilk, birinciSinifVarsayilan, onKaydet, onIptal }) {
+  const [v, setV] = useState(() => ({ cevaplar: {}, gozlem: {}, bayraklar: {}, uygulamaTarihi: today(), dogumTarihi: "", uygulayan: "", not: "", birinciSinifta: birinciSinifVarsayilan, ...(ilk || {}) }));
+  const [acik, setAcik] = useState(OOT_ALT_TESTLER[0].k);
+  const s = ootSonuc(v);
+  const guncelle = (alan, anahtar, deger) => setV(x => { const y = { ...x, [alan]: { ...x[alan] } }; if (deger === undefined) delete y[alan][anahtar]; else y[alan][anahtar] = deger; return y; });
+  const kart = { background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 12, marginBottom: 10 };
+  const giris = { width: "100%", padding: 9, borderRadius: 8, border: `1px solid ${BORDER}`, fontSize: 14, boxSizing: "border-box" };
+  const bolumBaslik = (k, baslik, sag, renk) => (
+    <button onClick={() => setAcik(acik === k ? null : k)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}>
+      <span style={{ fontWeight: 800, fontSize: 14, color: renk || TEXT }}>{acik === k ? "▾" : "▸"} {baslik}</span>
+      <span style={{ fontSize: 12, color: MUTED, fontWeight: 700, whiteSpace: "nowrap" }}>{sag}</span>
+    </button>
+  );
+  return (
+    <div data-testid="oot-uygulama">
+      <div style={kart}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8 }}>
+          <label style={{ fontSize: 12, color: MUTED }}>Doğum tarihi<input data-testid="oot-dogum" type="date" value={ootTarihInput(v.dogumTarihi)} onChange={e => setV(x => ({ ...x, dogumTarihi: e.target.value }))} style={giris} /></label>
+          <label style={{ fontSize: 12, color: MUTED }}>Uygulama tarihi<input type="date" value={ootTarihInput(v.uygulamaTarihi)} onChange={e => setV(x => ({ ...x, uygulamaTarihi: e.target.value }))} style={giris} /></label>
+          <label style={{ fontSize: 12, color: MUTED }}>Uygulayan<input value={v.uygulayan} onChange={e => setV(x => ({ ...x, uygulayan: e.target.value }))} style={giris} /></label>
+        </div>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 13 }}>
+          <input type="checkbox" checked={!!v.birinciSinifta} onChange={e => setV(x => ({ ...x, birinciSinifta: e.target.checked }))} /> Çocuk 1. sınıfa başlamış (yaş yorumu buna göre yapılır)
+        </label>
+        {s.yas && <div style={{ fontSize: 12.5, color: TEXT, marginTop: 6 }}>Yaş: <b>{s.yas.simdi} ay</b>{!v.birinciSinifta && <> · {s.yas.basYil} Eylül sonunda <b>{s.yas.eylul} ay</b></>}{(s.yas.simdi < 60 || s.yas.simdi > 90) && <span style={{ color: "#C0392B", fontWeight: 700 }}> · Araç 60–84 aylık çocuklar için tasarlandı</span>}</div>}
+      </div>
+
+      {OOT_ALT_TESTLER.map(at => {
+        const p = s.altlar.find(a => a.k === at.k);
+        return (
+          <div key={at.k} style={{ ...kart, borderLeft: `4px solid ${at.renk}` }} data-testid={`oot-bolum-${at.k}`}>
+            {bolumBaslik(at.k, at.ad, `${p.cevaplanan}/${p.maddeSayisi} · ${p.ham}/${p.maks}${p.yuzde != null ? ` · %${p.yuzde}` : ""}`, at.renk)}
+            {acik === at.k && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 12, color: MUTED, marginBottom: 6 }}>{at.aciklama}</div>
+                {at.maddeler.map((m, i) => (
+                  <div key={i} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", padding: "8px 0", borderTop: `1px solid ${BORDER}` }}>
+                    <div style={{ flex: "1 1 200px", minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 700 }}>{m.ornek ? "Örnek" : i + 1}. {m.yonerge}</div>
+                      <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>
+                        {m.tur === "secim" ? <>Doğru: <b style={{ color: "#1A8C5B" }}>{m.dogru}</b> (kitapçık {at.k.toUpperCase()}-{i + 1})</> : m.tur === "kopya" || m.tur === "yol" ? m.olcut : <>Kabul: {m.kabul}</>}
+                        {m.ileri && s.yas && s.yas.simdi < (m.yas || 78) && <span style={{ color: "#7F8C8D" }}> · yaşına göre henüz beklenmiyor, yaparsa ek puan</span>}
+                      </div>
+                    </div>
+                    {m.tur === "kopya" && <span dangerouslySetInnerHTML={{ __html: OOT_R.kopyaModel(m.sekil) }} />}
+                    {!m.ornek && <OOTPuanDugmeleri deger={v.cevaplar[`${at.k}_${i}`]} maks={at.puanAralik || 1} onChange={(d) => guncelle("cevaplar", `${at.k}_${i}`, d)} />}
+                  </div>
+                ))}
+                <button onClick={() => { const sira = OOT_ALT_TESTLER.findIndex(x => x.k === at.k); setAcik((OOT_ALT_TESTLER[sira + 1] || { k: "goz" }).k); }} style={{ marginTop: 6, padding: "7px 12px", borderRadius: 8, border: `1px solid ${BORDER}`, background: CARD, fontWeight: 700, cursor: "pointer" }}>Sonraki bölüm →</button>
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      <div style={{ ...kart, borderLeft: "4px solid #8E44AD" }} data-testid="oot-bolum-goz">
+        {bolumBaslik("goz", "Gözlem: sosyal-duygusal, öz düzenleme, öz bakım", `${s.goz.cevaplanan}/12${s.goz.yuzde != null ? ` · %${s.goz.yuzde}` : ""}`, "#8E44AD")}
+        {acik === "goz" && (
+          <div style={{ marginTop: 8 }}>
+            <div style={{ fontSize: 12, color: MUTED, marginBottom: 6 }}>0 = henüz değil · 1 = bazen / destekle · 2 = genellikle kendi başına. Kendi gözlemin + öğretmen + veli bilgisi.</div>
+            {OOT_GOZLEM.map((g, gi) => (
+              <div key={gi}>
+                <div style={{ fontSize: 12.5, fontWeight: 800, color: "#8E44AD", marginTop: 6 }}>{g.grup}</div>
+                {g.maddeler.map((m, mi) => (
+                  <div key={mi} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", padding: "6px 0", borderTop: `1px solid ${BORDER}` }}>
+                    <div style={{ flex: "1 1 200px", fontSize: 13 }}>{m}</div>
+                    <OOTPuanDugmeleri deger={v.gozlem[`${gi}_${mi}`]} maks={2} onChange={(d) => guncelle("gozlem", `${gi}_${mi}`, d)} />
+                  </div>
+                ))}
+              </div>
+            ))}
+            <div style={{ fontSize: 12.5, fontWeight: 800, marginTop: 10 }}>Dikkat edilecek durumlar (puanlanmaz)</div>
+            {OOT_BAYRAKLAR.map(b => (
+              <label key={b.k} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13, padding: "4px 0" }}>
+                <input type="checkbox" checked={!!v.bayraklar[b.k]} onChange={e => guncelle("bayraklar", b.k, e.target.checked ? true : undefined)} /> {b.ad}
+              </label>
+            ))}
+            <textarea value={v.not} onChange={e => setV(x => ({ ...x, not: e.target.value }))} placeholder="Uygulama notu (kalem tutuşu, el tercihi, isteklilik, yorgunluk…)" rows={3} style={{ ...giris, marginTop: 8, fontFamily: "inherit" }} />
+          </div>
+        )}
+      </div>
+
+      <div style={{ ...kart, background: s.karar ? s.karar.bg : CARD, borderColor: s.karar ? s.karar.renk : BORDER, position: "sticky", bottom: 8, zIndex: 2 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 800, color: s.karar ? s.karar.renk : MUTED }} data-testid="oot-canli-karar">{s.karar ? s.karar.ad : "Puanladıkça sonuç burada görünür"}</div>
+        {s.testYuzde != null && <div style={{ fontSize: 12, color: MUTED }}>Test %{s.testYuzde}{s.goz.yuzde != null ? ` · Gözlem %${s.goz.yuzde}` : ""}</div>}
+        <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+          <button onClick={onIptal} style={{ flex: 1, padding: 11, borderRadius: 10, border: `1px solid ${BORDER}`, background: CARD, fontWeight: 700, cursor: "pointer" }}>Vazgeç</button>
+          <button data-testid="oot-kaydet" onClick={() => onKaydet(v)} style={{ flex: 2, padding: 11, borderRadius: 10, border: "none", background: "#127C56", color: "#fff", fontWeight: 800, cursor: "pointer" }}>💾 Kaydet ve sonucu gör</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OOTSonucEkrani({ kayit, ogr, onDuzenle, onGeri }) {
+  const v = kayit.veri, s = ootSonuc(v);
+  const kart = { background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 12, marginBottom: 10 };
+  const btn = { padding: "9px 12px", borderRadius: 10, border: `1px solid ${BORDER}`, background: CARD, fontWeight: 700, fontSize: 13, cursor: "pointer" };
+  return (
+    <div data-testid="oot-sonuc">
+      <div style={{ ...kart, background: s.karar ? s.karar.bg : CARD, borderColor: s.karar ? s.karar.renk : BORDER }}>
+        <div style={{ fontSize: 16, fontWeight: 900, color: s.karar ? s.karar.renk : TEXT }} data-testid="oot-karar">{s.karar ? s.karar.ad : "Henüz puanlanmadı"}</div>
+        <div style={{ fontSize: 12.5, color: MUTED, marginTop: 3 }}>{ootTarihGoster(v.uygulamaTarihi)}{s.yas ? ` · ${s.yas.simdi} ay` : ""} · Test {s.testHam}/{s.testMaks}{s.testYuzde != null ? ` (%${s.testYuzde})` : ""}{s.goz.yuzde != null ? ` · Gözlem %${s.goz.yuzde}` : ""}</div>
+      </div>
+      <div style={kart}>
+        <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 6 }}>Alt test profili</div>
+        {[...s.altlar.map(a => ({ ad: a.kisa, y: a.yuzde, b: a.bant, p: a.cevaplanan ? `${a.ham}/${a.maks}` : "—" })), ...s.goz.gruplar.map(g => ({ ad: "Gözlem: " + g.ad.toLocaleLowerCase("tr"), y: g.yuzde, b: g.bant, p: g.cevaplanan ? `${g.ham}/${g.maks}` : "—" }))].map(r => (
+          <div key={r.ad} style={{ marginBottom: 7 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5 }}><span style={{ fontWeight: 700 }}>{r.ad}</span><span style={{ color: r.b ? r.b.renk : MUTED, fontWeight: 700, whiteSpace: "nowrap" }}>{r.p}{r.y != null ? ` · %${r.y} · ${r.b.ad}` : ""}</span></div>
+            <div style={{ background: "#EEE", borderRadius: 4, height: 8, marginTop: 3 }}><div style={{ width: `${r.y || 0}%`, background: r.b ? r.b.renk : "#CCC", height: 8, borderRadius: 4 }} /></div>
+          </div>
+        ))}
+      </div>
+      <div style={kart}>
+        <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 6 }}>Yorum</div>
+        <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.55 }} data-testid="oot-yorum">{ootYorum(s).map((l, i) => <li key={i}>{l}</li>)}</ul>
+      </div>
+      {ootOneriler(s).length > 0 && (
+        <div style={kart}>
+          <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 6 }}>Öneriler (okul ve ev)</div>
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.55 }}>{ootOneriler(s).map((o, i) => <li key={i}><b>{o.alan}:</b> {o.metin}</li>)}</ul>
+        </div>
+      )}
+      {v.not && <div style={kart}><b style={{ fontSize: 13 }}>Not:</b> <span style={{ fontSize: 13 }}>{v.not}</span></div>}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        <button onClick={onGeri} style={btn}>← Geri</button>
+        <button onClick={onDuzenle} style={btn}>✏️ Puanları düzenle</button>
+        <button onClick={() => ootBelgeAc(ootRaporHtml(s, v, ogr), "Okul Olgunluğu Raporu")} style={btn}>🖨️ Rapor</button>
+        <button onClick={() => ootBelgeAc(ootVeliHtml(s, v, ogr), "Veli Bilgilendirme")} style={btn}>✉️ Veli bilgilendirme</button>
+      </div>
+    </div>
+  );
+}
+
+function OOTPaneli({ seciliAd, seciliSinif, seciliNumara, testKayitlari, setTestKayitlari }) {
+  const [gorunum, setGorunum] = useState("ana");
+  const [aktif, setAktif] = useState(null);
+  const [durum, setDurum] = useState("");
+  useEffect(() => { setGorunum("ana"); setAktif(null); }, [seciliAd, seciliSinif]);
+  const tumKayitlar = pdrSozlukOku(testKayitlari, seciliAd, seciliSinif, seciliNumara) || [];
+  const kayitlar = tumKayitlar.filter(k => k.tip === "okul_olgunlugu").sort((a, b) => pdrTarihMs(b.tarih) - pdrTarihMs(a.tarih) || String(b.id).localeCompare(String(a.id)));
+  const birinci = /^\s*1\s*[-/.\s]?[A-Za-zÇĞİÖŞÜçğıöşü]?\s*$/.test(String(seciliSinif || "")) || /^1\b/.test(String(seciliSinif || "").trim());
+  const ogr = { ad: seciliAd, sinif: seciliSinif };
+  async function yaz(liste) {
+    const guncel = pdrSozlukYaz(testKayitlari, seciliAd, seciliSinif, liste, seciliNumara);
+    setTestKayitlari(guncel);
+    try { await saveTestKayitlari(guncel); setDurum("✓ Kaydedildi"); } catch (e) { setDurum("⚠ Kaydedilirken sorun oluştu — bağlantıyı kontrol edin."); }
+    setTimeout(() => setDurum(""), 2500);
+  }
+  async function kaydet(veri) {
+    const uyg = ootTarihNesne(veri.uygulamaTarihi);
+    const kayit = { id: (aktif && aktif.id) || uid(), kategori: "objektif", testAdi: "Okul Olgunluğu Taraması", tip: "okul_olgunlugu", tarih: uyg ? uyg.toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" }) : today(), not: "", veri: { ...veri, surum: OOT_SURUM } };
+    await yaz([kayit, ...tumKayitlar.filter(k => k.id !== kayit.id)]);
+    setAktif(kayit); setGorunum("sonuc");
+  }
+  async function sil(k) {
+    if (!confirm(`${k.tarih} tarihli okul olgunluğu taraması silinsin mi?`)) return;
+    await yaz(tumKayitlar.filter(x => x.id !== k.id));
+  }
+  if (!seciliAd) return <div style={{ fontSize: 12.5, color: MUTED, padding: 10 }}>Önce yukarıdan bir öğrenci seçin.</div>;
+  const ust = (
+    <div style={{ background: "linear-gradient(135deg,#FEF9E7 0%,#FFFFFF 70%)", border: "1px solid #F9E79F", borderRadius: 12, padding: 14, marginBottom: 12 }}>
+      <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+        <div style={{ fontSize: 36 }}>🎒</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 900, color: "#7D6608" }}>Okul Olgunluğu Taraması</div>
+          <div style={{ fontSize: 11.5, color: MUTED, marginTop: 2 }}>60–84 ay · bireysel, 25–35 dk · 7 alt test + gözlem · cihazda puanlanır, yapay zekâ kullanılmaz</div>
+        </div>
+      </div>
+      {durum && <div style={{ fontSize: 12.5, fontWeight: 700, color: durum.startsWith("✓") ? "#1A8C5B" : "#C0392B", marginTop: 6 }}>{durum}</div>}
+    </div>
+  );
+  if (gorunum === "uygula") return <div>{ust}<OOTUygulama ilk={aktif ? aktif.veri : null} birinciSinifVarsayilan={birinci} onKaydet={kaydet} onIptal={() => setGorunum(aktif ? "sonuc" : "ana")} /></div>;
+  if (gorunum === "sonuc" && aktif) return <div>{ust}<OOTSonucEkrani kayit={aktif} ogr={ogr} onDuzenle={() => setGorunum("uygula")} onGeri={() => { setAktif(null); setGorunum("ana"); }} /></div>;
+  const btn = { padding: "10px 12px", borderRadius: 10, border: `1px solid ${BORDER}`, background: CARD, fontWeight: 700, fontSize: 13, cursor: "pointer" };
+  return (
+    <div>
+      {ust}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+        <button data-testid="oot-yeni" onClick={() => { setAktif(null); setGorunum("uygula"); }} style={{ ...btn, flex: "1 1 100%", background: "#127C56", color: "#fff", border: "none", fontSize: 14 }}>▶ Yeni uygulama / puan gir</button>
+        <button onClick={() => ootBelgeAc(ootKitapcikHtml(), "Okul Olgunluğu - Çocuk Kitapçığı")} style={{ ...btn, flex: "1 1 45%" }}>🖨️ Çocuk kitapçığı</button>
+        <button onClick={() => ootBelgeAc(ootKilavuzHtml(), "Okul Olgunluğu - Uygulayıcı Kılavuzu")} style={{ ...btn, flex: "1 1 45%" }}>🖨️ Uygulayıcı kılavuzu ve kayıt formu</button>
+      </div>
+      <div style={{ fontSize: 12, color: MUTED, marginBottom: 10, lineHeight: 1.5 }}>
+        Kâğıtla uygula: kitapçık çocuğun önünde, kayıt formu sende. Sonra burada maddeleri işaretle; puanlama, profil, yorum ve veli bilgilendirmesi otomatik çıkar. Özgün bir tarama aracıdır, tanı koymaz.
+      </div>
+      {kayitlar.length === 0 ? <div style={{ fontSize: 13, color: MUTED }}>Bu öğrenci için kayıtlı tarama yok.</div> : kayitlar.map(k => (
+        <div key={k.id} data-testid="oot-kayit" style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 12, marginBottom: 8 }}>
+          <div style={{ fontWeight: 800, fontSize: 13.5 }}>{k.tarih}</div>
+          <div style={{ fontSize: 12.5, color: MUTED, marginTop: 2 }}>{ootKisaOzet(k.veri)}</div>
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <button onClick={() => { setAktif(k); setGorunum("sonuc"); }} style={btn}>Sonucu aç</button>
+            <button onClick={() => sil(k)} style={{ ...btn, color: "#C0392B" }}>Sil</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function OYPaneli({ seciliAd, seciliSinif, seciliNumara, testKayitlari, setTestKayitlari }) {
   const [gorunum, setGorunum] = useState("ana");   // ana | degerlendir | olcum | alistirma
   const [degTur, setDegTur] = useState("on");
@@ -22754,6 +23498,7 @@ function testSonucOzeti(k) {
     }
     case "dikkat_cdt": return cdtKisaOzet(v);
     case "dikkat_egitim": return dgKisaOzet(v);
+    case "okul_olgunlugu": return ootKisaOzet(v);
     case "okuma_degerlendirme": return oyKisaOzetDeg({ ...v, tarih: k.tarih });
     case "okuma_programi": return oyKisaOzetProgram(v);
     case "kaynastirma_ed": return kedKisaOzet(v);
@@ -23434,6 +24179,11 @@ KURALLAR:
                   <div style={{ display:"flex", gap:8, marginTop:8 }}>
                     <button data-asistan="test-kaynastirma" onClick={()=>setKategori("ked")} style={{ flex:1, padding:"14px 8px", borderRadius:12, border:`2px solid #6D28D9`, background:"linear-gradient(135deg,#F5F3FF,#FFFFFF)", color:"#4C1D95", fontSize:13, fontWeight:800, cursor:"pointer" }}>🧩 Kaynaştırma Eğitsel Değerlendirme (BEP)</button>
                   </div>
+                  {kademe === "ilkokul" && (
+                    <div style={{ display:"flex", gap:8, marginTop:8 }}>
+                      <button data-testid="test-okul-olgunlugu" onClick={()=>setKategori("oot")} style={{ flex:1, padding:"14px 8px", borderRadius:12, border:`2px solid #B7950B`, background:"linear-gradient(135deg,#FEF9E7,#FFFFFF)", color:"#7D6608", fontSize:13, fontWeight:800, cursor:"pointer" }}>🎒 Okul Olgunluğu Taraması<div style={{ fontSize:11, fontWeight:600, color:MUTED, marginTop:3 }}>60–84 ay · 7 alt test + gözlem · resimli kitapçık, otomatik yorum</div></button>
+                    </div>
+                  )}
                   <div style={{ display:"flex", gap:8, marginTop:8 }}>
                     <button data-asistan="test-okuma" onClick={()=>setKategori("oy")} style={{ flex:1, padding:"14px 8px", borderRadius:12, border:`2px solid #0E7490`, background:"linear-gradient(135deg,#ECFEFF,#FFFFFF)", color:"#155E75", fontSize:13, fontWeight:800, cursor:"pointer" }}>📖 Okuma-Yazma Destek Programı</button>
                   </div>
@@ -23477,6 +24227,11 @@ KURALLAR:
                 <div>
                   <button onClick={()=>setKategori(null)} style={{ background:"none", border:"none", color:MUTED, fontSize:12, cursor:"pointer", marginBottom:8, padding:0 }}>← Kategoriyi değiştir</button>
                   <KEDPaneli seciliAd={seciliAd} seciliSinif={seciliSinif} seciliNumara={seciliNumara} ogrenciler={ogrenciler} testKayitlari={testKayitlari} setTestKayitlari={setTestKayitlari} akademikTaramalar={akademikTaramalar} ilkokulTaramalar={ilkokulTaramalar} onKategori={setKategori} />
+                </div>
+              ) : kategori === "oot" ? (
+                <div>
+                  <button onClick={()=>setKategori(null)} style={{ background:"none", border:"none", color:MUTED, fontSize:12, cursor:"pointer", marginBottom:8, padding:0 }}>← Kategoriyi değiştir</button>
+                  <OOTPaneli seciliAd={seciliAd} seciliSinif={seciliSinif} seciliNumara={seciliNumara} testKayitlari={testKayitlari} setTestKayitlari={setTestKayitlari} />
                 </div>
               ) : kategori === "oy" ? (
                 <div>

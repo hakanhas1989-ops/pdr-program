@@ -10594,6 +10594,321 @@ function ksAsistanTarihNormal(t) {
 }
 function ksAsistanKisalt(s, n) { s = String(s || ""); return s.length > n ? s.slice(0, n - 1) + "…" : s; }
 
+// ── Görüşme analizi, günlük brifing ve test sonuçları (YEREL hesaplanır) ─────────
+// Sayılar, dağılımlar ve listeler cihazda çıkarılır; modele yalnızca bu özet gider
+// (öğrenci/sınıf adları gizlilik kalkanıyla kodlanır, not metinleri hiç gitmez).
+function ksAnzAkademikYil(ctx) {
+  const m = /^(\d{4})/.exec(String(ctx.aktifYil || ""));
+  if (m) return +m[1];
+  const d = new Date(); return d.getMonth() >= 8 ? d.getFullYear() : d.getFullYear() - 1;
+}
+// Takvim günü farkı (gece yarısına göre; saat farkı yuvarlamayı bozmaz): + geçmiş, − gelecek
+function ksAnzGunFarki(tarih) {
+  const a = ksTarihAnahtar(tarih); if (a === "00000000") return null;
+  const b = new Date(); b.setHours(0, 0, 0, 0);
+  return Math.round((b.getTime() - new Date(+a.slice(0, 4), +a.slice(4, 6) - 1, +a.slice(6, 8)).getTime()) / 86400000);
+}
+function ksAnzAnahtar(d) { return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`; }
+function ksAnzGoster(a) { return a && a !== "00000000" ? `${a.slice(6, 8)}.${a.slice(4, 6)}.${a.slice(0, 4)}` : ""; }
+// dönem: bu_hafta | bu_ay | gecen_ay | son_30 | son_90 | 1_donem | 2_donem | yil | tum ; baslangic/bitis GG.AA.YYYY önceliklidir
+function ksAnzAralik(g, ctx) {
+  const bugun = new Date(); bugun.setHours(0, 0, 0, 0);
+  const gun = (n) => new Date(bugun.getTime() - n * 86400000);
+  const y0 = ksAnzAkademikYil(ctx);
+  const d = String(g.donem || "").toLocaleLowerCase("tr").replace(/[\s.]+/g, "_");
+  let bas = null, bit = null, ad = "bütün kayıtlar";
+  if (/^(bu_?hafta|hafta)$/.test(d)) { const gd = (bugun.getDay() + 6) % 7; bas = gun(gd); bit = bugun; ad = "bu hafta"; }
+  else if (/^(bu_?ay|ay)$/.test(d)) { bas = new Date(bugun.getFullYear(), bugun.getMonth(), 1); bit = bugun; ad = "bu ay"; }
+  else if (/^gecen_?ay$/.test(d)) { bas = new Date(bugun.getFullYear(), bugun.getMonth() - 1, 1); bit = new Date(bugun.getFullYear(), bugun.getMonth(), 0); ad = "geçen ay"; }
+  else if (/^son_?(\d+)/.test(d)) { const n = +/(\d+)/.exec(d)[1]; bas = gun(n); bit = bugun; ad = `son ${n} gün`; }
+  else if (/^(1|birinci|ilk)_?donem$/.test(d)) { bas = new Date(y0, 8, 1); bit = new Date(y0 + 1, 0, 31); ad = "1. dönem"; }
+  else if (/^(2|ikinci)_?donem$/.test(d)) { bas = new Date(y0 + 1, 1, 1); bit = new Date(y0 + 1, 5, 30); ad = "2. dönem"; }
+  else if (/^(yil|bu_?yil|ogretim_?yili)$/.test(d)) { bas = new Date(y0, 8, 1); bit = new Date(y0 + 1, 7, 31); ad = `${y0}-${y0 + 1} öğretim yılı`; }
+  let A = bas ? ksAnzAnahtar(bas) : null, B = bit ? ksAnzAnahtar(bit) : null;
+  const gb = ksAsistanTarihNormal(g.baslangic), gs = ksAsistanTarihNormal(g.bitis);
+  if (gb) A = ksTarihAnahtar(gb);
+  if (gs) B = ksTarihAnahtar(gs);
+  if (gb || gs) ad = "";
+  const etiket = `${ad}${A || B ? `${ad ? " " : ""}(${A ? ksAnzGoster(A) : "…"}–${B ? ksAnzGoster(B) : "…"})` : ""}`;
+  return { A, B, etiket, icinde: (t) => { const k = ksTarihAnahtar(t); if (k === "00000000") return !A && !B; return (!A || k >= A) && (!B || k <= B); } };
+}
+function ksAnzSay(liste, fn) { const m = {}; liste.forEach(x => { const k = fn(x); if (k) m[k] = (m[k] || 0) + 1; }); return Object.entries(m).sort((a, b) => b[1] - a[1]); }
+function ksAnzYuzde(n, t) { return t ? Math.round(100 * n / t) : 0; }
+function ksAnzKonu(r) { return String(r.topic || "").trim() || "Konu girilmemiş"; }
+function ksAnzTur(r) { return r.meetingType || "Öğrenci"; }
+const KS_ANZ_AYLAR = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
+function ksAnzAy(t) { const k = ksTarihAnahtar(t); return k === "00000000" ? null : k.slice(0, 6); }
+function ksAnzAyAd(a) { return `${KS_ANZ_AYLAR[+a.slice(4, 6) - 1]} ${a.slice(2, 4)}`; }
+function ksAnzSinifEs(a, b) { const t = (s) => ksSade(String(s || "")).replace(/[^a-z0-9ıüöçşğ]/g, ""); return t(a) === t(b); }
+function ksAnzKademeOk(ctx, sinif) { return typeof pdrKademeUyumlu !== "function" || pdrKademeUyumlu(sinif, ctx.kademe || ""); }
+function ksAnzAktifPlanVar(ctx, ad, sinif) { return (pdrSozlukOku(ctx.mudahalePlan, ad, sinif) || []).some(p => p.durum === "Devam Ediyor"); }
+function ksAnzSonGorusme(ctx, ad, sinif) { return (ctx.records || []).filter(x => pdrAyniOgrenci(x.studentName, x.className, ad, sinif)).sort((a, b) => ksTarihSirala(b, a))[0] || null; }
+// Konu eğilimi: dönemin ilk yarısı ile ikinci yarısı karşılaştırılır
+function ksAnzEgilim(kayitlar) {
+  const anahtarlar = kayitlar.map(r => ksTarihAnahtar(r.date)).filter(k => k !== "00000000").sort();
+  if (anahtarlar.length < 6) return null;
+  const orta = anahtarlar[Math.floor(anahtarlar.length / 2)];
+  const ilk = {}, son = {};
+  kayitlar.forEach(r => { const k = ksTarihAnahtar(r.date); if (k === "00000000") return; const h = k < orta ? ilk : son; const t = ksAnzKonu(r); h[t] = (h[t] || 0) + 1; });
+  const tum = [...new Set([...Object.keys(ilk), ...Object.keys(son)])];
+  const fark = tum.map(t => ({ t, a: ilk[t] || 0, b: son[t] || 0 })).filter(x => Math.abs(x.b - x.a) >= 2 && (x.a + x.b) >= 3).sort((x, y) => Math.abs(y.b - y.a) - Math.abs(x.b - x.a)).slice(0, 5);
+  return { ortaTarih: ksAnzGoster(orta), fark };
+}
+function ksAsistanGorusmeAnalizi(g, ctx, o) {
+  if (g.ogrenci && !o) return `"${g.ogrenci}" adında kayıtlı öğrenci bulunamadı; ogrenci_ara ile ara.`;
+  const R = ksAnzAralik(g, ctx);
+  const sinifQ = String(g.sinif || "").trim();
+  const turQ = ["Öğrenci", "Veli", "Öğretmen"].find(t => ksSade(t) === ksSade(String(g.tur || "")));
+  const konuQ = ksSade(String(g.konu || "").trim());
+  const kelimeQ = ksSade(String(g.kelime || "").trim());
+  const kapsam = o ? "ogrenci" : sinifQ ? "sinif" : "okul";
+  const hamTum = (ctx.records || []).filter(r => ksAnzKademeOk(ctx, r.className));
+  let kayit = hamTum.filter(r => R.icinde(r.date));
+  if (kapsam === "sinif") kayit = kayit.filter(r => ksAnzSinifEs(r.className, sinifQ));
+  if (o) kayit = kayit.filter(r => pdrAyniOgrenci(r.studentName, r.className, o.name, o.className));
+  if (turQ) kayit = kayit.filter(r => ksAnzTur(r) === turQ);
+  if (konuQ) kayit = kayit.filter(r => ksSade(ksAnzKonu(r) + " " + (r.altKonu || "")).includes(konuQ));
+  const kelimeEs = (r) => ksSade(`${r.summary || ""} ${r.raw || ""} ${r.topic || ""} ${r.altKonu || ""}`).includes(kelimeQ);
+  if (kelimeQ) kayit = kayit.filter(kelimeEs);
+  const b = [];
+  const kapsamAd = kapsam === "ogrenci" ? ksAsistanEtiket(o) : kapsam === "sinif" ? `${sinifQ} sınıfı` : `okul geneli${ctx.kademe ? " (" + ctx.kademe + ")" : ""}`;
+  b.push(`GÖRÜŞME ANALİZİ — ${kapsamAd} · ${R.etiket || "bütün kayıtlar"}${turQ ? " · yalnız " + turQ.toLocaleLowerCase("tr") + " görüşmeleri" : ""}${konuQ ? ` · konu: "${g.konu}"` : ""}${kelimeQ ? ` · notunda "${g.kelime}" geçenler` : ""}`);
+  b.push("(Programda yerel olarak hesaplandı; sayılar kayıtlara dayanır.)");
+  if (!kayit.length) { b.push("Bu ölçütlere uyan görüşme kaydı yok."); return b.join("\n"); }
+  const ogrSet = new Set(kayit.map(r => ksSade(r.studentName || "") + "|" + ksSade(r.className || "")));
+  const turler = ksAnzSay(kayit, ksAnzTur);
+  const grup = kayit.filter(r => r.grupKatilimcilari && r.grupKatilimcilari.length).length;
+  b.push(`\nTOPLAM: ${kayit.length} görüşme · ${ogrSet.size} farklı öğrenci · ${turler.map(([k, v]) => `${k.toLocaleLowerCase("tr")} ${v}`).join(", ")}${grup ? ` · grup görüşmesi kaydı ${grup}` : ""}`);
+  const konular = ksAnzSay(kayit, ksAnzKonu);
+  b.push(`KONULAR: ${konular.slice(0, 10).map(([k, v]) => `${k} ${v} (%${ksAnzYuzde(v, kayit.length)})`).join(", ")}`);
+  const alt = ksAnzSay(kayit, r => String(r.altKonu || "").trim());
+  if (alt.length) b.push(`ALT KONULAR: ${alt.slice(0, 8).map(([k, v]) => `${k} ${v}`).join(", ")}`);
+  const veliKonu = ksAnzSay(kayit.filter(r => ksAnzTur(r) === "Veli"), ksAnzKonu);
+  if (veliKonu.length && !turQ) b.push(`VELİ GÖRÜŞMELERİNİN KONULARI: ${veliKonu.slice(0, 5).map(([k, v]) => `${k} ${v}`).join(", ")}`);
+  // Aylık seyir
+  const aylar = {};
+  kayit.forEach(r => { const a = ksAnzAy(r.date); if (!a) return; (aylar[a] = aylar[a] || []).push(r); });
+  const ayS = Object.keys(aylar).sort();
+  if (ayS.length >= 2) b.push(`AYLIK SEYİR: ${ayS.slice(-8).map(a => { const l = aylar[a]; const ust = ksAnzSay(l, ksAnzKonu)[0]; return `${ksAnzAyAd(a)} ${l.length}${ust && kapsam !== "ogrenci" ? " (en çok " + ust[0] + ")" : ""}`; }).join(" · ")}`);
+  const eg = ksAnzEgilim(kayit);
+  if (eg && eg.fark.length) b.push(`KONU EĞİLİMİ (${eg.ortaTarih} öncesi → sonrası): ${eg.fark.map(x => `${x.t} ${x.a}→${x.b} ${x.b > x.a ? "↑" : "↓"}`).join(", ")}`);
+  if (kelimeQ) {
+    const kSinif = ksAnzSay(kayit, r => r.className || "sınıfsız");
+    b.push(`"${g.kelime}" GEÇEN NOTLAR: ${kayit.length} görüşme, ${ogrSet.size} öğrenci; sınıflara göre: ${kSinif.slice(0, 10).map(([k, v]) => `${k} ${v}`).join(", ")}`);
+  }
+
+  if (kapsam === "okul") {
+    // Sınıf karşılaştırması
+    const kayitli = (ctx.ogrenciListesi || []).filter(x => ksAnzKademeOk(ctx, x.className));
+    const sinifMevcut = {}; kayitli.forEach(x => { const c = x.className || "?"; sinifMevcut[c] = (sinifMevcut[c] || 0) + 1; });
+    const sinifGrup = {}; kayit.forEach(r => { const c = r.className || "?"; (sinifGrup[c] = sinifGrup[c] || []).push(r); });
+    const satir = Object.entries(sinifGrup).map(([c, l]) => {
+      const ogr = new Set(l.map(r => ksSade(r.studentName || ""))).size, mev = sinifMevcut[c] || 0;
+      return { c, n: l.length, ogr, mev, veli: l.filter(r => ksAnzTur(r) === "Veli").length, ust: ksAnzSay(l, ksAnzKonu).slice(0, 2).map(x => x[0]) };
+    }).sort((a, b) => b.n - a.n);
+    b.push(`\nSINIFLAR (görüşme sayısına göre):`);
+    satir.slice(0, 14).forEach(s => b.push(`• ${s.c}: ${s.n} görüşme, ${s.ogr} öğrenci${s.mev ? ` (mevcudun %${ksAnzYuzde(s.ogr, s.mev)}'i)` : ""}, veli ${s.veli}; en çok: ${s.ust.join(", ")}`));
+    if (satir.length > 14) b.push(`  (+${satir.length - 14} sınıf daha)`);
+    const hic = Object.keys(sinifMevcut).filter(c => !sinifGrup[c]).sort();
+    if (hic.length) b.push(`HİÇ GÖRÜŞME YAPILMAYAN SINIFLAR: ${hic.slice(0, 15).join(", ")}`);
+    // Sınıf × konu (ilk 4 konu)
+    const ilk4 = konular.slice(0, 4).map(x => x[0]);
+    if (ilk4.length >= 2 && satir.length >= 2) {
+      const yogun = ilk4.map(t => { const ls = satir.map(s => ({ c: s.c, v: (sinifGrup[s.c] || []).filter(r => ksAnzKonu(r) === t).length })).filter(x => x.v).sort((a, b) => b.v - a.v).slice(0, 3); return `${t}: ${ls.map(x => `${x.c} ${x.v}`).join(", ")}`; });
+      b.push(`KONULARIN YOĞUNLAŞTIĞI SINIFLAR: ${yogun.join(" | ")}`);
+    }
+  }
+  if (kapsam === "sinif") {
+    const sinifOgr = (ctx.ogrenciListesi || []).filter(x => ksAnzSinifEs(x.className, sinifQ));
+    if (sinifOgr.length) {
+      const say = sinifOgr.map(x => ({ x, n: kayit.filter(r => pdrAyniOgrenci(r.studentName, r.className, x.name, x.className)).length, risk: (ctx.riskListesi || []).some(r => !r.kapandi && pdrAyniOgrenci(r.studentName, r.className, x.name, x.className)) }));
+      const gorulen = say.filter(s => s.n), gorulmeyen = say.filter(s => !s.n);
+      b.push(`\nSINIF KAPSAMI: mevcut ${sinifOgr.length}, görüşülen ${gorulen.length} (%${ksAnzYuzde(gorulen.length, sinifOgr.length)}), görüşülmeyen ${gorulmeyen.length}`);
+      b.push(`EN SIK GÖRÜŞÜLENLER: ${gorulen.sort((a, b) => b.n - a.n).slice(0, 6).map(s => `${s.x.name} ${s.n}${s.risk ? " (aktif risk)" : ""}`).join(", ") || "—"}`);
+      if (gorulmeyen.length) b.push(`BU ARALIKTA HİÇ GÖRÜŞÜLMEYENLER: ${gorulmeyen.slice(0, 15).map(s => s.x.name + (s.risk ? " (aktif risk!)" : "")).join(", ")}${gorulmeyen.length > 15 ? ` (+${gorulmeyen.length - 15})` : ""}`);
+    }
+    // Okul geneliyle karşılaştırma
+    const okul = hamTum.filter(r => R.icinde(r.date));
+    if (okul.length > kayit.length) {
+      const okulOran = Object.fromEntries(ksAnzSay(okul, ksAnzKonu).map(([k, v]) => [k, v / okul.length]));
+      const ayrisan = konular.map(([k, v]) => ({ k, s: v / kayit.length, o: okulOran[k] || 0, v })).filter(x => x.v >= 2 && x.s - x.o >= 0.1).slice(0, 4);
+      if (ayrisan.length) b.push(`OKUL GENELİNE GÖRE BU SINIFTA DAHA SIK: ${ayrisan.map(x => `${x.k} (%${Math.round(100 * x.s)} — okulda %${Math.round(100 * x.o)})`).join(", ")}`);
+    }
+  }
+  if (kapsam === "ogrenci") {
+    const sirali = kayit.slice().sort(ksTarihSirala);
+    b.push(`\nZAMAN ÇİZELGESİ: ${sirali.slice(-12).map(r => `${r.date} ${ksAnzKonu(r)}${ksAnzTur(r) !== "Öğrenci" ? " [" + ksAnzTur(r).toLocaleLowerCase("tr") + "]" : ""}`).join(" → ")}`);
+    const ak = sirali.map(r => ksTarihAnahtar(r.date)).filter(k => k !== "00000000").map(k => new Date(+k.slice(0, 4), +k.slice(4, 6) - 1, +k.slice(6, 8)).getTime());
+    if (ak.length >= 2) b.push(`GÖRÜŞME SIKLIĞI: ortalama ${Math.round((ak[ak.length - 1] - ak[0]) / 86400000 / (ak.length - 1))} günde bir; son görüşme ${ksAnzGunFarki(sirali[sirali.length - 1].date)} gün önce`);
+    const tekrar = konular.filter(([, v]) => v >= 3).map(([k, v]) => `${k} (${v} kez)`);
+    if (tekrar.length) b.push(`TEKRARLAYAN KONULAR: ${tekrar.join(", ")}`);
+    if (sirali.length >= 4) { const ilk = ksAnzSay(sirali.slice(0, Math.ceil(sirali.length / 2)), ksAnzKonu)[0], son = ksAnzSay(sirali.slice(Math.ceil(sirali.length / 2)), ksAnzKonu)[0]; if (ilk && son && ilk[0] !== son[0]) b.push(`ODAK DEĞİŞİMİ: ilk görüşmelerde ${ilk[0]}, son görüşmelerde ${son[0]}`); }
+    if (!kayit.some(r => ksAnzTur(r) === "Veli") && kayit.length >= 3) b.push("DİKKAT: Bu aralıkta veli görüşmesi yok.");
+    const rk = (ctx.riskListesi || []).filter(r => !r.kapandi && pdrAyniOgrenci(r.studentName, r.className, o.name, o.className));
+    b.push(`Aktif risk: ${rk.length ? rk.map(r => `${r.riskTuru} (${r.oncelik})`).join(", ") : "yok"} · aktif müdahale planı: ${ksAnzAktifPlanVar(ctx, o.name, o.className) ? "var" : "yok"}`);
+  } else {
+    // En sık görüşülen öğrenciler ve dikkat listeleri
+    const ogrSay = {}; kayit.forEach(r => { const k = (r.studentName || "?") + "\u0000" + (r.className || ""); ogrSay[k] = (ogrSay[k] || 0) + 1; });
+    const enSik = Object.entries(ogrSay).sort((a, b) => b[1] - a[1]).slice(0, 6);
+    b.push(`\nEN SIK GÖRÜŞÜLEN ÖĞRENCİLER: ${enSik.map(([k, v]) => { const [n, c] = k.split("\u0000"); return `${n}${kapsam === "okul" && c ? " (" + c + ")" : ""} ${v}`; }).join(", ")}`);
+    const veliYok = Object.entries(ogrSay).filter(([k, v]) => { if (v < 3) return false; const [n, c] = k.split("\u0000"); return !hamTum.some(r => ksAnzTur(r) === "Veli" && pdrAyniOgrenci(r.studentName, r.className, n, c)); }).slice(0, 8);
+    if (veliYok.length) b.push(`3+ GÖRÜŞMESİ OLUP HİÇ VELİ GÖRÜŞMESİ YAPILMAMIŞ: ${veliYok.map(([k, v]) => { const [n, c] = k.split("\u0000"); return `${n}${kapsam === "okul" && c ? " (" + c + ")" : ""} ${v}`; }).join(", ")}`);
+    const riskler = (ctx.riskListesi || []).filter(r => !r.kapandi && ksAnzKademeOk(ctx, r.className) && (kapsam !== "sinif" || ksAnzSinifEs(r.className, sinifQ)));
+    const plansiz = riskler.filter(r => !ksAnzAktifPlanVar(ctx, r.studentName, r.className));
+    b.push(`AKTİF RİSK: ${riskler.length} öğrenci; müdahale planı OLMAYAN: ${plansiz.length ? plansiz.slice(0, 10).map(r => `${r.studentName}${kapsam === "okul" && r.className ? " (" + r.className + ")" : ""} — ${r.riskTuru || "?"}, ${r.oncelik}`).join("; ") : "yok"}`);
+    const uzak = riskler.map(r => { const s = ksAnzSonGorusme(ctx, r.studentName, r.className); return { r, gun: s ? ksAnzGunFarki(s.date) : null }; }).filter(x => x.gun === null || x.gun >= 21).sort((a, b) => (b.gun ?? 9999) - (a.gun ?? 9999)).slice(0, 8);
+    if (uzak.length) b.push(`AKTİF RİSKLİ OLUP 21+ GÜNDÜR GÖRÜŞÜLMEYEN: ${uzak.map(x => `${x.r.studentName}${kapsam === "okul" && x.r.className ? " (" + x.r.className + ")" : ""} ${x.gun === null ? "hiç görüşme yok" : x.gun + " gün"}`).join(", ")}`);
+  }
+  return b.join("\n");
+}
+
+// ── "Bugün ne yapmalıyım?" — öncelik listesi kodla çıkarılır, model yalnızca anlatır ──
+function ksAnzTestSahipleri(ctx) {
+  const out = [];
+  Object.entries(ctx.testKayitlari || {}).forEach(([k, l]) => {
+    if (!Array.isArray(l) || !l.length) return;
+    const p = String(k).split(" || ");
+    out.push({ name: p[0] || "", className: p[1] || "", numara: p[2] || "", kayitlar: l });
+  });
+  return out;
+}
+function ksAsistanBugunBrifing(g, ctx) {
+  const bugunA = ksAnzAnahtar(new Date());
+  const kOk = (c) => ksAnzKademeOk(ctx, c);
+  const b = [`GÜNLÜK BRİFİNG — ${today()} (programda yerel olarak hesaplandı; öncelik sırasıyla)`];
+  let n = 0;
+  const bolum = (baslik, satirlar) => { if (satirlar.length) { n++; b.push(`\n${n}) ${baslik}`); satirlar.forEach(s => b.push("• " + s)); } };
+  // 1) Kriz: son 30 günde görüşülen öğrencilerde kritik ifade
+  const son30 = new Map();
+  (ctx.records || []).forEach(r => { const gf = ksAnzGunFarki(r.date); if (gf !== null && gf <= 30 && kOk(r.className)) { const k = ksSade(r.studentName || "") + "|" + ksSade(r.className || ""); if (!son30.has(k)) son30.set(k, { name: r.studentName, className: r.className, numara: r.numara }); } });
+  const kriz = [];
+  [...son30.values()].slice(0, 80).forEach(o => { try { const X = ksSupBaglam(ksAsistanGirdi(ctx, o)); if (X.c.kritikTurler.length) kriz.push(`${ksAsistanEtiket(o)} — ${X.c.kritikTurler.join(", ")} ile ilgili ifade; aynı gün güvenlik değerlendirmesi`); } catch (e) {} });
+  bolum("⚠ KRİTİK — ÖNCE GÜVENLİK", kriz);
+  // 2) Yüksek öncelikli aktif riskler
+  const riskler = (ctx.riskListesi || []).filter(r => !r.kapandi && kOk(r.className));
+  bolum("Yüksek öncelikli aktif riskler", riskler.filter(r => r.oncelik === "Yüksek").slice(0, 8).map(r => { const s = ksAnzSonGorusme(ctx, r.studentName, r.className); const gf = s ? ksAnzGunFarki(s.date) : null; return `${r.studentName}${r.className ? " (" + r.className + ")" : ""} — ${r.riskTuru || "?"}; son görüşme ${gf === null ? "yok" : gf + " gün önce"}${ksAnzAktifPlanVar(ctx, r.studentName, r.className) ? "" : "; müdahale planı yok"}`; }));
+  // 3) Hatırlatmalar: gecikmiş + bugün + 3 gün içinde
+  const hat = (ctx.hatirlatmalar || []).filter(h => !h.tamamlandi).map(h => ({ h, gf: ksAnzGunFarki(h.tarih) })).filter(x => x.gf !== null && x.gf >= -3).sort((a, b) => b.gf - a.gf);
+  bolum("Hatırlatmalar", hat.slice(0, 12).map(x => `${x.gf > 0 ? `GECİKMİŞ (${x.gf} gün)` : x.gf === 0 ? "BUGÜN" : `${-x.gf} gün sonra`} — ${x.h.studentName ? x.h.studentName + ": " : ""}${ksAsistanKisalt(x.h.metin, 80)} (${x.h.tarih})`));
+  // 4) Uzun süredir görüşülmeyen riskliler
+  const gun = Math.max(7, parseInt(g.gun) || 21);
+  const uzak = riskler.filter(r => r.oncelik !== "Yüksek").map(r => { const s = ksAnzSonGorusme(ctx, r.studentName, r.className); return { r, gf: s ? ksAnzGunFarki(s.date) : null }; }).filter(x => x.gf === null || x.gf >= gun).sort((a, b) => (b.gf ?? 9999) - (a.gf ?? 9999));
+  bolum(`${gun}+ gündür görüşülmeyen riskli öğrenciler`, uzak.slice(0, 8).map(x => `${x.r.studentName}${x.r.className ? " (" + x.r.className + ")" : ""} — ${x.r.riskTuru || "?"}, ${x.r.oncelik}; ${x.gf === null ? "hiç görüşme yok" : x.gf + " gün"}`));
+  // 5) Müdahale planı olmayan aktif riskliler
+  bolum("Aktif riskli ama müdahale planı yok", riskler.filter(r => r.oncelik !== "Yüksek" && !ksAnzAktifPlanVar(ctx, r.studentName, r.className)).slice(0, 8).map(r => `${r.studentName}${r.className ? " (" + r.className + ")" : ""} — ${r.riskTuru || "?"}, ${r.oncelik}`));
+  // 6) Test izleme / yeniden değerlendirme tarihleri
+  const izle = [];
+  ksAnzTestSahipleri(ctx).filter(s => kOk(s.className)).forEach(s => {
+    const etk = ksAsistanEtiket(s);
+    const oot = s.kayitlar.filter(k => k.tip === "okul_olgunlugu").sort((a, c) => ksTarihAnahtar(c.tarih).localeCompare(ksTarihAnahtar(a.tarih)))[0];
+    if (oot && typeof ootSonuc === "function") {
+      try {
+        const so = ootSonuc(oot.veri || {});
+        const onemli = so.karar && so.karar.k !== "eksik" ? ootRiskler(so).filter(r => r.duzey === "yüksek" || r.duzey === "orta") : [];
+        const u = ootTarihNesne(so.v.uygulamaTarihi) || (ksAsistanTarihNormal(oot.tarih) ? new Date(pdrTarihMs(ksAsistanTarihNormal(oot.tarih))) : null);
+        if (onemli.length && u) { const u0 = new Date(u.getFullYear(), u.getMonth(), u.getDate()), b0 = new Date(); b0.setHours(0, 0, 0, 0); const kalan = Math.round((u0.getTime() + 56 * 86400000 - b0.getTime()) / 86400000); if (kalan <= 7) izle.push(`${etk} — okul olgunluğu 8. hafta izlemesi ${kalan < 0 ? `${-kalan} gün GECİKTİ` : kalan === 0 ? "BUGÜN" : kalan + " gün içinde"} (${onemli.map(r => r.ad.toLocaleLowerCase("tr")).join(", ")})`); }
+      } catch (e) {}
+    }
+    const prg = s.kayitlar.filter(k => k.tip === "okuma_programi").sort((a, c) => String(c.id).localeCompare(String(a.id)))[0];
+    if (prg && prg.veri && !prg.veri.bitti && !prg.veri.tamamlandi) {
+      const iz = (prg.veri.izleme || []).slice().sort((a, c) => pdrTarihMs(a.tarih) - pdrTarihMs(c.tarih));
+      const sonT = iz.length ? iz[iz.length - 1].tarih : (prg.veri.baslangicTarih || prg.tarih);
+      const gf = ksAnzGunFarki(sonT);
+      if (gf !== null && gf >= 7) izle.push(`${etk} — okuma programı haftalık akıcılık ölçümü zamanı (son ölçüm ${gf} gün önce)`);
+    }
+    const ked = s.kayitlar.filter(k => k.tip === "kaynastirma_ed").sort((a, c) => ksTarihAnahtar(c.tarih).localeCompare(ksTarihAnahtar(a.tarih)))[0];
+    if (ked && typeof kedRaporBitisGun === "function") { const kg = kedRaporBitisGun(ked.veri || {}); if (kg !== null && kg <= 30) izle.push(`${etk} — RAM raporu ${kg < 0 ? `${-kg} gün önce bitti` : kg + " gün içinde bitiyor"}; yenileme`); }
+  });
+  bolum("Test izleme ve yeniden değerlendirme", izle.slice(0, 10));
+  // 7) Sevk sonucu bekleyenler (30+ gün)
+  bolum("Sonucu beklenen sevkler (30+ gün)", (ctx.sevkler || []).filter(x => x.sonucBekleniyor && kOk(x.className)).map(x => ({ x, gf: ksAnzGunFarki(x.tarih) })).filter(y => y.gf !== null && y.gf >= 30).sort((a, c) => c.gf - a.gf).slice(0, 8).map(y => `${y.x.studentName}${y.x.className ? " (" + y.x.className + ")" : ""} — ${y.x.sevkYeri || "sevk"}, ${y.gf} gün önce`));
+  // 8) Onay bekleyen uyum izleme önerileri
+  const bek = (ctx.uyumIzleme || []).filter(u => u.beklemede && kOk(u.className));
+  if (bek.length) bolum("Onay bekleyen uyum izleme önerileri", [`${bek.length} öneri Uyum İzleme ekranında onayını bekliyor (${bek.slice(0, 5).map(u => u.studentName).join(", ")}${bek.length > 5 ? "…" : ""})`]);
+  const bugunGor = (ctx.records || []).filter(r => ksTarihAnahtar(r.date) === bugunA && kOk(r.className)).length;
+  b.push(`\nBugün kaydedilen görüşme: ${bugunGor}.`);
+  if (!n) b.push("Acil ya da gecikmiş bir iş görünmüyor.");
+  return b.join("\n");
+}
+
+// ── Test sonuçları: programın kendi puanlama/yorum fonksiyonlarıyla ──
+function ksAsistanTestSonucu(g, ctx, o) {
+  const tum = (typeof butunlesikTestKayitlari === "function" ? butunlesikTestKayitlari(ctx.testKayitlari, o.name, o.className, o.numara) : pdrSozlukOku(ctx.testKayitlari, o.name, o.className, o.numara)) || [];
+  const q = ksSade(String(g.test || "").trim());
+  const l = tum.filter(t => !q || ksSade(`${t.testAdi || ""} ${t.tip || ""}`).includes(q) || (q.includes("olgun") && t.tip === "okul_olgunlugu") || (q.includes("okuma") && /^okuma_/.test(t.tip)) || (q.includes("kaynas") && t.tip === "kaynastirma_ed"))
+    .sort((a, c) => ksTarihAnahtar(c.tarih).localeCompare(ksTarihAnahtar(a.tarih))).slice(0, 5);
+  if (!l.length) return `${ksAsistanEtiket(o)} için ${q ? `"${g.test}" ile eşleşen ` : ""}test kaydı yok.${tum.length ? ` Kayıtlı testler: ${[...new Set(tum.map(t => t.testAdi || t.tip))].join(", ")}` : ""}`;
+  const K = ksAsistanKisalt;
+  const b = [`TEST SONUÇLARI: ${ksAsistanEtiket(o)} (programın kendi puanlamasıyla)`];
+  l.forEach(t => {
+    const v = t.veri || {};
+    b.push(`\n■ ${t.testAdi || t.tip} — ${t.tarih || "?"}`);
+    try {
+      if (t.tip === "okul_olgunlugu") {
+        const s = ootSonuc(v);
+        if (!s.karar) { b.push("Henüz puanlanmamış."); return; }
+        b.push(`Sonuç: ${s.karar.ad}. Alan ortalaması %${s.testYuzde}${s.goz.yuzde != null ? `, gözlem %${s.goz.yuzde}` : ""}.`);
+        b.push(`Alanlar: ${s.alanlar.filter(a => a.yuzde != null).map(a => `${a.ad} %${a.yuzde}`).join(", ")}`);
+        if (s.zayif.length) b.push(`Zayıf alt testler (<%40): ${s.zayif.map(a => `${a.kisa || a.ad} %${a.yuzde}`).join(", ")}`);
+        const rk = ootRiskler(s).filter(r => r.duzey === "yüksek" || r.duzey === "orta");
+        b.push(`Risk göstergeleri: ${rk.length ? rk.map(r => `${r.ad} (${r.duzey}${r.katkilar.length ? ": " + r.katkilar.slice(0, 2).map(x => K(x, 90)).join("; ") : ""}${r.koruyucu.length ? "; koruyucu: " + K(r.koruyucu[0], 60) : ""})`).join(" | ") : "orta/yüksek risk yok"}`);
+        const gy = ootGucluYanlar(s); if (gy.length) b.push(`Güçlü yanlar: ${gy.map(x => x.alan).join(", ")}`);
+        const ep = ootEylemPlani(s);
+        if (ep.okul.length) b.push(`Okulda: ${ep.okul.slice(0, 3).map(x => K(x.metin, 110)).join(" / ")}`);
+        if (ep.ev.length) b.push(`Evde: ${ep.ev.slice(0, 2).map(x => K(x.metin, 110)).join(" / ")}`);
+        if (ep.yonlendirme.length) b.push(`Yönlendirme: ${ep.yonlendirme.join("; ")}`);
+        b.push(`İzleme: ${K(ep.izleme, 220)}`);
+        const yy = ootYasYorumu(s); if (yy) b.push(`Yaş: ${K(yy, 200)}`);
+        if (s.gecerlilik && s.gecerlilik.mesaj) b.push(`Geçerlilik: ${K(s.gecerlilik.mesaj, 160)}`);
+        b.push("Not: tarama aracıdır, tanı koymaz.");
+      } else if (t.tip === "okuma_degerlendirme") {
+        b.push(oyKisaOzetDeg({ ...v, tarih: t.tarih }));
+        const p = oyProfil(v, v.sinifNo || oySinifNo(o.className), t.tarih);
+        if (p.moduller.length) b.push(`Destek gereken modüller: ${p.moduller.map(m => `${OY_MODULLER[m.k].ad} (${K(m.neden, 90)})`).join("; ")}`);
+        if (p.kademe) b.push(`Önerilen destek: ${p.kademe}`);
+      } else if (t.tip === "okuma_programi") {
+        b.push(oyKisaOzetProgram(v));
+        const iz = oyIzlemeAnaliz(v); if (iz.karar) b.push(`İzleme kararı: ${iz.karar.metin}`);
+      } else if (t.tip === "kaynastirma_ed") {
+        b.push(kedKisaOzet(v));
+        const zay = kedGelisimOzet(v).filter(a => a.zayif.length).map(a => `${a.ad}: ${a.zayif.slice(0, 2).map(m => K(m, 50)).join(", ")}`);
+        if (zay.length) b.push(`Gelişimde desteklenecek: ${zay.join(" | ")}`);
+        const kg = kedRaporBitisGun(v); if (kg !== null) b.push(`RAM raporu: ${kg < 0 ? `${-kg} gün önce bitti` : kg + " gün sonra bitiyor"}`);
+      } else {
+        const oz = typeof testSonucOzeti === "function" ? testSonucOzeti(t) : "";
+        const yazi = ["sonuc", "yorum", "genelYorum", "degerlendirme", "duzey", "seviye", "ozet"].map(k => typeof v[k] === "string" ? v[k] : "").filter(Boolean)[0];
+        b.push(K([oz && oz !== "—" ? oz : "", yazi || ""].filter(Boolean).join(" — ") || "Özet çıkarılamadı.", 400));
+      }
+      if (t.not) b.push(`Danışman notu: ${K(t.not, 120)}`);
+    } catch (e) { b.push("Bu kaydın özeti çıkarılamadı."); }
+  });
+  if (tum.length > l.length) b.push(`\n(Toplam ${tum.length} test kaydı var; "test" alanıyla belirli bir testi isteyebilirsin.)`);
+  return b.join("\n");
+}
+
+// ── Eksik kayıt türleri için yardımcılar ──
+function ksAnzUyumEsle(maddeler) {
+  const tum = []; UYUM_GOSTERGELERI.forEach(gr => gr.maddeler.forEach((m, i) => tum.push({ kod: `${gr.key}-${i}`, metin: m, grup: gr.ad })));
+  const kelime = (s) => ksSade(s).replace(/[^a-z0-9ıüöçşğ ]/g, " ").split(/\s+/).filter(w => w.length >= 4);
+  const bulunan = [], bulunamayan = [];
+  (Array.isArray(maddeler) ? maddeler : String(maddeler || "").split(/[;\n]/)).map(x => String(x || "").trim()).filter(Boolean).slice(0, 15).forEach(m => {
+    const kod = tum.find(t => t.kod === m.toLocaleLowerCase("tr"));
+    if (kod) { if (!bulunan.includes(kod)) bulunan.push(kod); return; }
+    const w = kelime(m); let en = null, enP = 0;
+    tum.forEach(t => { const tw = kelime(t.metin); const p = w.filter(x => tw.some(y => y.startsWith(x.slice(0, 5)) || x.startsWith(y.slice(0, 5)))).length / Math.max(1, Math.min(w.length, tw.length)); if (p > enP) { enP = p; en = t; } });
+    if (en && enP >= 0.5) { if (!bulunan.includes(en)) bulunan.push(en); } else bulunamayan.push(m);
+  });
+  return { bulunan, bulunamayan };
+}
+function ksAnzListe(g, alan) {
+  const l = Array.isArray(g.maddeler) ? g.maddeler : (g[alan] ? [{ kategori: g.kategori, [alan]: g[alan] }] : []);
+  return l.map(x => typeof x === "string" ? { kategori: g.kategori, [alan]: x } : x).filter(x => x && String(x[alan] || "").trim()).slice(0, 10);
+}
+function ksAnzKategori(liste, k, adAlan) {
+  const s = ksSade(String(k || ""));
+  return liste.find(c => c.key === k || ksSade(c.key) === s || ksSade(c[adAlan] || "").includes(s) && s.length >= 3) || null;
+}
+
 // ── Araçlar ──────────────────────────────────────────────────────────────────
 // her araç: aciklama, girdi (modelin göreceği tanım), yazma (onay gerekir mi),
 // calistir(girdi, ctx) → metin, onayOzeti(girdi, ctx) → danışmana gösterilecek özet
@@ -10698,6 +11013,21 @@ const KS_ASISTAN_ARACLAR = {
       return "Bilinmeyen liste türü. Kullanılabilir: riskli, gorusulmeyen, sinif, hatirlatmalar, son_gorusmeler.";
     },
   },
+  gorusme_analizi: {
+    aciklama: "Görüşme kayıtlarının istatistiği ve analizi (yerelde hesaplanır, not metinleri gönderilmez): konu ve alt konu dağılımı, öğrenci/veli/öğretmen görüşme sayıları, aylık seyir, konu eğilimi (artan/azalan), sınıf karşılaştırması, hiç görüşülmeyen sınıf ya da öğrenciler, en sık görüşülenler, veli görüşmesi yapılmamışlar, müdahale planı olmayan riskliler. Kapsam: sinif verirsen o sınıf, ogrenci verirsen o öğrenci, ikisi de boşsa okul geneli. donem: bu_hafta | bu_ay | gecen_ay | son_30 | son_90 | 1_donem | 2_donem | yil (boşsa bütün kayıtlar); ya da baslangic/bitis GG.AA.YYYY. tur: Öğrenci | Veli | Öğretmen. konu: yalnız bu konudakiler. kelime: notunda bu sözcük geçen görüşmeleri sayar (örn. zorbalık).",
+    girdi: '{"sinif": "isteğe bağlı", "ogrenci": "isteğe bağlı", "donem": "1_donem", "baslangic": "", "bitis": "", "tur": "", "konu": "", "kelime": ""}', yontem: "hepsi",
+    calistir: (g, ctx, o) => ksAsistanGorusmeAnalizi(g, ctx, o),
+  },
+  bugun_brifing: {
+    aciklama: "\"Bugün ne yapmalıyım\", \"öncelikler\", \"bu hafta kimler\" sorularında İLK bu aracı çağır. Program öncelik sırasını kendisi çıkarır: kriz ifadeleri, yüksek riskliler, gecikmiş/bugünkü/yaklaşan hatırlatmalar, uzun süredir görüşülmeyen riskliler, planı olmayan riskliler, test izleme tarihleri (okul olgunluğu 8. hafta, okuma programı ölçümü, RAM rapor bitişi), sonucu beklenen sevkler, onay bekleyen uyum önerileri. Sen sırayı değiştirmeden kısa ve uygulanabilir anlat.",
+    girdi: '{"gun": 21}', yontem: "hepsi",
+    calistir: (g, ctx) => ksAsistanBugunBrifing(g, ctx),
+  },
+  test_sonucu: {
+    aciklama: "Öğrencinin uygulanan testlerinin sonuçlarını programın kendi puanlamasıyla getirir: okul olgunluğu (karar, alan yüzdeleri, risk göstergeleri ve gerekçeleri, güçlü yanlar, okul/ev eylem planı, yönlendirme, izleme tarihi), okuma-yazma değerlendirmesi ve programı (destek modülleri, izleme kararı), kaynaştırma (bağımsız beceriler, desteklenecek alanlar, RAM rapor süresi) ve diğer testlerin özeti. Test sonucu sorulduğunda, veliye anlatım ya da plan hazırlanırken kullan. test: isteğe bağlı test adı (örn. okul olgunluğu).",
+    girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "test": "isteğe bağlı"}', ogrenciIster: true, yontem: "hepsi",
+    calistir: (g, ctx, o) => ksAsistanTestSonucu(g, ctx, o),
+  },
   meb_raporu: { aciklama: "Dönem sonu MEB rehberlik faaliyet raporu taslağı hazırlar.", girdi: '{"donem": "1. Dönem"}',
     calistir: (g, ctx) => {
       const r = ctx.records || [], rl = ctx.riskListesi || [], sv = ctx.sevkler || [];
@@ -10771,6 +11101,76 @@ const KS_ASISTAN_ARACLAR = {
       const guncel = pdrSozlukYaz(ctx.mudahalePlan, o.name, o.className, [yeni, ...mevcut]);
       ctx.mudahalePlan = guncel; await ctx.kaydet.mudahalePlan(guncel);
       return `Müdahale planı kaydedildi. Hedef: ${hedef}`;
+    },
+  },
+  uyum_kaydet: {
+    aciklama: "Okula uyum izleme kaydı ekler (ONAY GEREKİR). maddeler: gözlenen uyum göstergeleri (kısa ifadeler; program bunları Uyum İzleme formundaki maddelerle eşleştirir — okula devam, duygusal, sosyal, akademik, davranış değişikliği, destek ihtiyacı). sonuc: İzlemeye devam | Bireysel görüşme planlandı | Veli/öğretmen konsültasyonu | Grup çalışmasına yönlendirildi | RAM/uzman yönlendirmesi | Destek gerekmiyor. not: kısa açıklama.",
+    girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "maddeler": ["teneffüste yalnız kalıyor", "sabah okula gelmek istemiyor"], "sonuc": "İzlemeye devam", "not": "isteğe bağlı"}', ogrenciIster: true, yazma: true, yontem: "hepsi",
+    onayOzeti: (g, ctx, o) => { const e = ksAnzUyumEsle(g.maddeler); const s = UYUM_SONUC.find(x => ksSade(x) === ksSade(String(g.sonuc || ""))) || UYUM_SONUC[0]; return `🧭 Uyum izleme kaydı\nÖğrenci: ${ksAsistanEtiket(o)}\nİşaretlenecek maddeler:\n${e.bulunan.length ? e.bulunan.map(t => `• ${t.metin} (${t.grup})`).join("\n") : "• (eşleşen madde yok)"}${e.bulunamayan.length ? `\nEşleşmeyen (nota yazılacak): ${e.bulunamayan.join("; ")}` : ""}\nSonuç: ${s}${g.not ? "\nNot: " + g.not : ""}`; },
+    calistir: async (g, ctx, o) => {
+      const e = ksAnzUyumEsle(g.maddeler);
+      if (!e.bulunan.length && !String(g.not || "").trim() && !e.bulunamayan.length) return "Madde ya da not verilmediği için kaydedilmedi.";
+      const s = UYUM_SONUC.find(x => ksSade(x) === ksSade(String(g.sonuc || ""))) || UYUM_SONUC[0];
+      const not = [String(g.not || "").trim(), e.bulunamayan.length ? "Diğer gözlemler: " + e.bulunamayan.join("; ") : ""].filter(Boolean).join(" ");
+      const yeni = { id: uid(), yil: ctx.aktifYil, tarih: today(), studentName: o.name, className: o.className, numara: o.numara || "",
+        isaretli: e.bulunan.map(t => t.kod), dayanaklar: Object.fromEntries(e.bulunan.map(t => [t.kod, "Danışmanın aktarımı (asistan)"])), sonuc: s, not, kaynak: "asistan" };
+      const guncel = [...(ctx.uyumIzleme || []), yeni];
+      ctx.uyumIzleme = guncel; await ctx.kaydet.uyumIzleme(guncel);
+      return `Uyum izleme kaydedildi: ${e.bulunan.length} madde işaretlendi, sonuç "${s}".${s === "RAM/uzman yönlendirmesi" ? " Sevk kaydı da gerekiyorsa sevk_kaydet ile ekleyebilirim." : ""}`;
+    },
+  },
+  bireyi_tanima_ekle: {
+    aciklama: "Bireyi tanıma bilgisi ekler (ONAY GEREKİR). kategori: aile | saglik | olaylar | sosyoekonomik | ilgi | okul. Birden çok bilgi için maddeler listesi ver. Yalnızca danışmanın söylediği bilgiyi yaz, yorum ekleme.",
+    girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "maddeler": [{"kategori": "ilgi", "metin": "Basketbol takımında"}], "tarih": "GG.AA.YYYY"}', ogrenciIster: true, yazma: true, yontem: "hepsi",
+    onayOzeti: (g, ctx, o) => { const l = ksAnzListe(g, "metin"); return `🧩 Bireyi tanıma\nÖğrenci: ${ksAsistanEtiket(o)}\n${l.length ? l.map(x => { const k = ksAnzKategori(BIREYI_TANIMA_KATEGORILER, x.kategori, "label"); return `• ${k ? k.label : "⚠ kategori anlaşılamadı (" + (x.kategori || "—") + ")"}: ${x.metin}`; }).join("\n") : "• (bilgi yok)"}`; },
+    calistir: async (g, ctx, o) => {
+      const l = ksAnzListe(g, "metin"); const t = ksAsistanTarihNormal(g.tarih) || today();
+      const yeni = l.map(x => ({ x, k: ksAnzKategori(BIREYI_TANIMA_KATEGORILER, x.kategori, "label") })).filter(y => y.k)
+        .map(y => ({ id: uid(), studentName: o.name, className: o.className, numara: o.numara || "", kategori: y.k.key, metin: String(y.x.metin).trim().slice(0, 500), tarih: t }));
+      if (!yeni.length) return "Geçerli kategori ve metin olmadığı için kaydedilmedi. kategori: aile | saglik | olaylar | sosyoekonomik | ilgi | okul.";
+      const guncel = [...yeni, ...(ctx.bireyiTanima || [])];
+      ctx.bireyiTanima = guncel; await ctx.kaydet.bireyiTanima(guncel);
+      return `Bireyi tanıma: ${yeni.length} bilgi kaydedildi${yeni.length < l.length ? ` (${l.length - yeni.length} madde kategorisi anlaşılamadığı için atlandı)` : ""}.`;
+    },
+  },
+  bdt_ekle: {
+    aciklama: "BDT bilişsel çarpıtma kaydı ekler (ONAY GEREKİR). ifade: öğrencinin kendi sözü. kategori: asiri_genelleme | kisisellestirme | keyfi_cikarsama | olumsuz_etiketleme | ya_hep_ya_hic | meli_mali | felaket_tellalligi | olumluyu_yok_sayma | akil_okuma | falcilik | secici_soyutlama | abartma.",
+    girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "maddeler": [{"kategori": "asiri_genelleme", "ifade": "Ben hiçbir şeyi başaramam"}]}', ogrenciIster: true, yazma: true, yontem: "hepsi",
+    onayOzeti: (g, ctx, o) => { const l = ksAnzListe(g, "ifade"); return `🧠 BDT çarpıtma kaydı\nÖğrenci: ${ksAsistanEtiket(o)}\n${l.length ? l.map(x => { const k = ksAnzKategori(BDT_CARPITMA_KATEGORILERI, x.kategori, "ad"); return `• ${k ? k.ad : "⚠ kategori anlaşılamadı (" + (x.kategori || "—") + ")"}: "${x.ifade}"`; }).join("\n") : "• (ifade yok)"}`; },
+    calistir: async (g, ctx, o) => {
+      const l = ksAnzListe(g, "ifade");
+      const yeni = l.map(x => ({ x, k: ksAnzKategori(BDT_CARPITMA_KATEGORILERI, x.kategori, "ad") })).filter(y => y.k)
+        .map(y => ({ id: uid(), studentName: o.name, className: o.className, numara: o.numara || "", kategori: y.k.key, ifade: String(y.x.ifade).trim().slice(0, 400), tarih: today() }));
+      if (!yeni.length) return "Geçerli kategori ve ifade olmadığı için kaydedilmedi.";
+      const guncel = [...yeni, ...(ctx.bdtAnaliz || [])];
+      ctx.bdtAnaliz = guncel; await ctx.kaydet.bdtAnaliz(guncel);
+      return `BDT: ${yeni.length} çarpıtma kaydedildi${yeni.length < l.length ? ` (${l.length - yeni.length} madde kategorisi anlaşılamadığı için atlandı)` : ""}.`;
+    },
+  },
+  sevk_kaydet: {
+    aciklama: "Sevk kaydı ekler (ONAY GEREKİR); sonuç beklenen sevk olarak izlenir. yer: RAM | Hastane | Çocuk Ergen Psikiyatrisi | Sosyal Hizmetler | Diğer. neden: kısa sevk nedeni. tarih GG.AA.YYYY (boşsa bugün).",
+    girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "yer": "RAM", "neden": "kısa neden", "tarih": "GG.AA.YYYY"}', ogrenciIster: true, yazma: true, yontem: "hepsi",
+    onayOzeti: (g, ctx, o) => `📨 Sevk kaydı\nÖğrenci: ${ksAsistanEtiket(o)}\nYer: ${g.yer || "RAM"} · Tarih: ${ksAsistanTarihNormal(g.tarih) || today()}\nNeden: ${g.neden || "—"}`,
+    calistir: async (g, ctx, o) => {
+      if (!String(g.neden || "").trim()) return "Sevk nedeni boş olduğu için kaydedilmedi.";
+      if (!ctx.kaydet.sevkler) return "Sevk kaydı bu ekrandan yapılamıyor; Sevk Takip ekranını kullan.";
+      const yeni = { id: uid(), studentName: o.name, className: o.className, numara: o.numara || "", sevkYeri: String(g.yer || "RAM").trim().slice(0, 60), sevkNedeni: String(g.neden).trim().slice(0, 500), tarih: ksAsistanTarihNormal(g.tarih) || today(), sonucBekleniyor: true, geri_bildirim: "", kaynak: "asistan" };
+      const guncel = [yeni, ...(ctx.sevkler || [])];
+      ctx.sevkler = guncel; await ctx.kaydet.sevkler(guncel);
+      return `Sevk kaydedildi (${yeni.sevkYeri}, ${yeni.tarih}); sonuç bekleniyor olarak izlenecek.`;
+    },
+  },
+  sevk_sonuc: {
+    aciklama: "Öğrencinin sonucu beklenen en son sevkine sonucu/geri bildirimi yazar ve sevki tamamlandı yapar (ONAY GEREKİR).",
+    girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "sonuc": "gelen geri bildirim"}', ogrenciIster: true, yazma: true, yontem: "hepsi",
+    onayOzeti: (g, ctx, o) => { const s = (ctx.sevkler || []).filter(x => x.sonucBekleniyor && pdrAyniOgrenci(x.studentName, x.className, o.name, o.className)).sort((a, c) => ksTarihAnahtar(c.tarih).localeCompare(ksTarihAnahtar(a.tarih)))[0]; return `📨 Sevk sonucu\nÖğrenci: ${ksAsistanEtiket(o)}\n${s ? `Sevk: ${s.sevkYeri || "sevk"} (${s.tarih})` : "⚠ Sonucu beklenen sevk yok; onaylasan da kayıt yapılmayacak."}\nSonuç: ${g.sonuc || "—"}`; },
+    calistir: async (g, ctx, o) => {
+      const s = (ctx.sevkler || []).filter(x => x.sonucBekleniyor && pdrAyniOgrenci(x.studentName, x.className, o.name, o.className)).sort((a, c) => ksTarihAnahtar(c.tarih).localeCompare(ksTarihAnahtar(a.tarih)))[0];
+      if (!s) return "Bu öğrencinin sonucu beklenen sevki yok; kayıt yapılmadı.";
+      if (!ctx.kaydet.sevkler) return "Sevk bu ekrandan güncellenemiyor; Sevk Takip ekranını kullan.";
+      const guncel = (ctx.sevkler || []).map(x => x.id === s.id ? { ...x, sonucBekleniyor: false, geri_bildirim: [x.geri_bildirim, String(g.sonuc || "").trim()].filter(Boolean).join(" · ").slice(0, 800) } : x);
+      ctx.sevkler = guncel; await ctx.kaydet.sevkler(guncel);
+      return `Sevk sonucu kaydedildi (${s.sevkYeri || "sevk"}, ${s.tarih}).`;
     },
   },
   gorusme_duzelt: {
@@ -11005,7 +11405,10 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - Öğrenciyi "ogrenci" alanında adıyla/koduyla belirt; aynı adda birden çok öğrenci varsa "sinif" ekle.
 - HIZ İÇİN: Bir iş için gereken okuma araçlarının HEPSİNİ aynı yanıtta birlikte çağır (ör. ogrenci_dosyasi + liste), tek tek tur atma. Gereksiz araç çağırma.
 - Danışman tarihi "yarın", "cuma" gibi söylerse bugünün tarihine göre GG.AA.YYYY olarak hesapla.
-- "Bugün kimlerle ilgilenmeliyim", "öncelikler" gibi sorularda şu dört listeye birlikte bak: riskli, hatirlatmalar (gecikmişler önce), gorusulmeyen ve son_gorusmeler. Öncelik sırası: kriz/yüksek risk → gecikmiş hatırlatma → uzun süredir görüşülmeyen riskli öğrenci → yeni takip gerektirenler.
+- "Bugün ne yapmalıyım", "bugün kimlerle ilgilenmeliyim", "öncelikler" gibi sorularda İLK bugun_brifing aracını çağır; program öncelik sırasını kendisi çıkarır, sen sırayı bozmadan kısa anlat. Gerekirse liste aracıyla ayrıntıya in.
+- Sınıf, okul ya da öğrenci düzeyinde "hangi konular konuşulmuş", "kaç veli görüşmesi", "en çok hangi sınıfla", "eğilim", "karşılaştır", "dönem özeti", "kaç öğrencide zorbalık geçti" gibi sayı/analiz sorularında gorusme_analizi kullan; sayıları kendin tahmin etme. Yorum yaparken bulguyu, olası anlamını ve somut bir sonraki adımı söyle (örn. sınıf rehberlik etkinliği, veli toplantısı, grup çalışması).
+- Test sonucu sorulduğunda ya da test sonucuna göre plan/veli anlatımı istendiğinde test_sonucu kullan.
+- Uyum izleme, bireyi tanıma, BDT çarpıtması ve sevk kaydı için uyum_kaydet, bireyi_tanima_ekle, bdt_ekle, sevk_kaydet, sevk_sonuc araçları vardır; hepsi danışmanın onayından geçer.
 - Bir öğrenci için risk değerlendirmesi, müdahale planı, seans hazırlığı, süpervizyon ya da veli yazısı istendiğinde ÖNCE ogrenci_dosyasi aracını çağır. Görüşme geçmişini, akademik gidişi (bu yılın ve geçmiş dönemin denemeleri, yıl sonu not ortalamaları), BDT çarpıtmalarını, bireyi tanıma bilgilerini, test sonuçlarını, devamsızlığı ve önceki risk/müdahale kayıtlarını BİRLİKTE değerlendir. Önerinin hangi verilere dayandığını kısaca belirt; olmayan veri için "… kaydı yok" de, uydurma.
 - Danışmana ASLA kod sorma ve kodlardan söz etme; o ekranında gerçek adları görür. Öğrenciyi araçlara adıyla ya da sana gelen koduyla yazabilirsin. Ad belirsizse ogrenci_ara ile ara ve bulunan seçenekleri sun.
 - Kayıtlı bir görüşme notunu düzeltmen istenirse gorusme_duzelt kullan.
@@ -11014,7 +11417,7 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - Kodları her zaman eksiksiz yaz: "Öğrenci-11, Öğrenci-12" gibi; "11, 12 ve 13" diye kısaltma (kısaltılan kod danışmanın ekranında gerçek ada çevrilemez).
 ${ekranModu ? `- Danışman bir kayıt eklemeni ya da yazmanı isterse (görüşme notu, hatırlatma, risk, müdahale planı) [EKRANDA DOLDURUR] araçlarını kullan: formu danışmanın gözü önünde doldurursun, ardından program danışmana "Kaydedeyim mi?" diye sorar; danışman onaylarsa kaydedilir. Araç sonucu kaydedilip kaydedilmediğini söyler, ona göre kısa bir yanıt ver. Bu araçlardan bir yanıtta YALNIZCA BİRİNİ çağır.
 - Danışman bir ekranı "aç", "göster", "götür" derse ekranda_ac kullan.` : `- Danışman bir ekranı "aç", "göster", "götür" derse ekranda_ac kullan.`}
-- "Bugün kimlerle ilgilenmeliyim", "öncelikli kim var" gibi sorularda bu dört listenin HEPSİNE bak: liste tur=riskli, liste tur=gorusulmeyen, liste tur=hatirlatmalar (gecikmiş olanlar önce), liste tur=son_gorusmeler. Sonra kriz > gecikmiş hatırlatma > uzun süredir görüşülmeyen riskli > son görüşmelerde takip gerektiren sırasıyla öner. Bir liste boşsa diğerlerine bakmadan "kimse yok" deme.
+- "Öncelikli kim var" gibi sorularda bugun_brifing sonucundaki sırayı koru (kriz > yüksek risk > gecikmiş hatırlatma > uzun süredir görüşülmeyen riskli > diğerleri). Brifing boşsa "acil iş görünmüyor" de.
 
 DEĞİŞTİRİLEMEZ KURALLAR
 1. [ONAY GEREKİR] işaretli araçlar danışmanın onayından geçer. Bunları yalnızca danışman istediğinde ya da açıkça kabul ettiğinde çağır.
@@ -29581,7 +29984,7 @@ function pdrAsistanCtx(p) {
     profiles: p.profiles, profiles2: p.profiles2, denemeler: p.denemeler, sevkler: p.sevkler, testKayitlari: p.testKayitlari,
     akademikTaramalar: p.akademikTaramalar, liseTaramalar: p.liseTaramalar, benlikOlcekleri: p.benlikOlcekleri,
     sinavTuru: p.sinavTuru, aktifYil: p.aktifYil, ogrenciListesi: p.kayitliListesi,
-    bdtAnaliz: p.bdtAnaliz, bireyiTanima: p.bireyiTanima, ogrenciler: p.ogrenciler, uyumIzleme: p.uyumIzleme,
+    bdtAnaliz: p.bdtAnaliz, bireyiTanima: p.bireyiTanima, ogrenciler: p.ogrenciler, uyumIzleme: p.uyumIzleme, kademe: p.kademe || "",
     kaydet: {
       records: async (l) => { p.setRecords(l); await saveRecords(l); },
       hatirlatmalar: async (l) => { p.setHatirlatmalar(l); await saveHatirlatmalar(l); },
@@ -29590,6 +29993,7 @@ function pdrAsistanCtx(p) {
       bdtAnaliz: async (l) => { if (p.setBdtAnaliz) p.setBdtAnaliz(l); await saveBdtAnaliz(l); },
       bireyiTanima: async (l) => { if (p.setBireyiTanima) p.setBireyiTanima(l); await saveBireyiTanima(l); },
       uyumIzleme: async (l) => { if (p.setUyumIzleme) p.setUyumIzleme(l); await saveUyumIzleme(l); },
+      sevkler: p.setSevkler ? async (l) => { p.setSevkler(l); await saveSevkler(l); } : null,
     },
   };
 }
@@ -29682,7 +30086,7 @@ function AsistanEkrani({
   kayitliListesi, records, setRecords, riskListesi, setRiskListesi, hatirlatmalar, setHatirlatmalar,
   mudahalePlan, setMudahalePlan, profiles, profiles2, denemeler, sevkler, testKayitlari,
   akademikTaramalar, liseTaramalar, benlikOlcekleri, sinavTuru, aktifYil, setTab,
-  bdtAnaliz, bireyiTanima, ogrenciler, uyumIzleme, setBdtAnaliz, setBireyiTanima, setUyumIzleme
+  bdtAnaliz, bireyiTanima, ogrenciler, uyumIzleme, setBdtAnaliz, setBireyiTanima, setUyumIzleme, kademe, setSevkler
 }) {
   const S = PDR_ASISTAN_SOHBET;
   const [, yenile] = useState(0);
@@ -29757,7 +30161,7 @@ function AsistanEkrani({
     return pdrAsistanCtx({ kayitliListesi, records, setRecords, riskListesi, setRiskListesi, hatirlatmalar, setHatirlatmalar,
       mudahalePlan, setMudahalePlan, profiles, profiles2, denemeler, sevkler, testKayitlari,
       akademikTaramalar, liseTaramalar, benlikOlcekleri, sinavTuru, aktifYil, bdtAnaliz, bireyiTanima, ogrenciler, uyumIzleme,
-      setBdtAnaliz, setBireyiTanima, setUyumIzleme });
+      setBdtAnaliz, setBireyiTanima, setUyumIzleme, kademe, setSevkler });
   }
 
   function gonder(metinVer) { return gonderAyar(metinVer, ayar); }
@@ -41428,6 +41832,7 @@ function pdrBaslangicSekmesi() {
             sinavTuru={sinavTuru} aktifYil={aktifYil} setTab={setTab}
             bdtAnaliz={bdtAnaliz} bireyiTanima={bireyiTanima} ogrenciler={ogrenciler} uyumIzleme={uyumIzleme}
             setBdtAnaliz={setBdtAnaliz} setBireyiTanima={setBireyiTanima} setUyumIzleme={setUyumIzleme}
+            kademe={kademe} setSevkler={setSevkler}
           />
         )}
         {/* ── PDR ASİSTANI: her ekranda bas-konuş düğmesi ── */}
@@ -41444,6 +41849,7 @@ function pdrBaslangicSekmesi() {
             sinavTuru={sinavTuru} aktifYil={aktifYil} setTab={setTab}
             bdtAnaliz={bdtAnaliz} bireyiTanima={bireyiTanima} ogrenciler={ogrenciler} uyumIzleme={uyumIzleme}
             setBdtAnaliz={setBdtAnaliz} setBireyiTanima={setBireyiTanima} setUyumIzleme={setUyumIzleme}
+            kademe={kademe} setSevkler={setSevkler}
           />
         )}
 

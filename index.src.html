@@ -19996,16 +19996,16 @@ const OOT_ALT_TESTLER = [
   { k: "dk", ad: "Dil ve Kavramlar", kisa: "Dil-kavram", renk: "#7C3AED", alan: "dil",
     aciklama: "Okulda öğretmenin sık kullandığı yer-yön, büyüklük, miktar ve şekil kavramlarını anlama.",
     maddeler: [
-      { tur: "secim", resim: "dk1", yonerge: "Kutunun ÜSTÜNDE olan topu göster.", dogru: "A" },
-      { tur: "secim", resim: "dk2", yonerge: "Masanın ALTINDA olan topu göster.", dogru: "C" },
-      { tur: "secim", resim: "dk3", yonerge: "EN BÜYÜK ağacı göster.", dogru: "B" },
-      { tur: "secim", resim: "dk4", yonerge: "EN KISA kalemi göster.", dogru: "C" },
-      { tur: "secim", resim: "dk5", yonerge: "BOŞ olan bardağı göster.", dogru: "A" },
-      { tur: "secim", resim: "dk6", yonerge: "Hangi tabakta EN AZ elma var? Göster.", dogru: "C" },
-      { tur: "secim", resim: "dk7", yonerge: "ORTADAKİ resmi göster.", dogru: "B" },
-      { tur: "secim", resim: "dk8", yonerge: "Evin ÖNÜNDE olan topu göster.", dogru: "B" },
-      { tur: "secim", resim: "dk9", yonerge: "ÜÇGENİ göster.", dogru: "C" },
-      { tur: "secim", resim: "dk10", yonerge: "Kırmızı karenin YANINDAKİ mavi daireyi göster.", dogru: "D" },
+      { tur: "secim", resim: "dk1", kavram: "üstünde", yonerge: "Kutunun ÜSTÜNDE olan topu göster.", dogru: "A" },
+      { tur: "secim", resim: "dk2", kavram: "altında", yonerge: "Masanın ALTINDA olan topu göster.", dogru: "C" },
+      { tur: "secim", resim: "dk3", kavram: "en büyük", yonerge: "EN BÜYÜK ağacı göster.", dogru: "B" },
+      { tur: "secim", resim: "dk4", kavram: "en kısa", yonerge: "EN KISA kalemi göster.", dogru: "C" },
+      { tur: "secim", resim: "dk5", kavram: "boş", yonerge: "BOŞ olan bardağı göster.", dogru: "A" },
+      { tur: "secim", resim: "dk6", kavram: "en az", yonerge: "Hangi tabakta EN AZ elma var? Göster.", dogru: "C" },
+      { tur: "secim", resim: "dk7", kavram: "ortadaki", yonerge: "ORTADAKİ resmi göster.", dogru: "B" },
+      { tur: "secim", resim: "dk8", kavram: "önünde", yonerge: "Evin ÖNÜNDE olan topu göster.", dogru: "B" },
+      { tur: "secim", resim: "dk9", kavram: "üçgen", yonerge: "ÜÇGENİ göster.", dogru: "C" },
+      { tur: "secim", resim: "dk10", kavram: "yanında (renk + konum)", yonerge: "Kırmızı karenin YANINDAKİ mavi daireyi göster.", dogru: "D" },
     ] },
   { k: "sf", ad: "Sesbilgisel Farkındalık", kisa: "Ses farkındalığı", renk: "#DB2777", alan: "dil",
     aciklama: "Sözcüklerin hece ve seslerden oluştuğunu fark etme — okuma-yazmaya hazırlığın en güçlü göstergelerinden biri.",
@@ -20369,6 +20369,126 @@ function ootKisaOzet(v) {
   return `${s.karar.ad} · test %${s.testYuzde}${s.goz.yuzde != null ? ` · gözlem %${s.goz.yuzde}` : ""}${s.zayif.length ? ` · destek: ${s.zayif.map(a => a.kisa).join(", ")}` : ""}`;
 }
 
+// ===== OKUL OLGUNLUĞU TARAMASI — GRAFİK VE ÖRÜNTÜ ANALİZİ =====
+// Puan profilindeki örüntülerden "şuna işaret ediyor olabilir" türünde, ihtiyatlı
+// çıkarımlar üretir. Kurallar alanyazındaki bilinen ilişkilere dayanır (ör. ses
+// farkındalığı–okuma, görsel-motor–yazma, dikkat/öz düzenleme–sınıf uyumu); her
+// çıkarım bir hipotezdir ve "nasıl ayırt edilir" önerisiyle birlikte verilir.
+function ootModalite(veri) {
+  const c = (veri && veri.cevaplar) || {};
+  const grup = { sozlu: { ad: "Sözel yanıt", h: 0, m: 0 }, secim: { ad: "Resimden gösterme", h: 0, m: 0 }, kalem: { ad: "Kalem işi", h: 0, m: 0 } };
+  OOT_ALT_TESTLER.forEach(at => at.maddeler.forEach((m, i) => {
+    if (m.ornek) return; const v = c[`${at.k}_${i}`]; if (typeof v !== "number") return;
+    const g = m.tur === "secim" ? "secim" : (m.tur === "kopya" || m.tur === "yol") ? "kalem" : "sozlu";
+    const p = at.puanAralik || 1; grup[g].h += v; grup[g].m += p;
+  }));
+  return Object.values(grup).map(g => ({ ad: g.ad, yuzde: g.m ? Math.round(100 * g.h / g.m) : null }));
+}
+function ootMaddeAnalizi(veri, s) {
+  const c = (veri && veri.cevaplar) || {}, yasAy = s.yas ? s.yas.simdi : null, out = [];
+  const bak = (k, i) => c[`${k}_${i}`];
+  const dk = OOT_ALT_TESTLER.find(a => a.k === "dk");
+  const dkYanlis = dk.maddeler.map((m, i) => ({ m, i })).filter(x => bak("dk", x.i) === 0).map(x => x.m.kavram || x.m.yonerge);
+  if (dkYanlis.length) out.push(`Dil-kavram: henüz oturmamış kavramlar — ${dkYanlis.join(", ")}. Sınıfta öğretmen bu sözcükleri kullanırken resim/jestle desteklemesi yararlı olur.`);
+  const sfHece = [1, 2, 3].map(i => bak("sf", i)), sfSes = [4, 5, 6].map(i => bak("sf", i)), sfUyak = bak("sf", 7);
+  const top = (a) => a.filter(x => typeof x === "number"), oran = (a) => top(a).length ? top(a).reduce((x, y) => x + y, 0) / top(a).length : null;
+  const h = oran(sfHece), se = oran(sfSes);
+  if (h != null && se != null) {
+    if (h >= 0.67 && se < 0.5) out.push("Ses farkındalığı: heceleri ayırabiliyor ama sözcüğün ilk sesini ayırt etmekte zorlanıyor. Bu, gelişimde beklenen sıradır (hece → ses); ilk ses oyunlarıyla desteklenebilir.");
+    else if (h < 0.5) out.push("Ses farkındalığı: hece düzeyinde bile zorlanıyor; sözcüklerin parçalardan oluştuğu fikri henüz oluşmamış olabilir. Okuma-yazmaya geçişte yakın izlem gerektirir.");
+  }
+  if (sfUyak === 0 && h != null && h >= 0.67) out.push("Uyak (kafiye) maddesini kaçırdı; tekerleme ve uyaklı şarkılar bu beceriyi hızla geliştirir.");
+  const sn = (i) => bak("sn", i);
+  const snSayma = [sn(0), sn(1), sn(2)], snRakam = [sn(4), sn(5)], snIslem = [sn(7), sn(8)];
+  const ps = oran(snSayma), pr = oran(snRakam), pi = oran(snIslem);
+  if (ps != null && ps >= 0.67 && pi != null && pi < 0.5) out.push("Sayı: sayabiliyor ama ekleme-çıkarma problemlerinde zorlanıyor — sayı bilgisini duruma uygulamak henüz gelişiyor. Somut nesnelerle 'bir tane daha / bir tane gitti' oyunları önerilir.");
+  if (ps != null && ps < 0.5) out.push("Sayı: birebir sayma ya da ritmik sayma henüz güvenli değil; bu, sayı kavramının temel basamağıdır ve öncelikli desteklenmelidir.");
+  if (pr != null && pr < 0.5 && ps != null && ps >= 0.67) out.push("Sayı: sayabiliyor ama rakam sembollerini tanımıyor — bu genellikle deneyim eksikliğidir; okul öncesi/1. sınıf başında hızla kazanılır.");
+  if (sn(9) === 0 && ps != null && ps >= 0.67) out.push("Bakar bakmaz küçük miktarı (3) algılayamadı; tek tek saymaya bağımlı olabilir. Zar/domino ile 'bak-söyle' oyunları yararlıdır.");
+  const gm = OOT_ALT_TESTLER.find(a => a.k === "gm");
+  const gmGecikme = gm.maddeler.map((m, i) => ({ m, i })).filter(x => x.m.tur === "kopya" && !x.m.ileri && yasAy != null && yasAy >= x.m.yas + 6 && bak("gm", x.i) === 0);
+  if (gmGecikme.length) out.push(`Kopya etme: yaşına göre (≈${gmGecikme.map(x => `${x.m.sekil === "dikey" ? "dikey çizgi" : x.m.sekil === "arti" ? "artı" : x.m.sekil === "carpi" ? "çarpı" : x.m.sekil === "ucgen" ? "üçgen" : x.m.sekil} ${x.m.yas} ay`).join(", ")}) beklenen şekilleri çizemedi. İnce motor ve görsel-motor bütünleme izlenmelidir.`);
+  const karo = gm.maddeler.findIndex(m => m.ileri);
+  if (karo >= 0 && bak("gm", karo) === 2 && yasAy != null && yasAy < 78) out.push("Eşkenar dörtgeni yaşından önce doğru çizdi — görsel-motor beceride yaşıtlarının önünde.");
+  const db = (i) => bak("db", i);
+  const sayiDizisi = [0, 1, 2, 3].map(db), cumle = [4, 5].map(db), yonerge = [6, 7].map(db);
+  const ilkHata = sayiDizisi.findIndex(x => x === 0);
+  if (ilkHata === 0) out.push("İşitsel bellek: 2 rakamlık diziyi bile tekrar edemedi. Bu yaşta 4 rakam civarı beklenir; dikkat, işitme ya da anlama güçlüğü açısından izlenmeli, yönergeler tek tek verilmeli.");
+  else if (ilkHata > 0) out.push(`İşitsel bellek: ${ilkHata + 1} rakamlık diziyi tekrar edebildi, ${ilkHata + 2} rakamlıkta zorlandı. ${ilkHata + 1 <= 2 ? "Bu yaş için kısa sayılır (beklenen 4 civarı); yönergeleri tek tek vermek gerekir." : "Yaşına göre kabul edilebilir aralıkta."}`);
+  if (oran(yonerge) != null && oran(yonerge) < 0.5 && oran(cumle) != null && oran(cumle) >= 0.5) out.push("Cümleyi tekrar edebiliyor ama çok adımlı yönergeyi uygulayamıyor — sorun duymaktan çok sırayı planlayıp yürütmede (yürütücü işlev) olabilir.");
+  return out;
+}
+function ootOruntuler(s, veri) {
+  const A = Object.fromEntries(s.altlar.map(a => [a.k, a.yuzde]));
+  const G = Object.fromEntries(s.goz.gruplar.map(g => [g.ad, g.yuzde]));
+  const b = s.bayrak || {}, out = [];
+  const ort = (ks) => { const v = ks.map(k => A[k]).filter(x => x != null); return v.length ? v.reduce((x, y) => x + y, 0) / v.length : null; };
+  const dil = ort(["gb", "dk", "sf"]), algi = ort(["ga", "gm"]), sayi = A.sn, dikkat = A.db;
+  const ekle = (baslik, isaret, ayirt, guc) => out.push({ baslik, isaret, ayirt, guc });
+  const dolu = s.altlar.filter(a => a.yuzde != null).map(a => a.yuzde);
+  let daginik = null;
+  if (dolu.length >= 5) {
+    const fark = Math.max(...dolu) - Math.min(...dolu);
+    if (fark >= 45) daginik = () => ekle("Dağınık profil", `En güçlü ve en zayıf alan arasında ${fark} puan fark var. Genel bir gecikmeden çok, belirli bir alana özgü güçlük ya da o alanda deneyim eksikliğine işaret ediyor olabilir.`, "Zayıf alanı başka bir gün kısa bir etkinlikle yeniden gözlemleyin; fark sürüyorsa o alana yönelik ayrıntılı değerlendirme düşünülebilir.", "orta");
+    else if (fark <= 20 && s.testYuzde != null && s.testYuzde < 50) ekle("Her alanda benzer düzeyde düşük", "Bütün alanların birlikte düşük olması, tek bir beceriden çok genel gelişim düzeyinin yaşıtlarının gerisinde olduğuna ya da yeterli uyaran/okul öncesi deneyim almadığına işaret ediyor olabilir.", b.okulonce ? "Okul öncesi eğitim almamış: yoğun bir uyum ve uyaran döneminden sonra (6–8 hafta) tekrar bakın." : "Gelişim öyküsünü veliyle ayrıntılı konuşun; çocuk gelişim/ruh sağlığı değerlendirmesi ve RAM yönlendirmesi düşünülebilir.", "yüksek");
+    else if (fark <= 20 && s.testYuzde != null && s.testYuzde >= 75) ekle("Dengeli ve güçlü profil", "Alanlar arasında belirgin fark yok; becerileri birbirini destekleyecek biçimde gelişmiş görünüyor.", "", "bilgi");
+  }
+  if (dil != null && algi != null && dil + 20 <= algi && (ort(["gb", "dk"]) == null || ort(["gb", "dk"]) < 65)) ekle("Dil alanları, görsel-motor alanlardan belirgin düşük", "Görsel ve el becerileri yerindeyken dil temelli görevlerde zorlanması; dil gelişiminde gecikmeye, Türkçe deneyiminin az olmasına (iki dillilik) ya da işitme sorununa işaret ediyor olabilir.", `${b.ikidil ? "Evde başka dil konuşuluyor: kavramları ana dilinde biliyor mu veliyle kontrol edin. " : ""}${b.isitme ? "İşitme şüphesi işaretlenmiş — önce işitme taraması. " : "Bir işitme taraması dışlayıcı olur. "}Konuşma anlaşılırlığı ve cümle kurma da sorunluysa dil-konuşma terapisti değerlendirmesi önerilir.`, "yüksek");
+  if (algi != null && dil != null && algi + 20 <= dil) ekle("Görsel-motor alanlar, dil alanlarından belirgin düşük", "Sözel becerileri iyiyken görsel algı ve kalem işinde zorlanması; ince motor gelişiminde gecikmeye ya da görsel algı/görme sorununa işaret ediyor olabilir. Okulda en çok yazmayı öğrenirken görülür.", `${b.gorme ? "Görme şüphesi işaretlenmiş — göz muayenesi öncelikli. " : "Göz muayenesi dışlayıcı olur. "}İnce motor etkinlikleri 6–8 hafta yoğunlaştırılıp tekrar bakılmalı; sürerse ergoterapi değerlendirmesi düşünülebilir.`, "yüksek");
+  if (A.ga != null && A.gm != null && A.gm + 30 <= A.ga) ekle("Görüyor ama çizemiyor", "Şekilleri doğru ayırt ettiği halde kopya edemiyor; sorun algıda değil, kalemi yönetmede (ince motor kontrol) olabilir.", "Kalem tutuşuna ve el tercihine bakın; oyun hamuru, mandal, makas gibi parmak kası çalışmaları önerilir.", "orta");
+  if (A.ga != null && A.gm != null && A.ga + 30 <= A.gm) ekle("Çizebiliyor ama ayırt edemiyor", "Kalem kontrolü iyiyken benzer şekilleri ayırt etmekte zorlanıyor; görsel dikkat ya da görsel ayırt etme becerisinde zayıflığa işaret ediyor olabilir (b–d karışıklığı gibi).", "Görme muayenesi ve fark bulma, eşleştirme oyunlarıyla izleyin.", "orta");
+  if (A.sf != null && A.sf < 50 && dil != null && ort(["gb", "dk"]) >= 60) ekle("Okuma-yazmaya özgü risk işareti", "Genel dil anlayışı iyi olduğu halde ses farkındalığının düşük olması, okumayı öğrenirken zorlanma riskine işaret ediyor olabilir; ses farkındalığı okuma başarısının en güçlü erken göstergelerindendir.", "Ailede okuma-yazma güçlüğü öyküsü var mı sorun. 1. sınıfın ilk 2–3 ayında ses-harf ilerlemesini izleyin; geride kalırsa erken destek programı başlatın.", "yüksek");
+  if (sayi != null && sayi < 50 && dil != null && dil >= 60 && algi != null && algi >= 60) ekle("Sayıya özgü zayıflık", "Diğer alanları yerindeyken yalnızca sayı-nicelik alanında zorlanması, sayı kavramıyla ilgili deneyim eksikliğine ya da erken matematik güçlüğü riskine işaret ediyor olabilir.", "Somut nesnelerle sayma ve karşılaştırma oyunlarından 6–8 hafta sonra tekrar bakın; ilerleme yoksa yakın izlem.", "orta");
+  const ozd = G["Öz düzenleme"];
+  if (dikkat != null && dikkat < 50 && ozd != null && ozd < 60) ekle("Dikkat ve öz düzenleme birlikte zayıf", `Hem testte (akılda tutma, yönerge) hem gözlemde (masa başında kalma, işi bitirme) zorlanması${b.hareket ? " ve belirgin hareketlilik" : ""}; dikkat ve öz düzenleme becerilerinin yaşıtlarının gerisinde olduğuna işaret ediyor olabilir. Bu yaşta tanı konmaz; olgunlaşmayla belirgin değişebilir.`, "Öğretmen ve veli gözlemiyle 2–3 ay izleyin; sınıfta kısa ve tek adımlı yönerge, ön sıra, sık mola. Belirtiler iki ortamda da sürerse çocuk psikiyatrisi değerlendirmesi düşünülebilir.", "orta");
+  if (dikkat != null && dikkat < 50 && (ozd == null || ozd >= 75)) ekle("Testte dikkat düşük, günlük yaşamda iyi", "Gözlemde dikkat ve öz düzenleme iyiyken testte düşük çıkması; işitsel belleğe özgü zayıflığa, dili işlemlemede yavaşlığa ya da test anındaki kaygı/yorgunluğa işaret ediyor olabilir.", "İşitme taraması ve başka bir gün kısa tekrar uygulaması ayırt etmeye yardımcı olur.", "düşük");
+  const sd = G["Sosyal-duygusal"];
+  if (s.testYuzde != null && s.testYuzde >= 70 && sd != null && sd < 60) ekle("Akademik olarak hazır, duygusal-sosyal olarak hazırlanıyor", "Bilişsel ve akademik becerileri iyi; ancak ayrılma, paylaşma, sıra bekleme ya da duygu düzenlemede zorlanıyor. Okula uyum dönemi bu nedenle zor geçebilir.", "Uyum haftasında kısa ve tutarlı vedalaşma, sınıfta bir 'yardımcı arkadaş', duyguları adlandırma çalışmaları. Ayrılık kaygısı 4–6 haftayı aşarsa bireysel görüşme planlayın.", "orta");
+  const ob = G["Öz bakım ve ince motor"];
+  if (ob != null && ob < 50) ekle("Öz bakımda bağımlılık", "Tuvalet, giyinme ya da kalem-makas kullanımında yardıma ihtiyaç duyması, okulda bağımsız hareket etmesini zorlaştırabilir; çoğu zaman evde fırsat verilmemesiyle ilgilidir.", "Veliyle 'kendin yap' fırsatlarını konuşun; tuvalet bağımsızlığı yoksa okul öncesine devam/erteleme konuşmasında önemli bir etkendir.", "orta");
+  const mod = ootModalite(veri);
+  const soz = mod[0].yuzde, gos = mod[1].yuzde;
+  if (soz != null && gos != null && soz + 25 <= gos) ekle("Göstererek yanıtlıyor, konuşarak zorlanıyor", "Resimden göstererek yanıtladığı maddelerde başarılıyken sözel yanıt gerektirenlerde düşük kalması; ifade edici dilde (derdini sözle anlatma) gecikmeye ya da yabancı ortamda çekingenliğe işaret ediyor olabilir.", "Tanıdık bir ortamda (sınıf, evde) konuşkan mı, öğretmen ve veliye sorun. Her yerde az konuşuyorsa dil-konuşma değerlendirmesi düşünülebilir.", "orta");
+  if (soz != null && gos != null && gos + 25 <= soz) ekle("Konuşarak yanıtlıyor, resimlerde zorlanıyor", "Sözel görevlerde iyiyken resimli seçeneklerde zorlanması; görsel dikkat/tarama güçlüğüne, aceleci yanıt vermeye ya da görme sorununa işaret ediyor olabilir.", "Seçenekleri tek tek gösterip tekrar sorduğunuzda düzeliyor mu bakın; göz muayenesi dışlayıcı olur.", "düşük");
+  // Dağınık profil uyarısı, onu açıklayan özgül bir örüntü bulunmadıysa gösterilir
+  if (daginik && !out.some(o => o.guc === "yüksek" || o.guc === "orta")) daginik();
+  return out;
+}
+const OOT_GUC = { "yüksek": { ad: "Güçlü işaret", renk: "#C0392B" }, "orta": { ad: "Olası", renk: "#B9770E" }, "düşük": { ad: "Zayıf işaret — doğrulayın", renk: "#7F8C8D" }, "bilgi": { ad: "Bilgi", renk: "#1A8C5B" } };
+
+// Profil grafiği: yatay çubuklar + düzey bantları (40/60/80 eşikleri) — SVG metni, ekranda ve raporda aynı
+function ootProfilGrafik(s) {
+  const satirlar = [...s.altlar.map(a => ({ ad: a.kisa, y: a.yuzde, renk: a.bant ? a.bant.renk : "#999" })), ...s.goz.gruplar.map(g => ({ ad: g.ad === "Öz bakım ve ince motor" ? "Öz bakım" : g.ad, y: g.yuzde, renk: g.bant ? g.bant.renk : "#999", goz: true }))];
+  const sol = 108, sag = 44, W = 380, bar = 19, ara = 8, ust = 26, H = ust + satirlar.length * (bar + ara) + 22;
+  const gx = (y) => sol + (W - sol - sag) * y / 100;
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px;font-family:Arial,Helvetica,sans-serif" role="img" aria-label="Alt test profili">`;
+  [[0, 40, "#FDEDEC", "Destek"], [40, 60, "#FEF5E7", "Sınırda"], [60, 80, "#EBF5FB", "Yeterli"], [80, 100, "#E6F5EE", "Güçlü"]].forEach(([a, b, c, t]) => {
+    svg += `<rect x="${gx(a)}" y="${ust - 4}" width="${gx(b) - gx(a)}" height="${H - ust - 18}" fill="${c}"/><text x="${(gx(a) + gx(b)) / 2}" y="${ust - 9}" font-size="10.5" text-anchor="middle" fill="#666">${t}</text>`;
+  });
+  [40, 60, 80].forEach(t => { svg += `<line x1="${gx(t)}" x2="${gx(t)}" y1="${ust - 4}" y2="${H - 22}" stroke="#BBB" stroke-dasharray="3 3"/>`; });
+  satirlar.forEach((r, i) => {
+    const y = ust + i * (bar + ara);
+    if (r.goz && !satirlar[i - 1].goz) svg += `<line x1="4" x2="${W - 4}" y1="${y - ara / 2}" y2="${y - ara / 2}" stroke="#999"/>`;
+    svg += `<text x="${sol - 6}" y="${y + bar / 2 + 4}" font-size="13" text-anchor="end" fill="#222">${r.ad}</text>`;
+    if (r.y == null) { svg += `<text x="${sol + 4}" y="${y + bar / 2 + 4}" font-size="10.5" fill="#999">uygulanmadı</text>`; return; }
+    svg += `<rect x="${sol}" y="${y}" width="${Math.max(2, gx(r.y) - sol)}" height="${bar}" rx="3" fill="${r.renk}"/>`;
+    svg += `<text x="${gx(r.y) + 4}" y="${y + bar / 2 + 4}" font-size="13" font-weight="700" fill="#222">%${r.y}</text>`;
+  });
+  [0, 20, 40, 60, 80, 100].forEach(t => { svg += `<text x="${gx(t)}" y="${H - 6}" font-size="10.5" text-anchor="middle" fill="#666">${t}</text>`; });
+  return svg + `</svg>`;
+}
+function ootModaliteGrafik(veri) {
+  const m = ootModalite(veri).filter(x => x.yuzde != null);
+  if (!m.length) return "";
+  const W = 380, sol = 128, bar = 19, H = m.length * 29 + 10;
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px;font-family:Arial,Helvetica,sans-serif" role="img" aria-label="Yanıt türüne göre başarı">`;
+  m.forEach((r, i) => {
+    const y = 6 + i * 28, w = (W - sol - 50) * r.yuzde / 100;
+    svg += `<text x="${sol - 6}" y="${y + 13}" font-size="13" text-anchor="end" fill="#222">${r.ad}</text><rect x="${sol}" y="${y}" width="${W - sol - 50}" height="${bar}" rx="3" fill="#EEE"/><rect x="${sol}" y="${y}" width="${Math.max(2, w)}" height="${bar}" rx="3" fill="#34495E"/><text x="${sol + w + 5}" y="${y + 13}" font-size="13" font-weight="700" fill="#222">%${r.yuzde}</text>`;
+  });
+  return svg + `</svg>`;
+}
+
 // ===== OKUL OLGUNLUĞU TARAMASI — YAZDIRILABİLİR KİTAPÇIK VE KILAVUZ =====
 const OOT_CSS = `@page{size:A4;margin:11mm 12mm}*{box-sizing:border-box}body{font-family:"DejaVu Sans",Arial,sans-serif;color:#1a1a1a;margin:0;font-size:10pt}
 h1{font-size:17pt;margin:0 0 2mm;text-align:center}h2{font-size:12.5pt;margin:4mm 0 2mm;color:#0E5E41;border-bottom:2px solid #0E5E41;padding-bottom:1mm}
@@ -20481,6 +20601,8 @@ function ootRaporHtml(s, veri, ogr) {
   <h2>Alt test profili</h2><table><tr><th>Alt test</th><th style="width:20mm">Puan</th><th style="width:16mm">%</th><th style="width:28mm">Düzey</th><th style="width:45mm"></th></tr>
   ${s.altlar.map(a => `<tr><td>${a.ad}</td><td style="text-align:center">${a.cevaplanan ? `${a.ham}/${a.maks}` : "—"}</td><td style="text-align:center">${a.yuzde ?? "—"}</td><td style="color:${a.bant ? a.bant.renk : "#333"};font-weight:700">${a.bant ? a.bant.ad : "uygulanmadı"}</td><td>${bar(a.yuzde, a.bant ? a.bant.renk : "#ccc")}</td></tr>`).join("")}
   ${s.goz.gruplar.map(g => `<tr><td>Gözlem — ${g.ad}</td><td style="text-align:center">${g.cevaplanan ? `${g.ham}/${g.maks}` : "—"}</td><td style="text-align:center">${g.yuzde ?? "—"}</td><td style="color:${g.bant ? g.bant.renk : "#333"};font-weight:700">${g.bant ? g.bant.ad : "—"}</td><td>${bar(g.yuzde, g.bant ? g.bant.renk : "#ccc")}</td></tr>`).join("")}</table>
+  <h2>Beceri profili</h2>${ootProfilGrafik(s)}${ootModalite(veri).some(m => m.yuzde != null) ? `<h3>Yanıt türüne göre başarı</h3>${ootModaliteGrafik(veri)}` : ""}
+  ${s.karar && s.karar.k !== "eksik" ? (() => { const or = ootOruntuler(s, veri), md = ootMaddeAnalizi(veri, s); return `<h2>Profil analizi — olası anlamlar</h2><div class="kucuk">Puan örüntülerinden çıkarılan ihtiyatlı yorumlar; tanı değildir.</div>${or.map(o => `<div class="kutu" style="border-color:${OOT_GUC[o.guc].renk};background:#FAFAFA;page-break-inside:avoid"><b>${esc(o.baslik)}</b> <span class="kucuk" style="color:${OOT_GUC[o.guc].renk}">(${OOT_GUC[o.guc].ad})</span><br><b>Şuna işaret ediyor olabilir:</b> ${esc(o.isaret)}${o.ayirt ? `<br><b>Ayırt etmek / sonraki adım:</b> ${esc(o.ayirt)}` : ""}</div>`).join("")}${md.length ? `<h3>Madde düzeyinde gözlemler</h3><ul style="line-height:1.5;margin:0 0 0 5mm;padding:0">${md.map(l => `<li>${esc(l)}</li>`).join("")}</ul>` : ""}`; })() : ""}
   <h2>Yorum</h2><ul style="line-height:1.5;margin:0 0 0 5mm;padding:0">${ootYorum(s).map(l => `<li>${esc(l)}</li>`).join("")}</ul>
   ${ootOneriler(s).length ? `<h2>Öneriler</h2><ul style="line-height:1.5;margin:0 0 0 5mm;padding:0">${ootOneriler(s).map(o => `<li><b>${esc(o.alan)}:</b> ${esc(o.metin)}</li>`).join("")}</ul>` : ""}
   ${veri.not ? `<h2>Uygulayıcı notu</h2><div>${esc(veri.not)}</div>` : ""}
@@ -20618,15 +20740,41 @@ function OOTSonucEkrani({ kayit, ogr, onDuzenle, onGeri }) {
         <div style={{ fontSize: 16, fontWeight: 900, color: s.karar ? s.karar.renk : TEXT }} data-testid="oot-karar">{s.karar ? s.karar.ad : "Henüz puanlanmadı"}</div>
         <div style={{ fontSize: 12.5, color: MUTED, marginTop: 3 }}>{ootTarihGoster(v.uygulamaTarihi)}{s.yas ? ` · ${s.yas.simdi} ay` : ""} · Test {s.testHam}/{s.testMaks}{s.testYuzde != null ? ` (%${s.testYuzde})` : ""}{s.goz.yuzde != null ? ` · Gözlem %${s.goz.yuzde}` : ""}</div>
       </div>
-      <div style={kart}>
-        <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 6 }}>Alt test profili</div>
-        {[...s.altlar.map(a => ({ ad: a.kisa, y: a.yuzde, b: a.bant, p: a.cevaplanan ? `${a.ham}/${a.maks}` : "—" })), ...s.goz.gruplar.map(g => ({ ad: "Gözlem: " + g.ad.toLocaleLowerCase("tr"), y: g.yuzde, b: g.bant, p: g.cevaplanan ? `${g.ham}/${g.maks}` : "—" }))].map(r => (
-          <div key={r.ad} style={{ marginBottom: 7 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5 }}><span style={{ fontWeight: 700 }}>{r.ad}</span><span style={{ color: r.b ? r.b.renk : MUTED, fontWeight: 700, whiteSpace: "nowrap" }}>{r.p}{r.y != null ? ` · %${r.y} · ${r.b.ad}` : ""}</span></div>
-            <div style={{ background: "#EEE", borderRadius: 4, height: 8, marginTop: 3 }}><div style={{ width: `${r.y || 0}%`, background: r.b ? r.b.renk : "#CCC", height: 8, borderRadius: 4 }} /></div>
+      <div style={kart} data-testid="oot-grafik">
+        <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 4 }}>📊 Beceri profili</div>
+        <div style={{ fontSize: 11.5, color: MUTED, marginBottom: 6 }}>Her çubuk o alandaki başarı yüzdesi; arka plandaki renkli bantlar düzeyi gösterir. Çizginin altındakiler gözlem puanlarıdır.</div>
+        <div dangerouslySetInnerHTML={{ __html: ootProfilGrafik(s) }} />
+        {ootModalite(v).some(m => m.yuzde != null) && (
+          <div style={{ marginTop: 10 }}>
+            <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 2 }}>Yanıt türüne göre başarı</div>
+            <div style={{ fontSize: 11.5, color: MUTED, marginBottom: 4 }}>Aynı çocuk konuşarak, göstererek ve kalemle yanıt verirken farklı başarı gösteriyorsa bu bir ipucudur.</div>
+            <div dangerouslySetInnerHTML={{ __html: ootModaliteGrafik(v) }} />
           </div>
-        ))}
+        )}
       </div>
+      {s.karar && s.karar.k !== "eksik" && (() => { const or = ootOruntuler(s, v), md = ootMaddeAnalizi(v, s); return (
+        <div style={kart} data-testid="oot-analiz">
+          <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 4 }}>🔎 Profil analizi — olası anlamlar</div>
+          <div style={{ fontSize: 11.5, color: MUTED, marginBottom: 8 }}>Puan örüntülerinden çıkarılan ihtiyatlı yorumlardır; her biri bir olasılıktır ve "nasıl ayırt edilir" önerisiyle birlikte verilir. Tanı değildir.</div>
+          {or.length === 0 && <div style={{ fontSize: 13, color: MUTED }}>Belirgin bir örüntü yok; alanlar birbirine yakın.</div>}
+          {or.map((o, i) => (
+            <div key={i} style={{ borderLeft: `4px solid ${OOT_GUC[o.guc].renk}`, background: "#FAFAFA", borderRadius: 8, padding: "8px 10px", marginBottom: 8 }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+                <span style={{ fontWeight: 800, fontSize: 13.5 }}>{o.baslik}</span>
+                <span style={{ fontSize: 10.5, fontWeight: 700, color: OOT_GUC[o.guc].renk, border: `1px solid ${OOT_GUC[o.guc].renk}`, borderRadius: 10, padding: "1px 7px" }}>{OOT_GUC[o.guc].ad}</span>
+              </div>
+              <div style={{ fontSize: 13, marginTop: 4, lineHeight: 1.5 }}><b>Şuna işaret ediyor olabilir:</b> {o.isaret}</div>
+              {o.ayirt && <div style={{ fontSize: 12.5, marginTop: 4, lineHeight: 1.5, color: "#34495E" }}><b>Ayırt etmek / sonraki adım:</b> {o.ayirt}</div>}
+            </div>
+          ))}
+          {md.length > 0 && (
+            <div style={{ marginTop: 6 }}>
+              <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 4 }}>Madde düzeyinde gözlemler</div>
+              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, lineHeight: 1.55 }}>{md.map((l, i) => <li key={i}>{l}</li>)}</ul>
+            </div>
+          )}
+        </div>
+      ); })()}
       <div style={kart}>
         <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 6 }}>Yorum</div>
         <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.55 }} data-testid="oot-yorum">{ootYorum(s).map((l, i) => <li key={i}>{l}</li>)}</ul>

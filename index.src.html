@@ -16544,7 +16544,7 @@ function RaporModalIc({ rapor, onKapat }) {
               if (!akadKayit || !akadKayit.cevaplar || Object.keys(akadKayit.cevaplar).length === 0) return null;
               const sonuc = akadKayit.sonuc || akademikTaramaSonucHesapla(akadKayit.cevaplar);
               return (
-                <div style={{ marginTop:10, pageBreakInside:"avoid" }}>
+                <div style={{ marginTop:10 }}>
                   <div data-bolum="1" style={{ ...S.bolumBaslik2 }}><KaynakRozeti ikon="📋" ad="Profil" />Akademik Düzey Taraması (5-8. Sınıf Kademeli Tanılama)</div>
                   <div style={S.bolumIcerik2}>
                     <div style={{ fontSize:9, color:"#888", marginBottom:6 }}>({akadKayit.date})</div>
@@ -16563,6 +16563,7 @@ function RaporModalIc({ rapor, onKapat }) {
                         </div>
                       );
                     })}
+                    <DuzeyAnalizKarti rapor kademe="ortaokul" cevaplar={akadKayit.cevaplar} sinifAdi={ogrenciSinif} tarih={akadKayit.date} />
                   </div>
                 </div>
               );
@@ -16632,10 +16633,10 @@ function RaporModalIc({ rapor, onKapat }) {
               if (ilkKademe && ilkKademe !== "ilkokul") return null;
               const ilkKayit = (rapor.ilkokulTaramalar||[]).find(o => pdrAyniOgrenci(o.studentName, o.className, ogrenci, ogrenciSinif));
               if (!ilkKayit || !ilkKayit.cevaplar || Object.keys(ilkKayit.cevaplar).length === 0) return null;
-              const s = ilkKayit.sonuc || ilkokulTaramaSonucHesapla(ilkKayit.cevaplar, ogrenciSinif, ilkKayit.date);
+              const s = ilkokulTaramaSonucHesapla(ilkKayit.cevaplar, ogrenciSinif, ilkKayit.date);
               if (!s || s.hicUygulanmadi) return null;
               return (
-                <div style={{ marginTop:10, pageBreakInside:"avoid" }}>
+                <div style={{ marginTop:10 }}>
                   <div data-bolum="1" style={{ ...S.bolumBaslik2 }}><KaynakRozeti ikon="📋" ad="Profil" />İlkokul Düzey Taraması (1-4. Sınıf)</div>
                   <div style={S.bolumIcerik2}>
                     <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8, flexWrap:"wrap" }}>
@@ -16663,6 +16664,7 @@ function RaporModalIc({ rapor, onKapat }) {
                         {s.sevkOnerileri.map((o, i) => <div key={i} style={{ fontSize:9.5, color:"#555", lineHeight:1.5 }}>• {o}</div>)}
                       </div>
                     )}
+                    <DuzeyAnalizKarti rapor kademe="ilkokul" cevaplar={ilkKayit.cevaplar} sinifAdi={ogrenciSinif} tarih={ilkKayit.date} />
                   </div>
                 </div>
               );
@@ -16679,10 +16681,10 @@ function RaporModalIc({ rapor, onKapat }) {
               if (liseKademe && liseKademe !== "lise") return null;
               const liseKayit = (rapor.liseTaramalar||[]).find(o => pdrAyniOgrenci(o.studentName, o.className, ogrenci, ogrenciSinif));
               if (!liseKayit || !liseKayit.cevaplar || Object.keys(liseKayit.cevaplar).length === 0) return null;
-              const s = liseKayit.sonuc || liseTaramaSonucHesapla(liseKayit.cevaplar, ogrenciSinif, liseKayit.date);
+              const s = liseTaramaSonucHesapla(liseKayit.cevaplar, ogrenciSinif, liseKayit.date);
               if (!s || s.hicUygulanmadi) return null;
               return (
-                <div style={{ marginTop:10, pageBreakInside:"avoid" }}>
+                <div style={{ marginTop:10 }}>
                   <div data-bolum="1" style={{ ...S.bolumBaslik2 }}><KaynakRozeti ikon="📋" ad="Profil" />Lise Düzey Taraması (9-12. Sınıf)</div>
                   <div style={S.bolumIcerik2}>
                     <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8, flexWrap:"wrap" }}>
@@ -16720,6 +16722,7 @@ function RaporModalIc({ rapor, onKapat }) {
                         {s.sevkOnerileri.map((o, i) => <div key={i} style={{ fontSize:9.5, color:"#555", lineHeight:1.5 }}>• {o}</div>)}
                       </div>
                     )}
+                    <DuzeyAnalizKarti rapor kademe="lise" cevaplar={liseKayit.cevaplar} sinifAdi={ogrenciSinif} tarih={liseKayit.date} />
                   </div>
                 </div>
               );
@@ -34707,7 +34710,7 @@ function duzeyAnalizMetni(an, ad) {
   return s.join("\n");
 }
 // Grafik + çıkarımlar kartı (üç panelde de kullanılır)
-function DuzeyAnalizKarti({ kademe, cevaplar, sinifAdi, tarih }) {
+function DuzeyAnalizKarti({ kademe, cevaplar, sinifAdi, tarih, rapor }) {
   const an = duzeyTaramaAnaliz(kademe, cevaplar, sinifAdi, tarih);
   if (!an.uygulanan.length) return null;
   const W = 330, sol = 92, sag = 40, ust = 26, sat = 26, H = ust + an.uygulanan.length * sat + 22;
@@ -34716,7 +34719,7 @@ function DuzeyAnalizKarti({ kademe, cevaplar, sinifAdi, tarih }) {
   const renk = (d) => d.fark === null ? "#457B9D" : d.fark <= 0 ? "#1A8C5B" : d.fark === 1 ? "#D68910" : "#C0392B";
   const tr = { dikkat: ["#FDECEA", "#C0392B", "⚠"], guclu: ["#E6F5EE", "#1A8C5B", "✓"], oneri: ["#EEF2FF", "#3D5A80", "💡"], bilgi: ["#F4F4F2", "#5C6B64", "ℹ"] };
   return (
-    <div data-testid="duzey-analiz" style={{ background: "#fff", border: `1px solid ${BORDER}`, borderRadius: 12, padding: 14, marginBottom: 16 }}>
+    <div data-testid={rapor ? "duzey-analiz-rapor" : "duzey-analiz"} style={rapor ? { marginTop: 8, paddingTop: 8, borderTop: "1px dashed #ccc" } : { background: "#fff", border: `1px solid ${BORDER}`, borderRadius: 12, padding: 14, marginBottom: 16 }}>
       <div style={{ fontSize: 12.5, fontWeight: 900, color: ACCENT, marginBottom: 2 }}>🔎 Analiz ve Çıkarımlar</div>
       <div style={{ fontSize: 10, color: MUTED, lineHeight: 1.5, marginBottom: 8 }}>{an.not}</div>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: "block", maxWidth: 520 }} role="img" aria-label="Derslere göre işlevsel düzey ve beklenen düzey">
@@ -34740,7 +34743,7 @@ function DuzeyAnalizKarti({ kademe, cevaplar, sinifAdi, tarih }) {
       <div style={{ fontSize: 9, color: MUTED, margin: "2px 0 10px" }}>Çubuk: işlevsel düzey (eşiği art arda geçtiği en yüksek sınıf) · yüzde: o derste uygulanan soruların doğru oranı · yeşil: beklenen düzeyde/üstünde, turuncu: 1 yıl, kırmızı: 2+ yıl geride</div>
       {an.bulgular.map((b, i) => {
         const [bg, c, ik] = tr[b.tur] || tr.bilgi;
-        return (<div key={i} style={{ background: bg, border: `1px solid ${c}33`, borderRadius: 9, padding: "8px 10px", marginBottom: 6 }}>
+        return (<div key={i} style={{ background: bg, border: `1px solid ${c}33`, borderRadius: 9, padding: "8px 10px", marginBottom: 6, pageBreakInside: "avoid" }}>
           <div style={{ fontSize: 11.5, fontWeight: 900, color: c, marginBottom: 2 }}>{ik} {b.baslik}</div>
           <div style={{ fontSize: 11, color: TEXT, lineHeight: 1.55 }}>{b.metin}</div>
         </div>);

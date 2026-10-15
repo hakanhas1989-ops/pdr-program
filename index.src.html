@@ -10919,6 +10919,110 @@ function ksAsistanTestSonucu(g, ctx, o) {
   return b.join("\n");
 }
 
+// ── Müdahale programları kütüphanesi (kitapların tam metni) ──
+// Kitapların PDF'ten çıkarılmış, temizlenmiş metni ayrı dosyada (mudahale-metin.json, ~1,5 MB)
+// durur; asistan ilk kez ihtiyaç duyduğunda bir kez indirilir, sonra bellekte ve tarayıcı
+// önbelleğinde kalır (çevrimdışı da çalışır). Öğrenci verisi bu dosyaya hiç girmez.
+const PDR_MUDAHALE_METIN_SURUM = "1";
+let PDR_MUDAHALE_METIN = null, PDR_MUDAHALE_METIN_YUKLENIYOR = null;
+async function pdrMudahaleMetinYukle() {
+  if (PDR_MUDAHALE_METIN) return PDR_MUDAHALE_METIN;
+  if (!PDR_MUDAHALE_METIN_YUKLENIYOR) PDR_MUDAHALE_METIN_YUKLENIYOR = (async () => {
+    const adresler = [];
+    if (/^https?:/.test(location.protocol)) adresler.push(`mudahale-metin.json?v=${PDR_MUDAHALE_METIN_SURUM}`);
+    adresler.push(`https://raw.githubusercontent.com/hakanhas1989-ops/pdr-program/main/mudahale-metin.json?v=${PDR_MUDAHALE_METIN_SURUM}`);
+    for (const u of adresler) {
+      try { const res = await fetch(u); if (res.ok) { const j = await res.json(); if (j && typeof j === "object" && Object.keys(j).length) { PDR_MUDAHALE_METIN = j; return j; } } } catch (e) {}
+    }
+    return null;
+  })();
+  const s = await PDR_MUDAHALE_METIN_YUKLENIYOR; if (!s) PDR_MUDAHALE_METIN_YUKLENIYOR = null; return s;
+}
+function ksProgramBul(q) {
+  const s = ksSade(String(q || "").trim()); if (!s) return null;
+  let en = null, enP = 0;
+  MUDAHALE_PROGRAMLARI.forEach(p => {
+    const kisa = (typeof MUDAHALE_PROGRAM_KISA_ADLAR !== "undefined" && MUDAHALE_PROGRAM_KISA_ADLAR[p.key]) || "";
+    const hedef = ksSade(`${p.key.replace(/-/g, " ")} ${kisa} ${p.ad}`);
+    if (ksSade(p.key) === s || ksSade(kisa) === s) { en = p; enP = 99; return; }
+    const w = s.split(/[\s\-()]+/).filter(x => x.length >= 3);
+    let puan = w.filter(x => hedef.includes(x)).length;
+    if (/maruz|magdur/.test(s) && p.key === "zorbalik-maruz-kalan") puan += 2;
+    if (/yapan|zorba\b/.test(s) && p.key === "zorbalik-yapan") puan += 2;
+    if (/psikoegitim|grup/.test(s) && p.key === "sdb-psikoegitim") puan += 1.5;
+    if (/farkindalik|sinif/.test(s) && p.key === "sdb-farkindalik") puan += 1.5;
+    if (/mudahale|bireysel/.test(s) && p.key === "sosyal-duygusal") puan += 1;
+    if (puan > enP) { enP = puan; en = p; }
+  });
+  return enP > 0 ? en : null;
+}
+function ksProgramEtiket(p) { return `${p.ad} [${p.key}]`; }
+function ksMetinParcasi(metin, sozcukler, uzunluk = 220) {
+  const m = String(metin || ""), sm = ksSade(m);
+  let i = -1; for (const w of sozcukler) { i = sm.indexOf(w); if (i >= 0) break; }
+  if (i < 0) return ksAsistanKisalt(m.replace(/\s+/g, " "), uzunluk);
+  const bas = Math.max(0, i - 80);
+  return (bas ? "…" : "") + m.slice(bas, bas + uzunluk).replace(/\s+/g, " ") + "…";
+}
+async function ksAsistanProgramAra(g) {
+  const q = String(g.sorgu || "").trim();
+  if (!q) return "Aranacak konu/kelime yazılmadı.";
+  const prog = g.program ? ksProgramBul(g.program) : null;
+  const w = [...new Set(ksSade(q).split(/[\s,;.\-/]+/).filter(x => x.length >= 3).map(x => x.length > 5 ? x.slice(0, Math.max(5, x.length - 3)) : x))];
+  if (!w.length) return "Arama için en az 3 harfli bir kelime yaz.";
+  const M = await pdrMudahaleMetinYukle();
+  const sonuc = [];
+  MUDAHALE_PROGRAMLARI.filter(p => !prog || p.key === prog.key).forEach(p => {
+    p.oturumlar.forEach((o, i) => {
+      const tm = M && M[p.key] && M[p.key].oturumlar[i] ? M[p.key].oturumlar[i].metin : "";
+      const bas = ksSade(`${o.baslik} ${o.modul || ""}`), oz = ksSade(o.ozet || ""), sm = ksSade(tm);
+      let puan = 0, eslesen = 0;
+      w.forEach(x => {
+        let p1 = 0;
+        if (bas.includes(x)) p1 += 6; if (oz.includes(x)) p1 += 3;
+        if (sm) { let n = 0, k = sm.indexOf(x); while (k >= 0 && n < 8) { n++; k = sm.indexOf(x, k + 1); } p1 += n * 0.5; }
+        if (p1) eslesen++; puan += p1;
+      });
+      if (puan > 0) sonuc.push({ p, o, i, puan: puan * (eslesen / w.length) * (eslesen === w.length ? 1.5 : 1), tm });
+    });
+  });
+  sonuc.sort((a, c) => c.puan - a.puan);
+  const b = [`MÜDAHALE PROGRAMLARI KÜTÜPHANESİNDE "${q}"${prog ? ` (${prog.ad})` : ""} — ${M ? "kitapların tam metninde arandı" : "tam metin yüklenemedi, yalnız başlık ve özetlerde arandı"}:`];
+  if (!sonuc.length) { b.push("Eşleşen oturum bulunamadı. Başka bir kelimeyle dene ya da program_oturumu ile program listesine bak."); return b.join("\n"); }
+  sonuc.slice(0, Math.max(1, Math.min(10, parseInt(g.adet) || 6))).forEach((x, n) => {
+    b.push(`${n + 1}. ${x.p.ad} [${x.p.key}] — ${x.i + 1}. oturum: "${x.o.baslik}"${x.o.modul ? ` (${x.o.modul})` : ""}, PDF s.${x.o.sayfa}`);
+    b.push(`   Hedef kitle: ${ksAsistanKisalt(x.p.hedefKitle, 120)} · Özet: ${ksAsistanKisalt(x.o.ozet, 160)}`);
+    if (x.tm) b.push(`   Metinden: ${ksMetinParcasi(x.tm, w)}`);
+  });
+  b.push("Ayrıntı için program_oturumu aracını program anahtarı ve oturum numarasıyla çağır.");
+  return b.join("\n");
+}
+async function ksAsistanProgramOturumu(g) {
+  if (!g.program) {
+    return "MÜDAHALE PROGRAMLARI KÜTÜPHANESİ (" + MUDAHALE_PROGRAMLARI.length + " kitap):\n" + MUDAHALE_PROGRAMLARI.map(p => `• ${p.ad} [${p.key}] — ${p.oturumlar.length} oturum. Hedef kitle: ${ksAsistanKisalt(p.hedefKitle, 110)}\n  Oturumlar: ${p.oturumlar.slice(0, 6).map((o, i) => `${i + 1}) ${ksAsistanKisalt(o.baslik, 40)}`).join("; ")}${p.oturumlar.length > 6 ? `; … (+${p.oturumlar.length - 6}; tamamı için program_oturumu program=${p.key})` : ""}`).join("\n");
+  }
+  const p = ksProgramBul(g.program);
+  if (!p) return `"${g.program}" adında program bulunamadı. Programlar: ${MUDAHALE_PROGRAMLARI.map(x => `${x.key}`).join(", ")}.`;
+  const M = await pdrMudahaleMetinYukle(); const mp = M && M[p.key];
+  const parca = Math.max(1, parseInt(g.parca) || 1), BOY = 3600;
+  const bol = (metin) => { const n = Math.max(1, Math.ceil(metin.length / BOY)); const k = Math.min(parca, n); return { n, k, s: metin.slice((k - 1) * BOY, k * BOY) }; };
+  const oq = String(g.oturum ?? "").trim();
+  if (!oq || oq === "0" || /genel|giris|giriş|tanitim|tanıtım/i.test(oq)) {
+    const b = [`PROGRAM: ${ksProgramEtiket(p)}`, `Hedef kitle: ${p.hedefKitle}`, `Oturumlar: ${p.oturumlar.map((o, i) => `${i + 1}) ${o.baslik} (s.${o.sayfa})`).join("; ")}`];
+    if (mp && mp.giris) { const x = bol(mp.giris); b.push(`\nKİTABIN GİRİŞ BÖLÜMÜ (uygulama ilkeleri, kuramsal temel) — parça ${x.k}/${x.n}:\n${x.s}`); if (x.k < x.n) b.push(`(Devamı için parca: ${x.k + 1})`); }
+    else if (!M) b.push("(Kitabın tam metni şu an yüklenemedi; yalnız başlıklar verildi.)");
+    return b.join("\n");
+  }
+  let i = /^\d+$/.test(oq) ? parseInt(oq) - 1 : -1;
+  if (i < 0) { const s = ksSade(oq); i = p.oturumlar.findIndex(o => ksSade(o.baslik).includes(s) || s.includes(ksSade(o.baslik))); }
+  if (i < 0 || i >= p.oturumlar.length) return `${p.ad} programında "${oq}" oturumu bulunamadı. Oturumlar: ${p.oturumlar.map((o, k) => `${k + 1}) ${o.baslik}`).join("; ")}`;
+  const o = p.oturumlar[i];
+  const b = [`${p.ad} [${p.key}] — ${i + 1}/${p.oturumlar.length}. oturum: "${o.baslik}"${o.modul ? ` (${o.modul})` : ""} · PDF s.${o.sayfa}`, `Özet: ${o.ozet}`];
+  const tm = mp && mp.oturumlar[i] ? mp.oturumlar[i].metin : "";
+  if (tm) { const x = bol(tm); b.push(`\nOTURUM METNİ (kitaptan, parça ${x.k}/${x.n}):\n${x.s}`); if (x.k < x.n) b.push(`\n(Oturumun devamı için aynı aracı parca: ${x.k + 1} ile çağır.)`); }
+  else b.push("(Kitabın tam metni şu an yüklenemedi; yalnız özet verildi. Danışman PDF'i Müdahale Programları ekranından açabilir.)");
+  return b.join("\n");
+}
 // LGS konu önceliği: Konu Haritası işaretleri × LGS'de konu başına beklenen soru
 function ksAsistanLgsOncelik(g, ctx, o) {
   if (g.ogrenci && !o) return `"${g.ogrenci}" adında kayıtlı öğrenci bulunamadı; ogrenci_ara ile ara.`;
@@ -11082,6 +11186,16 @@ const KS_ASISTAN_ARACLAR = {
     aciklama: "\"Bugün ne yapmalıyım\", \"öncelikler\", \"bu hafta kimler\" sorularında İLK bu aracı çağır. Program öncelik sırasını kendisi çıkarır: kriz ifadeleri, yüksek riskliler, gecikmiş/bugünkü/yaklaşan hatırlatmalar, uzun süredir görüşülmeyen riskliler, planı olmayan riskliler, test izleme tarihleri (okul olgunluğu 8. hafta, okuma programı ölçümü, RAM rapor bitişi), sonucu beklenen sevkler, onay bekleyen uyum önerileri. Sen sırayı değiştirmeden kısa ve uygulanabilir anlat.",
     girdi: '{"gun": 21}', yontem: "hepsi",
     calistir: (g, ctx) => ksAsistanBugunBrifing(g, ctx),
+  },
+  program_ara: {
+    aciklama: "Müdahale Programları kütüphanesindeki 8 kitabın (Psikolojik Sağlamlık, Akademik Beceriler, Zorbalık Yapan, Zorbalığa Maruz Kalan, Sosyal Duygusal Beceriler Müdahale / Psikoeğitim / Farkındalık, Akran Nezaketi) TAM METNİNDE konu, beceri ya da etkinlik arar (örn. öfke yönetimi, sınav kaygısı, empati, zaman yönetimi, ısınma oyunu). Hangi kitabın hangi oturumunda, hangi sayfada olduğunu ve kısa alıntı verir. program: isteğe bağlı, yalnız o kitapta arar.",
+    girdi: '{"sorgu": "öfke yönetimi", "program": "isteğe bağlı", "adet": 6}', yontem: "hepsi",
+    calistir: (g) => ksAsistanProgramAra(g),
+  },
+  program_oturumu: {
+    aciklama: "Müdahale programı kitabından bir oturumun TAM içeriğini getirir: amaç, kazanımlar, süre, materyal, uygulama basamakları, yönergeler, çalışma yaprakları. program: kitap anahtarı ya da adı (psikolojik-saglamlik, akademik-beceriler, zorbalik-yapan, zorbalik-maruz-kalan, sosyal-duygusal, akran-nezaketi, sdb-psikoegitim, sdb-farkindalik). oturum: numara ya da başlık; 0 ya da boş = kitabın giriş bölümü (hedef kitle, uygulama ilkeleri). Uzun oturumlar parçalıdır: parca 2, 3… ile devamı. program boşsa bütün kitapların oturum listesini verir.",
+    girdi: '{"program": "sdb-psikoegitim", "oturum": 3, "parca": 1}', yontem: "hepsi",
+    calistir: (g) => ksAsistanProgramOturumu(g),
   },
   lgs_konu_onceligi: {
     aciklama: "LGS konu önceliği (yerelde hesaplanır). ogrenci verirsen öğrencinin Konu Haritası'ndaki tamamlanma yüzdelerini LGS'de konu başına beklenen soru sayısıyla birleştirip 'önce bunlara çalış' listesini ve tahmini kazanılabilir neti verir. ogrenci vermezsen derslere göre LGS'de en çok soru çıkan konuları verir. ders: isteğe bağlı (Türkçe, Matematik, Fen Bilimleri, İnkılap Tarihi, Din Kültürü, İngilizce).",
@@ -11473,6 +11587,7 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - "Bugün ne yapmalıyım", "bugün kimlerle ilgilenmeliyim", "öncelikler" gibi sorularda İLK bugun_brifing aracını çağır; program öncelik sırasını kendisi çıkarır, sen sırayı bozmadan kısa anlat. Gerekirse liste aracıyla ayrıntıya in.
 - Sınıf, okul ya da öğrenci düzeyinde "hangi konular konuşulmuş", "kaç veli görüşmesi", "en çok hangi sınıfla", "eğilim", "karşılaştır", "dönem özeti", "kaç öğrencide zorbalık geçti" gibi sayı/analiz sorularında gorusme_analizi kullan; sayıları kendin tahmin etme. Yorum yaparken bulguyu, olası anlamını ve somut bir sonraki adımı söyle (örn. sınıf rehberlik etkinliği, veli toplantısı, grup çalışması).
 - Test sonucu sorulduğunda ya da test sonucuna göre plan/veli anlatımı istendiğinde test_sonucu kullan.
+- Müdahale Programları kütüphanesindeki kitaplar (8 kitap, tam metin) senin başvuru kaynağın: bir konu/beceri için etkinlik, oturum ya da program önerirken, grup ya da bireysel çalışma planlarken veya danışman bir kitap/oturum sorduğunda önce program_ara, ayrıntı için program_oturumu kullan. Önerinde kitabın adını, oturum numarasını ve PDF sayfasını belirt; kitapta olmayan bir şeyi kitaptaymış gibi söyleme.
 - LGS'ye hazırlık, "hangi konuya öncelik vermeli", "LGS'de en çok hangi konudan soru çıkıyor", "kaç net artırabilir" gibi sorularda lgs_konu_onceligi kullan; kazanılabilir neti "en fazla/yaklaşık" diye temkinli söyle.
 - Uyum izleme, bireyi tanıma, BDT çarpıtması ve sevk kaydı için uyum_kaydet, bireyi_tanima_ekle, bdt_ekle, sevk_kaydet, sevk_sonuc araçları vardır; hepsi danışmanın onayından geçer.
 - Bir öğrenci için risk değerlendirmesi, müdahale planı, seans hazırlığı, süpervizyon ya da veli yazısı istendiğinde ÖNCE ogrenci_dosyasi aracını çağır. Görüşme geçmişini, akademik gidişi (bu yılın ve geçmiş dönemin denemeleri, yıl sonu not ortalamaları), BDT çarpıtmalarını, bireyi tanıma bilgilerini, test sonuçlarını, devamsızlığı ve önceki risk/müdahale kayıtlarını BİRLİKTE değerlendir. Önerinin hangi verilere dayandığını kısaca belirt; olmayan veri için "… kaydı yok" de, uydurma.

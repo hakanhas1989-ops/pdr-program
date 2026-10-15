@@ -30091,7 +30091,8 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
   }));
   const denemeAvg = denemeGirilen.length ? (denemeGirilen.reduce((s,d)=>s+d.toplam,0)/denemeGirilen.length).toFixed(1) : null;
 
-  const siniflar = [...new Set([...(sinifListesi||[]), ...tumOgrenciler.map(o=>(o.className||"").trim())].filter(Boolean))].sort((a,b)=>a.localeCompare(b,"tr"));
+  // Sınıf düğmeleri de seçili kademeye göre süzülür (ilkokul seçiliyken ortaokul sınıfları görünmez; veri silinmez, sadece gizlenir)
+  const siniflar = [...new Set([...(sinifListesi||[]).filter(s => pdrKademeUyumlu(s, kademe)), ...tumOgrenciler.map(o=>(o.className||"").trim())].filter(Boolean))].sort((a,b)=>a.localeCompare(b,"tr"));
 
   const gosterilecek = filtreliListe.filter(o =>
     sinifFiltre === "Tümü" || (o.className||"").trim() === sinifFiltre
@@ -40970,7 +40971,7 @@ function pdrBaslangicSekmesi() {
             grupCalismalari={grupCalismalari}
             setGrupCalismalari={setGrupCalismalari}
             aktifYil={aktifYil}
-            siniflar={[...new Set([...(sinifListesi||[]), ...(ogrenciler||[]).map(o=>(o.className||"").trim())].filter(Boolean))].sort((a,b)=>a.localeCompare(b,"tr"))}
+            siniflar={[...new Set([...(sinifListesi||[]), ...(ogrenciler||[]).filter(o => !o.yil || o.yil === aktifYil).map(o=>(o.className||"").trim())].filter(Boolean))].filter(s => pdrKademeUyumlu(s, kademe)).sort((a,b)=>a.localeCompare(b,"tr"))}
           />
         )}
 
@@ -40981,7 +40982,7 @@ function pdrBaslangicSekmesi() {
             aktifYil={aktifYil}
             hatirlatmalar={hatirlatmalar}
             setHatirlatmalar={setHatirlatmalar}
-            siniflar={[...new Set([...(sinifListesi||[]), ...(ogrenciler||[]).map(o=>(o.className||"").trim())].filter(Boolean))].sort((a,b)=>a.localeCompare(b,"tr"))}
+            siniflar={[...new Set([...(sinifListesi||[]), ...(ogrenciler||[]).filter(o => !o.yil || o.yil === aktifYil).map(o=>(o.className||"").trim())].filter(Boolean))].filter(s => pdrKademeUyumlu(s, kademe)).sort((a,b)=>a.localeCompare(b,"tr"))}
           />
         )}
 
@@ -40993,7 +40994,7 @@ function pdrBaslangicSekmesi() {
             aktifYil={aktifYil}
             setRiskForm={setRiskForm}
             setTab={setTab}
-            siniflar={[...new Set([...(sinifListesi||[]), ...(ogrenciler||[]).map(o=>(o.className||"").trim())].filter(Boolean))].sort((a,b)=>a.localeCompare(b,"tr"))}
+            siniflar={[...new Set([...(sinifListesi||[]), ...(ogrenciler||[]).filter(o => !o.yil || o.yil === aktifYil).map(o=>(o.className||"").trim())].filter(Boolean))].filter(s => pdrKademeUyumlu(s, kademe)).sort((a,b)=>a.localeCompare(b,"tr"))}
           />
         )}
 

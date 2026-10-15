@@ -10919,6 +10919,33 @@ function ksAsistanTestSonucu(g, ctx, o) {
   return b.join("\n");
 }
 
+// LGS konu önceliği: Konu Haritası işaretleri × LGS'de konu başına beklenen soru
+function ksAsistanLgsOncelik(g, ctx, o) {
+  if (g.ogrenci && !o) return `"${g.ogrenci}" adında kayıtlı öğrenci bulunamadı; ogrenci_ara ile ara.`;
+  if (ctx.kademe === "lise") return "Bu araç LGS (ortaokul) içindir; lise kademesinde TYT/AYT konu haritası kullanılır.";
+  const dersQ = ksSade(String(g.ders || ""));
+  const dersOk = (d) => !dersQ || ksSade(d).includes(dersQ) || dersQ.includes(ksSade(d).split(" ")[0]);
+  const b = [];
+  if (!o) {
+    b.push("LGS'DE KONU BAŞINA BEKLENEN SORU (2021, 2022, 2024, 2025, 2026 ortalaması; 2020 ve 2023 yalnız 1. dönemi kapsadığı için katılmadı):");
+    Object.entries(LGS_KONU_HARITASI).filter(([d]) => dersOk(d)).forEach(([d, l]) => {
+      b.push(`• ${d} (${LGS_DERS_SORU[d]} soru): ${l.filter(k => lgsBeklenenSoru(k) > 0).slice(0, dersQ ? 20 : 5).map(k => `${k.konu} ≈${lgsSayiYaz(lgsBeklenenSoru(k))}`).join(", ")}`);
+      const yok = l.filter(k => !lgsBeklenenSoru(k)).map(k => k.konu); if (yok.length && dersQ) b.push(`  Son yıllarda soru çıkmayanlar: ${yok.join(", ")}`);
+    });
+    return b.join("\n");
+  }
+  const v = (ctx.konuHaritasiVerisi || {});
+  const ogrVerisi = v[pdrOgrAnahtar(o.name, o.className, o.numara)] || v[pdrOgrAnahtar(o.name, o.className)] || null;
+  b.push(`LGS KONU ÖNCELİĞİ: ${ksAsistanEtiket(o)} (yerelde hesaplandı)`);
+  if (!ogrVerisi) b.push("Bu öğrenci için Konu Haritası'nda hiç işaret yok; liste bütün konuları eksik sayarak LGS ağırlığına göre sıralandı. Daha doğru sonuç için Konu Haritası'nda tamamlanan konuları işaretlemesini öner.");
+  else b.push(`Ders tamamlanma: ${Object.keys(LGS_KONU_HARITASI).map(d => `${d} %${konuHaritasiYuzdeHesapla(d, ogrVerisi[d])}`).join(", ")}`);
+  const l = lgsKonuOnceligi(ogrVerisi).filter(x => dersOk(x.ders)).slice(0, 8);
+  if (!l.length) { b.push("Eksik görünen LGS konusu yok."); return b.join("\n"); }
+  b.push("ÖNCELİK (beklenen soru × eksik kısım):");
+  l.forEach((x, i) => b.push(`${i + 1}. ${x.konu} (${x.ders}) — LGS'de ≈${lgsSayiYaz(x.beklenen)} soru/yıl, tamamlanma %${x.yuzde}, kazanılabilir ≈+${lgsSayiYaz(x.kazanc)}`));
+  b.push(`İlk 3 konu tam öğrenilirse en fazla ≈ +${lgsSayiYaz(l.slice(0, 3).reduce((s, x) => s + x.kazanc, 0))} net (tahmin; söylerken "en fazla/yaklaşık" de).`);
+  return b.join("\n");
+}
 // ── Eksik kayıt türleri için yardımcılar ──
 function ksAnzUyumEsle(maddeler) {
   const tum = []; UYUM_GOSTERGELERI.forEach(gr => gr.maddeler.forEach((m, i) => tum.push({ kod: `${gr.key}-${i}`, metin: m, grup: gr.ad })));
@@ -11055,6 +11082,11 @@ const KS_ASISTAN_ARACLAR = {
     aciklama: "\"Bugün ne yapmalıyım\", \"öncelikler\", \"bu hafta kimler\" sorularında İLK bu aracı çağır. Program öncelik sırasını kendisi çıkarır: kriz ifadeleri, yüksek riskliler, gecikmiş/bugünkü/yaklaşan hatırlatmalar, uzun süredir görüşülmeyen riskliler, planı olmayan riskliler, test izleme tarihleri (okul olgunluğu 8. hafta, okuma programı ölçümü, RAM rapor bitişi), sonucu beklenen sevkler, onay bekleyen uyum önerileri. Sen sırayı değiştirmeden kısa ve uygulanabilir anlat.",
     girdi: '{"gun": 21}', yontem: "hepsi",
     calistir: (g, ctx) => ksAsistanBugunBrifing(g, ctx),
+  },
+  lgs_konu_onceligi: {
+    aciklama: "LGS konu önceliği (yerelde hesaplanır). ogrenci verirsen öğrencinin Konu Haritası'ndaki tamamlanma yüzdelerini LGS'de konu başına beklenen soru sayısıyla birleştirip 'önce bunlara çalış' listesini ve tahmini kazanılabilir neti verir. ogrenci vermezsen derslere göre LGS'de en çok soru çıkan konuları verir. ders: isteğe bağlı (Türkçe, Matematik, Fen Bilimleri, İnkılap Tarihi, Din Kültürü, İngilizce).",
+    girdi: '{"ogrenci": "isteğe bağlı", "sinif": "isteğe bağlı", "ders": "isteğe bağlı"}', yontem: "hepsi",
+    calistir: (g, ctx, o) => ksAsistanLgsOncelik(g, ctx, o),
   },
   test_sonucu: {
     aciklama: "Öğrencinin uygulanan testlerinin sonuçlarını programın kendi puanlamasıyla getirir: okul olgunluğu (karar, alan yüzdeleri, risk göstergeleri ve gerekçeleri, güçlü yanlar, okul/ev eylem planı, yönlendirme, izleme tarihi), okuma-yazma değerlendirmesi ve programı (destek modülleri, izleme kararı), kaynaştırma (bağımsız beceriler, desteklenecek alanlar, RAM rapor süresi) ve diğer testlerin özeti. Test sonucu sorulduğunda, veliye anlatım ya da plan hazırlanırken kullan. test: isteğe bağlı test adı (örn. okul olgunluğu).",
@@ -11441,6 +11473,7 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - "Bugün ne yapmalıyım", "bugün kimlerle ilgilenmeliyim", "öncelikler" gibi sorularda İLK bugun_brifing aracını çağır; program öncelik sırasını kendisi çıkarır, sen sırayı bozmadan kısa anlat. Gerekirse liste aracıyla ayrıntıya in.
 - Sınıf, okul ya da öğrenci düzeyinde "hangi konular konuşulmuş", "kaç veli görüşmesi", "en çok hangi sınıfla", "eğilim", "karşılaştır", "dönem özeti", "kaç öğrencide zorbalık geçti" gibi sayı/analiz sorularında gorusme_analizi kullan; sayıları kendin tahmin etme. Yorum yaparken bulguyu, olası anlamını ve somut bir sonraki adımı söyle (örn. sınıf rehberlik etkinliği, veli toplantısı, grup çalışması).
 - Test sonucu sorulduğunda ya da test sonucuna göre plan/veli anlatımı istendiğinde test_sonucu kullan.
+- LGS'ye hazırlık, "hangi konuya öncelik vermeli", "LGS'de en çok hangi konudan soru çıkıyor", "kaç net artırabilir" gibi sorularda lgs_konu_onceligi kullan; kazanılabilir neti "en fazla/yaklaşık" diye temkinli söyle.
 - Uyum izleme, bireyi tanıma, BDT çarpıtması ve sevk kaydı için uyum_kaydet, bireyi_tanima_ekle, bdt_ekle, sevk_kaydet, sevk_sonuc araçları vardır; hepsi danışmanın onayından geçer.
 - Bir öğrenci için risk değerlendirmesi, müdahale planı, seans hazırlığı, süpervizyon ya da veli yazısı istendiğinde ÖNCE ogrenci_dosyasi aracını çağır. Görüşme geçmişini, akademik gidişi (bu yılın ve geçmiş dönemin denemeleri, yıl sonu not ortalamaları), BDT çarpıtmalarını, bireyi tanıma bilgilerini, test sonuçlarını, devamsızlığı ve önceki risk/müdahale kayıtlarını BİRLİKTE değerlendir. Önerinin hangi verilere dayandığını kısaca belirt; olmayan veri için "… kaydı yok" de, uydurma.
 - Danışmana ASLA kod sorma ve kodlardan söz etme; o ekranında gerçek adları görür. Öğrenciyi araçlara adıyla ya da sana gelen koduyla yazabilirsin. Ad belirsizse ogrenci_ara ile ara ve bulunan seçenekleri sun.
@@ -27098,76 +27131,128 @@ function netIlerlemeSVGOlustur(ogrKayitlar, genislik, yukseklik) {
 // — en sık sorulan konu en üstte çıksın, önceliklendirme kolaylaşsın. Bu bir
 // yardımcı referans, kesin/güncel müfredat kaynağı değil; ÖSYM'nin resmi bir
 // yayını değildir, danışmanın kendi topladığı istatistiksel bir özettir.
+// LGS konu haritası — her konunun 2026→2020 yıllarındaki soru sayısı (yillar dizisi,
+// LGS_SORU_YILLARI sırasıyla). Kaynak: danışmanın paylaştığı "LGS Yıllara Göre Soru Dağılımı
+// (2020-2026)" tablosu (15.10.2026). Konu adları ESKİ kayıtlarla aynı tutuldu (öğrenci
+// verisi konu adıyla saklanıyor). gecmisSoru = 7 yılın toplamı.
 const LGS_KONU_HARITASI = {
   "Türkçe": [
-    { konu: "Parçada Anlam", gecmisSoru: 51 },
-    { konu: "Sözel Mantık", gecmisSoru: 24 },
-    { konu: "Cümlede Anlam", gecmisSoru: 16 },
-    { konu: "Sözcükte Anlam", gecmisSoru: 12 },
-    { konu: "Yazım Kuralları", gecmisSoru: 6 },
-    { konu: "Noktalama İşaretleri", gecmisSoru: 6 },
-    { konu: "Metin Türleri", gecmisSoru: 5 },
-    { konu: "Fiilimsiler", gecmisSoru: 3 },
-    { konu: "Deyimler ve Atasözleri", gecmisSoru: 3 },
-    { konu: "Cümlenin Ögeleri", gecmisSoru: 3 },
-    { konu: "Fiillerde Çatı", gecmisSoru: 3 },
-    { konu: "Cümle Türleri", gecmisSoru: 3 },
-    { konu: "Anlatım Bozukluğu", gecmisSoru: 3 },
-    { konu: "Söz Sanatları", gecmisSoru: 2 },
+    { konu: "Parçada Anlam", gecmisSoru: 49, yillar: [8, 7, 7, 7, 6, 10, 4] },
+    { konu: "Sözel Mantık", gecmisSoru: 27, yillar: [1, 3, 3, 4, 5, 4, 7] },
+    { konu: "Sözcükte Anlam", gecmisSoru: 15, yillar: [2, 2, 2, 4, 2, 2, 1] },
+    { konu: "Cümlede Anlam", gecmisSoru: 13, yillar: [2, 2, 2, 2, 1, 2, 2] },
+    { konu: "Deyimler ve Atasözleri", gecmisSoru: 4, yillar: [1, 0, 1, 0, 0, 2, 0] },
+    { konu: "Noktalama İşaretleri", gecmisSoru: 6, yillar: [1, 1, 1, 1, 1, 0, 1] },
+    { konu: "Yazım Kuralları", gecmisSoru: 6, yillar: [1, 1, 1, 1, 1, 0, 1] },
+    { konu: "Anlatım Bozukluğu", gecmisSoru: 3, yillar: [0, 1, 1, 0, 1, 0, 0] },
+    { konu: "Cümle Türleri", gecmisSoru: 4, yillar: [1, 1, 1, 0, 0, 0, 1] },
+    { konu: "Fiillerde Çatı", gecmisSoru: 3, yillar: [1, 1, 0, 0, 1, 0, 0] },
+    { konu: "Fiilimsiler", gecmisSoru: 4, yillar: [1, 0, 1, 1, 0, 0, 1] },
+    { konu: "Söz Sanatları", gecmisSoru: 3, yillar: [1, 1, 0, 0, 0, 0, 1] },
+    { konu: "Cümlenin Ögeleri", gecmisSoru: 2, yillar: [0, 0, 0, 0, 1, 0, 1] },
+    { konu: "Metin Türleri", gecmisSoru: 3, yillar: [0, 0, 0, 0, 1, 0, 2] },
   ],
   "Matematik": [
-    { konu: "Köklü Sayılar", gecmisSoru: 22 },
-    { konu: "Üslü Sayılar", gecmisSoru: 19 },
-    { konu: "Cebirsel İfadeler", gecmisSoru: 18 },
-    { konu: "Doğrusal Denklemler ve Eğim", gecmisSoru: 15 },
-    { konu: "Çarpanlar ve Katlar", gecmisSoru: 13 },
-    { konu: "Veri Analizi", gecmisSoru: 12 },
-    { konu: "Olasılık", gecmisSoru: 10 },
-    { konu: "Üçgenler", gecmisSoru: 10 },
-    { konu: "Eşitsizlikler", gecmisSoru: 8 },
-    { konu: "Eşlik ve Benzerlik", gecmisSoru: 5 },
-    { konu: "Dönüşüm Geometrisi", gecmisSoru: 4 },
-    { konu: "Geometrik Cisimler", gecmisSoru: 4 },
+    { konu: "Doğrusal Denklemler ve Eğim", gecmisSoru: 16, yillar: [3, 3, 4, 0, 4, 2, 0] },
+    { konu: "Köklü Sayılar", gecmisSoru: 22, yillar: [3, 3, 3, 5, 3, 2, 3] },
+    { konu: "Cebirsel İfadeler", gecmisSoru: 19, yillar: [2, 2, 3, 4, 2, 2, 4] },
+    { konu: "Üslü Sayılar", gecmisSoru: 19, yillar: [2, 2, 2, 4, 2, 3, 4] },
+    { konu: "Üçgenler", gecmisSoru: 9, yillar: [2, 2, 1, 0, 2, 2, 0] },
+    { konu: "Çarpanlar ve Katlar", gecmisSoru: 14, yillar: [1, 1, 2, 3, 1, 3, 3] },
+    { konu: "Eşitsizlikler", gecmisSoru: 7, yillar: [1, 2, 1, 0, 1, 2, 0] },
+    { konu: "Veri Analizi", gecmisSoru: 11, yillar: [1, 1, 1, 2, 1, 2, 3] },
+    { konu: "Eşlik ve Benzerlik", gecmisSoru: 5, yillar: [2, 1, 0, 0, 1, 1, 0] },
+    { konu: "Olasılık", gecmisSoru: 10, yillar: [1, 1, 1, 2, 1, 1, 3] },
+    { konu: "Dönüşüm Geometrisi", gecmisSoru: 4, yillar: [1, 1, 1, 0, 1, 0, 0] },
+    { konu: "Geometrik Cisimler", gecmisSoru: 4, yillar: [1, 1, 1, 0, 1, 0, 0] },
   ],
   "Fen Bilimleri": [
-    { konu: "DNA ve Genetik Kod", gecmisSoru: 35 },
-    { konu: "Madde ve Endüstri", gecmisSoru: 33 },
-    { konu: "Basınç", gecmisSoru: 20 },
-    { konu: "Enerji Dönüşümleri ve Çevre Bilimi", gecmisSoru: 19 },
-    { konu: "Mevsimler ve İklim", gecmisSoru: 15 },
-    { konu: "Basit Makineler", gecmisSoru: 10 },
-    { konu: "Elektrik Yükleri ve Elektrik Enerjisi", gecmisSoru: 10 },
+    { konu: "Madde ve Endüstri", gecmisSoru: 33, yillar: [5, 5, 5, 4, 5, 5, 4] },
+    { konu: "DNA ve Genetik Kod", gecmisSoru: 36, yillar: [4, 3, 4, 8, 4, 5, 8] },
+    { konu: "Enerji Dönüşümleri ve Çevre Bilimi", gecmisSoru: 18, yillar: [3, 4, 3, 0, 4, 4, 0] },
+    { konu: "Basit Makineler", gecmisSoru: 10, yillar: [2, 2, 2, 0, 2, 2, 0] },
+    { konu: "Basınç", gecmisSoru: 20, yillar: [2, 2, 2, 5, 2, 2, 5] },
+    { konu: "Elektrik Yükleri ve Elektrik Enerjisi", gecmisSoru: 10, yillar: [3, 3, 2, 0, 2, 0, 0] },
+    { konu: "Mevsimler ve İklim", gecmisSoru: 13, yillar: [1, 1, 2, 3, 1, 2, 3] },
   ],
   "İnkılap Tarihi": [
-    { konu: "Milli Uyanış: Bağımsızlık Yolunda Atılan Adımlar", gecmisSoru: 20 },
-    { konu: "Ya İstiklal Ya Ölüm", gecmisSoru: 14 },
-    { konu: "Atatürkçülük ve Çağdaşlaşan Türkiye", gecmisSoru: 14 },
-    { konu: "Bir Kahraman Doğuyor", gecmisSoru: 12 },
-    { konu: "Demokratikleşme Çabaları", gecmisSoru: 5 },
-    { konu: "Atatürk Dönemi Türk Dış Politikası", gecmisSoru: 5 },
-    { konu: "Atatürk'ün Vefatı ve Sonrası", gecmisSoru: 0 },
+    { konu: "Atatürkçülük ve Çağdaşlaşan Türkiye", gecmisSoru: 16, yillar: [3, 3, 4, 0, 3, 3, 0] },
+    { konu: "Milli Uyanış: Bağımsızlık Yolunda Atılan Adımlar", gecmisSoru: 16, yillar: [2, 2, 2, 2, 2, 2, 4] },
+    { konu: "Ya İstiklal Ya Ölüm", gecmisSoru: 16, yillar: [2, 2, 2, 3, 2, 2, 3] },
+    { konu: "Atatürk Dönemi Türk Dış Politikası", gecmisSoru: 5, yillar: [1, 1, 1, 0, 1, 1, 0] },
+    { konu: "Bir Kahraman Doğuyor", gecmisSoru: 13, yillar: [1, 1, 1, 5, 1, 1, 3] },
+    { konu: "Demokratikleşme Çabaları", gecmisSoru: 4, yillar: [1, 1, 0, 0, 1, 1, 0] },
+    { konu: "Atatürk'ün Vefatı ve Sonrası", gecmisSoru: 0, yillar: [0, 0, 0, 0, 0, 0, 0] },
   ],
   "Din Kültürü": [
-    { konu: "Din ve Hayat", gecmisSoru: 19 },
-    { konu: "Zekat ve Sadaka", gecmisSoru: 18 },
-    { konu: "Kader İnancı", gecmisSoru: 16 },
-    { konu: "Hz. Muhammed'in Örnekliği", gecmisSoru: 6 },
-    { konu: "Kur'an-ı Kerim'in Özellikleri", gecmisSoru: 6 },
-    { konu: "Bir Peygamber Tanıyorum: Hz. Musa", gecmisSoru: 5 },
+    { konu: "Kader İnancı", gecmisSoru: 22, yillar: [3, 3, 3, 4, 3, 2, 4] },
+    { konu: "Din ve Hayat", gecmisSoru: 18, yillar: [2, 2, 3, 3, 3, 3, 2] },
+    { konu: "Hz. Muhammed'in Örnekliği", gecmisSoru: 10, yillar: [2, 2, 1, 0, 2, 3, 0] },
+    { konu: "Zekat ve Sadaka", gecmisSoru: 17, yillar: [2, 2, 2, 3, 2, 2, 4] },
+    { konu: "Kur'an-ı Kerim'in Özellikleri", gecmisSoru: 3, yillar: [1, 1, 1, 0, 0, 0, 0] },
+    { konu: "Bir Peygamber Tanıyorum: Hz. Musa", gecmisSoru: 0, yillar: null },
   ],
   "İngilizce": [
-    { konu: "Friendship", gecmisSoru: 14 },
-    { konu: "In The Kitchen", gecmisSoru: 10 },
-    { konu: "On The Phone", gecmisSoru: 9 },
-    { konu: "The Internet", gecmisSoru: 9 },
-    { konu: "Teen Life", gecmisSoru: 7 },
-    { konu: "Tourism", gecmisSoru: 6 },
-    { konu: "Adventures", gecmisSoru: 5 },
-    { konu: "Chores", gecmisSoru: 5 },
-    { konu: "Science", gecmisSoru: 5 },
-    { konu: "Natural Forces", gecmisSoru: 1 },
+    { konu: "Friendship", gecmisSoru: 15, yillar: [2, 2, 2, 4, 2, 1, 2] },
+    { konu: "In The Kitchen", gecmisSoru: 10, yillar: [1, 1, 1, 2, 1, 2, 2] },
+    { konu: "Adventures", gecmisSoru: 5, yillar: [1, 1, 1, 0, 1, 1, 0] },
+    { konu: "Chores", gecmisSoru: 5, yillar: [1, 1, 1, 0, 1, 1, 0] },
+    { konu: "On The Phone", gecmisSoru: 9, yillar: [1, 1, 1, 2, 1, 1, 2] },
+    { konu: "Science", gecmisSoru: 5, yillar: [1, 1, 1, 0, 1, 1, 0] },
+    { konu: "Teen Life", gecmisSoru: 7, yillar: [1, 1, 1, 0, 1, 1, 2] },
+    { konu: "The Internet", gecmisSoru: 9, yillar: [1, 1, 1, 2, 1, 1, 2] },
+    { konu: "Tourism", gecmisSoru: 5, yillar: [1, 1, 1, 0, 1, 1, 0] },
+    { konu: "Natural Forces", gecmisSoru: 0, yillar: [0, 0, 0, 0, 0, 0, 0] },
   ],
 };
+// Yıllar (yillar dizisinin sırası) ve ortalamaya giren TAM KAPSAMLI yıllar: 2020 (pandemi) ve
+// 2023 (deprem) LGS'leri yalnız 1. dönem konularını kapsadı; bu iki yıl ortalamayı bozmasın
+// diye "beklenen soru" hesabına katılmaz (tabloda yine görünür).
+const LGS_SORU_YILLARI = [2026, 2025, 2024, 2023, 2022, 2021, 2020];
+const LGS_TAM_KAPSAM_YILLARI = [2026, 2025, 2024, 2022, 2021];
+const LGS_DERS_SORU = { "Türkçe": 20, "Matematik": 20, "Fen Bilimleri": 20, "İnkılap Tarihi": 10, "Din Kültürü": 10, "İngilizce": 10 };
+// Bir konudan bir LGS'de beklenen soru sayısı (tam kapsamlı yılların ortalaması)
+function lgsBeklenenSoru(k) {
+  if (!k || !Array.isArray(k.yillar)) return 0;
+  const l = LGS_TAM_KAPSAM_YILLARI.map(y => k.yillar[LGS_SORU_YILLARI.indexOf(y)]).filter(x => typeof x === "number");
+  return l.length ? l.reduce((s, x) => s + x, 0) / l.length : 0;
+}
+function lgsSonYilSoru(k) { return k && Array.isArray(k.yillar) ? k.yillar[0] : null; }
+function lgsSayiYaz(x) { return (Math.round(x * 10) / 10).toLocaleString("tr-TR"); }
+// Öğrencinin konu haritasına göre öncelik listesi: kazanç = beklenen soru × eksik oran.
+// Konuyu tam öğrenirse en fazla kaç soru (≈ net) kazanabileceğini gösterir; bir tahmindir.
+function lgsKonuOnceligi(ogrVerisi, adet) {
+  const l = [];
+  Object.entries(LGS_KONU_HARITASI).forEach(([ders, konular]) => konular.forEach(k => {
+    const b = lgsBeklenenSoru(k); if (b <= 0) return;
+    const yuzde = konuDegeriAl((ogrVerisi || {})[ders], k.konu);
+    const kazanc = b * (100 - yuzde) / 100;
+    if (kazanc > 0.05) l.push({ ders, konu: k.konu, beklenen: b, yuzde, kazanc, sonYil: lgsSonYilSoru(k) });
+  }));
+  l.sort((a, c) => c.kazanc - a.kazanc || c.beklenen - a.beklenen);
+  return adet ? l.slice(0, adet) : l;
+}
+// Yazdırılabilir LGS soru dağılımı tablosu
+function lgsSoruDagilimiHtml() {
+  const e = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  let h = `<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LGS Soru Dağılımı</title><style>
+body{font-family:Arial,sans-serif;color:#222;margin:14px;font-size:11px}h1{font-size:16px;color:#1F4E79;margin:0 0 4px}h2{font-size:13px;margin:12px 0 4px;color:#1F4E79}
+table{border-collapse:collapse;width:100%;margin-bottom:6px;page-break-inside:avoid}th,td{border:1px solid #ccc;padding:3px 5px;text-align:center}th{background:#1F4E79;color:#fff;font-size:10px}
+td.k{text-align:left}td.o{font-weight:700;background:#E8F2EC}th.y{background:#7F8C8D}.not{color:#666;font-size:10px;line-height:1.4}.sifir{color:#aaa}
+@media print{body{margin:8mm}h2{page-break-after:avoid}}</style></head><body>
+<h1>LGS Yıllara Göre Soru Dağılımı (2020–2026)</h1>
+<div class="not">"Beklenen" sütunu tam kapsamlı yılların (2021, 2022, 2024, 2025, 2026) ortalamasıdır. 2020 ve 2023 LGS'leri yalnızca 1. dönem konularını kapsadığı için (gri sütunlar) ortalamaya katılmadı. Konular beklenen soru sayısına göre sıralıdır.</div>`;
+  Object.entries(LGS_KONU_HARITASI).forEach(([ders, konular]) => {
+    h += `<h2>${e(ders)} (${LGS_DERS_SORU[ders] || ""} soru)</h2><table><tr><th style="text-align:left">Konu</th><th>Beklenen</th>${LGS_SORU_YILLARI.map(y => `<th class="${LGS_TAM_KAPSAM_YILLARI.includes(y) ? "" : "y"}">${y}</th>`).join("")}</tr>`;
+    konular.forEach(k => {
+      const b = lgsBeklenenSoru(k);
+      h += `<tr><td class="k">${e(k.konu)}</td><td class="o">${b ? lgsSayiYaz(b) : "—"}</td>${LGS_SORU_YILLARI.map((y, i) => { const v = k.yillar ? k.yillar[i] : null; return `<td class="${v ? "" : "sifir"}">${v ? v : "-"}</td>`; }).join("")}</tr>`;
+    });
+    h += `</table>`;
+  });
+  h += `<div class="not">Kaynak: LGS Yıllara Göre Soru Dağılımı (2020–2026) tablosu. Tabloda olmayan konular "—" ile gösterilir. Bir konudan çıkan soru sayısı yıldan yıla değişebilir; liste çalışma önceliği için yol göstericidir.</div></body></html>`;
+  return h;
+}
 const LGS_KONU_HARITASI_DERSLER = Object.keys(LGS_KONU_HARITASI);
 
 // TYT/AYT Konu Haritası verisi — @rehberlikadresim'in "Son 8 Yıl Çıkmış Soru-Konu
@@ -27632,8 +27717,14 @@ function KonuHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, kon
     <div style={{ padding: 16, maxWidth: 640 }}>
       <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 4, color:PURPLE }}>📚 Konu Haritası <span style={{fontSize:12, fontWeight:700, background:PURPLE_LIGHT, color:PURPLE, borderRadius:8, padding:"2px 8px", marginLeft:4}}>{liseMi ? sinavTip.toUpperCase() : "LGS"}</span></div>
       <div style={{ fontSize: 12, color: MUTED, marginBottom: liseMi?10:16, lineHeight: 1.5 }}>
-        Görüşme sırasında öğrencinin ne kadarını bitirdiğini işaretle (%25/%50/%75/%100) — ders başlığındaki yüzde, konuların ortalamasına göre otomatik hesaplanır. Konunun yanındaki sayı, o konudan son 8 yılda (2018-2025) {liseMi ? sinavTip.toUpperCase() : "LGS"}'de kaç soru çıktığını gösterir; henüz bitmemiş ama sık çıkan konulara öncelik verilebilir.
+        Görüşme sırasında öğrencinin ne kadarını bitirdiğini işaretle (%25/%50/%75/%100) — ders başlığındaki yüzde, konuların ortalamasına göre otomatik hesaplanır. {liseMi ? <>Konunun yanındaki sayı, o konudan son 8 yılda (2018-2025) {sinavTip.toUpperCase()}'de kaç soru çıktığını gösterir; henüz bitmemiş ama sık çıkan konulara öncelik verilebilir.</> : <>Konunun yanındaki sayı, o konudan bir LGS'de ortalama kaç soru çıktığını gösterir (2021, 2022, 2024, 2025, 2026 ortalaması; 2020 ve 2023 yalnız 1. dönemi kapsadığı için katılmadı). Konular en çok soru çıkandan aza sıralıdır.</>}
       </div>
+
+      {!liseMi && (
+        <button data-testid="lgs-dagilim-yazdir" onClick={() => ootBelgeAc(lgsSoruDagilimiHtml(), "LGS Soru Dağılımı")} style={{
+          display:"block", width:"100%", padding:"8px", borderRadius:9, border:`1px solid ${PURPLE}55`, background:PURPLE_LIGHT, color:PURPLE, fontSize:12, fontWeight:800, cursor:"pointer", marginBottom:14
+        }}>🖨️ LGS Soru Dağılımı Tablosu (yazdır / panoya as)</button>
+      )}
 
       {liseMi && (
         <div style={{ display:"flex", gap:6, marginBottom:16 }}>
@@ -27672,6 +27763,31 @@ function KonuHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, kon
         </>
       )}
 
+      {/* LGS çalışma önceliği: eksik konu × LGS'de beklenen soru */}
+      {seciliAd && !liseMi && (() => {
+        const onc = lgsKonuOnceligi(ogrVerisi, 5);
+        if (!onc.length) return <div style={{ background:"#E8F5EE", border:"1px solid #1A8C5B55", borderRadius:12, padding:"10px 12px", marginBottom:12, fontSize:12, color:"#1A8C5B", fontWeight:700 }}>🎉 Bütün LGS konuları %100 işaretli.</div>;
+        const ilk3 = onc.slice(0, 3).reduce((s, x) => s + x.kazanc, 0);
+        return (
+          <div data-testid="lgs-oncelik" style={{ background:"#FFF8E6", border:"1px solid #E0B44C", borderRadius:12, padding:"10px 12px", marginBottom:12 }}>
+            <div style={{ fontSize:13, fontWeight:900, color:"#8A5A00", marginBottom:6 }}>🎯 Önce bunlara çalış</div>
+            {onc.map((x, i) => (
+              <div key={x.ders + x.konu} style={{ display:"flex", alignItems:"center", gap:8, padding:"4px 0", borderTop: i ? "1px dashed #E0B44C66" : "none" }}>
+                <span style={{ fontSize:11, fontWeight:900, color:"#8A5A00", width:14 }}>{i + 1}</span>
+                <span style={{ flex:1, minWidth:0, fontSize:12 }}>
+                  <b>{x.konu}</b> <span style={{ color:MUTED }}>· {x.ders}</span>
+                  <span style={{ display:"block", fontSize:10.5, color:MUTED }}>LGS'de ≈{lgsSayiYaz(x.beklenen)} soru/yıl{x.sonYil != null ? ` (2026'da ${x.sonYil})` : ""} · tamamlanma %{x.yuzde}</span>
+                </span>
+                <span style={{ flexShrink:0, fontSize:11, fontWeight:900, color:"#1A8C5B" }}>+{lgsSayiYaz(x.kazanc)}</span>
+              </div>
+            ))}
+            <div style={{ fontSize:11.5, color:"#5A4300", marginTop:6, lineHeight:1.45 }}>
+              İlk 3 konuyu tam öğrenirse LGS'de <b>en fazla ≈ +{lgsSayiYaz(ilk3)} net</b> kazanabilir. <span style={{ color:MUTED }}>(Tahmindir: o konulardan beklenen soru sayısı × eksik kısım.)</span>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Ders listesi */}
       {seciliAd && (
         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
@@ -27700,7 +27816,9 @@ function KonuHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, kon
                         <div key={k.konu} style={{ padding:"8px 0", borderBottom:`1px solid ${BG}` }}>
                           <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:5 }}>
                             <span style={{ flex:1, fontSize:13, color: konuYuzde>=100 ? MUTED : TEXT, textDecoration: konuYuzde>=100 ? "line-through" : "none" }}>{k.konu}</span>
-                            <span style={{ fontSize:10, color:MUTED, background:BG, borderRadius:8, padding:"2px 7px", flexShrink:0 }}>{k.gecmisSoru} soru</span>
+                            {liseMi
+                              ? <span style={{ fontSize:10, color:MUTED, background:BG, borderRadius:8, padding:"2px 7px", flexShrink:0 }}>{k.gecmisSoru} soru</span>
+                              : (() => { const b = lgsBeklenenSoru(k); return <span title={k.yillar ? LGS_SORU_YILLARI.map((y, i) => `${y}: ${k.yillar[i]}`).join(" · ") : "Tabloda yok"} style={{ fontSize:10, color: b ? (b >= 3 ? "#8A5A00" : MUTED) : "#aaa", background: b >= 3 ? "#FFF3D6" : BG, fontWeight: b >= 3 ? 800 : 400, borderRadius:8, padding:"2px 7px", flexShrink:0 }}>{b ? `≈${lgsSayiYaz(b)} soru/yıl` : "son yıllarda çıkmadı"}</span>; })()}
                           </div>
                           <div style={{ display:"flex", gap:4 }}>
                             {KONU_TAMAMLAMA_SECENEKLER.map(y => (
@@ -30017,7 +30135,7 @@ function pdrAsistanCtx(p) {
     profiles: p.profiles, profiles2: p.profiles2, denemeler: p.denemeler, sevkler: p.sevkler, testKayitlari: p.testKayitlari,
     akademikTaramalar: p.akademikTaramalar, liseTaramalar: p.liseTaramalar, benlikOlcekleri: p.benlikOlcekleri,
     sinavTuru: p.sinavTuru, aktifYil: p.aktifYil, ogrenciListesi: p.kayitliListesi,
-    bdtAnaliz: p.bdtAnaliz, bireyiTanima: p.bireyiTanima, ogrenciler: p.ogrenciler, uyumIzleme: p.uyumIzleme, kademe: p.kademe || "",
+    bdtAnaliz: p.bdtAnaliz, bireyiTanima: p.bireyiTanima, ogrenciler: p.ogrenciler, uyumIzleme: p.uyumIzleme, kademe: p.kademe || "", konuHaritasiVerisi: p.konuHaritasiVerisi || {},
     kaydet: {
       records: async (l) => { p.setRecords(l); await saveRecords(l); },
       hatirlatmalar: async (l) => { p.setHatirlatmalar(l); await saveHatirlatmalar(l); },
@@ -30119,7 +30237,7 @@ function AsistanEkrani({
   kayitliListesi, records, setRecords, riskListesi, setRiskListesi, hatirlatmalar, setHatirlatmalar,
   mudahalePlan, setMudahalePlan, profiles, profiles2, denemeler, sevkler, testKayitlari,
   akademikTaramalar, liseTaramalar, benlikOlcekleri, sinavTuru, aktifYil, setTab,
-  bdtAnaliz, bireyiTanima, ogrenciler, uyumIzleme, setBdtAnaliz, setBireyiTanima, setUyumIzleme, kademe, setSevkler
+  bdtAnaliz, bireyiTanima, ogrenciler, uyumIzleme, setBdtAnaliz, setBireyiTanima, setUyumIzleme, kademe, setSevkler, konuHaritasiVerisi
 }) {
   const S = PDR_ASISTAN_SOHBET;
   const [, yenile] = useState(0);
@@ -30194,7 +30312,7 @@ function AsistanEkrani({
     return pdrAsistanCtx({ kayitliListesi, records, setRecords, riskListesi, setRiskListesi, hatirlatmalar, setHatirlatmalar,
       mudahalePlan, setMudahalePlan, profiles, profiles2, denemeler, sevkler, testKayitlari,
       akademikTaramalar, liseTaramalar, benlikOlcekleri, sinavTuru, aktifYil, bdtAnaliz, bireyiTanima, ogrenciler, uyumIzleme,
-      setBdtAnaliz, setBireyiTanima, setUyumIzleme, kademe, setSevkler });
+      setBdtAnaliz, setBireyiTanima, setUyumIzleme, kademe, setSevkler, konuHaritasiVerisi });
   }
 
   function gonder(metinVer) { return gonderAyar(metinVer, ayar); }
@@ -41867,7 +41985,7 @@ function pdrBaslangicSekmesi() {
             sinavTuru={sinavTuru} aktifYil={aktifYil} setTab={setTab}
             bdtAnaliz={bdtAnaliz} bireyiTanima={bireyiTanima} ogrenciler={ogrenciler} uyumIzleme={uyumIzleme}
             setBdtAnaliz={setBdtAnaliz} setBireyiTanima={setBireyiTanima} setUyumIzleme={setUyumIzleme}
-            kademe={kademe} setSevkler={setSevkler}
+            kademe={kademe} setSevkler={setSevkler} konuHaritasiVerisi={konuHaritasiVerisi}
           />
         )}
         {/* ── PDR ASİSTANI: her ekranda bas-konuş düğmesi ── */}
@@ -41884,7 +42002,7 @@ function pdrBaslangicSekmesi() {
             sinavTuru={sinavTuru} aktifYil={aktifYil} setTab={setTab}
             bdtAnaliz={bdtAnaliz} bireyiTanima={bireyiTanima} ogrenciler={ogrenciler} uyumIzleme={uyumIzleme}
             setBdtAnaliz={setBdtAnaliz} setBireyiTanima={setBireyiTanima} setUyumIzleme={setUyumIzleme}
-            kademe={kademe} setSevkler={setSevkler}
+            kademe={kademe} setSevkler={setSevkler} konuHaritasiVerisi={konuHaritasiVerisi}
           />
         )}
 

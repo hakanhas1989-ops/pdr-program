@@ -15,6 +15,7 @@
 <title>PDR Program</title>
 <script>
 window.addEventListener('error', function(e) {
+  if (e && e.target && e.target.tagName === 'SCRIPT' && e.target.getAttribute('data-istege-bagli')) return; // sonradan yüklenen yardımcı (ör. PDF okuyucu): kendi hatasını kendisi yönetir
   if (e && e.target && e.target.tagName === 'SCRIPT') {
     showPdrFatalError('Bir betik dosyası yüklenemedi: ' + e.target.src, '', 'Ağ/engelleme sorunu olabilir (okul wifi, VPN, reklam engelleyici vb.)');
     return;
@@ -491,6 +492,7 @@ function pdrClearLocalCache() {
     if (k && k.startsWith("pdr__")) toRemove.push(k);
   }
   toRemove.forEach((k) => localStorage.removeItem(k));
+  try { indexedDB.deleteDatabase("pdr-kutuphane-metin"); } catch (e) {}   // başka hesabın kütüphane metinleri bu cihazda kalmasın
 }
 
 // ===== CİHAZDA ŞİFRELEME BAŞLANGIÇ =====
@@ -771,6 +773,7 @@ async function pdrSyncDown(uid) {
   try {
     const snap = await pdrDb.collection("users").doc(uid).collection("data").get();
     for (const doc of snap.docs) {
+      if (doc.id.startsWith("pdr-kutuphane-metin-")) continue;   // kütüphane tam metni: gerektiğinde ayrıca okunur
       const d = doc.data();
       let deger = null;
       if (d && d.chunked) {
@@ -1210,7 +1213,7 @@ function pdrKalkanAdlariGuncelle(adlar, siniflar) {
   PDR_KALKAN.orijinal = orijinal;
   const liste = [...desen.keys()].sort((a, b) => b.length - a.length).map(pdrKalkanRegexKac);
   if (typeof window !== "undefined") window.__pdrKalkanAdSayisi = orijinal.size; // denetim için: kaç kişi korunuyor
-  PDR_KALKAN.regex = liste.length ? new RegExp("(^|[^\\p{L}\\p{N}])(" + liste.join("|") + ")(?=[^\\p{L}\\p{N}]|$)", "gu") : null;
+  PDR_KALKAN.regex = liste.length ? new RegExp("(^|[^\\p{L}\\p{N}])(" + liste.join("|") + ")(?=" + PDR_KALKAN_EK + "?(?:[^\\p{L}\\p{N}]|$))", "gu") : null;
   // Kısaltılmış kayıtlı adlar ("MUSTAFA AB** AK"): danışman tam adı yazarsa ("Mustafa Aber Ak")
   // da yakalansın diye yıldızlı parça önek olarak eşlenir. Büyük/küçük harf Türkçeye göre.
   const harf = (ch) => { const k = pdrKalkanKucukHarf(ch), b = pdrKalkanBuyukHarf(ch); return /\p{L}/u.test(ch) ? `[${pdrKalkanRegexKac(k)}${b !== k ? pdrKalkanRegexKac(b) : ""}]` : pdrKalkanRegexKac(ch); };
@@ -1228,14 +1231,27 @@ function pdrKalkanAdlariGuncelle(adlar, siniflar) {
   });
   PDR_KALKAN.maske = maske.map(m => ({ ...m, re: new RegExp("^(?:" + m.desen + ")$", "u") }));
   PDR_KALKAN.maskeRegex = maske.length ? new RegExp("(^|[^\\p{L}\\p{N}])(" + maske.map(m => m.desen).sort((a, b) => b.length - a.length).join("|") + ")(?=[^\\p{L}\\p{N}*]|$)", "gu") : null;
-  const sListe = [...sinifTekil].sort((a, b) => b.length - a.length).map(pdrKalkanRegexKac);
-  PDR_KALKAN.sinifRegex = sListe.length ? new RegExp("(^|[^\\p{L}\\p{N}])(" + sListe.join("|") + ")(?=[^\\p{L}\\p{N}]|$)", "gu") : null;
+  // Sınıf yazımları esnek: "8-A", "8/A", "8 A", "8A", "8a" aynı sınıf sayılır
+  const sDesen = new Map(), sOrijinal = new Map();
+  sinifTekil.forEach(c => {
+    const m = c.match(/^(\d{1,2})\s*[-/. ]?\s*([\p{L}]{1,3})$/u);
+    if (!m) { sDesen.set(pdrKalkanRegexKac(c), c); sOrijinal.set(pdrKalkanKucukHarf(c), c); return; }
+    const harf = [...m[2]].map(ch => { const k = pdrKalkanKucukHarf(ch), b = pdrKalkanBuyukHarf(ch); return `[${pdrKalkanRegexKac(k)}${b !== k ? pdrKalkanRegexKac(b) : ""}]`; }).join("");
+    sDesen.set(m[1] + "\\s?[-/.]?\\s?" + harf, c);
+    const n = m[1] + "|" + pdrKalkanKucukHarf(m[2]);
+    if (!sOrijinal.has(n)) sOrijinal.set(n, c);
+  });
+  PDR_KALKAN.sinifOrijinal = sOrijinal;
+  const sListe = [...sDesen.keys()].sort((a, b) => b.length - a.length);
+  PDR_KALKAN.sinifRegex = sListe.length ? new RegExp("(^|[^\\p{L}\\p{N}])(" + sListe.join("|") + ")(?=['’]|[^\\p{L}\\p{N}]|$)", "gu") : null;
 }
+// Ada kesme işaretsiz eklenen yaygın ekler: Kayanın, Demirin, Kayaya, Demirde, Kayayla
+const PDR_KALKAN_EK = "(n[ıiuü]n|[ıiuü]n|y[ae]|n[ae]|[dt][ae]n|[dt][ae]|y[ıiuü]|y?l[ae]|ler|lar|[ıiuü])";
 const PDR_KALKAN_NUMARA_ANAHTARLARI = ["numara", "ogrenciNo", "okulNo", "ogrenciNumara", "studentNumber", "ogrNo"];
 
 // Tek bir istek için kod tablosu
 function pdrKalkanOturum() {
-  return { kod: new Map(), geri: new Map(), sayac: 0, ek: { TC: 0, TELEFON: 0, EPOSTA: 0, N: 0, "KİŞİ": 0, OKUL: 0, YER: 0, IBAN: 0, PLAKA: 0, "DOĞUM": 0 }, sinif: new Map(), numara: new Map(), buIstekteTam: new Set(), genis: false, genisKod: new Map(), dosya: 0, dosyaImza: [] };
+  return { kod: new Map(), geri: new Map(), sayac: 0, ek: { TC: 0, TELEFON: 0, EPOSTA: 0, N: 0, "KİŞİ": 0, OKUL: 0, YER: 0, IBAN: 0, PLAKA: 0, "DOĞUM": 0, HESAP: 0 }, sinif: new Map(), numara: new Map(), buIstekteTam: new Set(), genis: false, genisKod: new Map(), dosya: 0, dosyaImza: [] };
 }
 function pdrKalkanKodVer(o, anahtar, gorunen) {
   if (!o.kod.has(anahtar)) { o.sayac += 1; const k = "Öğrenci-" + o.sayac; o.kod.set(anahtar, k); o.geri.set(k, gorunen); }
@@ -1244,6 +1260,10 @@ function pdrKalkanKodVer(o, anahtar, gorunen) {
 function pdrKalkanMetin(s, o) {
   if (typeof s !== "string" || !s) return s;
   let t = s;
+  const etiket0 = (tur, deger) => { o.ek[tur] += 1; const k = `[${tur}-${o.ek[tur]}]`; o.geri.set(k, deger); return k; };
+  t = t.replace(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g, v => etiket0("EPOSTA", v));
+  t = t.replace(/(^|[^\w@.\[])@([A-Za-z0-9_.]{3,30})(?![\w@])/g, (m, on, v) => on + etiket0("HESAP", "@" + v));
+  if (o.genis) t = pdrKalkanOkulYer(t, o);
   if (PDR_KALKAN.maskeRegex) {
     t = t.replace(PDR_KALKAN.maskeRegex, (m, on, ad) => {
       const e = PDR_KALKAN.maske.find(x => x.re.test(ad));
@@ -1255,55 +1275,63 @@ function pdrKalkanMetin(s, o) {
   if (PDR_KALKAN.regex) {
     // 1. tur: bu metinde geçen tam adları topla (parça eşleşmelerini doğru kişiye bağlamak için)
     t.replace(PDR_KALKAN.regex, (m, on, ad) => { const d = PDR_KALKAN.desen.get(ad); if (d && d.tur === "tam") o.buIstekteTam.add(d.anahtar); return m; });
-    t = t.replace(PDR_KALKAN.regex, (m, on, ad, konum, butun) => {
+    t = t.replace(PDR_KALKAN.regex, (m, on, ad, ek, konum, butun) => {
       const d = PDR_KALKAN.desen.get(ad);
       if (!d) return m;
+      // Bitişik ek yalnızca güvenilir biçimlerde kabul edilir (kısa/küçük harfli parça sıradan sözcük olabilir)
+      if (ek && d.tur === "parca" && (ad.length < 4 || ad === pdrKalkanKucukHarf(ad))) return m;
       // Zaten verilmiş bir kodun ("Öğrenci-3") parçası yeniden kodlanmaz
       if (/^-\d/.test(butun.slice(konum + on.length + ad.length, konum + on.length + ad.length + 2))) return m;
       // "Prof. Hakan", "Dr. Ayşe" gibi unvanlı adlar öğrenci değildir (ör. AI personası)
       if (/(Prof|Dr|Doç|Uzm|Av)\.\s*$/.test(butun.slice(Math.max(0, konum - 8), konum + on.length))) return m;
-      if (d.tur === "tam") return on + pdrKalkanKodVer(o, "T:" + d.anahtar, ad);
+      const kes = ek ? "'" : "";
+      if (d.tur === "tam") return on + pdrKalkanKodVer(o, "T:" + d.anahtar, ad) + kes;
       const sahipler = [...(PDR_KALKAN.parcaSahibi.get(d.anahtar) || [])];
       const buradakiler = sahipler.filter(a => o.buIstekteTam.has(a));
       const sahip = buradakiler.length === 1 ? buradakiler[0] : sahipler.length === 1 ? sahipler[0] : null;
       if (sahip) {
-        return on + pdrKalkanKodVer(o, "T:" + sahip, PDR_KALKAN.orijinal.get(sahip) || ad);
+        return on + pdrKalkanKodVer(o, "T:" + sahip, PDR_KALKAN.orijinal.get(sahip) || ad) + kes;
       }
-      return on + pdrKalkanKodVer(o, "P:" + d.anahtar, ad);
+      return on + pdrKalkanKodVer(o, "P:" + d.anahtar, ad) + kes;
     });
   }
   const etiket = (tur, deger) => { o.ek[tur] += 1; const k = `[${tur}-${o.ek[tur]}]`; o.geri.set(k, deger); return k; };
   // Sınıf: "5-A" -> "5-Ş1" (düzey kalır, şube gizlenir; aynı istekte aynı sınıf hep aynı kod)
   if (PDR_KALKAN.sinifRegex) {
     t = t.replace(PDR_KALKAN.sinifRegex, (m, on, c) => {
-      if (!o.sinif.has(c)) { const duzey = (c.match(/\d{1,2}/) || [""])[0]; const k = `${duzey}-Ş${o.sinif.size + 1}`; o.sinif.set(c, k); o.geri.set(k, c); }
-      return on + o.sinif.get(c);
+      const mm = c.match(/^(\d{1,2})\s?[-/.]?\s?([\p{L}]{1,3})$/u);
+      const n = mm ? mm[1] + "|" + pdrKalkanKucukHarf(mm[2]) : pdrKalkanKucukHarf(c);
+      const gercek = (PDR_KALKAN.sinifOrijinal && PDR_KALKAN.sinifOrijinal.get(n)) || c;
+      if (!o.sinif.has(n)) { const duzey = (c.match(/\d{1,2}/) || [""])[0]; const k = `${duzey}-Ş${o.sinif.size + 1}`; o.sinif.set(n, k); o.geri.set(k, gercek); }
+      return on + o.sinif.get(n);
     });
   }
   // Okul numarası: programın kimlik biçimi "No:12" ve kayıt anahtarı "Ad||Sınıf||12" -> "[N-1]"
   // (Soru no, madde no gibi başka sayılara dokunulmaz.)
   t = t.replace(/(^|[^\p{L}])((?:(?:Okul|Öğrenci|Öğr|Ögr)\.?\s*No\.?\s*:?\s*)|(?:No\s*:\s*)|(?:Numara(?:sı)?\s*:\s*))(\d{1,6})(?!\d)/giu, (m, on, no, v) => on + no + pdrKalkanNumara(o, v));
   t = t.replace(/(\|\|)(\d{1,6})$/, (m, on, v) => on + pdrKalkanNumara(o, v));
+  t = t.replace(/(^|[^\p{L}\p{N}.,])(\d{1,5})(\s*(?:numaralı|numarali|nolu|no['’]lu))/giu, (m, on, v, son) => on + pdrKalkanNumara(o, v) + son);
   // IBAN, doğum tarihi ve araç plakası (TC/telefon taramasından önce)
   t = t.replace(/(^|[^\p{L}\p{N}])(TR\s?\d{2}(?:\s?[0-9A-Z]{4}){5}\s?[0-9A-Z]{2})(?![\p{L}\p{N}])/giu, (m, on, v) => on + etiket("IBAN", v));
-  t = t.replace(/((?:doğum\s*tarihi|doğum\s*t\.|d\.\s*tarihi|doğum)\s*[:\-]?\s*)(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})(?!\d)/giu, (m, on, v) => on + etiket("DOĞUM", v));
-  t = t.replace(/(^|[^\d.])(\d{1,2}[./-]\d{1,2}[./-]\d{4})(\s+doğumlu)/giu, (m, on, v, son) => on + etiket("DOĞUM", v) + son);
+  t = t.replace(/((?:doğum\s*tarihi|doğum\s*t\.|d\.\s*tarihi|d\.\s*t\.?|doğum)\s*[:\-]?\s*)(\d{1,2}[./-]\d{1,2}[./-]\d{2,4}|\d{4}[./-]\d{1,2}[./-]\d{1,2})(?!\d)/giu, (m, on, v) => on + etiket("DOĞUM", v));
+  t = t.replace(/(^|[^\d.])(\d{1,2}[./-]\d{1,2}[./-]\d{4}|\d{4}[./-]\d{1,2}[./-]\d{1,2})(\s+doğumlu)/giu, (m, on, v, son) => on + etiket("DOĞUM", v) + son);
   t = t.replace(/(^|[^\p{L}\p{N}])((?:0[1-9]|[1-7]\d|8[01])\s?([A-Z]{1,3})\s?(\d{2,5}))(?![\p{L}\p{N}])/gu, (m, on, v, harf, sayi) => {
     const uygun = (harf.length === 1 && sayi.length >= 4) || (harf.length === 2 && sayi.length >= 3 && sayi.length <= 4) || (harf.length === 3 && sayi.length <= 3);
     return uygun && !PDR_KALKAN_PLAKA_DEGIL.has(harf) ? on + etiket("PLAKA", v) : m;
   });
   t = t.replace(/(^|\D)([1-9]\d{10})(?!\d)/g, (m, on, v) => on + etiket("TC", v));
-  t = t.replace(/(^|[^\d+])((?:\+?90[\s-]?)?0?5\d{2}[\s-]?\d{3}[\s-]?\d{2}[\s-]?\d{2})(?!\d)/g, (m, on, v) => on + etiket("TELEFON", v));
+  t = t.replace(/(^|\D)([1-9]\d{2}[ .]\d{3}[ .]\d{3}[ .]\d{2})(?!\d)/g, (m, on, v) => on + etiket("TC", v));   // 123 456 789 01
+  // Cep: 0532 123 45 67, 05321234567, +90 (532) 123 45 67, 532-123-4567, 0 532 1234567
+  t = t.replace(/(^|[^\d+])((?:\+?90[\s-]*)?(?:\(?0\)?[\s-]*)?\(?5\d{2}\)?[\s-]*\d{3}[\s-]*(?:\d{2}[\s-]*\d{2}|\d{4}))(?!\d)/g, (m, on, v) => on + etiket("TELEFON", v));
   // Sabit hat: 0312 456 78 90, (0212) 456 78 90, +90 232 456 78 90
   t = t.replace(/(^|[^\d+])((?:\+?90[\s-]?\(?|\(?0)[2-4]\d{2}\)?[\s-]?\d{3}[\s-]?\d{2}[\s-]?\d{2})(?!\d)/g, (m, on, v) => on + etiket("TELEFON", v));
-  t = t.replace(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g, v => etiket("EPOSTA", v));
   if (o.genis) t = pdrKalkanGenisMetin(t, o);
   return t;
 }
 // Geniş kalkan (Asistan istekleri): öğrenci dışındaki kişi (veli, öğretmen,
 // yakın), okul ve yer adlarını da "[KİŞİ-1]", "[OKUL-1]", "[YER-1]" yapar.
 // Aynı istekte aynı ad hep aynı kodu alır; yanıtta cihazda geri çevrilir.
-const PDR_KALKAN_AD_DEGIL = new Set(["öğrenci", "öğrencisi", "matematik", "türkçe", "fen", "sosyal", "ingilizce", "almanca", "arapça", "din", "beden", "müzik", "resim", "görsel", "rehber", "rehberlik", "psikolojik", "danışman", "sınıf", "branş", "okul", "müdür", "müdürü", "yardımcısı", "bilişim", "teknoloji", "tarih", "coğrafya", "fizik", "kimya", "biyoloji", "edebiyat", "felsefe", "hayat", "bilgisi", "bilimleri", "nöbetçi", "özel", "eğitim", "inkılap", "sayın", "prof", "dr", "doç", "uzm", "bu", "şu", "o", "bir", "ve", "ama", "ancak", "veli", "anne", "baba", "kardeş", "ders", "dersi", "pazartesi", "salı", "çarşamba", "perşembe", "cuma", "cumartesi", "pazar", "ocak", "şubat", "mart", "nisan", "mayıs", "haziran", "temmuz", "ağustos", "eylül", "ekim", "kasım", "aralık", "bugün", "dün", "yarın", "geçen", "sonra", "önce", "kendisi", "kendi", "ayrıca", "fakat", "çünkü", "evet", "hayır", "tüm", "her", "hiç", "çok", "daha", "en", "ile", "için", "gibi", "lgs", "yks", "ram", "bep", "türkiye", "türk", "allah"]);
+const PDR_KALKAN_AD_DEGIL = new Set(["öğrenci", "öğrencisi", "matematik", "türkçe", "fen", "sosyal", "ingilizce", "almanca", "arapça", "din", "beden", "müzik", "resim", "görsel", "rehber", "rehberlik", "psikolojik", "danışman", "sınıf", "branş", "okul", "müdür", "müdürü", "yardımcısı", "bilişim", "teknoloji", "tarih", "coğrafya", "fizik", "kimya", "biyoloji", "edebiyat", "felsefe", "hayat", "bilgisi", "bilimleri", "nöbetçi", "özel", "eğitim", "inkılap", "sayın", "prof", "dr", "doç", "uzm", "bu", "şu", "o", "bir", "ve", "ama", "ancak", "veli", "anne", "baba", "kardeş", "ders", "dersi", "pazartesi", "salı", "çarşamba", "perşembe", "cuma", "cumartesi", "pazar", "ocak", "şubat", "mart", "nisan", "mayıs", "haziran", "temmuz", "ağustos", "eylül", "ekim", "kasım", "aralık", "bugün", "dün", "yarın", "geçen", "sonra", "önce", "kendisi", "kendi", "ayrıca", "fakat", "çünkü", "evet", "hayır", "tüm", "her", "hiç", "çok", "daha", "en", "ile", "için", "gibi", "lgs", "yks", "ram", "bep", "türkiye", "türk", "allah", "adı", "ad", "soyadı", "soyad", "isim", "ismi", "adres", "adresi", "tel", "telefon", "no", "numara", "numarası", "günaydın", "hepinize", "merhaba", "akademik"]);
 const PDR_KALKAN_ILISKI = /^(?:üvey|anneanne|babaanne|anne|baba|abla|abi|ağabey|kız|erkek|kardeş|teyze|dayı|amca|hala|dede|nine|eş|veli|vasi|arkadaş|sevgili|komşu|kuzen|yeğen|enişte|yenge)(?:si|sı|i|ı|leri|ları)?(?:nin|nın|nun|nün|ne|na|ye|ya|yle|yla|le|la)?$/;
 function pdrKalkanAdDegil(k) { const w = pdrKalkanKucukHarf(k.replace(/['’].*$/, "")); return PDR_KALKAN_AD_DEGIL.has(w) || PDR_KALKAN_ILISKI.test(w); }
 function pdrKalkanGenisKod(o, tur, deger) {
@@ -1317,18 +1345,69 @@ const PDR_KALKAN_AD = `[${PDR_KALKAN_BH}][${PDR_KALKAN_KH}]+`;
 const PDR_KALKAN_RE_UNVAN = new RegExp(`(^|[^\\p{L}\\p{N}\\-\\[])(${PDR_KALKAN_AD}(?:\\s+${PDR_KALKAN_AD})?)(\\s+)(Hanım|Bey|Hoca|Öğretmen)(?=[^\\p{L}]|[${PDR_KALKAN_KH}]|$)`, "gu");
 const PDR_KALKAN_RE_YAKIN = new RegExp(`(^|[^\\p{L}])((?:üvey\\s+)?(?:anneanne|babaanne|anne|baba|abla|abi|ağabey|kız\\s+kardeş|erkek\\s+kardeş|kardeş|teyze|dayı|amca|hala|dede|nine|eş|veli|vasi|arkadaş|sevgili|komşu|kuzen|yeğen|enişte|yenge)(?:si|sı|i|ı|leri|ları)?(?:nin|nın|nun|nün)?(?:\\s*[:(]\\s*|\\s+))(${PDR_KALKAN_AD}(?:\\s+${PDR_KALKAN_AD})?)(?![\\p{L}\\-])`, "giu");
 const PDR_KALKAN_RE_OKUL = new RegExp(`(^|[^\\p{L}\\p{N}\\-\\[])((?:(?:[${PDR_KALKAN_BH}][\\p{L}]*|\\d{1,3}\\.?)\\s+){1,5})((?:İlkokul|Ortaokul|Okul|Anaokul)u|Lisesi|Koleji)([\\p{L}'’]*)`, "gu");
-const PDR_KALKAN_RE_YER = new RegExp(`(^|[^\\p{L}\\p{N}\\-\\[])((?:(?:[${PDR_KALKAN_BH}][\\p{L}]*|\\d{1,4}\\.?)\\s+){1,4})(Mahallesi|Mahalle|Mah\\.|Sokağı|Sokak|Caddesi|Cad\\.|Bulvarı|Sitesi|Apartmanı|Köyü)([\\p{L}'’]*)`, "gu");
-function pdrKalkanGenisMetin(t, o) {
-  // okul ve yer önce (içlerindeki adlar kişi sanılmasın)
+const PDR_KALKAN_AD_DESEN = `[${PDR_KALKAN_BH}][\\p{L}]+`;
+const PDR_KALKAN_RE_ETIKET = new RegExp(`(^|[^\\p{L}])((?:(?:anne|baba|veli|öğrenci|öğretmen|kardeş|vasi|danışan|öğrencinin|velinin|annenin|babanın)(?:\\s+(?:adı\\s*[-/]?\\s*soyadı|ad\\s*[-/]?\\s*soyad|adı|ad|ismi|isim))?|adı\\s*[-/]?\\s*soyadı|ad\\s*[-/]?\\s*soyad|isim|ismi|adı)\\s*[:=]\\s*)([\\p{L}][^\\n]{0,60})`, "giu");
+const PDR_KALKAN_RE_ROL = new RegExp(`(^|[^\\p{L}])((?:öğretmen(?:i|imiz|leri)?|hoca(?:sı|mız)?|müdür(?:ü|ümüz)?(?:\\s+yardımcısı)?|müdire(?:si)?|doktor(?:u)?|psikolo(?:g|ğu)|psikiyatrist(?:i)?|terapist(?:i)?|avukat(?:ı)?|uzman(?:ı)?|antrenör(?:ü)?|muhtar(?:ı)?|imam(?:ı)?|sosyal\\s+hizmet\\s+uzmanı)\\s+)(${PDR_KALKAN_AD_DESEN}(?:\\s+${PDR_KALKAN_AD_DESEN})?)`, "giu");
+const PDR_KALKAN_RE_SOYAD = new RegExp(`(^|[^\\p{L}\\p{N}\\-\\[])([${PDR_KALKAN_BH}][${PDR_KALKAN_KH}]{2,})(\\s+)([${PDR_KALKAN_BH}][${PDR_KALKAN_KH}]*(?:oğlu|oğulları|türk|soy|gil|kaya|taş|demir|doğan|yıldız|çelik|aslan|arslan|şahin|kurt|baş|tekin|yılmaz|özdemir|polat|erdoğan|koç|kılıç|güler|akın|çınar|öztürk|aydın|bulut|yüksel|keskin|altun|altın|karaca|yiğit|ekinci|uçar|duman|kaplan|bozkurt|tunç|sezer|ateş))(?![\\p{L}])`, "gu");
+const PDR_KALKAN_RE_YER = new RegExp(`(^|[^\\p{L}\\p{N}\\-\\[])((?:(?:[${PDR_KALKAN_BH}][\\p{L}]*|\\d{1,4}\\.?)\\s+){1,4})(Mahallesi|Mahalle|Mah\\.|Sokağı|Sokak|Sok\\.|Sk\\.|Caddesi|Cad\\.|Cd\\.|Bulvarı|Blv\\.|Sitesi|Apartmanı|Apt\\.|Köyü)([\\p{L}'’]*)`, "gu");
+const PDR_KALKAN_OKUL_TURU = new Set(["anadolu", "fen", "sosyal", "bilimler", "meslek", "mesleki", "teknik", "ve", "imam", "hatip", "kız", "erkek", "spor", "güzel", "sanatlar", "endüstri", "meslek", "ticaret", "sağlık", "çok", "programlı", "mahalle", "akşam", "açık", "temel", "ortaokulu", "ilkokulu", "lisesi", "özel", "devlet", "yatılı", "bölge", "pansiyonlu", "proje", "okulu", "imam-hatip"]);
+// Okul ve yer adları, öğrenci adlarından ÖNCE kodlanır ("Ali Çebi Ortaokulu" öğrenci Ali sanılmasın)
+function pdrKalkanOkulYer(t, o) {
   const zincir = (tur) => (m, on0, on, ek, ekSon) => {
     const kelimeler = on.trim().split(/\s+/);
     let i = 0; while (i < kelimeler.length && pdrKalkanAdDegil(kelimeler[i])) i++;
     if (i === kelimeler.length) return m;
+    // Yalnızca okul TÜRÜ yazıyorsa ("Anadolu Lisesi", "Fen Lisesi", "İmam Hatip") gizlenmez
+    if (kelimeler.slice(i).every(w => PDR_KALKAN_OKUL_TURU.has(pdrKalkanKucukHarf(w.replace(/['’].*$/, ""))))) return m;
     const onEk = kelimeler.slice(0, i).join(" ");
     return on0 + (onEk ? onEk + " " : "") + pdrKalkanGenisKod(o, tur, kelimeler.slice(i).join(" ") + " " + ek) + ekSon;
   };
   t = t.replace(PDR_KALKAN_RE_OKUL, zincir("OKUL"));
   t = t.replace(PDR_KALKAN_RE_YER, zincir("YER"));
+  // İlçe/il: "Esenyurt/İstanbul", "Kadıköy, İstanbul"
+  t = t.replace(PDR_KALKAN_RE_ILCE, (m, on, ilce, ayr, il) => pdrKalkanAdDegil(ilce) ? m : on + pdrKalkanGenisKod(o, "YER", ilce) + ayr + il);
+  t = t.replace(PDR_KALKAN_RE_ILCE_TEK, (m, on, ilce, konum, butun) => /(Prof|Dr|Sultan)\.?\s*$/.test(butun.slice(Math.max(0, konum - 8), konum + on.length)) ? m : on + pdrKalkanGenisKod(o, "YER", ilce));
+  return t;
+}
+const PDR_KALKAN_ILLER = "Adana|Adıyaman|Afyonkarahisar|Ağrı|Aksaray|Amasya|Ankara|Antalya|Ardahan|Artvin|Aydın|Balıkesir|Bartın|Batman|Bayburt|Bilecik|Bingöl|Bitlis|Bolu|Burdur|Bursa|Çanakkale|Çankırı|Çorum|Denizli|Diyarbakır|Düzce|Edirne|Elazığ|Erzincan|Erzurum|Eskişehir|Gaziantep|Giresun|Gümüşhane|Hakkari|Hatay|Iğdır|Isparta|İstanbul|İzmir|Kahramanmaraş|Karabük|Karaman|Kars|Kastamonu|Kayseri|Kırıkkale|Kırklareli|Kırşehir|Kilis|Kocaeli|Konya|Kütahya|Malatya|Manisa|Mardin|Mersin|Muğla|Muş|Nevşehir|Niğde|Ordu|Osmaniye|Rize|Sakarya|Samsun|Siirt|Sinop|Sivas|Şanlıurfa|Şırnak|Tekirdağ|Tokat|Trabzon|Tunceli|Uşak|Van|Yalova|Yozgat|Zonguldak";
+const PDR_KALKAN_ILCELER = "Adalar|Arnavutköy|Ataşehir|Avcılar|Bağcılar|Bahçelievler|Bakırköy|Başakşehir|Bayrampaşa|Beşiktaş|Beykoz|Beylikdüzü|Beyoğlu|Büyükçekmece|Çatalca|Çekmeköy|Esenler|Esenyurt|Eyüpsultan|Fatih|Gaziosmanpaşa|Güngören|Kadıköy|Kağıthane|Kartal|Küçükçekmece|Maltepe|Pendik|Sancaktepe|Sarıyer|Silivri|Sultanbeyli|Sultangazi|Şile|Şişli|Tuzla|Ümraniye|Üsküdar|Zeytinburnu";
+const PDR_KALKAN_RE_ILCE_TEK = new RegExp(`(^|[^\\p{L}\\p{N}\\-\\[])(${PDR_KALKAN_ILCELER})(?=['’]|[^\\p{L}]|$)`, "gu");
+const PDR_KALKAN_RE_ILCE = new RegExp(`(^|[^\\p{L}\\p{N}\\-\\[])([${PDR_KALKAN_BH}][${PDR_KALKAN_KH}]+)(\\s*[/,-]\\s*)(${PDR_KALKAN_ILLER})(?![\\p{L}])`, "gu");
+function pdrKalkanGenisMetin(t, o) {
+  const BAS = /^[A-ZÇĞİÖŞÜÂÎÛ]/;
+  const adlariAl = (metin, enFazla) => {
+    // metnin başındaki ad sözcüklerini (kod olmayan, "ad değil" listesinde olmayan) toplar
+    const k = metin.split(/\s+/); const al = [];
+    for (const w of k) {
+      const temiz = w.replace(/[,.;:)(!?]+$/, "");
+      if (!temiz || /^(Öğrenci-\d|\[)/.test(temiz) || pdrKalkanAdDegil(temiz) || !/^[\p{L}'’]+$/u.test(temiz)) break;
+      if (al.length && !BAS.test(temiz) && !PDR_KALKAN_SOZLUK.has(pdrKalkanKucukHarf(temiz.replace(/['’].*$/, "")))) break;
+      al.push(temiz.replace(/['’].*$/, "")); if (al.length >= enFazla || temiz !== w || /['’]/.test(temiz)) break;
+    }
+    return al.join(" ");
+  };
+  // Etiketli adlar: "Anne adı: Gülfiye Akbaş", "Adı Soyadı: …", "Öğretmen: …", "İsim: …"
+  // (aynı satırda birden çok etiket olabilir: eşleşme metni yuttuğu için birkaç tur dönülür)
+  for (let tur = 0; tur < 6; tur++) {
+    const y = t.replace(PDR_KALKAN_RE_ETIKET, (m, on, etk, devam) => {
+      const ad = adlariAl(devam, 3);
+      if (!ad || (!BAS.test(ad) && ad.includes(" "))) return m;
+      const ilk = ad.split(" ")[0];
+      if (!PDR_KALKAN_SOZLUK.has(pdrKalkanKucukHarf(ilk)) && (pdrKalkanBaslikEki(ilk) || /(me|ma|ması|mesi)$/u.test(pdrKalkanKucukHarf(ilk)))) return m; // "Veli: Bilgilendirme"
+      return on + etk + pdrKalkanGenisKod(o, "KİŞİ", ad) + devam.slice(devam.indexOf(ad) + ad.length);
+    });
+    if (y === t) break;
+    t = y;
+  }
+  // Rol + ad: "sınıf öğretmeni Gülfiye Akbaş", "müdür yardımcısı Kemal", "psikoloğu Ayten"
+  t = t.replace(PDR_KALKAN_RE_ROL, (m, on, rol, devam) => {
+    if (!BAS.test(devam)) return m;
+    const ad = adlariAl(devam, 2);
+    if (!ad) return m;
+    return on + rol + pdrKalkanGenisKod(o, "KİŞİ", ad) + devam.slice(ad.length);
+  });
+  // Küçük harfle yazılmış ad + unvan: "ayşe hanım", "kemal bey"
+  t = t.replace(/(^|[^\p{L}])([a-zçğıöşü]{3,})(\s+)(hanım|bey|hoca)(?![\p{L}])/gu, (m, on, ad, b, u) => PDR_KALKAN_SOZLUK.has(ad) ? on + pdrKalkanGenisKod(o, "KİŞİ", ad) + b + u : m);
   t = t.replace(PDR_KALKAN_RE_UNVAN, (m, on, ad, bosluk, unvan, konum, butun) => {
     const yer = konum + on.length;
     if (/(Prof|Dr|Doç|Uzm|Av)\.\s*$/.test(butun.slice(Math.max(0, yer - 8), yer))) return m;
@@ -1344,6 +1423,11 @@ function pdrKalkanGenisMetin(t, o) {
     if (pdrKalkanBaslikEki(k[0]) || /(me|ma)$/u.test(pdrKalkanKucukHarf(k[0])) && !PDR_KALKAN_SOZLUK.has(pdrKalkanKucukHarf(k[0]))) return m; // "veli Görüşmesi", "veli Bilgilendirme"
     const al = (k.length > 1 && !pdrKalkanAdDegil(k[1]) && /^[A-ZÇĞİÖŞÜÂÎÛ]/.test(k[1])) ? k.join(" ") : k[0];
     return on + iliski + pdrKalkanGenisKod(o, "KİŞİ", al) + ad.slice(al.length);
+  });
+  // Soyadı sezgisi: "Gülfiye Akbaş", "Elvanur Sağıroğlu" (ad sözlükte olmasa da tipik soyadı sonu)
+  t = t.replace(PDR_KALKAN_RE_SOYAD, (m, on, ad, b, soyad) => {
+    if (pdrKalkanAdDegil(ad) || pdrKalkanAdDegil(soyad)) return m;
+    return on + pdrKalkanGenisKod(o, "KİŞİ", ad + b + soyad);
   });
   // Ad sözlüğü: programda kayıtlı OLMAYAN kişilerin adları ("teneffüste Emre vurmuş")
   t = t.replace(PDR_KALKAN_RE_BUYUK_DIZI, (m, on, dizi, konum, butun) => {
@@ -1398,8 +1482,20 @@ function pdrKalkanVeriMi(s) {
 const PDR_KALKAN_DOKUNMA = ["apiKey", "model", "action", "media_type", "type"];
 // JSON gövdesini gezer: metinleri ve nesne anahtarlarını ayıklar; fotoğraf/PDF
 // verisine, API anahtarına, model ve eylem adına dokunmaz.
+const PDR_KALKAN_ANAHTAR_TUR = [
+  [/^(veli|anne|baba|vasi|kardes|kardeş|ogretmen|öğretmen|sinifOgretmeni|sınıfÖğretmeni|danisman|yakin)(Ad|Adi|Adı|AdSoyad|AdiSoyadi|Isim|İsim|Ismi)?$|^(adSoyad|adiSoyadi|isim|ismi|veliAdi|anneAdi|babaAdi|parentName|teacherName)$/i, "KİŞİ"],
+  [/^(telefon|tel|gsm|cep|cepTel|telNo|phone|veliTel|veliTelefon|anneTel|babaTel)$/i, "TELEFON"],
+  [/^(adres|evAdresi|address|adresi)$/i, "YER"],
+  [/^(tc|tcNo|tcKimlik|tckn|kimlikNo|tcKimlikNo)$/i, "TC"],
+  [/^(dogumTarihi|doğumTarihi|dogum|birthDate|dob)$/i, "DOĞUM"],
+  [/^(eposta|ePosta|email|mail)$/i, "EPOSTA"],
+];
 function pdrKalkanGez(x, o, anahtar) {
   if (PDR_KALKAN_NUMARA_ANAHTARLARI.includes(anahtar) && (typeof x === "string" || typeof x === "number") && String(x).trim()) return pdrKalkanNumara(o, x);
+  if (anahtar && (typeof x === "string" || typeof x === "number") && String(x).trim() && !/^(Öğrenci-\d+|\[[^\]]+\])$/.test(String(x).trim())) {
+    const tur = (PDR_KALKAN_ANAHTAR_TUR.find(([re]) => re.test(anahtar)) || [])[1];
+    if (tur) return tur === "KİŞİ" ? pdrKalkanGenisKod(o, "KİŞİ", String(x).trim()) : (o.ek[tur] += 1, o.geri.set(`[${tur}-${o.ek[tur]}]`, String(x)), `[${tur}-${o.ek[tur]}]`);
+  }
   if (typeof x === "string") {
     if (PDR_KALKAN_DOKUNMA.includes(anahtar)) return x;
     if (pdrKalkanVeriMi(x)) { o.dosya += 1; o.dosyaImza.push(x.length + ":" + x.slice(-60)); return x; }
@@ -1422,7 +1518,7 @@ function pdrKalkanGez(x, o, anahtar) {
 function pdrKalkanGeriCevir(x, o) {
   if (typeof x === "string") {
     let t = x.replace(/Öğrenci-(\d+)/giu, (m, n) => o.geri.get("Öğrenci-" + n) || m);
-    t = t.replace(/\[(TC|TELEFON|EPOSTA|N|KİŞİ|OKUL|YER|IBAN|PLAKA|DOĞUM)-(\d+)\]/gu, m => o.geri.get(m) || m);
+    t = t.replace(/\[(TC|TELEFON|EPOSTA|N|KİŞİ|OKUL|YER|IBAN|PLAKA|DOĞUM|HESAP)-(\d+)\]/gu, m => o.geri.get(m) || m);
     t = t.replace(/(^|[^\[\p{L}])(KİŞİ|OKUL|YER)-(\d+)(?!\])/gu, (m, on, a, n) => { const v = o.geri.get(`[${a}-${n}]`); return v ? on + v : m; });
     t = t.replace(/\d{0,2}-Ş\d+/gu, m => o.geri.get(m) || m);
     return t;
@@ -1605,16 +1701,20 @@ const PDR_PDFJS_SURUM = "3.11.174";
 async function pdrPdfJsYukle() {
   if (window.pdfjsLib) return window.pdfjsLib;
   const kok = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDR_PDFJS_SURUM}/`;
-  await new Promise((ok, hata) => { const sc = document.createElement("script"); sc.src = kok + "pdf.min.js"; sc.onload = ok; sc.onerror = () => hata(new Error("PDF okuyucu yüklenemedi")); document.head.appendChild(sc); });
+  await new Promise((ok, hata) => { const sc = document.createElement("script"); sc.setAttribute("data-istege-bagli", "1"); sc.src = kok + "pdf.min.js"; sc.onload = ok; sc.onerror = () => hata(new Error("PDF okuyucu yüklenemedi")); document.head.appendChild(sc); });
   if (!window.pdfjsLib) throw new Error("PDF okuyucu yüklenemedi");
   window.pdfjsLib.GlobalWorkerOptions.workerSrc = kok + "pdf.worker.min.js";
   return window.pdfjsLib;
 }
-async function pdrPdfMetinCikar(file, enFazlaSayfa = 8) {
+async function pdrPdfMetinCikar(file, enFazlaSayfa = 8, enFazlaKarakter = 60000, ilerle) {
   const lib = await pdrPdfJsYukle();
   const pdf = await lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
   const sayfalar = [];
-  for (let i = 1; i <= Math.min(pdf.numPages, enFazlaSayfa); i++) {
+  const sayfaSayisi = Math.min(pdf.numPages, enFazlaSayfa);
+  let uzunluk = 0;
+  for (let i = 1; i <= sayfaSayisi; i++) {
+    if (ilerle && (i === 1 || i % 10 === 0)) ilerle(i, sayfaSayisi);
+    if (uzunluk > enFazlaKarakter) break;
     const ic = await (await pdf.getPage(i)).getTextContent();
     const satirlar = new Map();
     ic.items.forEach(it => {
@@ -1623,9 +1723,12 @@ async function pdrPdfMetinCikar(file, enFazlaSayfa = 8) {
       if (!satirlar.has(y)) satirlar.set(y, []);
       satirlar.get(y).push({ x: it.transform[4], s: it.str.trim() });
     });
-    sayfalar.push([...satirlar.entries()].sort((a, b) => b[0] - a[0]).map(([, p]) => p.sort((a, b) => a.x - b.x).map(q => q.s).join("  ")).join("\n"));
+    const sayfaMetni = [...satirlar.entries()].sort((a, b) => b[0] - a[0]).map(([, p]) => p.sort((a, b) => a.x - b.x).map(q => q.s).join("  ")).join("\n");
+    uzunluk += sayfaMetni.length;
+    sayfalar.push(sayfaMetni);
   }
-  return sayfalar.join("\n\n--- sonraki sayfa ---\n\n").slice(0, 60000);
+  pdrPdfMetinCikar.sonSayfa = sayfalar.length;
+  return sayfalar.join("\n\n--- sonraki sayfa ---\n\n").slice(0, enFazlaKarakter);
 }
 if (typeof window !== "undefined") window.pdrPdfMetinCikar = pdrPdfMetinCikar; // denetim/test için
 
@@ -8271,6 +8374,155 @@ function pdrKutuphaneBaglam(kutuphaneOzetleri = []) {
     ? "\n\nKÜTÜPHANE REFERANSLARI:\n" + kutuphaneOzetleri.map((k, i) => `[${i+1}] ${k.baslik}${k.tur === "yonetmelik" ? " (Yönetmelik/Mevzuat)" : ""}:\n${k.ozet}`).join("\n\n")
     : "";
 }
+// ===== KÜTÜPHANE TAM METİN =====
+// Yüklenen kaynağın (PDF, Word, metin) TAMAMI telefonda metne çevrilip saklanır.
+// Ekranda kısa özet görünür; ama AI analizleri ve Asistan, kaynağın tam metninde
+// arama yapıp ilgili bölümleri okur — "özet kadar" değil, kaynağın tamamı kadar bilir.
+// Saklama: bu cihazda IndexedDB (telefon belleğini doldurmasın diye localStorage değil)
+// + giriş yapılıysa buluta (şifreleme açıksa şifreli, büyükse parçalı).
+const PDR_KMETIN_ONEK = "pdr-kutuphane-metin-";
+const PDR_KMETIN_BELLEK = new Map();
+function pdrKmetinIdb() {
+  return new Promise((ok, hata) => {
+    try {
+      const r = indexedDB.open("pdr-kutuphane-metin", 1);
+      r.onupgradeneeded = () => r.result.createObjectStore("m");
+      r.onsuccess = () => ok(r.result); r.onerror = () => hata(r.error);
+    } catch (e) { hata(e); }
+  });
+}
+async function pdrKmetinIdbIslem(tur, id, deger) {
+  const db = await pdrKmetinIdb();
+  return new Promise((ok, hata) => {
+    const tx = db.transaction("m", tur === "oku" ? "readonly" : "readwrite"), st = tx.objectStore("m");
+    const r = tur === "oku" ? st.get(id) : tur === "sil" ? st.delete(id) : st.put(deger, id);
+    r.onsuccess = () => ok(r.result); r.onerror = () => hata(r.error);
+  });
+}
+// kayit: { metin, bolumler: [{ no, bas, son, not }] }
+async function pdrKutuphaneMetinYaz(id, kayit) {
+  PDR_KMETIN_BELLEK.set(id, kayit);
+  const json = JSON.stringify(kayit);
+  try { await pdrKmetinIdbIslem("yaz", id, json); } catch (e) { console.warn("Kütüphane metni cihaza yazılamadı:", e); }
+  try { const u = pdrAuth.currentUser; if (u) await pdrFirestoreYaz(u.uid, PDR_KMETIN_ONEK + id, json); } catch (e) { console.warn("Kütüphane metni buluta yazılamadı:", e); }
+}
+async function pdrKutuphaneMetinOku(id) {
+  if (!id) return null;
+  if (PDR_KMETIN_BELLEK.has(id)) return PDR_KMETIN_BELLEK.get(id);
+  let json = null;
+  try { json = await pdrKmetinIdbIslem("oku", id); } catch (e) {}
+  if (!json) {
+    try {
+      const u = pdrAuth.currentUser;
+      if (u) { json = await pdrFirestoreOku(u.uid, PDR_KMETIN_ONEK + id); if (json) { try { await pdrKmetinIdbIslem("yaz", id, json); } catch (e) {} } }
+    } catch (e) {}
+  }
+  let kayit = null; try { kayit = json ? JSON.parse(json) : null; } catch (e) {}
+  if (kayit) PDR_KMETIN_BELLEK.set(id, kayit);
+  return kayit;
+}
+async function pdrKutuphaneMetinSil(id) {
+  PDR_KMETIN_BELLEK.delete(id);
+  try { await pdrKmetinIdbIslem("sil", id); } catch (e) {}
+  try { const u = pdrAuth.currentUser; if (u) { await pdrDb.collection("users").doc(u.uid).collection("data").doc(PDR_KMETIN_ONEK + id).delete(); pdrEskiParcalariTemizle(u.uid, PDR_KMETIN_ONEK + id); } } catch (e) {}
+}
+
+// Word (.docx) metni: docx bir zip arşividir; word/document.xml açılıp yazılar alınır.
+async function pdrDocxMetin(file) {
+  const buf = new Uint8Array(await file.arrayBuffer());
+  const dv = new DataView(buf.buffer);
+  let eocd = -1;
+  for (let i = buf.length - 22; i >= Math.max(0, buf.length - 70000); i--) { if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; } }
+  if (eocd < 0) throw new Error("Word dosyası okunamadı");
+  let p = dv.getUint32(eocd + 16, true); const adet = dv.getUint16(eocd + 10, true);
+  for (let n = 0; n < adet; n++) {
+    if (dv.getUint32(p, true) !== 0x02014b50) break;
+    const yontem = dv.getUint16(p + 10, true), boy = dv.getUint32(p + 20, true);
+    const adUz = dv.getUint16(p + 28, true), ekUz = dv.getUint16(p + 30, true), yUz = dv.getUint16(p + 32, true), yerel = dv.getUint32(p + 42, true);
+    const ad = new TextDecoder().decode(buf.slice(p + 46, p + 46 + adUz));
+    if (ad === "word/document.xml") {
+      const bas = yerel + 30 + dv.getUint16(yerel + 26, true) + dv.getUint16(yerel + 28, true);
+      const veri = buf.slice(bas, bas + boy);
+      let xml;
+      if (yontem === 0) xml = new TextDecoder().decode(veri);
+      else xml = await new Response(new Blob([veri]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).text();
+      return xml.replace(/<w:tab\/>/g, "\t").replace(/<\/w:p>/g, "\n").replace(/<w:br[^>]*\/>/g, "\n").replace(/<[^>]+>/g, "")
+        .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&").replace(/\n{3,}/g, "\n\n").trim();
+    }
+    p += 46 + adUz + ekUz + yUz;
+  }
+  throw new Error("Word dosyasında metin bulunamadı");
+}
+
+// Arama: metin ~1500 karakterlik parçalara bölünür; sorgu sözcükleri (kök) en çok ve en
+// ayırt edici biçimde geçen parçalar seçilir.
+const PDR_KMETIN_DURAK = new Set("için ile gibi daha çok olan olarak veya ancak fakat çünkü kadar sonra önce göre bunu şunu onun bunun şöyle böyle nasıl neden niçin hangi kendi öğrenci öğrencinin öğrenciye görüşme görüştük yapıldı yaptı oldu olur olması etti eder ediyor değil bile yine şimdi zaman kez her hiç tüm bütün diğer bazı birçok çocuk".split(" "));
+function pdrKmetinSozcukler(q, enFazla = 30) {
+  const say = new Map();
+  ksSade(String(q || "")).split(/[^a-z0-9çğıöşü]+/).filter(x => x.length >= 4 && !PDR_KMETIN_DURAK.has(x)).forEach(x => {
+    const kok = x.length > 5 ? x.slice(0, Math.max(5, x.length - 3)) : x;
+    say.set(kok, (say.get(kok) || 0) + 1);
+  });
+  return [...say.entries()].sort((a, b) => b[1] - a[1] || b[0].length - a[0].length).slice(0, enFazla).map(x => x[0]);
+}
+const PDR_KMETIN_PARCA = new Map();
+function pdrKmetinParcalar(id, metin) {
+  const anahtar = id + ":" + metin.length;
+  if (PDR_KMETIN_PARCA.has(anahtar)) return PDR_KMETIN_PARCA.get(anahtar);
+  const parcalar = []; let i = 0;
+  while (i < metin.length) {
+    let son = Math.min(metin.length, i + 1500);
+    if (son < metin.length) { const p = metin.lastIndexOf("\n", son); const n = metin.lastIndexOf(". ", son); const k = Math.max(p, n); if (k > i + 700) son = k + 1; }
+    const yazi = metin.slice(i, son);
+    parcalar.push({ bas: i, yazi, sade: ksSade(yazi) });
+    i = son;
+  }
+  PDR_KMETIN_PARCA.set(anahtar, parcalar);
+  return parcalar;
+}
+// kaynaklar: [{ k (kütüphane kaydı), kayit (tam metin kaydı) }]
+function pdrKmetinAra(kaynaklar, sorgu, enFazla = 5) {
+  const w = pdrKmetinSozcukler(sorgu);
+  if (!w.length) return [];
+  const hepsi = [];
+  kaynaklar.forEach(({ k, kayit }) => { if (kayit && kayit.metin) pdrKmetinParcalar(k.id, kayit.metin).forEach((p, i) => hepsi.push({ k, kayit, p, i })); });
+  if (!hepsi.length) return [];
+  const df = new Map(w.map(x => [x, hepsi.filter(h => h.p.sade.includes(x)).length]));
+  const N = hepsi.length;
+  hepsi.forEach(h => {
+    let puan = 0, eslesen = 0;
+    w.forEach(x => {
+      if (!df.get(x)) return;
+      let n = 0, j = h.p.sade.indexOf(x); while (j >= 0 && n < 6) { n++; j = h.p.sade.indexOf(x, j + 1); }
+      if (n) { eslesen++; puan += (1 + Math.log(n)) * Math.log(1 + N / df.get(x)); }
+    });
+    h.puan = puan * (0.5 + eslesen / w.length);
+  });
+  return hepsi.filter(h => h.puan > 0).sort((a, b) => b.puan - a.puan).slice(0, enFazla);
+}
+function pdrKmetinBolumNo(kayit, bas) {
+  const b = (kayit.bolumler || []).find(x => bas >= x.bas && bas < x.son);
+  return b ? b.no : null;
+}
+// AI analizleri için kütüphane bağlamı: her kaynağın özeti + sorguyla ilgili tam metin bölümleri
+async function pdrKutuphaneBaglamGetir(kutuphane = [], sorgu = "", sinir = 6000) {
+  const ozet = pdrKutuphaneBaglam(kutuphane);
+  if (!kutuphane.length || !String(sorgu || "").trim()) return ozet;
+  try {
+    const kaynaklar = [];
+    for (const k of kutuphane) { if (k.tamMetin) kaynaklar.push({ k, kayit: await pdrKutuphaneMetinOku(k.id) }); }
+    const bulunan = pdrKmetinAra(kaynaklar, sorgu, 8);
+    if (!bulunan.length) return ozet;
+    let toplam = 0; const parcalar = [];
+    for (const h of bulunan) {
+      const yazi = h.p.yazi.replace(/\s+/g, " ").trim();
+      if (toplam + yazi.length > sinir) break;
+      toplam += yazi.length;
+      parcalar.push(`— ${h.k.baslik}${h.k.tur === "yonetmelik" ? " (Yönetmelik/Mevzuat)" : ""}: «${yazi}»`);
+    }
+    return ozet + (parcalar.length ? "\n\nKÜTÜPHANE KAYNAKLARINDAN İLGİLİ BÖLÜMLER (kaynağın tam metninden, bu duruma göre seçildi; yararlanırken hangi kaynaktan aldığını belirt):\n" + parcalar.join("\n\n") : "");
+  } catch (e) { return ozet; }
+}
 
 // Risk/müdahale AI önerileri, öğrencinin okul kademesine göre farklı gelişimsel
 // bağlamda değerlendirilmeli — aynı davranış (örn. akran çatışması) ilkokulda,
@@ -11237,6 +11489,66 @@ async function ksAsistanProgramAra(g) {
   b.push("Ayrıntı için program_oturumu aracını program anahtarı ve oturum numarasıyla çağır.");
   return b.join("\n");
 }
+// ── Danışmanın kendi Kütüphanesi (Belgeler → Kütüphane; yüklenen kaynakların tam metni) ──
+async function ksKutuphaneListe() { try { return await loadKutuphane(); } catch (e) { return []; } }
+function ksKutuphaneBul(liste, q) {
+  const s = ksSade(String(q || "").trim());
+  if (!s) return null;
+  const n = parseInt(s, 10);
+  if (String(n) === s && liste[n - 1]) return liste[n - 1];
+  return liste.find(k => ksSade(k.baslik) === s) || liste.find(k => ksSade(k.baslik).includes(s)) || liste.find(k => s.split(/\s+/).filter(w => w.length >= 3).every(w => ksSade(k.baslik + " " + (k.dosyaAdi || "")).includes(w))) || null;
+}
+async function ksAsistanKutuphaneAra(g) {
+  const q = String(g.sorgu || "").trim();
+  const liste = await ksKutuphaneListe();
+  if (!liste.length) return "Kütüphanede henüz kaynak yok (Kayıtlar → 📚 Kütüphane'den PDF, Word ya da metin yüklenebilir).";
+  if (!q) return "KÜTÜPHANEDEKİ KAYNAKLAR:\n" + liste.map((k, i) => `${i + 1}. ${k.baslik}${k.tur === "yonetmelik" ? " (yönetmelik)" : ""} — ${k.tamMetin ? `tamamı öğrenildi${k.bolumSayisi > 1 ? `, ${k.bolumSayisi} bölüm` : ""}` : "yalnız özet"}`).join("\n");
+  const hedef = g.kaynak ? ksKutuphaneBul(liste, g.kaynak) : null;
+  if (g.kaynak && !hedef) return `"${g.kaynak}" adlı kaynak bulunamadı. Kaynaklar: ${liste.map(k => k.baslik).join("; ")}`;
+  const secili = hedef ? [hedef] : liste;
+  const kaynaklar = [];
+  for (const k of secili) kaynaklar.push({ k, kayit: k.tamMetin ? await pdrKutuphaneMetinOku(k.id) : null });
+  const bulunan = pdrKmetinAra(kaynaklar, q, 6);
+  const b = [`KÜTÜPHANEDE "${q}"${hedef ? ` (${hedef.baslik})` : ""} — kaynakların tam metninde arandı:`];
+  let toplam = 0;
+  bulunan.forEach(h => {
+    const bol = pdrKmetinBolumNo(h.kayit, h.p.bas);
+    const w = pdrKmetinSozcukler(q); let konum = -1;
+    w.forEach(x => { const j = h.p.sade.indexOf(x); if (j >= 0 && (konum < 0 || j < konum)) konum = j; });
+    const bas = Math.max(0, konum - 250);
+    const yazi = (bas ? "…" : "") + h.p.yazi.slice(bas, bas + 900).replace(/\s+/g, " ").trim();
+    if (toplam + yazi.length > 3800) return;
+    toplam += yazi.length;
+    b.push(`• ${h.k.baslik}${bol ? ` — bölüm ${bol}` : ""}: «${yazi}»`);
+  });
+  if (!bulunan.length) {
+    const w = pdrKmetinSozcukler(q);
+    const ozetteki = secili.filter(k => w.some(x => ksSade(k.ozet || "").includes(x)));
+    if (!ozetteki.length) return b[0] + "\nEşleşen bölüm bulunamadı. Farklı/eş anlamlı bir sözcükle yeniden ara ya da kaynağın bölüm listesine kutuphane_oku ile bak.";
+    ozetteki.forEach(k => b.push(`• ${k.baslik} (yalnız özette geçiyor): ${ksAsistanKisalt((k.ozet || "").replace(/\s+/g, " "), 700)}`));
+  }
+  b.push("Ayrıntı için kutuphane_oku (kaynak + bolum) kullan. Yanıtta kaynağın adını belirt; kaynakta olmayanı kaynaktaymış gibi söyleme.");
+  return b.join("\n");
+}
+async function ksAsistanKutuphaneOku(g) {
+  const liste = await ksKutuphaneListe();
+  if (!liste.length) return "Kütüphanede henüz kaynak yok.";
+  const k = ksKutuphaneBul(liste, g.kaynak);
+  if (!k) return `Kaynak bulunamadı. Kaynaklar:\n${liste.map((x, i) => `${i + 1}. ${x.baslik}`).join("\n")}`;
+  const kayit = k.tamMetin ? await pdrKutuphaneMetinOku(k.id) : null;
+  if (!kayit || !kayit.metin) return `${k.baslik} — bu kaynağın yalnız özeti var (tam metin saklanmamış; danışman kaynağı yeniden yüklerse tamamı öğrenilir):\n${k.ozet || ""}`;
+  const bolumler = kayit.bolumler && kayit.bolumler.length ? kayit.bolumler : [{ no: 1, bas: 0, son: kayit.metin.length, not: "" }];
+  const no = parseInt(g.bolum, 10);
+  if (!no) {
+    return `${k.baslik} (${bolumler.length} bölüm, ≈${Math.round(kayit.metin.length / 7)} kelime)\nGENEL ÖZET:\n${ksAsistanKisalt(k.ozet || "", 1500)}\n\nBÖLÜMLER:\n${bolumler.map(b => `${b.no}. ${ksAsistanKisalt((b.not || kayit.metin.slice(b.bas, b.bas + 200)).replace(/\s+/g, " "), bolumler.length > 8 ? 160 : 320)}`).join("\n")}\n\nBir bölümün metnini okumak için bolum numarası ver (uzun bölümler parca 2, 3… ile devam eder).`;
+  }
+  const b = bolumler.find(x => x.no === no);
+  if (!b) return `${k.baslik} kaynağında ${no}. bölüm yok (1-${bolumler.length}).`;
+  const BOY = 3600, parca = Math.max(1, parseInt(g.parca, 10) || 1);
+  const metin = kayit.metin.slice(b.bas, b.son), parcaSay = Math.max(1, Math.ceil(metin.length / BOY));
+  if (parca > parcaSay) return `${no}. bölüm ${parcaSay} parçadır.`;
+  return `${k.baslik} — bölüm ${no}/${bolumler.length}, parça ${parca}/${parcaSay}:\n${metin.slice((parca - 1) * BOY, parca * BOY)}${parca < parcaSay ? `\n(devamı: parca ${parca + 1})` : ""}`;
+}
 async function ksAsistanProgramOturumu(g) {
   if (!g.program) {
     return "MÜDAHALE PROGRAMLARI KÜTÜPHANESİ (" + MUDAHALE_PROGRAMLARI.length + " kitap):\n" + MUDAHALE_PROGRAMLARI.map(p => `• ${p.ad} [${p.key}] — ${p.oturumlar.length} oturum. Hedef kitle: ${ksAsistanKisalt(p.hedefKitle, 110)}\n  Oturumlar: ${p.oturumlar.slice(0, 6).map((o, i) => `${i + 1}) ${ksAsistanKisalt(o.baslik, 40)}`).join("; ")}${p.oturumlar.length > 6 ? `; … (+${p.oturumlar.length - 6}; tamamı için program_oturumu program=${p.key})` : ""}`).join("\n");
@@ -11449,6 +11761,16 @@ const KS_ASISTAN_ARACLAR = {
     aciklama: "Müdahale programı kitabından bir oturumun TAM içeriğini getirir: amaç, kazanımlar, süre, materyal, uygulama basamakları, yönergeler, çalışma yaprakları. program: kitap anahtarı ya da adı (psikolojik-saglamlik, akademik-beceriler, zorbalik-yapan, zorbalik-maruz-kalan, sosyal-duygusal, akran-nezaketi, sdb-psikoegitim, sdb-farkindalik). oturum: numara ya da başlık; 0 ya da boş = kitabın giriş bölümü (hedef kitle, uygulama ilkeleri). Uzun oturumlar parçalıdır: parca 2, 3… ile devamı. program boşsa bütün kitapların oturum listesini verir.",
     girdi: '{"program": "sdb-psikoegitim", "oturum": 3, "parca": 1}', yontem: "hepsi",
     calistir: (g) => ksAsistanProgramOturumu(g),
+  },
+  kutuphane_ara: {
+    aciklama: "Danışmanın KENDİ kütüphanesinde (Kayıtlar → 📚 Kütüphane: yüklediği kitap, makale, yönetmelik, genelge) arama yapar; kaynakların TAM METNİNDE arar ve ilgili bölümleri getirir. sorgu boşsa kaynak listesini verir. kaynak: isteğe bağlı (başlık ya da sıra no) — yalnız o kaynakta arar. Mevzuat/yönetmelik, kuram, teknik ya da danışmanın yüklediği bir kaynak sorulduğunda kullan.",
+    girdi: '{"sorgu": "aranacak konu/kelime", "kaynak": "isteğe bağlı"}', yontem: "hepsi",
+    calistir: (g) => ksAsistanKutuphaneAra(g),
+  },
+  kutuphane_oku: {
+    aciklama: "Kütüphanedeki bir kaynağı okur. bolum boşsa genel özet + bölüm listesi (her bölümün notu); bolum verirsen o bölümün tam metni (uzunsa parca 2, 3… ile devam). Kaynağın tamamını özetlemek, belli bir bölümü ayrıntılı anlatmak ya da kutuphane_ara'nın bulduğu yerin devamını okumak için kullan.",
+    girdi: '{"kaynak": "başlık ya da sıra no", "bolum": 0, "parca": 1}', yontem: "hepsi",
+    calistir: (g) => ksAsistanKutuphaneOku(g),
   },
   duzey_taramasi: {
     aciklama: "Akademik düzey taramaları (ilkokul 1-4, ortaokul 5-8, lise 9-12). ogrenci verirsen kayıtlı sonucunu programın kendi analiziyle getirir: ders ders işlevsel düzey, beklenen düzeyle karşılaştırma (öğretim yılı içinde beklenen = tamamladığı sınıf), kural tabanlı çıkarımlar (\"şuna işaret ediyor olabilir\"), yanlış yapılan kazanımlar. Kayıt yoksa ya da \"nasıl uygularım\" sorulursa o öğrenciye göre hangi setlerin hangi sırayla uygulanacağını anlatan rehberi verir. rehber:true ise analizle birlikte rehberi de ekler. kademe: isteğe bağlı (ilkokul | ortaokul | lise).",
@@ -11851,6 +12173,7 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - Sınıf, okul ya da öğrenci düzeyinde "hangi konular konuşulmuş", "kaç veli görüşmesi", "en çok hangi sınıfla", "eğilim", "karşılaştır", "dönem özeti", "kaç öğrencide zorbalık geçti" gibi sayı/analiz sorularında gorusme_analizi kullan; sayıları kendin tahmin etme. Yorum yaparken bulguyu, olası anlamını ve somut bir sonraki adımı söyle (örn. sınıf rehberlik etkinliği, veli toplantısı, grup çalışması).
 - Test sonucu sorulduğunda ya da test sonucuna göre plan/veli anlatımı istendiğinde test_sonucu kullan.
 - Akademik düzey taraması (ilkokul/ortaokul/lise) sonucu, yorumu ya da "nasıl uygularım, hangi setleri sorayım" sorulduğunda duzey_taramasi kullan. Öğretim yılı içinde beklenen düzeyin TAMAMLADIĞI sınıf olduğunu unutma (8. sınıfın başındaki öğrencide 7 çıkması normaldir); çıkarımları "işaret ediyor olabilir" diliyle aktar.
+- Danışmanın kendi Kütüphanesi (yüklediği kitap, makale, yönetmelik, genelge — tam metin): "kütüphanede/yüklediğim kaynakta … ne diyor", mevzuat, süre/madde sorusu ya da kuramsal bir soru geldiğinde önce kutuphane_ara, ayrıntı için kutuphane_oku kullan; yanıtta kaynağın adını ve bölümünü belirt, kaynakta olmayanı kaynaktaymış gibi söyleme.
 - Müdahale Programları kütüphanesindeki kitaplar (8 kitap, tam metin) senin başvuru kaynağın: bir konu/beceri için etkinlik, oturum ya da program önerirken, grup ya da bireysel çalışma planlarken veya danışman bir kitap/oturum sorduğunda önce program_ara, ayrıntı için program_oturumu kullan. Önerinde kitabın adını, oturum numarasını ve PDF sayfasını belirt; kitapta olmayan bir şeyi kitaptaymış gibi söyleme.
 - LGS'ye hazırlık, "hangi konuya öncelik vermeli", "LGS'de en çok hangi konudan soru çıkıyor", "kaç net artırabilir" gibi sorularda lgs_konu_onceligi kullan; kazanılabilir neti "en fazla/yaklaşık" diye temkinli söyle.
 - Uyum izleme, bireyi tanıma, BDT çarpıtması ve sevk kaydı için uyum_kaydet, bireyi_tanima_ekle, bdt_ekle, sevk_kaydet, sevk_sonuc araçları vardır; hepsi danışmanın onayından geçer.
@@ -12573,7 +12896,7 @@ async function getRiskAnalizi(riskForm, gorusmeler, profil1, kutuphaneOzetleri =
   const denemeBolum = denemeOzet
     ? `DENEME/AKADEMİK DURUM:\nOrtalama: ${denemeOzet.ortalama}${denemeOzet.toplam?`/${denemeOzet.toplam}`:""}\nDeneme bazlı risk düzeyi: ${denemeOzet.risk || "belirsiz"} (kaynak: ${denemeOzet.kaynak})\n`
     : "";
-  const kutuphaneBaglam = pdrKutuphaneBaglam(kutuphaneOzetleri);
+  const kutuphaneBaglam = await pdrKutuphaneBaglamGetir(kutuphaneOzetleri, [riskForm.riskTuru, riskForm.aciklama, ...gorusmeler.slice(0, 8).map(r => `${r.topic || ""} ${r.summary || ""}`)].join(" "));
   const kademeMetni = kademeBaglamMetni(kademe);
   const prompt = `Öğrenci: ${pdrAnonimKimlik(riskForm.studentName, riskForm.className, riskForm.numara)}
 Risk Türü: ${riskForm.riskTuru}
@@ -12648,7 +12971,7 @@ async function getDenemeAnalizi(studentName, gorusmeler, denemeGirilen, kutuphan
     });
   }
   const dersSirali = Object.entries(dersOrtalamalari).sort((a,b)=>parseFloat(b[1])-parseFloat(a[1]));
-  const kutuphaneBaglam = pdrKutuphaneBaglam(kutuphaneOzetleri);
+  const kutuphaneBaglam = await pdrKutuphaneBaglamGetir(kutuphaneOzetleri, ["sınav kaygısı ders çalışma motivasyon akademik başarı hedef", sinavTuru, ...(gorusmeler || []).slice(0, 6).map(r => `${r.topic || ""} ${r.summary || ""}`)].join(" "));
   const hedefSatiri = sinavTuru === "lgs"
     ? `HEDEF OKUL ARALIĞI: (Mevcut ${avg||"?"}/${toplamSoru} ortalamaya gore hangi liselere gidebilir — somut okul turu belirt)`
     : `HEDEF ÜNİVERSİTE/BÖLÜM ARALIĞI: (Mevcut ${avg||"?"}/${toplamSoru} ortalamaya gore hangi bölüm/üniversite düzeyine yönelebilir — somut belirt)`;
@@ -12850,9 +13173,8 @@ Boyle bir bilgi YOKSA sadece "Yok" yaz. Tahmin yurutme, sadece notta ACIKCA beli
 
 async function getProfileAnalysis(studentName, className, scores, notes, kutuphaneOzetleri = []) {
   const boyutlar = DIMENSIONS.map(d => `${d.label}: ${scores[d.key] || 0}/5`).join(", ");
-  const kutuphaneBaglam = kutuphaneOzetleri.length > 0
-    ? "\n\nKÜTÜPHANE REFERANSLARI:\n" + kutuphaneOzetleri.map((k, i) => `[${i+1}] ${k.baslik}:\n${k.ozet}`).join("\n\n")
-    : "";
+  const zayif = Object.entries(scores || {}).filter(([, v]) => Number(v) <= 2).map(([k]) => k).join(" ");
+  const kutuphaneBaglam = kutuphaneOzetleri.length > 0 ? await pdrKutuphaneBaglamGetir(kutuphaneOzetleri, `${zayif} ${notes || ""}`) : "";
   const onerilerNot = kutuphaneOzetleri.length > 0 ? ", kütüphane referanslarından yararlan" : "";
   const prompt = `Öğrenci: ${pdrAnonimKimlik(studentName, className)}
 Rehberlik Profil Puanları (1-5): ${boyutlar}
@@ -26353,7 +26675,7 @@ function MudahalePlanEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, mud
     if (!seciliAd) return;
     setAiLoading(true);
     const notlar = pdrGorusmeListesiMetni(ogrRec);
-    const kutuphaneBaglam = pdrKutuphaneBaglam(kutuphane);
+    const kutuphaneBaglam = await pdrKutuphaneBaglamGetir(kutuphane, `müdahale planı ${notlar}`);
     const kademeMetni = kademeBaglamMetni(kademe);
     const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
       method:"POST", headers:{"Content-Type":"application/json"},
@@ -38797,6 +39119,7 @@ function KutuphaneEkle({ kutuphane, setKutuphane }) {
   const [yeniMetin, setYeniMetin] = useState("");
   const [yeniLink, setYeniLink] = useState("");
   const [yukleniyor, setYukleniyor] = useState(false);
+  const [ilerleme, setIlerleme] = useState("");
 
   const stl = { width:"100%", padding:"9px 11px", border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius:9, fontSize:13, background:CARD, color:TEXT, outline:"none", boxSizing:"border-box", fontFamily:"inherit" };
   const lbl = { fontSize:11, fontWeight:600, color:MUTED, display:"block", marginBottom:4, textTransform:"uppercase" };
@@ -38811,62 +39134,96 @@ function KutuphaneEkle({ kutuphane, setKutuphane }) {
     return "Sen Dr. Ayse Kara'sin - 20 yillik klinik deneyime sahip PDR uzmani ve psikologsun. BDT (otomatik dusunceler, sema teorisi, maruz birakma), baglanma teorisi (Bowlby), aile sistemleri (Minuchin), gelisim psikolojisi (Erikson, Vygotsky), Bourdieu sosyolojisi, Frankl anlam terapisi ve Stoa felsefesi perspektifinden degerlendirir; somut, uygulanabilir PDR onerileri sunarsın. Yargilamayan, guclu yonlere odaklanan, Turkce yazan bir klinisyensin. Verilen metni su yapida ozet: 1. ANA TEMALAR 2. PDR/KLINIK ACISINDAN ONEMLI NOKTALAR (BDT, baglanma, sosyoloji, felsefe) 3. ANAHTAR KAVRAMLAR. Max 350 kelime. Sade yaz. Markdown kullanma.";
   }
 
-  async function aiOzetle(metin, baslik) {
+  async function aiCagir(system, icerik, maxTok) {
     const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
       method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({
-        model:"claude-sonnet-4-6", max_tokens:800,
-        system: ozetSistemPrompt(),
-        messages:[{role:"user", content:`Başlık: ${baslik||"Belirtilmemiş"}\n\nMetin:\n${metin.substring(0,8000)}`}]
-      })
+      body: JSON.stringify({ model:"claude-sonnet-4-6", max_tokens:maxTok, __kalkanDosyaOnayli: true, system, messages:[{role:"user", content:icerik}] })
     });
     const data = await res.json();
-    return data.content?.[0]?.text || metin.substring(0,400);
+    if (data.error) throw new Error(typeof data.error === "string" ? data.error : (data.error.message || "AI hatası"));
+    return (data.content || []).filter(b => b.type === "text").map(b => b.text).join("").trim();
+  }
+  const BOLUM_SISTEM = "Sen bir PDR kaynağını bölüm bölüm okuyan bir asistansın. Sana kaynağın bir bölümü verilecek. Bu bölüm için, sonradan bölüme geri dönmeyi sağlayacak bir BÖLÜM NOTU yaz: ele alınan başlıklar ve konular, temel kavramlar, önemli bulgular, uygulanabilir teknikler/etkinlikler/öneriler; yönetmelikse madde numaraları, süreler, sayısal eşikler ve prosedürler AYNEN. Yorum ekleme, uydurma. En fazla 220 kelime. Markdown kullanma.";
+  // Kaynağın TAMAMI okunur: bölümlere ayrılır, her bölümün notu çıkarılır, sonra bu notlardan genel özet yazılır.
+  async function tamMetniOgren(metin, baslik) {
+    const PARCA = Math.max(24000, Math.ceil(metin.length / 14));
+    const bolumler = [];
+    for (let i = 0, no = 1; i < metin.length; no++) {
+      let son = Math.min(metin.length, i + PARCA);
+      if (son < metin.length) { const k = metin.lastIndexOf("\n", son); if (k > i + PARCA * 0.6) son = k + 1; }
+      bolumler.push({ no, bas: i, son, not: "" }); i = son;
+    }
+    if (bolumler.length === 1) {
+      setIlerleme("✍️ Kaynağın tamamı okunup özetleniyor…");
+      const ozet = await aiCagir(ozetSistemPrompt(), `Başlık: ${baslik || "Belirtilmemiş"}\n\nMetnin TAMAMI:\n${metin}`, 1200);
+      return { ozet, bolumler };
+    }
+    for (const b of bolumler) {
+      setIlerleme(`📖 Bölüm ${b.no}/${bolumler.length} okunuyor…`);
+      try { b.not = await aiCagir(BOLUM_SISTEM, `Kaynak: ${baslik || "Belirtilmemiş"} — Bölüm ${b.no}/${bolumler.length}\n\n${metin.slice(b.bas, b.son)}`, 600); }
+      catch (e) { b.not = ""; }
+    }
+    setIlerleme("✍️ Bütün bölümlerden genel özet yazılıyor…");
+    const notlu = bolumler.filter(b => b.not);
+    const ozet = notlu.length
+      ? await aiCagir(ozetSistemPrompt(), `Başlık: ${baslik || "Belirtilmemiş"}\n\nAşağıda bu kaynağın ${bolumler.length} bölümünün notları var (kaynağın tamamı okundu). Bütün kaynağı kapsayan özeti yaz:\n\n${notlu.map(b => `BÖLÜM ${b.no}:\n${b.not}`).join("\n\n")}`, 1200)
+      : "Özet çıkarılamadı; kaynağın tam metni yine de saklandı ve analizlerde kullanılır.";
+    return { ozet, bolumler };
   }
 
-  async function kaydet(ozet, baslik, kaynak) {
-    const yeni = {id:uid(), baslik:baslik||"İsimsiz Kaynak", dosyaAdi:kaynak, ozet, tur:kaynakTuru, tarih:today()};
+  async function kaydet(ozet, baslik, kaynak, ek = {}) {
+    const yeni = {id: ek.id || uid(), ...ek, baslik:baslik||"İsimsiz Kaynak", dosyaAdi:kaynak, ozet, tur:kaynakTuru, tarih:today()};
     const updated = [yeni, ...kutuphane];
     setKutuphane(updated);
     await saveKutuphane(updated);
     setYeniBaslik(""); setYeniMetin(""); setYeniLink("");
   }
+  // Tam metni öğren + sakla + listeye ekle
+  async function metniKaydet(metin, baslik, kaynak, ekBilgi = {}) {
+    metin = String(metin || "").replace(/\r/g, "").replace(/[ \t]+\n/g, "\n").slice(0, 1500000);
+    const { ozet, bolumler } = await tamMetniOgren(metin, baslik);
+    const id = uid();
+    setIlerleme("💾 Kaynağın tam metni saklanıyor…");
+    await pdrKutuphaneMetinYaz(id, { metin, bolumler: bolumler.map(b => ({ no: b.no, bas: b.bas, son: b.son, not: b.not })) });
+    await kaydet(ozet, baslik, kaynak, { id, tamMetin: true, karakter: metin.length, bolumSayisi: bolumler.length, ...ekBilgi });
+  }
 
   async function handleDosya(file) {
     if (!file) return;
-    setYukleniyor(true);
+    setYukleniyor(true); setIlerleme("");
     try {
-      const baslik = yeniBaslik || file.name.replace(/\.pdf$/i,"");
-      if (file.type === "application/pdf") {
-        const b64 = await new Promise((res,rej) => {
-          const r = new FileReader();
-          r.onload = () => res(r.result.split(",")[1]);
-          r.onerror = rej;
-          r.readAsDataURL(file);
-        });
-        const resp = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
-          method:"POST", headers:{"Content-Type":"application/json"},
-          body: JSON.stringify({
-            model:"claude-sonnet-4-6", max_tokens:800, __kalkanDosyaOnayli: true,
-            system: ozetSistemPrompt(),
-            messages:[{role:"user", content:[
-              {type:"document", source:{type:"base64", media_type:"application/pdf", data:b64}},
-              {type:"text", text: kaynakTuru === "yonetmelik"
-                ? `Bu yönetmelik/mevzuat belgesini yukarıdaki talimata göre özetle. Başlık: ${baslik}`
-                : `Bu belgeyi PDR perspektifinden özetle. Başlık: ${baslik}`}
-            ]}]
-          })
-        });
-        const data = await resp.json();
-        const ozet = data.content?.[0]?.text || "Özet alınamadı.";
-        await kaydet(ozet, baslik, file.name);
+      const ad = file.name.toLocaleLowerCase("tr");
+      const baslik = yeniBaslik || file.name.replace(/\.(pdf|txt|docx?|md)$/i,"");
+      if (file.type === "application/pdf" || ad.endsWith(".pdf")) {
+        setIlerleme("📄 PDF telefonda okunuyor…");
+        let metin = "";
+        let okuyucuYok = false;
+        try { metin = await pdrPdfMetinCikar(file, 1500, 1500000, (i, n) => setIlerleme(`📄 PDF telefonda okunuyor… sayfa ${i}/${n}`)); } catch (e) { metin = ""; okuyucuYok = /yüklenemedi/.test(e.message || ""); }
+        if (metin.replace(/\s/g, "").length >= 500) {
+          await metniKaydet(metin, baslik, file.name, { sayfa: pdrPdfMetinCikar.sonSayfa || null });
+        } else {
+          // Taranmış (fotoğraf) PDF: yazı çıkmaz → yalnızca AI özeti alınır
+          setIlerleme("🖼️ Taranmış PDF — yazı okunamadı, AI özet çıkarıyor…");
+          const b64 = await new Promise((res,rej) => { const r = new FileReader(); r.onload = () => res(r.result.split(",")[1]); r.onerror = rej; r.readAsDataURL(file); });
+          const ozet = await aiCagir(ozetSistemPrompt(), [
+            {type:"document", source:{type:"base64", media_type:"application/pdf", data:b64}},
+            {type:"text", text: kaynakTuru === "yonetmelik" ? `Bu yönetmelik/mevzuat belgesini yukarıdaki talimata göre özetle. Başlık: ${baslik}` : `Bu belgeyi PDR perspektifinden özetle. Başlık: ${baslik}`}
+          ], 1200);
+          await kaydet(ozet || "Özet alınamadı.", baslik, file.name, { tamMetin: false, taranmis: true });
+          alert(okuyucuYok
+            ? "PDF okuyucu indirilemedi (internet bağlantısını kontrol et); bu sefer yalnızca özet kaydedildi. Bağlantı düzelince kaynağı yeniden yüklersen tamamı öğrenilir."
+            : "Bu PDF taranmış (fotoğraf) olduğu için yazısı okunamadı; yalnızca özeti kaydedildi. Yazı seçilebilen bir PDF yüklersen kaynağın tamamı öğrenilir.");
+        }
+      } else if (ad.endsWith(".docx")) {
+        setIlerleme("📄 Word dosyası telefonda okunuyor…");
+        await metniKaydet(await pdrDocxMetin(file), baslik, file.name);
+      } else if (ad.endsWith(".doc")) {
+        alert("Eski Word biçimi (.doc) okunamıyor. Dosyayı Word'de .docx ya da PDF olarak kaydedip yükle.");
       } else {
-        const metin = await file.text();
-        const ozet = await aiOzetle(metin, baslik);
-        await kaydet(ozet, baslik, file.name);
+        await metniKaydet(await file.text(), baslik, file.name);
       }
     } catch(e) { alert("Hata: " + e.message); }
-    setYukleniyor(false);
+    setYukleniyor(false); setIlerleme("");
   }
 
   // NOT: Bu fonksiyon önceden bir üçüncü parti ücretsiz proxy servisine
@@ -38908,12 +39265,9 @@ function KutuphaneEkle({ kutuphane, setKutuphane }) {
   }
   async function handleMetin() {
     if (!yeniMetin.trim()) return;
-    setYukleniyor(true);
-    try {
-      const ozet = await aiOzetle(yeniMetin, yeniBaslik);
-      await kaydet(ozet, yeniBaslik, "metin");
-    } catch(e) { alert("Hata: " + e.message); }
-    setYukleniyor(false);
+    setYukleniyor(true); setIlerleme("");
+    try { await metniKaydet(yeniMetin, yeniBaslik, "metin"); } catch(e) { alert("Hata: " + e.message); }
+    setYukleniyor(false); setIlerleme("");
   }
 
   return (
@@ -38952,7 +39306,7 @@ function KutuphaneEkle({ kutuphane, setKutuphane }) {
         onChange={e => setYeniBaslik(e.target.value)} style={{...stl, marginBottom:12}} />
 
         {yukleniyor ? (
-          <div style={{color:MUTED, fontSize:13, padding:20, textAlign:"center"}}>⏳ AI okuyor ve özetliyor… (30-60 sn)</div>
+          <div data-testid="kutuphane-ilerleme" style={{color:MUTED, fontSize:13, padding:20, textAlign:"center", lineHeight:1.5}}>{ilerleme || "⏳ AI okuyor ve özetliyor…"}<div style={{fontSize:11, marginTop:4}}>Kaynağın tamamı okunuyor; uzun kitaplarda birkaç dakika sürebilir. Bu ekranda kal.</div></div>
         ) : (
           <div style={{textAlign:"center"}}>
             <div style={{border:`2px dashed ${BORDER}`, borderRadius:10, padding:24, background:BG}}
@@ -38969,14 +39323,14 @@ function KutuphaneEkle({ kutuphane, setKutuphane }) {
                 }}>
                   📂 Dosya Seç
                 </div>
-                <input type="file" accept=".pdf,.txt,.doc,application/pdf,text/plain"
+                <input type="file" accept=".pdf,.txt,.md,.docx,.doc,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                   style={{
                     position:"absolute", top:0, left:0, width:"100%", height:"100%",
                     opacity:0, cursor:"pointer", fontSize:16, margin:0, padding:0
                   }}
                   onChange={e => { const f=e.target.files?.[0]; if(f){handleDosya(f); e.target.value="";} }} />
               </div>
-              <div style={{fontSize:11, color:MUTED, marginTop:10}}>PDF, TXT · Bilgisayarda sürükle bırak da çalışır</div>
+              <div style={{fontSize:11, color:MUTED, marginTop:10}}>PDF, Word (.docx), TXT · Bilgisayarda sürükle bırak da çalışır</div>
             </div>
           </div>
         )}
@@ -39538,7 +39892,7 @@ function YedekHatirlatmaBandi({ ogrenciSayisi, tab, setTab }) {
 }
 
 // ── Ayarlar: AI Gizlilik Kalkanı kartı (deneme kutusu + gizlilik kaydı) ──
-const PDR_KALKAN_ETIKET = { ogrenci: "öğrenci", sinif: "sınıf", "KİŞİ": "kişi", OKUL: "okul", YER: "yer/adres", TC: "T.C. no", TELEFON: "telefon", EPOSTA: "e-posta", N: "okul no", IBAN: "IBAN", PLAKA: "plaka", "DOĞUM": "doğum tarihi" };
+const PDR_KALKAN_ETIKET = { ogrenci: "öğrenci", sinif: "sınıf", "KİŞİ": "kişi", OKUL: "okul", YER: "yer/adres", TC: "T.C. no", TELEFON: "telefon", EPOSTA: "e-posta", N: "okul no", IBAN: "IBAN", PLAKA: "plaka", "DOĞUM": "doğum tarihi", HESAP: "sosyal medya hesabı" };
 function pdrKalkanSayiMetni(s) {
   const p = Object.keys(PDR_KALKAN_ETIKET).filter(k => s && s[k]).map(k => `${s[k]} ${PDR_KALKAN_ETIKET[k]}`);
   return p.length ? p.join(" · ") : "gizlenecek bilgi yoktu";
@@ -39563,8 +39917,9 @@ function KalkanKarti() {
     <div data-testid="kalkan-karti" style={{ background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 12, padding: 14, marginBottom: 16 }}>
       <div style={{ fontWeight: 800, marginBottom: 6, fontSize: 14, color: "#1E3A8A" }}>🛡️ AI Gizlilik Kalkanı <span style={{ fontSize: 11, background: "#1E3A8A", color: "#fff", borderRadius: 8, padding: "2px 8px", marginLeft: 6 }}>AÇIK</span></div>
       <div style={{ fontSize: 13, color: TEXT, lineHeight: 1.55, marginBottom: 8 }}>
-        Yapay zekâya giden her istek önce bu telefonda taranır. Öğrenci adları, veli/öğretmen/yakın adları, okul ve adres, T.C. no, telefon, e-posta, IBAN, plaka ve doğum tarihi koda çevrilir; yanıt gelince kodlar yine telefonda gerçek adlara döner.
+        Yapay zekâya giden her istek önce bu telefonda taranır. Öğrenci adları, veli/öğretmen/yakın adları, okul, ilçe ve adres, T.C. no, telefon, e-posta, sosyal medya hesabı, IBAN, plaka ve doğum tarihi koda çevrilir; yanıt gelince kodlar yine telefonda gerçek adlara döner.
         <div style={{ marginTop: 6, fontSize: 12, color: MUTED }}>Gönderimden hemen önce ikinci bir kontrol yapılır: açık bir bilgi kalmışsa ya da kalkan isteği okuyamazsa istek <b>hiç gönderilmez</b>. Korunan kayıtlı öğrenci: <b>{korunan}</b>.</div>
+        <div style={{ marginTop: 6, fontSize: 12, color: MUTED }}>🎤 Not: Sesle yazdırırken sesini yazıya telefonun kendi ses tanıma hizmeti (Google/Apple) çevirir; bu kısım kalkanın dışındadır. Hassas bir şeyi sesle söylerken ad yerine "öğrenci" demek daha güvenlidir.</div>
       </div>
 
       <div style={{ background: "#fff", border: "1px solid #DBEAFE", borderRadius: 10, padding: 10, marginBottom: 10 }}>
@@ -41468,6 +41823,7 @@ export default function App() {
   }
 
   async function handleKutuphaneDelete(id) {
+    pdrKutuphaneMetinSil(id);
     const u = kutuphane.filter(k => k.id !== id);
     setKutuphane(u);
     await saveKutuphane(u);
@@ -43527,7 +43883,7 @@ function pdrBaslangicSekmesi() {
         {tab === "kutuphane" && (
           <div>
             <div style={{ background: "#FEF9C3", borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#92400E", fontWeight: 600, lineHeight: 1.6 }}>
-              📚 PDF yükle → AI özetlesin → Profil analizlerinde teorik referans olarak kullansın.
+              📚 PDF, Word ya da metin yükle → kaynağın tamamı okunur ve saklanır. Ekranda kısa özet görünür; AI analizleri ve Asistan ise kaynağın tam metninde arayıp ilgili bölümleri kullanır.
               {kutuphane.length > 0 && <span style={{ color: ACCENT, fontWeight: 700 }}> ({kutuphane.length} kaynak yüklü)</span>}
             </div>
 
@@ -43548,6 +43904,9 @@ function pdrBaslangicSekmesi() {
                         {k.tur === "yonetmelik" && <span style={{ marginLeft:6, background:"#EEF2FF", color:BLUE, borderRadius:8, padding:"1px 6px", fontSize:9, fontWeight:800 }}>YÖNETMELİK</span>}
                       </div>
                       <div style={{ fontSize: 11, color: MUTED }}>{k.tarih} · {k.dosyaAdi}</div>
+                      <div data-testid="kutuphane-rozet" style={{ fontSize: 10.5, fontWeight: 700, marginTop: 3, color: k.tamMetin ? "#166534" : "#92400E" }}>
+                        {k.tamMetin ? `📖 Tamamı öğrenildi${k.sayfa ? ` · ${k.sayfa} sayfa` : ""} · ≈${Math.round((k.karakter || 0) / 7).toLocaleString("tr-TR")} kelime${k.bolumSayisi > 1 ? ` · ${k.bolumSayisi} bölüm` : ""}` : "Yalnız özet biliniyor — tamamı öğrenilsin istersen kaynağı yeniden yükle"}
+                      </div>
                     </div>
                     <button onClick={() => handleKutuphaneDelete(k.id)} style={{
                       background: "none", border: "1px solid #F28B82", color: "#C5221F",
@@ -43563,7 +43922,7 @@ function pdrBaslangicSekmesi() {
 
             {kutuphane.length > 0 && (
               <div style={{ background: ACCENT_LIGHT, borderRadius: 10, padding: "10px 14px", fontSize: 12, color: ACCENT, fontWeight: 600, marginTop: 8 }}>
-                ✓ Bu {kutuphane.length} kaynak, Profil 1 AI analizi yapılırken otomatik referans alınacak.
+                ✓ Bu {kutuphane.length} kaynak risk, profil, deneme ve müdahale planı analizlerinde otomatik kullanılır; Asistan'a da "kütüphanede … ne diyor?" diye sorabilirsin.
               </div>
             )}
           </div>

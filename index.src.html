@@ -11762,6 +11762,22 @@ const KS_ASISTAN_ARACLAR = {
     girdi: '{"program": "sdb-psikoegitim", "oturum": 3, "parca": 1}', yontem: "hepsi",
     calistir: (g) => ksAsistanProgramOturumu(g),
   },
+  asistan_notu_kaydet: {
+    aciklama: "Bu sohbetteki asistan yanıtlarını öğrencinin dosyasına (Öğrenciler → öğrenci → 🤖 Asistan Notları) AYNEN kaydeder (ONAY GEREKİR). kapsam: son = bu öğrenciyle ilgili son yanıt; hepsi = bu sohbette bu öğrenciyle ilgili bütün yanıtlar. Metni sen yazma, özetleme; program sohbetteki yanıtları olduğu gibi kaydeder. Danışman \"bunu / bu konuşmayı X'in dosyasına kaydet\", \"öğrenciye gönder\", \"sekmesine ekle\" dediğinde kullan.",
+    girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "kapsam": "son"}', ogrenciIster: true, yazma: true, yontem: "hepsi",
+    onayOzeti: (g, ctx, o) => { const l = ksAsistanNotAdaylari(o, g.kapsam); return `📌 Asistan notu → öğrenci dosyası\nÖğrenci: ${ksAsistanEtiket(o)}\n${l.length ? l.map(m => `• ${pdrAsistanNotBaslik(m)}: ${ksAsistanKisalt(String(m.metin).replace(/\s+/g, " "), 90)}`).join("\n") : "⚠ Kaydedilecek yanıt bulunamadı (zaten kaydedilmiş olabilir)."}`; },
+    calistir: async (g, ctx, o) => {
+      const l = ksAsistanNotAdaylari(o, g.kapsam);
+      if (!l.length) return "Bu sohbette bu öğrenciyle ilgili kaydedilmemiş bir yanıt bulunamadı.";
+      if (!ctx.kaydet.asistanNotlari) return "Bu ekrandan kaydedilemiyor; yanıtın altındaki 📌 Öğrenciye kaydet düğmesini kullan.";
+      const yeni = l.map(m => pdrAsistanNotOlustur(m, o));
+      const guncel = [...yeni, ...(ctx.asistanNotlari || [])];
+      ctx.asistanNotlari = guncel; await ctx.kaydet.asistanNotlari(guncel);
+      const anahtar = o.name + "||" + (o.className || "");
+      l.forEach(m => { m.kaydedildi = [...(m.kaydedildi || []), anahtar]; });
+      return `${yeni.length} yanıt ${o.name} öğrencisinin dosyasına kaydedildi (Öğrenciler → ${o.name} → 🤖 Asistan Notları). Plan olarak takip etmek istersen orada "Müdahale Planına aktar" düğmesi var.`;
+    },
+  },
   kutuphane_ara: {
     aciklama: "Danışmanın KENDİ kütüphanesinde (Kayıtlar → 📚 Kütüphane: yüklediği kitap, makale, yönetmelik, genelge) arama yapar; kaynakların TAM METNİNDE arar ve ilgili bölümleri getirir. sorgu boşsa kaynak listesini verir. kaynak: isteğe bağlı (başlık ya da sıra no) — yalnız o kaynakta arar. Mevzuat/yönetmelik, kuram, teknik ya da danışmanın yüklediği bir kaynak sorulduğunda kullan.",
     girdi: '{"sorgu": "aranacak konu/kelime", "kaynak": "isteğe bağlı"}', yontem: "hepsi",
@@ -12173,6 +12189,7 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - Sınıf, okul ya da öğrenci düzeyinde "hangi konular konuşulmuş", "kaç veli görüşmesi", "en çok hangi sınıfla", "eğilim", "karşılaştır", "dönem özeti", "kaç öğrencide zorbalık geçti" gibi sayı/analiz sorularında gorusme_analizi kullan; sayıları kendin tahmin etme. Yorum yaparken bulguyu, olası anlamını ve somut bir sonraki adımı söyle (örn. sınıf rehberlik etkinliği, veli toplantısı, grup çalışması).
 - Test sonucu sorulduğunda ya da test sonucuna göre plan/veli anlatımı istendiğinde test_sonucu kullan.
 - Akademik düzey taraması (ilkokul/ortaokul/lise) sonucu, yorumu ya da "nasıl uygularım, hangi setleri sorayım" sorulduğunda duzey_taramasi kullan. Öğretim yılı içinde beklenen düzeyin TAMAMLADIĞI sınıf olduğunu unutma (8. sınıfın başındaki öğrencide 7 çıkması normaldir); çıkarımları "işaret ediyor olabilir" diliyle aktar.
+- Danışman bir yanıtı ya da bu sohbeti öğrencinin dosyasına kaydetmek/göndermek isterse asistan_notu_kaydet kullan (kapsam: son ya da hepsi). Kaydedilecek metni yeniden yazma; program yanıtları aynen kaydeder.
 - Danışmanın kendi Kütüphanesi (yüklediği kitap, makale, yönetmelik, genelge — tam metin): "kütüphanede/yüklediğim kaynakta … ne diyor", mevzuat, süre/madde sorusu ya da kuramsal bir soru geldiğinde önce kutuphane_ara, ayrıntı için kutuphane_oku kullan; yanıtta kaynağın adını ve bölümünü belirt, kaynakta olmayanı kaynaktaymış gibi söyleme.
 - Müdahale Programları kütüphanesindeki kitaplar (8 kitap, tam metin) senin başvuru kaynağın: bir konu/beceri için etkinlik, oturum ya da program önerirken, grup ya da bireysel çalışma planlarken veya danışman bir kitap/oturum sorduğunda önce program_ara, ayrıntı için program_oturumu kullan. Önerinde kitabın adını, oturum numarasını ve PDF sayfasını belirt; kitapta olmayan bir şeyi kitaptaymış gibi söyleme.
 - LGS'ye hazırlık, "hangi konuya öncelik vermeli", "LGS'de en çok hangi konudan soru çıkıyor", "kaç net artırabilir" gibi sorularda lgs_konu_onceligi kullan; kazanılabilir neti "en fazla/yaklaşık" diye temkinli söyle.
@@ -12416,7 +12433,7 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
       }
       sonuc = ksAsistanKisalt(String(sonuc), 4500);
       if (/⚠ KRİTİK/.test(sonuc)) kritik = true;
-      olay({ tip: "arac", ad: c.ad, ogrenci: ogr ? ksAsistanEtiket(ogr) : "", sonuc });
+      olay({ tip: "arac", ad: c.ad, ogrenci: ogr ? ksAsistanEtiket(ogr) : "", ogrKimlik: ogr ? { name: ogr.name, className: ogr.className || "", numara: ogr.numara || "" } : null, sonuc });
       sonuclar.push(`<sonuc ad="${c.ad}">\n${sonuc}\n</sonuc>`);
       dogrudan.push(ksAsistanDogrudanYanit(c.ad, sonuc));
     }
@@ -15542,6 +15559,13 @@ async function loadBdtAnaliz() {
 }
 async function saveBdtAnaliz(items) {
   try { await window.storage.set("pdr-bdt-analiz", JSON.stringify(items)); } catch(e) { console.warn(e); }
+}
+// Asistan notları: asistanın yanıtlarından öğrencinin dosyasına kaydedilenler
+async function loadAsistanNotlari() {
+  try { const r = await window.storage.get("pdr-asistan-notlari"); return r ? JSON.parse(r.value) : []; } catch { return []; }
+}
+async function saveAsistanNotlari(items) {
+  try { await window.storage.set("pdr-asistan-notlari", JSON.stringify(items)); } catch(e) { console.warn(e); }
 }
 async function loadSinavKaygisi() {
   try { const r = await window.storage.get("pdr-sinav-kaygisi"); return r ? JSON.parse(r.value) : {}; } catch { return {}; }
@@ -30810,7 +30834,107 @@ const PDR_ASISTAN_ARAC_AD = {
   gorusme_kaydet: "Görüşme kaydı", hatirlatma_ekle: "Hatırlatma", risk_kaydet: "Risk kaydı", mudahale_kaydet: "Müdahale planı kaydı",
   ekranda_ac: "📍 Ekran açıldı", ekranda_gorusme: "👀 Görüşme formu ekranda dolduruldu", ekranda_hatirlatma: "👀 Hatırlatma ekranda dolduruldu",
   ekranda_risk: "👀 Risk formu ekranda hazırlandı", ekranda_mudahale: "👀 Müdahale planı ekranda dolduruldu",
+  asistan_notu_kaydet: "📌 Öğrenciye not kaydı",
 };
+// ── Asistan notları: yanıtı öğrencinin dosyasına kaydetme ──
+function pdrAsistanMesajOgrencileri(m) {
+  const g = new Map();
+  (m && m.adimlar || []).forEach(a => { if (a.ogrKimlik && a.ogrKimlik.name) g.set(a.ogrKimlik.name + "||" + (a.ogrKimlik.className || ""), a.ogrKimlik); });
+  return [...g.values()];
+}
+function pdrAsistanNotBaslik(m) {
+  const adlar = (m.adimlar || []).map(a => a.ad);
+  const sira = [["mudahale_plani", "Müdahale planı önerisi"], ["mudahale_kaydet", "Müdahale planı"], ["seans_hazirlik", "Seans hazırlığı"], ["risk_analizi", "Risk değerlendirmesi"], ["supervizyon", "Süpervizyon notu"], ["veli_mektubu", "Veli yazısı taslağı"], ["profil_analizi", "Profil değerlendirmesi"], ["deneme_analizi", "Deneme değerlendirmesi"], ["test_sonucu", "Test sonucu yorumu"], ["duzey_taramasi", "Düzey taraması yorumu"], ["lgs_konu_onceligi", "LGS çalışma önceliği"], ["gorusme_analizi", "Görüşme analizi"], ["program_ara", "Müdahale programı önerisi"], ["program_oturumu", "Müdahale programı oturumu"], ["kutuphane_ara", "Kütüphaneden bilgi"], ["kutuphane_oku", "Kütüphaneden bilgi"]];
+  const b = sira.find(([k]) => adlar.includes(k));
+  if (b) return b[1];
+  if (/müdahale\s+plan/i.test(m.metin || "")) return "Müdahale planı önerisi";
+  return ksAsistanKisalt(String(m.soru || "Asistan notu").replace(/\s+/g, " ").trim(), 60);
+}
+function pdrAsistanNotOlustur(m, ogr) {
+  const s = new Date();
+  return {
+    id: uid(), studentName: ogr.name, className: ogr.className || "", numara: ogr.numara || "",
+    tarih: today(), saat: String(s.getHours()).padStart(2, "0") + ":" + String(s.getMinutes()).padStart(2, "0"),
+    baslik: pdrAsistanNotBaslik(m), soru: String(m.soru || "").slice(0, 500),
+    metin: pdrKalinTemizle(String(m.metin || "")).replace(/^#{1,4}\s+/gm, "").trim(),
+    model: m.yerel ? "hızlı komut" : (([...(PDR_ASISTAN_MODELLER.claude || []), ...(PDR_ASISTAN_MODELLER.ucretsiz || [])].find(x => x.id === m.model) || {}).ad || m.model || "").split(" — ")[0], kaynak: "asistan",
+  };
+}
+// Sohbetteki, bu öğrenciyle ilgili asistan yanıtları (kaydedilmemiş olanlar)
+function ksAsistanNotAdaylari(o, kapsam) {
+  const S = PDR_ASISTAN_SOHBET;
+  const anahtar = o.name + "||" + (o.className || "");
+  const yanitlar = (S.gorunen || []).filter(m => m.rol === "asistan" && !m.hata && !m.durdu && String(m.metin || "").trim());
+  const ilgili = yanitlar.filter(m => pdrAsistanMesajOgrencileri(m).some(x => pdrAyniOgrenci(x.name, x.className, o.name, o.className, x.numara, o.numara)));
+  const kaydedilmemis = (l) => l.filter(m => !(m.kaydedildi || []).includes(anahtar));
+  if (kapsam === "hepsi") return kaydedilmemis(ilgili.length ? ilgili : yanitlar.slice(-1));
+  const son = ilgili.length ? ilgili[ilgili.length - 1] : yanitlar[yanitlar.length - 1];
+  return son ? kaydedilmemis([son]) : [];
+}
+// Asistan notundaki plan metninden Müdahale Planı kaydı çıkarır (hedef / adımlar / süre)
+function pdrAsistanNotuPlanaCevir(metin) {
+  const t = String(metin || "").replace(/\r/g, "");
+  let hedef = ((t.match(/(?:^|\n)\s*\**\s*(?:Hedef|Amaç)\s*\**\s*:\s*\**\s*(.+)/i) || [])[1] || "").replace(/\*+/g, "").trim();
+  if (!hedef) hedef = ((t.replace(/\s+/g, " ").match(/^[^.!?]{10,220}[.!?]/) || [t.slice(0, 180)])[0] || "").trim();
+  const m = t.match(/(?:Temel\s+Adımlar|Müdahale\s+Adımları|Uygulama\s+Adımları|Adımlar|Plan\s+Adımları)\s*\**\s*:?\s*\n([\s\S]+?)(?:\n\s*\n\s*\**\s*(?:Önerilen\s+Kaynak|Kaynak|Nasıl\s+ilerleyelim|Süre|Değerlendirme|İzleme)|$)/i);
+  const adimlar = (m ? m[1] : t).split("\n").map(x => x.replace(/^\s*[*•-]\s*/, "• ").replace(/\*+/g, "").trimEnd()).filter(x => x.trim()).join("\n").slice(0, 3000);
+  const sm = t.match(/(\d+)\s*(haftalık|hafta|aylık|ay)\b/i);
+  return { hedef: hedef.slice(0, 300), adimlar, sure: sm ? `${sm[1]} ${/^ay/i.test(sm[2]) ? "ay" : "hafta"}` : "" };
+}
+
+// Öğrenci sayfası → 🤖 Asistan Notları sekmesi
+function AsistanNotlariSekmesi({ ogrenci, sinif, numara, asistanNotlari, setAsistanNotlari, mudahalePlan, setMudahalePlan, profiles, setTab }) {
+  const notlar = (asistanNotlari || []).filter(n => pdrAyniOgrenci(n.studentName, n.className, ogrenci, sinif, n.numara, numara));
+  const [acik, setAcik] = useState({});
+  const kaydet = async (l) => { setAsistanNotlari(l); await saveAsistanNotlari(l); };
+  async function sil(n) {
+    if (!window.confirm(`"${n.baslik}" notu silinsin mi? Bu işlem geri alınamaz.`)) return;
+    await kaydet((asistanNotlari || []).filter(x => x.id !== n.id));
+  }
+  async function planaAktar(n) {
+    const p = pdrAsistanNotuPlanaCevir(n.metin);
+    if (!window.confirm(`Müdahale Planı'na yeni plan olarak eklensin mi?\n\nHedef: ${p.hedef}\n\nAdımlar:\n${ksAsistanKisalt(p.adimlar, 700)}${p.sure ? "\n\nSüre: " + p.sure : ""}\n\n(Müdahale Planı ekranında düzenleyebilirsin.)`)) return;
+    const baslangicPuan = typeof pdrSonProfilPuani === "function" ? pdrSonProfilPuani(profiles, ogrenci, sinif) : null;
+    const yeni = { id: uid(), tarih: today(), ogrenci, ogrenciSinif: sinif, hedef: p.hedef, adimlar: p.adimlar, sorumlu: "pdr", sure: p.sure, oncelik: "Orta", durum: "Devam Ediyor", baslangicPuan, baslangicTarih: baslangicPuan ? today() : null, kaynak: "asistan-notu" };
+    const mevcut = pdrSozlukOku(mudahalePlan, ogrenci, sinif) || [];
+    const guncel = pdrSozlukYaz(mudahalePlan || {}, ogrenci, sinif, [yeni, ...mevcut]);
+    setMudahalePlan(guncel); await saveMudahalePlan(guncel);
+    await kaydet((asistanNotlari || []).map(x => x.id === n.id ? { ...x, plana: today() } : x));
+    if (typeof pdrAiBildir === "function") pdrAiBildir("🎯 Müdahale Planı'na eklendi.");
+  }
+  if (!notlar.length) return (
+    <div data-testid="asistan-notlari-bos" style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 16, fontSize: 13, color: MUTED, lineHeight: 1.6 }}>
+      Bu öğrenci için kaydedilmiş asistan notu yok.<br />
+      Asistanın bir yanıtının altındaki <b>📌 Öğrenciye kaydet</b> düğmesine basabilir ya da asistana "bu konuşmayı {ogrenci}'in dosyasına kaydet" diyebilirsin.
+    </div>
+  );
+  return (
+    <div data-testid="asistan-notlari" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {notlar.map(n => {
+        const uzun = n.metin.length > 700;
+        return (
+          <div key={n.id} style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: "12px 14px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
+              <div style={{ fontWeight: 800, fontSize: 13.5, color: TEXT }}>🤖 {n.baslik}</div>
+              <div style={{ fontSize: 11, color: MUTED }}>{n.tarih}{n.saat ? " " + n.saat : ""}</div>
+            </div>
+            {n.soru && <div style={{ fontSize: 11.5, color: MUTED, marginTop: 4, fontStyle: "italic" }}>Sorun: "{ksAsistanKisalt(n.soru, 160)}"</div>}
+            <div style={{ fontSize: 13, color: TEXT, whiteSpace: "pre-wrap", lineHeight: 1.6, marginTop: 8, wordBreak: "break-word" }}>{uzun && !acik[n.id] ? n.metin.slice(0, 700) + "…" : n.metin}</div>
+            {uzun && <button onClick={() => setAcik(a => ({ ...a, [n.id]: !a[n.id] }))} style={{ background: "none", border: "none", color: ACCENT, fontSize: 12, fontWeight: 700, cursor: "pointer", padding: "4px 0" }}>{acik[n.id] ? "Daha az göster" : "Tamamını göster"}</button>}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8, paddingTop: 8, borderTop: `1px solid ${BORDER}` }}>
+              <button onClick={() => { try { navigator.clipboard.writeText(n.metin); if (typeof pdrAiBildir === "function") pdrAiBildir("📋 Kopyalandı"); } catch (e) {} }} style={{ padding: "5px 10px", borderRadius: 8, border: `1px solid ${BORDER}`, background: "#fff", color: TEXT, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>📋 Kopyala</button>
+              {n.plana
+                ? <button onClick={() => setTab && setTab("mudahale")} style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid #86EFAC", background: "#F0FDF4", color: "#166534", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>✓ Plana aktarıldı ({n.plana}) →</button>
+                : <button data-testid="plana-aktar" onClick={() => planaAktar(n)} style={{ padding: "5px 10px", borderRadius: 8, border: "none", background: ACCENT, color: "#fff", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>🎯 Müdahale Planına aktar</button>}
+              <button onClick={() => sil(n)} style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid #F28B82", background: "#fff", color: "#C5221F", fontSize: 12, fontWeight: 700, cursor: "pointer", marginLeft: "auto" }}>Sil</button>
+            </div>
+            <div style={{ fontSize: 10.5, color: MUTED, marginTop: 4 }}>{n.model ? `Yazan: ${n.model}` : ""}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 const PDR_ASISTAN_ORNEKLER = [
   "Bugün öncelikle kimlerle ilgilenmeliyim?",
   "3 haftadır görüşmediğim riskli öğrencileri listele",
@@ -30872,7 +30996,9 @@ function pdrAsistanCtx(p) {
     akademikTaramalar: p.akademikTaramalar, liseTaramalar: p.liseTaramalar, benlikOlcekleri: p.benlikOlcekleri,
     sinavTuru: p.sinavTuru, aktifYil: p.aktifYil, ogrenciListesi: p.kayitliListesi,
     bdtAnaliz: p.bdtAnaliz, bireyiTanima: p.bireyiTanima, ogrenciler: p.ogrenciler, uyumIzleme: p.uyumIzleme, kademe: p.kademe || "", konuHaritasiVerisi: p.konuHaritasiVerisi || {}, ilkokulTaramalar: p.ilkokulTaramalar || [],
+    asistanNotlari: p.asistanNotlari || [],
     kaydet: {
+      asistanNotlari: p.setAsistanNotlari ? async (l) => { p.setAsistanNotlari(l); await saveAsistanNotlari(l); } : null,
       records: async (l) => { p.setRecords(l); await saveRecords(l); },
       hatirlatmalar: async (l) => { p.setHatirlatmalar(l); await saveHatirlatmalar(l); },
       riskListesi: async (l) => { p.setRiskListesi(l); await saveRiskListesi(l); },
@@ -30918,17 +31044,17 @@ async function pdrAsistanIstek(m, kullanilan, ctx) {
       const a = KS_ASISTAN_ARACLAR[yk.ad];
       S.durum = yk.ad === "ekranda_ac" ? "ekran" : "arac"; pdrAsistanBildir();
       const sonuc = String(await a.calistir(yk.girdi, ctx, yk.ogr || null));
-      adimlar.push({ ad: yk.ad, ogrenci: yk.ogr ? ksAsistanEtiket(yk.ogr) : "", sonuc });
+      adimlar.push({ ad: yk.ad, ogrenci: yk.ogr ? ksAsistanEtiket(yk.ogr) : "", ogrKimlik: yk.ogr ? { name: yk.ogr.name, className: yk.ogr.className || "", numara: yk.ogr.numara || "" } : null, sonuc });
       const yanit = yk.ad === "ekranda_ac" ? (ksAsistanDogrudanYanit("ekranda_ac", sonuc) || sonuc) : sonuc;
       S.gecmis.push({ role: "assistant", content: `(Hızlı komut olarak yapıldı) ${ksAsistanKisalt(yanit, 600)}` });
-      S.gorunen = [...S.gorunen, { rol: "asistan", metin: yanit, adimlar, yerel: true }];
+      S.gorunen = [...S.gorunen, { rol: "asistan", metin: yanit, adimlar, yerel: true, soru: m }];
       if (kullanilan.sesliMod && dinleyenVar() && yk.ad === "ekranda_ac") pdrAsistanSesliOkuOrtak(S.gorunen.length - 1, yanit);
       return;
     }
     const s = await pdrAsistanCalistir({
       gecmis: S.gecmis, ayar: kullanilan, ctx, iptal,
       olay: (o) => {
-        if (o.tip === "arac") adimlar.push({ ad: o.ad, ogrenci: o.ogrenci, sonuc: o.sonuc });
+        if (o.tip === "arac") adimlar.push({ ad: o.ad, ogrenci: o.ogrenci, ogrKimlik: o.ogrKimlik || null, sonuc: o.sonuc });
         if (o.tip === "onay_sonuc") adimlar.push({ ad: o.ad, onay: o.ok });
         S.durum = o.tip; S.adimlar = [...adimlar]; pdrAsistanBildir();
       },
@@ -30948,7 +31074,7 @@ async function pdrAsistanIstek(m, kullanilan, ctx) {
     });
     const dolar = kullanilan.saglayici === "ucretsiz" ? null : ksAsistanMaliyet(s.model, s.ucretGiris ?? s.giris, s.cikis);
     if (dolar) S.toplamDolar += dolar;
-    S.gorunen = [...S.gorunen, { rol: "asistan", metin: s.yanit, adimlar, model: s.model, giris: s.giris, cikis: s.cikis, onbellek: s.onbellek || 0, dolar, giden: s.giden, kritik: s.kritik, yedek: s.yedek, ucretsiz: kullanilan.saglayici === "ucretsiz" }];
+    S.gorunen = [...S.gorunen, { rol: "asistan", soru: m, metin: s.yanit, adimlar, model: s.model, giris: s.giris, cikis: s.cikis, onbellek: s.onbellek || 0, dolar, giden: s.giden, kritik: s.kritik, yedek: s.yedek, ucretsiz: kullanilan.saglayici === "ucretsiz" }];
     // Sesli modda cevap kendiliğinden okunur
     if (kullanilan.sesliMod && dinleyenVar()) pdrAsistanSesliOkuOrtak(S.gorunen.length - 1, s.yanit);
   } catch (e) {
@@ -30973,9 +31099,12 @@ function AsistanEkrani({
   kayitliListesi, records, setRecords, riskListesi, setRiskListesi, hatirlatmalar, setHatirlatmalar,
   mudahalePlan, setMudahalePlan, profiles, profiles2, denemeler, sevkler, testKayitlari,
   akademikTaramalar, liseTaramalar, benlikOlcekleri, sinavTuru, aktifYil, setTab,
-  bdtAnaliz, bireyiTanima, ogrenciler, uyumIzleme, setBdtAnaliz, setBireyiTanima, setUyumIzleme, kademe, setSevkler, konuHaritasiVerisi, ilkokulTaramalar
+  bdtAnaliz, bireyiTanima, ogrenciler, uyumIzleme, setBdtAnaliz, setBireyiTanima, setUyumIzleme, kademe, setSevkler, konuHaritasiVerisi, ilkokulTaramalar,
+  asistanNotlari, setAsistanNotlari
 }) {
   const S = PDR_ASISTAN_SOHBET;
+  const [notSec, setNotSec] = useState(null);       // hangi yanıt için öğrenci seçiliyor
+  const [notArama, setNotArama] = useState("");
   const [, yenile] = useState(0);
   const [ayar, setAyarState] = useState(pdrAsistanAyarOku);
   const [girdi, setGirdi] = useState("");
@@ -31048,7 +31177,22 @@ function AsistanEkrani({
     return pdrAsistanCtx({ kayitliListesi, records, setRecords, riskListesi, setRiskListesi, hatirlatmalar, setHatirlatmalar,
       mudahalePlan, setMudahalePlan, profiles, profiles2, denemeler, sevkler, testKayitlari,
       akademikTaramalar, liseTaramalar, benlikOlcekleri, sinavTuru, aktifYil, bdtAnaliz, bireyiTanima, ogrenciler, uyumIzleme,
-      setBdtAnaliz, setBireyiTanima, setUyumIzleme, kademe, setSevkler, konuHaritasiVerisi, ilkokulTaramalar });
+      setBdtAnaliz, setBireyiTanima, setUyumIzleme, kademe, setSevkler, konuHaritasiVerisi, ilkokulTaramalar, asistanNotlari, setAsistanNotlari });
+  }
+  // 📌 Yanıtı öğrencinin dosyasına kaydet
+  async function notaKaydet(i, ogr) {
+    const m = S.gorunen[i]; if (!m || !setAsistanNotlari) return;
+    const not = pdrAsistanNotOlustur(m, ogr);
+    const guncel = [not, ...(asistanNotlari || [])];
+    setAsistanNotlari(guncel); await saveAsistanNotlari(guncel);
+    m.kaydedildi = [...(m.kaydedildi || []), ogr.name + "||" + (ogr.className || "")];
+    setNotSec(null); setNotArama(""); pdrAsistanBildir();
+    if (typeof pdrAiBildir === "function") pdrAiBildir(`📌 ${ogr.name} öğrencisinin Asistan Notlarına kaydedildi.`);
+  }
+  function notDugmesi(i, m) {
+    const ogrs = pdrAsistanMesajOgrencileri(m);
+    if (ogrs.length === 1 && !(m.kaydedildi || []).length) notaKaydet(i, ogrs[0]);
+    else { setNotSec(notSec === i ? null : i); setNotArama(""); }
   }
 
   function gonder(metinVer) { return gonderAyar(metinVer, ayar); }
@@ -31269,8 +31413,23 @@ function AsistanEkrani({
                 <span style={{ display: "flex", gap: 10 }}>
                   <button onClick={() => sesliOku(i, m.metin)} style={{ background: "none", border: "none", color: ACCENT, fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: 0 }}>{okunan === i ? "⏹ Sustur" : "🔊 Sesli oku"}</button>
                   <button onClick={() => { try { navigator.clipboard.writeText(temizMetin(m.metin)); } catch (e) {} }} style={{ background: "none", border: "none", color: ACCENT, fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: 0 }}>📋 Kopyala</button>
+                  {setAsistanNotlari && <button data-testid="ogrenciye-kaydet" onClick={() => notDugmesi(i, m)} style={{ background: "none", border: "none", color: (m.kaydedildi || []).length ? "#166534" : ACCENT, fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: 0 }}>{(m.kaydedildi || []).length ? `✓ Kaydedildi (${m.kaydedildi.map(k => k.split("||")[0].split(" ")[0]).join(", ")})` : "📌 Öğrenciye kaydet"}</button>}
                   <button onClick={() => ac("g" + i)} style={{ background: "none", border: "none", color: ACCENT, fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: 0 }}>🔍 Modele ne gitti? {acik["g" + i] ? "▲" : "▼"}</button>
                 </span>
+              </div>
+            )}
+            {notSec === i && (
+              <div data-testid="not-ogrenci-sec" style={{ marginTop: 8, background: "#fff", border: `1px dashed ${BORDER}`, borderRadius: 8, padding: 8 }}>
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: TEXT, marginBottom: 6 }}>Bu yanıt hangi öğrencinin dosyasına kaydedilsin?</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 6 }}>
+                  {pdrAsistanMesajOgrencileri(m).map(o => <button key={o.name + o.className} onClick={() => notaKaydet(i, o)} style={{ padding: "5px 10px", borderRadius: 14, border: `1px solid ${ACCENT}`, background: ACCENT_LIGHT, color: ACCENT, fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>{o.name}{o.className ? " · " + o.className : ""}</button>)}
+                </div>
+                <input value={notArama} onChange={e => setNotArama(e.target.value)} placeholder="Başka öğrenci ara… (en az 2 harf)" style={{ width: "100%", boxSizing: "border-box", padding: "7px 9px", border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12.5 }} />
+                {notArama.trim().length >= 2 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+                    {(kayitliListesi || []).filter(o => ksSade(o.name + " " + (o.className || "")).includes(ksSade(notArama.trim()))).slice(0, 12).map(o => <button key={o.name + o.className + (o.numara || "")} onClick={() => notaKaydet(i, { name: o.name, className: o.className || "", numara: o.numara || "" })} style={{ padding: "5px 10px", borderRadius: 14, border: `1px solid ${BORDER}`, background: "#fff", color: TEXT, fontSize: 11.5, cursor: "pointer" }}>{o.name}{o.className ? " · " + o.className : ""}</button>)}
+                  </div>
+                )}
               </div>
             )}
             {acik["g" + i] && (
@@ -32332,6 +32491,7 @@ function OgrenciYonetim({
   ilerlemeNotlari, setIlerlemeNotlari,
   onRaporAc, setAktifOgrenci, aktifOgrenci, setTab, onSinifGuncelle, onOgrenciSil, onSinifSil, sinifListesi, sinavTuru, sevkler, setSevkler, testKayitlari, setTestKayitlari, kademe,
   bireyiTanima, setBireyiTanima, bdtAnaliz, setBdtAnaliz, sinavKaygisi, setSinavKaygisi, konuHaritasiVerisi, setKonuHaritasiVerisi,
+  asistanNotlari, setAsistanNotlari,
   sosyometri, setSosyometri,
   hatirlatmalar, setHatirlatmalar, mudahaleOnerileri, setMudahaleOnerileri,
   netHaritasiKayitlari, setNetHaritasiKayitlari, oogDegerlendirmeler, setOogDegerlendirmeler, profNotlari, setProfNotlari
@@ -33269,6 +33429,7 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
               { key:"bireyi_tanima", label:"🔍 Bireyi Tanıma" },
               { key:"bdt_analiz", label:"🧠 BDT Analiz" },
               { key:"sinav_kaygisi", label:"😰 Sınav Kaygısı" },
+              { key:"asistan_notlari", label:`🤖 Asistan Notları (${(asistanNotlari || []).filter(n => pdrAyniOgrenci(n.studentName, n.className, seciliOgrenci, seciliOgrenciSinif, n.numara, seciliOgrenciNumara)).length})` },
             ].map(s => (
               <button key={s.key} data-asistan="ogr-sekme" data-deger={s.key} onClick={() => setAktifSekme(s.key)} style={{
                 padding:"6px 12px", border:`1px solid ${aktifSekme===s.key ? ACCENT : BORDER}`,
@@ -33601,6 +33762,11 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
                 );
               })}
             </div>
+          )}
+          {aktifSekme === "asistan_notlari" && (
+            <AsistanNotlariSekmesi ogrenci={seciliOgrenci} sinif={seciliOgrenciSinif} numara={seciliOgrenciNumara}
+              asistanNotlari={asistanNotlari} setAsistanNotlari={setAsistanNotlari}
+              mudahalePlan={mudahalePlan} setMudahalePlan={setMudahalePlan} profiles={profiles} setTab={setTab} />
           )}
           {aktifSekme === "sinav_kaygisi" && (() => {
             const ogrKey = pdrOgrAnahtar(seciliOgrenci, seciliOgrenciSinif, seciliOgrenciNumara);
@@ -39795,7 +39961,8 @@ const PDR_YEDEK_EK_ALANLAR = [
   ["uyumIzleme", loadUyumIzleme, saveUyumIzleme],
   ["riskHaritasi", loadRiskHaritasi, saveRiskHaritasi],
   ["mudahaleOnerileri", loadMudahaleOnerileri, saveMudahaleOnerileri],
-  ["bilproDegerlendirmeler", loadBilproDegerlendirmeler, saveBilproDegerlendirmeler]
+  ["bilproDegerlendirmeler", loadBilproDegerlendirmeler, saveBilproDegerlendirmeler],
+  ["asistanNotlari", loadAsistanNotlari, saveAsistanNotlari]
 ];
 const PDR_YEDEK_UYARI_GUN = 30;
 
@@ -39809,7 +39976,7 @@ const PDR_YEDEK_UYARI_GUN = 30;
 //  • Yedekteki adlar eski maskeleme biçiminde olabilir ("Yı****"); mevcut öğrenciyle
 //    eşleşen adlar mevcut biçime çevrilir, böylece kayıt doğru öğrenciye bağlanır.
 //  • Tek değerli ayarlar (kademe, sınav türü, aktif yıl) değiştirilmez.
-const PDR_YEDEK_ALAN_AD = { ogrenciler: "Öğrenciler", records: "Görüşme kayıtları", profiles: "Profil 1", profiles2: "Profil 2", riskListesi: "Risk kayıtları", denemeler: "Denemeler (öğrenci)", sevkler: "Sevkler", mudahalePlan: "Müdahale planları", hazirlikNotlari: "Seans hazırlık notları", ilerlemeNotlari: "İlerleme notları", profNotlari: "Prof. Hakan notları", kutuphane: "Kütüphane", testKayitlari: "Test kayıtları", hatirlatmalar: "Hatırlatmalar", netHaritasiKayitlari: "Net haritası", konuHaritasiVerisi: "Konu haritası", bireyiTanima: "Bireyi tanıma", bdtAnaliz: "BDT analizi", sinavKaygisi: "Sınav kaygısı", oogDegerlendirmeler: "ÖÖG ön-tarama", castDegerlendirmeler: "Otizm taraması", pasDegerlendirmeler: "CAS taraması", pasPerformanslar: "CAS performans", akademikTaramalar: "Akademik düzey taraması", ilkokulTaramalar: "İlkokul düzey taraması", liseTaramalar: "Lise düzey taraması", benlikOlcekleri: "Benlik ölçeği", bilproDegerlendirmeler: "BİLPRO", sosyometri: "Sosyometri", krizKayitlari: "Kriz kayıtları", grupCalismalari: "Grup çalışmaları", uyumIzleme: "Uyum izleme", riskHaritasi: "Risk haritası", mudahaleOnerileri: "Müdahale önerileri", yillar: "Yıllar", sinifListesi: "Sınıf listesi" };
+const PDR_YEDEK_ALAN_AD = { asistanNotlari: "Asistan notları", ogrenciler: "Öğrenciler", records: "Görüşme kayıtları", profiles: "Profil 1", profiles2: "Profil 2", riskListesi: "Risk kayıtları", denemeler: "Denemeler (öğrenci)", sevkler: "Sevkler", mudahalePlan: "Müdahale planları", hazirlikNotlari: "Seans hazırlık notları", ilerlemeNotlari: "İlerleme notları", profNotlari: "Prof. Hakan notları", kutuphane: "Kütüphane", testKayitlari: "Test kayıtları", hatirlatmalar: "Hatırlatmalar", netHaritasiKayitlari: "Net haritası", konuHaritasiVerisi: "Konu haritası", bireyiTanima: "Bireyi tanıma", bdtAnaliz: "BDT analizi", sinavKaygisi: "Sınav kaygısı", oogDegerlendirmeler: "ÖÖG ön-tarama", castDegerlendirmeler: "Otizm taraması", pasDegerlendirmeler: "CAS taraması", pasPerformanslar: "CAS performans", akademikTaramalar: "Akademik düzey taraması", ilkokulTaramalar: "İlkokul düzey taraması", liseTaramalar: "Lise düzey taraması", benlikOlcekleri: "Benlik ölçeği", bilproDegerlendirmeler: "BİLPRO", sosyometri: "Sosyometri", krizKayitlari: "Kriz kayıtları", grupCalismalari: "Grup çalışmaları", uyumIzleme: "Uyum izleme", riskHaritasi: "Risk haritası", mudahaleOnerileri: "Müdahale önerileri", yillar: "Yıllar", sinifListesi: "Sınıf listesi" };
 function pdrYedekAdEsle(ad, sinif, numara, ogrenciler) {
   if (!ad || !ogrenciler || !ogrenciler.length) return ad;
   const n = (x) => pdrSoyadMaskele(String(x || "")).toLocaleLowerCase("tr").trim();
@@ -41195,6 +41362,7 @@ export default function App() {
   const [konuHaritasiVerisi, setKonuHaritasiVerisi] = useState({});
   const [bireyiTanima, setBireyiTanima] = useState([]);
   const [bdtAnaliz, setBdtAnaliz] = useState([]);
+  const [asistanNotlari, setAsistanNotlari] = useState([]);
   const [sinavKaygisi, setSinavKaygisi] = useState({});
   const [kutuphane, setKutuphane] = useState([]);
   const [search, setSearch] = useState("");
@@ -41240,6 +41408,7 @@ export default function App() {
     loadKonuHaritasi().then(setKonuHaritasiVerisi);
     loadBireyiTanima().then(setBireyiTanima);
     loadBdtAnaliz().then(setBdtAnaliz);
+    loadAsistanNotlari().then(setAsistanNotlari);
     loadSinavKaygisi().then(setSinavKaygisi);
   }, []);
 
@@ -41299,6 +41468,7 @@ export default function App() {
       "pdr-konu-haritasi": () => loadKonuHaritasi().then(setKonuHaritasiVerisi),
       "pdr-bireyi-tanima": () => loadBireyiTanima().then(setBireyiTanima),
       "pdr-bdt-analiz": () => loadBdtAnaliz().then(setBdtAnaliz),
+      "pdr-asistan-notlari": () => loadAsistanNotlari().then(setAsistanNotlari),
       "pdr-sinav-kaygisi": () => loadSinavKaygisi().then(setSinavKaygisi),
       // "pdr-rehber-gorundu" bilerek dahil edilmedi — bu sadece "ilk açılışta
       // rehber gösterildi mi" bayrağı, cihazlar arası senkron olması gerekmiyor.
@@ -42347,6 +42517,9 @@ function pdrBaslangicSekmesi() {
     const kalanBdtAnaliz = (bdtAnaliz||[]).filter(b => !silinecekMi(b.studentName, b.className, b.numara));
     setBdtAnaliz(kalanBdtAnaliz); await saveBdtAnaliz(kalanBdtAnaliz);
 
+    const kalanAsistanNotlari = (asistanNotlari||[]).filter(b => !silinecekMi(b.studentName, b.className, b.numara));
+    setAsistanNotlari(kalanAsistanNotlari); await saveAsistanNotlari(kalanAsistanNotlari);
+
     // İsimle anahtarlanan sözlükler (deneme, müdahale planı, hazırlık/ilerleme notları,
     // Prof. Dr. Hakan süpervizyon notları): silinen her öğrencinin hem numaralı,
     // hem yeni (isim+sınıf) hem eski (düz isim) anahtarını temizle
@@ -43040,6 +43213,7 @@ function pdrBaslangicSekmesi() {
             bdtAnaliz={bdtAnaliz} bireyiTanima={bireyiTanima} ogrenciler={ogrenciler} uyumIzleme={uyumIzleme}
             setBdtAnaliz={setBdtAnaliz} setBireyiTanima={setBireyiTanima} setUyumIzleme={setUyumIzleme}
             kademe={kademe} setSevkler={setSevkler} konuHaritasiVerisi={konuHaritasiVerisi} ilkokulTaramalar={ilkokulTaramalar}
+            asistanNotlari={asistanNotlari} setAsistanNotlari={setAsistanNotlari}
           />
         )}
         {/* ── PDR ASİSTANI: her ekranda bas-konuş düğmesi ── */}
@@ -43057,6 +43231,7 @@ function pdrBaslangicSekmesi() {
             bdtAnaliz={bdtAnaliz} bireyiTanima={bireyiTanima} ogrenciler={ogrenciler} uyumIzleme={uyumIzleme}
             setBdtAnaliz={setBdtAnaliz} setBireyiTanima={setBireyiTanima} setUyumIzleme={setUyumIzleme}
             kademe={kademe} setSevkler={setSevkler} konuHaritasiVerisi={konuHaritasiVerisi} ilkokulTaramalar={ilkokulTaramalar}
+            asistanNotlari={asistanNotlari} setAsistanNotlari={setAsistanNotlari}
           />
         )}
 
@@ -43206,6 +43381,8 @@ function pdrBaslangicSekmesi() {
             setSinavKaygisi={setSinavKaygisi}
             konuHaritasiVerisi={konuHaritasiVerisi}
             setKonuHaritasiVerisi={setKonuHaritasiVerisi}
+            asistanNotlari={asistanNotlari}
+            setAsistanNotlari={setAsistanNotlari}
             sosyometri={sosyometri}
             setSosyometri={setSosyometri}
             hatirlatmalar={hatirlatmalar}
@@ -43299,6 +43476,9 @@ function pdrBaslangicSekmesi() {
 
               const yeniBdtAnaliz = (bdtAnaliz||[]).map(b => ayniMi(b.studentName, b.className, b.numara) ? { ...b, studentName: yeniAd, className: yeniSinif } : b);
               setBdtAnaliz(yeniBdtAnaliz); await saveBdtAnaliz(yeniBdtAnaliz);
+
+              const yeniAsistanNotlari = (asistanNotlari||[]).map(b => ayniMi(b.studentName, b.className, b.numara) ? { ...b, studentName: yeniAd, className: yeniSinif } : b);
+              setAsistanNotlari(yeniAsistanNotlari); await saveAsistanNotlari(yeniAsistanNotlari);
 
               const yeniUyumIzleme = (uyumIzleme||[]).map(u => ayniMi(u.studentName, u.className, u.numara) ? { ...u, studentName: yeniAd, className: yeniSinif } : u);
               setUyumIzleme(yeniUyumIzleme); await saveUyumIzleme(yeniUyumIzleme);
@@ -43435,6 +43615,9 @@ function pdrBaslangicSekmesi() {
 
               const updBdtAnaliz = (bdtAnaliz||[]).filter(b => !silinecekMi(b.studentName, b.className, b.numara));
               setBdtAnaliz(updBdtAnaliz); await saveBdtAnaliz(updBdtAnaliz);
+
+              const updAsistanNotlari = (asistanNotlari||[]).filter(b => !silinecekMi(b.studentName, b.className, b.numara));
+              setAsistanNotlari(updAsistanNotlari); await saveAsistanNotlari(updAsistanNotlari);
 
               // İsimle anahtarlanan sözlükler: silinen öğrencinin hem numaralı, hem
               // isim+sınıf, hem eski düz-isim anahtarını temizle

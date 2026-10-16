@@ -12221,7 +12221,7 @@ async function ksAsistanModelCagir(ayar, sistem, mesajlar, iptal) {
   let onbellekAcik = claudeMi && ayar.onbellek !== false;
   const istek = async (model) => {
     // __kalkanGenis: gizlilik kalkanı bu istekte veli/öğretmen/okul/yer adlarını da kodlar (sunucuya gitmeden silinir)
-    const govde = { model, max_tokens: claudeMi ? 4000 : 2500, system: sistem, messages: mesajlar, __kalkanGenis: true, __asistan: true };
+    const govde = { model, max_tokens: claudeMi ? 4000 : 6000, system: sistem, messages: mesajlar, __kalkanGenis: true, __asistan: true };
     if (onbellekAcik) {
       govde.system = [{ type: "text", text: sistem, cache_control: { type: "ephemeral" } }];
       govde.messages = mesajlar.map((m, i) => i === mesajlar.length - 1 && typeof m.content === "string"
@@ -12266,8 +12266,11 @@ async function ksAsistanModelCagir(ayar, sistem, mesajlar, iptal) {
   // Ücrete esas giriş: önbellekten okunan 0,1×, önbelleğe yazılan 1,25× fiyatlanır
   const ucretGiris = giris - okunan - yazilan + okunan * 0.1 + yazilan * 1.25;
   const cikis = u.output_tokens ?? u.completion_tokens ?? Math.round(metin.length / 3.5);
-  const kesildi = data.stop_reason === "max_tokens" || !!(data.choices && data.choices[0] && data.choices[0].finish_reason === "length");
-  return { metin: String(metin), giris, cikis, ucretGiris, onbellek: okunan, giden, tahmini: !data.usage, model, yedek, kesildi };
+  // Ücretsiz modelin eski worker'ı kesilmeyi bildirmez: cümle ortasında biten (araç çağrısı olmayan) yanıt da kesilmiş sayılır
+  const yarim = !claudeMi && !/<\/arac>/.test(metin) && /[\p{L}\d,;:(\-–]$/u.test(String(metin).trim());
+  const kesinKesildi = data.stop_reason === "max_tokens" || !!(data.choices && data.choices[0] && data.choices[0].finish_reason === "length");
+  const kesildi = kesinKesildi || yarim;
+  return { metin: String(metin), giris, cikis, ucretGiris, onbellek: okunan, giden, tahmini: !data.usage, model, yedek, kesildi, kesinKesildi };
 }
 // Yanıttaki metni çıkarır: Anthropic (birden çok blok olabilir; yalnızca "text" blokları),
 // Workers AI ("response") ve OpenAI biçimi ("choices")
@@ -12341,6 +12344,8 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
     try { y = await ksAsistanModelCagir(ayar, sistem, gecmis, iptal); } catch (e) { ksAsistanDurdu(iptal); throw e; }
     ksAsistanDurdu(iptal);
     toplamGiris += y.giris; toplamCikis += y.cikis; toplamUcret += y.ucretGiris ?? y.giris; toplamOnb += y.onbellek || 0; sonGiden = y.giden; model = y.model; yedek = yedek || y.yedek;
+    // Yarıda kaldığı tahmin edilen yanıta modelin "zaten bitmişti" cevabı (TAMAM) eklenmez
+    if (devamSay > 0 && /^\s*tamam[.!]?\s*$/i.test(y.metin || "")) { y.metin = ""; y.kesildi = false; y.kesinKesildi = false; }
     gecmis.push({ role: "assistant", content: y.metin || "(boş yanıt)" });
     const { cagrilar, hatalar, disMetin } = ksAsistanAyristir(y.metin || "");
     // Yanıt uzunluk sınırına takıldıysa (araç çağrısı yoksa) kaldığı yerden devam ettir (en fazla 2 kez)
@@ -12348,16 +12353,18 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
       if (devamBas < 0) devamBas = gecmis.length - 1;
       birikmis = ksAsistanBirlestir(birikmis, y.metin || "");
       devamSay++;
-      gecmis.push({ role: "user", content: "(Yanıtın uzunluk sınırında kesildi. Kaldığın yerden, önceki kısmı tekrar etmeden ve kısa tutarak devam et.)" });
+      gecmis.push({ role: "user", content: y.kesinKesildi
+        ? "(Yanıtın uzunluk sınırında kesildi. Kaldığın yerden, önceki kısmı tekrar etmeden ve kısa tutarak devam et.)"
+        : "(Yanıtın yarıda kalmış görünüyor. Bitmediyse kaldığın yerden, önceki kısmı tekrar etmeden ve kısa tutarak devam et. Zaten bittiyse yalnızca TAMAM yaz.)" });
       continue;
     }
     if (!cagrilar.length && !hatalar.length) {
-      let yanit = disMetin || y.metin || "(Model boş yanıt verdi.)";
+      let yanit = disMetin || y.metin || (devamBas >= 0 ? "" : "(Model boş yanıt verdi.)");
       if (devamBas >= 0) {
         yanit = ksAsistanBirlestir(birikmis, yanit);
         gecmis.splice(devamBas, gecmis.length - devamBas, { role: "assistant", content: yanit });
       }
-      if (y.kesildi) yanit += "\n\n(…yanıt çok uzun olduğu için kısaltıldı; devamını istersen \"devam et\" yaz.)";
+      if (y.kesinKesildi) yanit += "\n\n(…yanıt çok uzun olduğu için kısaltıldı; devamını istersen \"devam et\" yaz.)";
       return { yanit, giris: toplamGiris, cikis: toplamCikis, ucretGiris: toplamUcret, onbellek: toplamOnb, giden: sonGiden, model, yedek, kritik };
     }
     const sonuclar = [], dogrudan = [];
@@ -30753,13 +30760,15 @@ export default {
     try { b = await request.json(); } catch (e) { return json({ error: { message: "Geçersiz istek." } }, 400); }
     const model = IZINLI_MODELLER.includes(b.model) ? b.model : IZINLI_MODELLER[0];
     const mesajlar = (Array.isArray(b.messages) ? b.messages : []).slice(-30)
-      .map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content || "").slice(0, 24000) }));
-    const messages = b.system ? [{ role: "system", content: String(b.system).slice(0, 24000) }, ...mesajlar] : mesajlar;
+      .map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content || "").slice(0, 40000) }));
+    const messages = b.system ? [{ role: "system", content: String(b.system).slice(0, 60000) }, ...mesajlar] : mesajlar;
     try {
-      const r = await env.AI.run(model, { messages, max_tokens: Math.min(parseInt(b.max_tokens) || 1500, 2500) });
+      const r = await env.AI.run(model, { messages, max_tokens: Math.min(parseInt(b.max_tokens) || 2000, 8000) });
       const text = (r && (r.response ?? (r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content))) ?? (typeof r === "string" ? r : "");
       const u = (r && r.usage) || {};
-      return json({ content: [{ type: "text", text: typeof text === "string" ? text : JSON.stringify(text) }], usage: { input_tokens: u.prompt_tokens || 0, output_tokens: u.completion_tokens || 0 }, model });
+      const bitis = r && r.choices && r.choices[0] && r.choices[0].finish_reason;
+      // Yanıt uzunluk sınırında kesildiyse program bunu bilsin ve kaldığı yerden devam ettirsin
+      return json({ content: [{ type: "text", text: typeof text === "string" ? text : JSON.stringify(text) }], stop_reason: bitis === "length" ? "max_tokens" : "end_turn", usage: { input_tokens: u.prompt_tokens || 0, output_tokens: u.completion_tokens || 0 }, model });
     } catch (e) {
       return json({ error: { message: "Model hatası: " + (e && e.message ? e.message : String(e)) } }, 502);
     }

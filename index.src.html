@@ -12247,6 +12247,17 @@ async function ksAsistanModelCagir(ayar, sistem, mesajlar, iptal) {
   }
   // Ücretsiz model boş yanıt verdiyse aynı isteği bir kez daha dene
   if (!claudeMi && !hatali(r) && !ksAsistanMetinCikar(r.data).trim()) r = await istek(r.model);
+  // Cloudflare geçici hata verdiyse (ör. "4002 could not route request", kapasite dolu, zaman aşımı):
+  // kısa bir beklemeyle aynı modeli bir kez daha dene; yine olmazsa başka bir ücretsiz modelle yanıtla
+  const geciciHata = (x) => hatali(x) && ([429, 500, 502, 503, 504].includes(x.res.status) || /4002|3040|route|capacity|kapasite|timeout/i.test(x.ham || ""));
+  if (!claudeMi && geciciHata(r)) {
+    await new Promise(ok => setTimeout(ok, 1500)); ksAsistanDurdu(iptal);
+    r = await istek(r.model);
+    if (geciciHata(r)) {
+      const diger = PDR_ASISTAN_MODELLER.ucretsiz.map(m => m.id).filter(id => id !== r.model && id !== "@cf/qwen/qwen3.8-27b");
+      for (const id of diger.slice(0, 2)) { ksAsistanDurdu(iptal); r = await istek(id); yedek = true; if (!geciciHata(r)) break; }
+    }
+  }
   const { res, data, ham, giden, model } = r;
   if (!res.ok || !data || data.error) {
     const m = data && data.error ? (data.error.message || data.error) : ham.slice(0, 200);

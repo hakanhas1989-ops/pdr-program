@@ -33716,6 +33716,64 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
               {ogrP2 && (
                 <div style={{ background:CARD, border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius:10, padding:12 }}>
                   <div style={{ fontSize:11, fontWeight:700, color:MUTED, marginBottom:8, textTransform:"uppercase" }}>Profil 2 — Akademik & İlgi</div>
+                  {(() => {
+                    // Yazılı sınav puanları: yalnızca puanı girilmiş dersler
+                    const sv = ogrP2.sinavlar || {};
+                    const sayi = (v) => { const n = parseFloat(String(v ?? "").replace(",", ".")); return isNaN(n) ? null : n; };
+                    const satirlar = DERSLER.map(d => ({ d, y1: sayi(sv[d.key + "1"]), y2: sayi(sv[d.key + "2"]) })).filter(x => x.y1 !== null || x.y2 !== null);
+                    const yillar = Object.entries(ogrP2.gecmisYillar || {}).map(([k, v]) => [parseInt(k, 10), sayi(v)]).filter(([k, v]) => k && v !== null).sort((a, c) => a[0] - c[0]);
+                    const d2 = ogrP2.d2 || {};
+                    const d2Var = ["TN", "E_yuzde", "TN_E", "CP", "PR"].some(k => String(d2[k] || "").trim());
+                    const tumOrt = satirlar.length ? (satirlar.reduce((t, x) => t + (x.y1 !== null && x.y2 !== null ? (x.y1 + x.y2) / 2 : (x.y1 ?? x.y2)), 0) / satirlar.length) : null;
+                    const renk = (v) => v === null ? MUTED : v >= 85 ? "#15803D" : v >= 70 ? "#0E7490" : v >= 50 ? "#B45309" : "#B91C1C";
+                    return (
+                      <>
+                        {satirlar.length > 0 ? (
+                          <div data-testid="p2-yazililar" style={{ marginBottom:10 }}>
+                            <div style={{ fontSize:11.5, fontWeight:700, color:BLUE, marginBottom:6 }}>📝 Yazılı Sınav Puanları{tumOrt !== null ? <span style={{ color:MUTED, fontWeight:600 }}> · genel ortalama {tumOrt.toFixed(1)}</span> : null}</div>
+                            <div style={{ display:"grid", gridTemplateColumns:"1fr auto auto auto", gap:"4px 12px", fontSize:12, alignItems:"center" }}>
+                              <span style={{ fontSize:10, color:MUTED }}>Ders</span><span style={{ fontSize:10, color:MUTED, textAlign:"center" }}>1. Yazılı</span><span style={{ fontSize:10, color:MUTED, textAlign:"center" }}>2. Yazılı</span><span style={{ fontSize:10, color:MUTED, textAlign:"center" }}>Ort.</span>
+                              {satirlar.map(({ d, y1, y2 }) => {
+                                const ort = y1 !== null && y2 !== null ? (y1 + y2) / 2 : (y1 ?? y2);
+                                return (
+                                  <React.Fragment key={d.key}>
+                                    <span style={{ color:d.color, fontWeight:700 }}>{d.label}</span>
+                                    <span style={{ textAlign:"center", fontWeight:700, color:renk(y1) }}>{y1 ?? "—"}</span>
+                                    <span style={{ textAlign:"center", fontWeight:700, color:renk(y2) }}>{y2 ?? "—"}</span>
+                                    <span style={{ textAlign:"center", fontWeight:900, color:renk(ort) }}>{Number.isInteger(ort) ? ort : ort.toFixed(1)}</span>
+                                  </React.Fragment>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ fontSize:11.5, color:MUTED, marginBottom:8 }}>📝 Yazılı sınav puanı girilmemiş.</div>
+                        )}
+                        {yillar.length > 0 && (
+                          <div data-testid="p2-yilsonu" style={{ marginBottom:10 }}>
+                            <div style={{ fontSize:11.5, fontWeight:700, color:PURPLE, marginBottom:6 }}>🎓 Yıl Sonu Not Ortalamaları</div>
+                            <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                              {yillar.map(([k, v], i) => {
+                                const onceki = i > 0 ? yillar[i - 1][1] : null;
+                                const fark = onceki !== null ? v - onceki : null;
+                                return (
+                                  <div key={k} style={{ background:"#F3F0FF", borderRadius:8, padding:"5px 10px", fontSize:12 }}>
+                                    <span style={{ color:MUTED }}>{k}. sınıf: </span><b style={{ color:renk(v) }}>{v}</b>
+                                    {fark !== null && Math.abs(fark) >= 0.1 && <span style={{ fontSize:10.5, marginLeft:4, color: fark > 0 ? "#15803D" : "#B91C1C" }}>{fark > 0 ? "▲" : "▼"}{Math.abs(fark).toFixed(1)}</span>}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                        {d2Var && (
+                          <div style={{ fontSize:12, marginBottom:8, color:TEXT }}>
+                            <b style={{ color:"#0E7490" }}>🎯 d2 Dikkat:</b> {[["TN", "TN"], ["E_yuzde", "E%"], ["TN_E", "TN-E"], ["CP", "CP"], ["PR", "Yüzdelik"]].filter(([k]) => String(d2[k] || "").trim()).map(([k, ad]) => `${ad} ${d2[k]}`).join(" · ")}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                   {ogrP2.kariyer_hedef && <div style={{ fontSize:12, marginBottom:6 }}><b>Kariyer:</b> {ogrP2.kariyer_hedef}</div>}
                   {ogrP2.ilgiler?.length > 0 && (
                     <div style={{ display:"flex", flexWrap:"wrap", gap:4, marginBottom:8 }}>

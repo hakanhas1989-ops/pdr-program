@@ -11762,6 +11762,28 @@ const KS_ASISTAN_ARACLAR = {
     girdi: '{"program": "sdb-psikoegitim", "oturum": 3, "parca": 1}', yontem: "hepsi",
     calistir: (g) => ksAsistanProgramOturumu(g),
   },
+  not_kaydet: {
+    aciklama: "Öğrencinin ders notlarını kaydeder (ONAY GEREKİR): yazılı sınav puanları (Profil 2 → Yazılı Sınav Puanları; her derste 1. ve 2. yazılı) ve yıl sonu not ortalamaları (Profil 2 → Geçmiş Yıl Sonu Not Ortalamaları; sınıf düzeyine göre). yazililar: [{ders, yazili: 1|2, puan: 0-100}] — yazili verilmezse o dersin boş olan ilk yazılısına yazılır. Dersler: Türkçe, Matematik, İnkılap Tarihi, Fen Bilimleri, İngilizce, Din Kültürü. yil_sonu: [{sinif: sınıf düzeyi (örn. 7), ortalama: 0-100}]. Danışmanın söylediği sayıları aynen yaz, tahmin etme.",
+    girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "yazililar": [{"ders": "Matematik", "yazili": 1, "puan": 85}], "yil_sonu": [{"sinif": 7, "ortalama": 82.5}]}', ogrenciIster: true, yazma: true, yontem: "hepsi",
+    onayOzeti: (g, ctx, o) => { const p = ksNotPlani(g, ctx, o); return `📚 Not kaydı\nÖğrenci: ${ksAsistanEtiket(o)}\n${p.satirlar.length ? p.satirlar.join("\n") : "• (kaydedilecek geçerli not yok)"}${p.sorunlar.length ? "\n⚠ Kaydedilmeyecek: " + p.sorunlar.join("; ") : ""}`; },
+    calistir: async (g, ctx, o) => {
+      const p = ksNotPlani(g, ctx, o);
+      if (!p.satirlar.length) return "Geçerli not olmadığı için kaydedilmedi." + (p.sorunlar.length ? " Sorunlar: " + p.sorunlar.join("; ") : "");
+      if (!ctx.kaydet.profiles2) return "Notlar bu ekrandan kaydedilemiyor; Profil → Profil 2 ekranını kullan.";
+      const eski = p.kayit;
+      const yeni = {
+        id: (eski && eski.id) || uid(), date: (eski && eski.date) || today(),
+        ...(eski || { d2: { ...EMPTY_D2 }, ilgiler: [], ilgiNot: "", kariyer_hedef: "", aile_notu: "", d2_analiz: "" }),
+        studentName: o.name, className: o.className, numara: o.numara || (eski && eski.numara) || "",
+        sinavlar: { ...EMPTY_SINAV, ...((eski && eski.sinavlar) || {}), ...p.sinavlar },
+        gecmisYillar: { ...((eski && eski.gecmisYillar) || {}), ...p.gecmisYillar },
+      };
+      const liste = ctx.profiles2 || [];
+      const guncel = eski ? liste.map(x => x === eski ? yeni : x) : [yeni, ...liste];
+      ctx.profiles2 = guncel; await ctx.kaydet.profiles2(guncel);
+      return `Notlar kaydedildi (${p.satirlar.length} değer): ${p.satirlar.map(x => x.replace(/^• /, "")).join("; ")}.${p.sorunlar.length ? " Kaydedilmeyenler: " + p.sorunlar.join("; ") : ""} Profil → Profil 2'de görünür.`;
+    },
+  },
   asistan_notu_kaydet: {
     aciklama: "Bu sohbetteki asistan yanıtlarını öğrencinin dosyasına (Öğrenciler → öğrenci → 🤖 Asistan Notları) AYNEN kaydeder (ONAY GEREKİR). kapsam: son = bu öğrenciyle ilgili son yanıt; hepsi = bu sohbette bu öğrenciyle ilgili bütün yanıtlar. Metni sen yazma, özetleme; program sohbetteki yanıtları olduğu gibi kaydeder. Danışman \"bunu / bu konuşmayı X'in dosyasına kaydet\", \"öğrenciye gönder\", \"sekmesine ekle\" dediğinde kullan.",
     girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "kapsam": "son"}', ogrenciIster: true, yazma: true, yontem: "hepsi",
@@ -12189,6 +12211,7 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - Sınıf, okul ya da öğrenci düzeyinde "hangi konular konuşulmuş", "kaç veli görüşmesi", "en çok hangi sınıfla", "eğilim", "karşılaştır", "dönem özeti", "kaç öğrencide zorbalık geçti" gibi sayı/analiz sorularında gorusme_analizi kullan; sayıları kendin tahmin etme. Yorum yaparken bulguyu, olası anlamını ve somut bir sonraki adımı söyle (örn. sınıf rehberlik etkinliği, veli toplantısı, grup çalışması).
 - Test sonucu sorulduğunda ya da test sonucuna göre plan/veli anlatımı istendiğinde test_sonucu kullan.
 - Akademik düzey taraması (ilkokul/ortaokul/lise) sonucu, yorumu ya da "nasıl uygularım, hangi setleri sorayım" sorulduğunda duzey_taramasi kullan. Öğretim yılı içinde beklenen düzeyin TAMAMLADIĞI sınıf olduğunu unutma (8. sınıfın başındaki öğrencide 7 çıkması normaldir); çıkarımları "işaret ediyor olabilir" diliyle aktar.
+- Danışman öğrencinin yazılı sınav puanını ya da yıl sonu not ortalamasını söylerse not_kaydet kullan (birden çok dersi tek çağrıda ver). Sayıları aynen yaz; hangi yazılı olduğu belli değilse yazili alanını boş bırak, program boş olana yazar.
 - Danışman bir yanıtı ya da bu sohbeti öğrencinin dosyasına kaydetmek/göndermek isterse asistan_notu_kaydet kullan (kapsam: son ya da hepsi). Kaydedilecek metni yeniden yazma; program yanıtları aynen kaydeder.
 - Danışmanın kendi Kütüphanesi (yüklediği kitap, makale, yönetmelik, genelge — tam metin): "kütüphanede/yüklediğim kaynakta … ne diyor", mevzuat, süre/madde sorusu ya da kuramsal bir soru geldiğinde önce kutuphane_ara, ayrıntı için kutuphane_oku kullan; yanıtta kaynağın adını ve bölümünü belirt, kaynakta olmayanı kaynaktaymış gibi söyleme.
 - Müdahale Programları kütüphanesindeki kitaplar (8 kitap, tam metin) senin başvuru kaynağın: bir konu/beceri için etkinlik, oturum ya da program önerirken, grup ya da bireysel çalışma planlarken veya danışman bir kitap/oturum sorduğunda önce program_ara, ayrıntı için program_oturumu kullan. Önerinde kitabın adını, oturum numarasını ve PDF sayfasını belirt; kitapta olmayan bir şeyi kitaptaymış gibi söyleme.
@@ -30834,7 +30857,7 @@ const PDR_ASISTAN_ARAC_AD = {
   gorusme_kaydet: "Görüşme kaydı", hatirlatma_ekle: "Hatırlatma", risk_kaydet: "Risk kaydı", mudahale_kaydet: "Müdahale planı kaydı",
   ekranda_ac: "📍 Ekran açıldı", ekranda_gorusme: "👀 Görüşme formu ekranda dolduruldu", ekranda_hatirlatma: "👀 Hatırlatma ekranda dolduruldu",
   ekranda_risk: "👀 Risk formu ekranda hazırlandı", ekranda_mudahale: "👀 Müdahale planı ekranda dolduruldu",
-  asistan_notu_kaydet: "📌 Öğrenciye not kaydı",
+  asistan_notu_kaydet: "📌 Öğrenciye not kaydı", not_kaydet: "📚 Yazılı / yıl sonu notu kaydı",
 };
 // ── Asistan notları: yanıtı öğrencinin dosyasına kaydetme ──
 function pdrAsistanMesajOgrencileri(m) {
@@ -30882,6 +30905,45 @@ function pdrAsistanNotuPlanaCevir(metin) {
   return { hedef: hedef.slice(0, 300), adimlar, sure: sm ? `${sm[1]} ${/^ay/i.test(sm[2]) ? "ay" : "hafta"}` : "" };
 }
 
+// ── Not kaydı (yazılı puanları ve yıl sonu ortalamaları → Profil 2) ──
+const KS_DERS_ES = { turkce: ["turkce", "türkçe", "tr"], mat: ["mat", "matematik"], inkilap: ["inkilap", "inkılap", "tarih", "inkılap tarihi", "ataturkculuk", "t.c. inkılap"], fen: ["fen", "fen bilimleri", "fen bilgisi"], ingilizce: ["ingilizce", "ing", "yabanci dil", "yabancı dil", "english"], din: ["din", "din kulturu", "din kültürü", "dkab"] };
+function ksDersBul(ad) {
+  const s = ksSade(String(ad || "")).trim();
+  if (!s) return null;
+  const d = DERSLER.find(x => ksSade(x.label) === s || x.key === s);
+  if (d) return d;
+  const k = Object.keys(KS_DERS_ES).find(key => KS_DERS_ES[key].some(e => s === ksSade(e) || s.startsWith(ksSade(e) + " ") || (ksSade(e).length >= 4 && s.includes(ksSade(e)))));
+  return k ? DERSLER.find(x => x.key === k) : null;
+}
+function ksNotPlani(g, ctx, o) {
+  const kayit = (ctx.profiles2 || []).find(p => pdrAyniOgrenci(p.studentName, p.className, o.name, o.className, p.numara, o.numara)) || null;
+  const mevcut = { ...((kayit && kayit.sinavlar) || {}) };
+  const sinavlar = {}, gecmisYillar = {}, satirlar = [], sorunlar = [];
+  const sayi = (v) => { const n = parseFloat(String(v ?? "").replace(",", ".")); return isNaN(n) ? null : n; };
+  (Array.isArray(g.yazililar) ? g.yazililar : []).forEach(y => {
+    const d = ksDersBul(y && y.ders);
+    const puan = sayi(y && y.puan);
+    if (!d) { sorunlar.push(`"${(y && y.ders) || "?"}" dersi tanınmadı (programdaki dersler: ${DERSLER.map(x => x.label).join(", ")})`); return; }
+    if (puan === null || puan < 0 || puan > 100) { sorunlar.push(`${d.label}: puan 0-100 arasında olmalı (${y && y.puan})`); return; }
+    let no = parseInt(y.yazili, 10);
+    if (no !== 1 && no !== 2) no = !String({ ...mevcut, ...sinavlar }[d.key + "1"] || "").trim() ? 1 : !String({ ...mevcut, ...sinavlar }[d.key + "2"] || "").trim() ? 2 : 0;
+    if (!no) { sorunlar.push(`${d.label}: iki yazılı da dolu; hangisi olduğunu (1 ya da 2) belirt`); return; }
+    const k = d.key + no, eski = String(mevcut[k] || "").trim();
+    sinavlar[k] = String(puan);
+    satirlar.push(`• ${d.label} ${no}. yazılı: ${eski && eski !== String(puan) ? eski + " → " : ""}${puan}`);
+  });
+  const duzey = parseInt((String(o.className || "").match(/\d+/) || [""])[0], 10);
+  (Array.isArray(g.yil_sonu) ? g.yil_sonu : []).forEach(y => {
+    const sv = parseInt(String(y && y.sinif || "").match(/\d+/) ? String(y.sinif).match(/\d+/)[0] : "", 10);
+    const ort = sayi(y && y.ortalama);
+    if (!sv || sv < 1 || sv > 12 || (duzey && sv > duzey)) { sorunlar.push(`yıl sonu: sınıf düzeyi geçersiz (${y && y.sinif})`); return; }
+    if (ort === null || ort < 0 || ort > 100) { sorunlar.push(`${sv}. sınıf yıl sonu ortalaması 0-100 arasında olmalı (${y && y.ortalama})`); return; }
+    const eski = String(((kayit && kayit.gecmisYillar) || {})[sv] || "").trim();
+    gecmisYillar[sv] = String(ort);
+    satirlar.push(`• ${sv}. sınıf yıl sonu ortalaması: ${eski && eski !== String(ort) ? eski + " → " : ""}${ort}`);
+  });
+  return { kayit, sinavlar, gecmisYillar, satirlar, sorunlar };
+}
 // Öğrenci sayfası → 🤖 Asistan Notları sekmesi
 function AsistanNotlariSekmesi({ ogrenci, sinif, numara, asistanNotlari, setAsistanNotlari, mudahalePlan, setMudahalePlan, profiles, setTab }) {
   const notlar = (asistanNotlari || []).filter(n => pdrAyniOgrenci(n.studentName, n.className, ogrenci, sinif, n.numara, numara));
@@ -30999,6 +31061,7 @@ function pdrAsistanCtx(p) {
     asistanNotlari: p.asistanNotlari || [],
     kaydet: {
       asistanNotlari: p.setAsistanNotlari ? async (l) => { p.setAsistanNotlari(l); await saveAsistanNotlari(l); } : null,
+      profiles2: p.setProfiles2 ? async (l) => { p.setProfiles2(l); await saveProfiles2(l); } : null,
       records: async (l) => { p.setRecords(l); await saveRecords(l); },
       hatirlatmalar: async (l) => { p.setHatirlatmalar(l); await saveHatirlatmalar(l); },
       riskListesi: async (l) => { p.setRiskListesi(l); await saveRiskListesi(l); },
@@ -31100,7 +31163,7 @@ function AsistanEkrani({
   mudahalePlan, setMudahalePlan, profiles, profiles2, denemeler, sevkler, testKayitlari,
   akademikTaramalar, liseTaramalar, benlikOlcekleri, sinavTuru, aktifYil, setTab,
   bdtAnaliz, bireyiTanima, ogrenciler, uyumIzleme, setBdtAnaliz, setBireyiTanima, setUyumIzleme, kademe, setSevkler, konuHaritasiVerisi, ilkokulTaramalar,
-  asistanNotlari, setAsistanNotlari
+  asistanNotlari, setAsistanNotlari, setProfiles2
 }) {
   const S = PDR_ASISTAN_SOHBET;
   const [notSec, setNotSec] = useState(null);       // hangi yanıt için öğrenci seçiliyor
@@ -31177,7 +31240,7 @@ function AsistanEkrani({
     return pdrAsistanCtx({ kayitliListesi, records, setRecords, riskListesi, setRiskListesi, hatirlatmalar, setHatirlatmalar,
       mudahalePlan, setMudahalePlan, profiles, profiles2, denemeler, sevkler, testKayitlari,
       akademikTaramalar, liseTaramalar, benlikOlcekleri, sinavTuru, aktifYil, bdtAnaliz, bireyiTanima, ogrenciler, uyumIzleme,
-      setBdtAnaliz, setBireyiTanima, setUyumIzleme, kademe, setSevkler, konuHaritasiVerisi, ilkokulTaramalar, asistanNotlari, setAsistanNotlari });
+      setBdtAnaliz, setBireyiTanima, setUyumIzleme, kademe, setSevkler, konuHaritasiVerisi, ilkokulTaramalar, asistanNotlari, setAsistanNotlari, setProfiles2 });
   }
   // 📌 Yanıtı öğrencinin dosyasına kaydet
   async function notaKaydet(i, ogr) {
@@ -43213,7 +43276,7 @@ function pdrBaslangicSekmesi() {
             bdtAnaliz={bdtAnaliz} bireyiTanima={bireyiTanima} ogrenciler={ogrenciler} uyumIzleme={uyumIzleme}
             setBdtAnaliz={setBdtAnaliz} setBireyiTanima={setBireyiTanima} setUyumIzleme={setUyumIzleme}
             kademe={kademe} setSevkler={setSevkler} konuHaritasiVerisi={konuHaritasiVerisi} ilkokulTaramalar={ilkokulTaramalar}
-            asistanNotlari={asistanNotlari} setAsistanNotlari={setAsistanNotlari}
+            asistanNotlari={asistanNotlari} setAsistanNotlari={setAsistanNotlari} setProfiles2={setProfiles2}
           />
         )}
         {/* ── PDR ASİSTANI: her ekranda bas-konuş düğmesi ── */}
@@ -43231,7 +43294,7 @@ function pdrBaslangicSekmesi() {
             bdtAnaliz={bdtAnaliz} bireyiTanima={bireyiTanima} ogrenciler={ogrenciler} uyumIzleme={uyumIzleme}
             setBdtAnaliz={setBdtAnaliz} setBireyiTanima={setBireyiTanima} setUyumIzleme={setUyumIzleme}
             kademe={kademe} setSevkler={setSevkler} konuHaritasiVerisi={konuHaritasiVerisi} ilkokulTaramalar={ilkokulTaramalar}
-            asistanNotlari={asistanNotlari} setAsistanNotlari={setAsistanNotlari}
+            asistanNotlari={asistanNotlari} setAsistanNotlari={setAsistanNotlari} setProfiles2={setProfiles2}
           />
         )}
 

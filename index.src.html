@@ -11827,11 +11827,13 @@ const KS_ASISTAN_ARACLAR = {
   ogrenci_ekle: {
     aciklama: "Öğrenci listesine yeni öğrenci ekler (ONAY GEREKİR). ad: ad soyad (soyadı program tarafından kısaltılır), sinif: örn. 8-C, numara: okul numarası (isteğe bağlı). Önce ogrenci_ara ile öğrencinin zaten kayıtlı olmadığından emin ol.",
     girdi: '{"ad": "Ad Soyad", "sinif": "8-C", "numara": ""}', yazma: true, yontem: "hepsi",
-    onayOzeti: (g, ctx) => { const ad = pdrSoyadMaskele(String(g.ad || "").trim()), sn = ksSinifNormal(g.sinif); const var_ = (ctx.ogrenciler || []).some(x => pdrAyniOgrenci(x.studentName, x.className, ad, sn, x.numara, String(g.numara || ""))); return `👤 Yeni öğrenci\nAd: ${ad || "(boş)"}\nSınıf: ${sn || "(boş)"}${g.numara ? "\nNo: " + g.numara : ""}${var_ ? "\n⚠ Bu öğrenci zaten kayıtlı; eklenmeyecek." : ""}`; },
+    onayOzeti: (g, ctx) => { const ad = pdrSoyadMaskele(String(g.ad || "").trim()), sn = ksSinifNormal(g.sinif); const var_ = (ctx.ogrenciler || []).some(x => pdrAyniOgrenci(x.studentName, x.className, ad, sn, x.numara, String(g.numara || ""))); const dis = ksKademeDisi(ctx, ksSinifDuzeyi(sn)); return `👤 Yeni öğrenci\nAd: ${ad || "(boş)"}\nSınıf: ${sn || "(boş)"}${g.numara ? "\nNo: " + g.numara : ""}${var_ ? "\n⚠ Bu öğrenci zaten kayıtlı; eklenmeyecek." : ""}${dis ? "\n⚠ " + dis + "; eklenmeyecek (kademe Ayarlar'dan değiştirilebilir)." : ""}`; },
     calistir: async (g, ctx) => {
       const ad = pdrSoyadMaskele(String(g.ad || "").trim()), sn = ksSinifNormal(g.sinif), no = String(g.numara || "").replace(/\D/g, "").slice(0, 6);
       if (ad.replace(/\*/g, "").length < 3 || !sn) return "Ad ve sınıf gerekli; öğrenci eklenmedi.";
       if ((ctx.ogrenciler || []).some(x => pdrAyniOgrenci(x.studentName, x.className, ad, sn, x.numara, no))) return "Bu öğrenci zaten kayıtlı; eklenmedi.";
+      const dis = ksKademeDisi(ctx, ksSinifDuzeyi(sn));
+      if (dis) return `Eklenmedi: ${dis}. Sınıfı doğrula; okul kademesi farklıysa Ayarlar'dan kademeyi değiştir.`;
       if (!ctx.kaydet.ogrenciler) return "Öğrenci bu ekrandan eklenemiyor; Öğrenciler ekranını kullan.";
       const yeni = { id: uid(), studentName: ad, className: sn, numara: no, yil: ctx.aktifYil, tarih: today() };
       const guncel = [yeni, ...(ctx.ogrenciler || [])];
@@ -12316,7 +12318,52 @@ function ksAsistanProgramRehberi(sorgu) {
 
 // ── Sistem talimatı ──────────────────────────────────────────────────────────
 const PDR_ASISTAN_VARSAYILAN_KURALLAR = "Bana meslektaşın gibi, sade ve kısa yanıt ver.\nÖnerilerinde önce öğrencinin güçlü yönlerini gözet.\nEmin olmadığın bir konuda bunu açıkça söyle.";
-function ksAsistanSistem(ayar) {
+// ── Kademe duyarlılığı: asistan sınıf düzeylerini, yaşları ve kademeye özgü konuları buradan bilir ──
+const KS_KADEME = {
+  ilkokul: { ad: "İlkokul", alt: 1, ust: 4, yas: "yaklaşık 6-10 yaş",
+    dersler: "Türkçe, Matematik, Hayat Bilgisi (1-3. sınıf), Fen Bilimleri (3-4. sınıf), Sosyal Bilgiler (4. sınıf), İngilizce (2. sınıftan itibaren), Din Kültürü (4. sınıf), Görsel Sanatlar, Müzik, Beden Eğitimi ve Oyun",
+    sinav: "Merkezi sınav (LGS/YKS) YOK; deneme sınavı ve LGS konu çalışması bu kademede yapılmaz.",
+    odak: "okula uyum ve okul olgunluğu (özellikle 1. sınıf), okuma-yazma becerisi ve öğrenme güçlükleri ön belirtileri, ayrılık kaygısı, aile içi değişikliklere uyum, oyun temelli ve somut yöntemler, veli işbirliği ön planda",
+    araclar: "Okul olgunluğu, okuma-yazma değerlendirmesi ve programı, ilkokul düzey taraması (1-4), Koppitz/İnsan Çiz, kaynaştırma/BEP" },
+  ortaokul: { ad: "Ortaokul", alt: 5, ust: 8, yas: "yaklaşık 10-14 yaş",
+    dersler: "Türkçe, Matematik, Fen Bilimleri, Sosyal Bilgiler (5-7. sınıf), T.C. İnkılap Tarihi ve Atatürkçülük (8. sınıf), İngilizce, Din Kültürü ve Ahlak Bilgisi ve diğerleri",
+    sinav: "LGS 8. sınıfın sonunda yapılır (Türkçe 20, Matematik 20, Fen 20, İnkılap 10, Din 10, İngilizce 10 soru). Deneme sınavları ve LGS konu haritası esas olarak 7-8. sınıflar içindir.",
+    odak: "ergenliğe geçiş, akran ilişkileri ve zorbalık, sınav kaygısı (LGS), çalışma becerileri, lise tercihi ve meslekleri tanıma, aile ile çatışmalar",
+    araclar: "Ortaokul düzey taraması (5-8), deneme analizi, LGS konu önceliği, Konu Haritası, mesleki eğilim/ilgi envanterleri" },
+  lise: { ad: "Lise", alt: 9, ust: 12, yas: "yaklaşık 14-18 yaş",
+    dersler: "Türk Dili ve Edebiyatı, Matematik, Fizik, Kimya, Biyoloji, Tarih, Coğrafya, Felsefe, İngilizce ve alan dersleri",
+    sinav: "YKS (TYT ve AYT) 12. sınıfın sonunda yapılır; 9-10. sınıflarda TYT temeli, 11-12. sınıflarda alan (AYT) çalışması. LGS ve LGS konuları bu kademede kullanılmaz.",
+    odak: "kimlik gelişimi, alan seçimi (10. sınıf sonu), kariyer planlama ve üniversite tercihi, romantik ilişkiler, madde kullanımı ve dijital bağımlılık riskleri, öz zarar ve intihar riskine dikkat, özerkliğe saygı",
+    araclar: "Lise düzey taraması (9-12), TYT/AYT deneme analizi, kariyer/mesleki yönlendirme" },
+};
+function ksKademeAnahtar(ctx) { const k = String((ctx && ctx.kademe) || "").toLowerCase(); return KS_KADEME[k] ? k : "ortaokul"; }
+function ksSinifDuzeyi(c) { const m = String(c || "").match(/\d{1,2}/); return m ? parseInt(m[0], 10) : null; }
+// Öğrencinin sınıf düzeyi seçili kademenin dışındaysa uyarı metni döner
+function ksKademeDisi(ctx, duzey) {
+  const k = KS_KADEME[ksKademeAnahtar(ctx)];
+  if (!duzey) return "";
+  return duzey < k.alt || duzey > k.ust ? `${duzey}. sınıf, programın kademesi olan ${k.ad.toLocaleLowerCase("tr")} (${k.alt}-${k.ust}. sınıf) dışında` : "";
+}
+function ksKademeMetni(ctx) {
+  const anahtar = ksKademeAnahtar(ctx), k = KS_KADEME[anahtar];
+  const liste = (ctx && ctx.ogrenciListesi) || [];
+  const say = new Map();
+  liste.forEach(o => { const c = String(o.className || "").trim(); if (c) say.set(c, (say.get(c) || 0) + 1); });
+  const siniflar = [...say.entries()].sort((a, b) => (ksSinifDuzeyi(a[0]) || 0) - (ksSinifDuzeyi(b[0]) || 0) || a[0].localeCompare(b[0], "tr"));
+  const duzeyler = {};
+  siniflar.forEach(([c, n]) => { const d = ksSinifDuzeyi(c); if (d) { duzeyler[d] = duzeyler[d] || { sube: 0, ogr: 0 }; duzeyler[d].sube++; duzeyler[d].ogr += n; } });
+  const disarida = siniflar.filter(([c]) => ksKademeDisi(ctx, ksSinifDuzeyi(c)));
+  return `KADEME: ${k.ad.toLocaleUpperCase("tr")} (${k.alt}-${k.ust}. sınıf, ${k.yas})
+- Bu okulda sınıf düzeyleri YALNIZCA ${Array.from({ length: k.ust - k.alt + 1 }, (_, i) => k.alt + i).map(d => d + ".").join(", ")} sınıflardır. Bu aralık dışında bir sınıf düzeyinden söz etme, örnek verirken de bu düzeyleri kullan.
+- Kayıtlı sınıflar ve öğrenci sayıları (programdaki gerçek liste; sayı gerektiğinde buradan ya da araçlardan al, asla tahmin etme): ${siniflar.length ? Object.entries(duzeyler).map(([d, v]) => `${d}. sınıf: ${v.sube} şube, ${v.ogr} öğrenci`).join("; ") + `. Toplam ${liste.length} öğrenci.` : "henüz kayıtlı öğrenci yok."}${disarida.length ? `\n- Not: listede kademe dışı görünen sınıf(lar) var (${disarida.map(([c]) => c).join(", ")}); bunlar eski ya da hatalı kayıt olabilir, danışmana belirt.` : ""}
+- Dersler: ${k.dersler}.
+- Sınavlar: ${k.sinav}
+- Bu kademede öncelikli konular: ${k.odak}.
+- Kademeye uygun araç ve testler: ${k.araclar}.
+- Öğrencinin sınıf düzeyini her zaman kayıtlı sınıfından (örn. "7-Ş1" → 7. sınıf) al; yaşını, gelişim dönemini, önerilerini ve dilini o düzeye göre ayarla (ilkokulda oyun temelli, somut, veliyle birlikte; ortaokulda ergenliğe uygun; lisede özerkliğe saygılı, kariyer odaklı). Başka kademeye ait sınav, ders ya da test önerme (örn. ilkokulda LGS/deneme, lisede LGS konuları, ortaokulda alan seçimi/YKS).
+- Danışman kademe dışı bir sınıf düzeyi söylerse (örn. ortaokulda "3. sınıf"), bunun programın kademesine uymadığını kibarca belirt ve doğrulamasını iste.`;
+}
+function ksAsistanSistem(ayar, ctx) {
   const gunler = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
   const araclar = Object.entries(KS_ASISTAN_ARACLAR).filter(([ad]) => ksAsistanAracAcik(ad, ayar)).map(([ad, a]) => `- ${ad}${a.yazma ? " [ONAY GEREKİR]" : a.ekranYazma ? " [EKRANDA DOLDURUR]" : ""}: ${a.aciklama} Girdi: ${a.girdi}`).join("\n");
   const ekranModu = (ayar.kayitYontemi || "ekran") !== "sohbet";
@@ -12324,6 +12371,8 @@ function ksAsistanSistem(ayar) {
   return `Sen "PDR Asistanı"sın: bir okul psikolojik danışmanının (rehber öğretmen) öğrenci takip programının içinde çalışan yardımcısısın. Danışmanla meslektaş gibi, doğru Türkçe imlayla konuşursun.
 
 ${ksAsistanProgramOzet()}
+
+${ksKademeMetni(ctx)}${(() => { try { return kademeBaglamMetni(ksKademeAnahtar(ctx)); } catch (e) { return ""; } })()}
 
 VERİ VE GİZLİLİK
 - Öğrenci adları sana "Öğrenci-1" gibi kodlarla, sınıflar "8-Ş1" gibi, diğer kişi/okul/yer adları "[KİŞİ-1]", "[OKUL-1]", "[YER-1]" gibi gelir. Kodları aynen kullan; gerçek adları tahmin etmeye çalışma. Danışman ekranında kodları gerçek adlarla görür.
@@ -12517,7 +12566,7 @@ function ksAsistanGecmisDuzenle(gecmis) {
   return gecmis;
 }
 async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTur = 8, iptal = null }) {
-  const sistem = ksAsistanSistem(ayar);
+  const sistem = ksAsistanSistem(ayar, ctx);
   ksAsistanGecmisDuzenle(gecmis);
   let toplamGiris = 0, toplamCikis = 0, toplamUcret = 0, toplamOnb = 0, sonGiden = "", model = "", yedek = false, kritik = false, ekranIsi = false;
   let birikmis = "", devamBas = -1, devamSay = 0;   // yarıda kesilen yanıtın parçaları
@@ -31059,7 +31108,8 @@ function ksEslesenBul(liste, ad, alanlar, esler = {}) {
 }
 const KS_DENEME_DERS_ES = { mat: ["mat", "matematik", "temel matematik"], sosyal: ["sosyal", "inkilap", "inkılap", "tarih", "inkılap tarihi", "sosyal bilgiler"], fen: ["fen", "fen bilimleri"], din: ["din", "din kültürü", "dkab"], turkce: ["türkçe", "turkce"], ingilizce: ["ingilizce", "yabancı dil", "ing"] };
 function ksDenemePlani(g, ctx, o) {
-  const dersler = aktifDersler(ctx.sinavTuru || "lgs");
+  if (ksKademeAnahtar(ctx) === "ilkokul") return { dersler: [], mevcut: {}, no: 0, netler: {}, eski: null, gdo: null, satirlar: [], sorunlar: ["İlkokul kademesinde deneme sınavı kaydı yapılmaz"] };
+  const dersler = aktifDersler(ksKademeAnahtar(ctx) === "lise" && (!ctx.sinavTuru || ctx.sinavTuru === "lgs") ? "tyt" : (ctx.sinavTuru || "lgs"));
   const mevcut = pdrSozlukOku(ctx.denemeler, o.name, o.className, o.numara) || {};
   const satirlar = [], sorunlar = [], netler = {};
   let no = parseInt(g.deneme, 10);
@@ -31143,6 +31193,7 @@ function ksSinifNormal(c) {
 }
 function ksKonuPlani(g, ctx, o) {
   const satirlar = [], sorunlar = [], degisim = {};
+  if (ksKademeAnahtar(ctx) !== "ortaokul") { sorunlar.push(`LGS Konu Haritası yalnızca ortaokulda kullanılır (program kademesi: ${KS_KADEME[ksKademeAnahtar(ctx)].ad})${ksKademeAnahtar(ctx) === "lise" ? "; lisede TYT/AYT konuları Konu Haritası ekranından girilir" : ""}`); return { ders: null, degisim, satirlar, sorunlar }; }
   const dersAdlari = LGS_KONU_HARITASI_DERSLER;
   const ders = ksEslesenBul(dersAdlari.map(d => ({ key: d, label: d })), g.ders, ["label"], { "Matematik": ["mat"], "T.C. İnkılap Tarihi ve Atatürkçülük": ["inkılap", "inkilap", "tarih", "sosyal"], "Din Kültürü ve Ahlak Bilgisi": ["din"], "Fen Bilimleri": ["fen"], "İngilizce": ["ingilizce"], "Türkçe": ["türkçe"] });
   if (!ders) { sorunlar.push(`"${g.ders || ""}" dersi Konu Haritası'nda yok (${dersAdlari.join(", ")})`); return { ders: null, degisim, satirlar, sorunlar }; }
@@ -31207,7 +31258,7 @@ function ksNotPlani(g, ctx, o) {
   (Array.isArray(g.yil_sonu) ? g.yil_sonu : []).forEach(y => {
     const sv = parseInt(String(y && y.sinif || "").match(/\d+/) ? String(y.sinif).match(/\d+/)[0] : "", 10);
     const ort = sayi(y && y.ortalama);
-    if (!sv || sv < 1 || sv > 12 || (duzey && sv > duzey)) { sorunlar.push(`yıl sonu: sınıf düzeyi geçersiz (${y && y.sinif})`); return; }
+    if (!sv || sv < 1 || sv > 12 || (duzey && sv > duzey)) { sorunlar.push(`yıl sonu: sınıf düzeyi geçersiz (${y && y.sinif}${duzey && sv > duzey ? `; öğrenci ${duzey}. sınıfta` : ""})`); return; }
     if (ort === null || ort < 0 || ort > 100) { sorunlar.push(`${sv}. sınıf yıl sonu ortalaması 0-100 arasında olmalı (${y && y.ortalama})`); return; }
     const eski = String(((kayit && kayit.gecmisYillar) || {})[sv] || "").trim();
     gecmisYillar[sv] = String(ort);

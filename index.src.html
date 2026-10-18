@@ -11767,6 +11767,11 @@ const KS_ASISTAN_ARACLAR = {
     girdi: '{"konu": "lgs_kocluk"}', yontem: "hepsi",
     calistir: (g) => { const k = ksSade(String(g.konu || "")).replace(/[^a-z_]/g, ""); const anahtar = Object.keys(KS_SINAV_REHBERI).find(x => k === x) || (k.includes("yks") ? (k.includes("koc") ? "yks_kocluk" : "yks") : (k.includes("koc") ? "lgs_kocluk" : "lgs")); return KS_SINAV_REHBERI[anahtar] + "\n(Kaynak: MEB/ÖSYM kılavuzları; tarih ve tercih sayıları her yıl değişebilir, güncel kılavuzla doğrulanmalı.)"; },
   },
+  lise_taban_puanlari: {
+    aciklama: "İstanbul liselerinin 2026 LGS taban puanlarını ve yüzdelik dilimlerini getirir (2025 karşılaştırmalı). Ayrıntılı ilçeler: Beylikdüzü, Esenyurt, Başakşehir, Büyükçekmece, Avcılar; ayrıca İstanbul'un en yüksek puanlı liseleri. ilce ve okul_turu (fen | anadolu | sosyal | aihl | mtal) ile süzülür. puan, net (90 üzerinden toplam net) ya da yuzdelik verilirse okulları hedef / gerçekçi / güvenli diye ayırır; net → puan → yüzdelik dönüşümü yaklaşıktır. Bir öğrencinin netiyle tercih konuşulacaksa önce deneme_analizi ile ortalama netini al, sonra bu araca net olarak ver.",
+    girdi: '{"ilce": "Beylikdüzü", "okul_turu": "isteğe bağlı", "net": 72, "puan": "isteğe bağlı", "yuzdelik": "isteğe bağlı"}', yontem: "hepsi",
+    calistir: (g) => ksLiseTaban(g || {}),
+  },
   sinif_bilgisi: {
     aciklama: "Bir sınıfın (şubenin) öğrenci sayısını ve listesini getirir; öğrencilerin sınıfa eklenme tarihleri ve SONRADAN eklenenler (nakil/yeni kayıt olabilir) işaretlenir. sinif boşsa bütün şubelerin öğrenci sayıları ve son 60 günde sonradan eklenenler.",
     girdi: '{"sinif": "8-C"}', yontem: "hepsi",
@@ -12381,6 +12386,143 @@ function ksSonradanEklenenler(ctx, gun = 60) {
     .sort((a, c) => (tarihMs(c.tarih) || 0) - (tarihMs(a.tarih) || 0))
     .map(o => ({ ad: o.studentName || o.name, sinif: o.className, tarih: o.tarih, numara: o.numara || "" }));
 }
+// İstanbul LGS taban puanları (lise_taban_puanlari aracı). Kaynak: MEB tercih kılavuzu verisini derleyen tabanpuanlari.net ilçe sayfaları (Ekim 2026'da derlendi).
+// Satır: okul | tür | alan/program | 2026 taban | 2026 yüzdelik | 2025 taban | 2025 yüzdelik (boşsa bilinmiyor)
+const KS_LISE_TABAN_2026 = {
+  "Beylikdüzü": `Yaşar Acar Fen Lisesi|fen|Fen Bilimleri|468.063|1.42|470.751|1.58
+Büyükşehir Hüseyin Yıldız Anadolu Lisesi|anadolu|İngilizce|434.599|4.85|436.420|5.33
+Vali Muammer Güler Sosyal Bilimler Lisesi|sosyal|Sosyal Bilimler|392.797|11.36|391.582|12.15
+Musa Efendi Kız Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (4 yıl)|333.632|24.97||
+Musa Efendi Kız Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (5 yıl, hazırlıklı)|324.038|27.71||
+Gürpınar Borsa İstanbul MTAL|mtal|Biyomedikal Cihaz Teknolojileri|286.630|39.85||
+Azem Yükseloğlu Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler|285.025|40.42||
+İTO Beylikdüzü OSB MTAL|mtal|Elektrik-Elektronik|261.412|50.44||
+Şehit Şafak Evran MTAL|mtal|Yiyecek İçecek Hizmetleri|250.169|55.10||
+İTO Beylikdüzü OSB MTAL|mtal|Makine ve Tasarım|240.794|60.00||
+Şehit Şafak Evran MTAL|mtal|Konaklama ve Seyahat|230.801|65.85||
+Gürpınar İsmail Lütfi Çakan Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler|215.186|75.53||`,
+  "Esenyurt": `Esenyurt Fen Lisesi|fen|Fen Bilimleri|435.935|4.69|438.737|5.04
+Esenyurt Nakipoğlu Cumhuriyet Anadolu Lisesi|anadolu|İngilizce|416.421|7.39|411.837|8.85
+Güzelyurt Kız Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (hazırlıklı)|395.305|10.90|390.991|12.25
+Borusan Asım Kocabıyık MTAL|mtal|Bilişim Teknolojileri (proje)|390.290|11.83|390.302|12.47
+Borusan Asım Kocabıyık MTAL|mtal|Elektrik-Elektronik (proje)|386.084|12.64|378.765|14.53
+Borusan Asım Kocabıyık MTAL|mtal|Bilişim Teknolojileri (AMP)|375.805|14.72|372.023|15.65
+Güzelyurt Kız Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (4 yıl)|369.387|16.09|357.753|18.35
+Borusan Asım Kocabıyık MTAL|mtal|Elektrik-Elektronik (AMP)|365.166|17.03|358.289|18.40
+Borusan Asım Kocabıyık MTAL|mtal|Motorlu Araçlar|349.859|20.68|349.903|19.93
+Borusan Asım Kocabıyık MTAL|mtal|Makine ve Tasarım|345.727|21.75|344.648|21.02
+Recep Tayyip Erdoğan Kız Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler|262.114|49.57|233.551|54.60
+Ali Kul MTAL|mtal|Elektrik-Elektronik|252.067|54.17|238.927|52.65
+Kıraç Borsa İstanbul MTAL|mtal|Bilişim Teknolojileri|240.242|60.30||
+Aydoğan Öztiryaki Tim Sander Dış Ticaret MTAL|mtal|Elektrik-Elektronik|223.484|70.57|208.398|70.53
+İhsan Nakipoğlu Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler|212.901|77.92|189.013|83.35
+Ali Kul MTAL|mtal|Kimya Teknolojisi|209.771|80.13|152.411|90.54`,
+  "Başakşehir": `Mehmet Emin Saraç Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (İngilizce, 5 yıl)|468.923|1.36||
+Mehmet Emin Saraç Anadolu İmam Hatip Lisesi|aihl|Arapça|457.632|2.30||
+Hacı Şöhret Demiröz Fen Lisesi|fen|Fen Bilimleri|455.499|2.51||
+Mehmet Emin Saraç Anadolu İmam Hatip Lisesi|aihl|Rusça|454.992|2.56||
+Akif İnan Anadolu İmam Hatip Lisesi|aihl|Fen ve Teknoloji|452.792|2.78||
+Akif İnan Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (5 yıl)|443.550|3.78||
+Akif İnan Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (4 yıl)|438.727|4.35||
+Şehit Haki Aras Kız Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (5 yıl)|437.437|4.50||
+Alev Alatlı Anadolu Lisesi|anadolu|İngilizce|423.566|6.33||
+Şehit Haki Aras Kız Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (4 yıl)|419.103|6.98||
+Öğrenciden Armağan Anadolu Lisesi|anadolu|İngilizce|410.300|8.36||
+Toki Aliya İzzetbegoviç Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler|348.839|20.94||
+Borsa İstanbul Başakşehir MTAL|mtal|Bilişim Teknolojileri|321.889|28.34||
+Borsa İstanbul Başakşehir MTAL|mtal|Elektrik-Elektronik|310.331|31.89||
+Bahçeşehir Borsa İstanbul MTAL|mtal|Bilişim Teknolojileri|297.439|36.10||
+Borsa İstanbul Başakşehir MTAL|mtal|Motorlu Araçlar|284.283|40.70||
+Borsa İstanbul Başakşehir MTAL|mtal|Makine ve Tasarım|256.424|52.12||`,
+  "Büyükçekmece": `Şehit Münir Alkan Fen Lisesi|fen|Fen Bilimleri|466.868|1.51|469.014|1.74
+Büyükçekmece Anadolu Lisesi (Atatürk AL)|anadolu|İngilizce|424.521|6.25|425.305|6.86
+Şehit Şirin Diril Kız Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler|341.252|22.92|334.297|23.25
+Şehit Kemal Ekşi Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler|296.919|36.27|259.496|45.27
+Rosvita-Timur İmrağ MTAL|mtal|Elektrik-Elektronik|229.558|66.64|213.422|67.25
+Hayriye Duruk Kız MTAL|mtal|Yiyecek İçecek Hizmetleri|220.483|72.61|213.809|66.99
+Rosvita-Timur İmrağ MTAL|mtal|Endüstriyel Otomasyon|212.993|77.85|199.007|76.68
+Rosvita-Timur İmrağ MTAL|mtal|Makine ve Tasarım|207.604|81.63|191.661|81.48
+Büyükçekmece MTAL|mtal|Metal Teknolojisi|189.141|92.79|179.702|85.61`,
+  "Avcılar": `Süleyman Nazif Anadolu Lisesi|anadolu|İngilizce|413.861|7.80|410.564|9.04
+Haydar Akın MTAL|mtal|Bilişim Teknolojileri|330.151|25.95|339.877|22.03
+Şehit Murat Kocatürk Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler|328.525|26.41|321.557|26.14
+Avcılar Kız Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler|305.173|33.53|290.914|34.00
+Avcılar MTAL|mtal|Elektrik-Elektronik|300.300|35.14|292.784|33.49
+Avcılar MTAL|mtal|Makine ve Tasarım|271.496|45.64|270.404|41.36
+Mehmet Emin Horoz MTAL|mtal|Ulaştırma Hizmetleri|266.200|47.81|250.610|48.45`,
+  "İstanbul geneli (en yüksekler)": `İstanbul Erkek Lisesi|anadolu|Almanca|500.000||
+Kabataş Erkek Lisesi|anadolu|İngilizce|497.758||
+Galatasaray Lisesi|anadolu|Fransızca|497.432||
+İstanbul Atatürk Fen Lisesi|fen|İngilizce (5 yıl)|493.359||
+Cağaloğlu Anadolu Lisesi|anadolu|Almanca|493.359||
+Haydarpaşa Lisesi|anadolu|İngilizce|487.783||
+Kadıköy Anadolu Lisesi|anadolu|İngilizce|483.867||
+Çapa Fen Lisesi|fen|İngilizce (4 yıl)|482.802||
+Vefa Lisesi|anadolu|İngilizce|480.102||
+Validebağ Fen Lisesi|fen|İngilizce (5 yıl)|477.820||
+Pertevniyal Lisesi|anadolu|İngilizce|474.499||
+Teknopark İstanbul MTAL|mtal|Siber Güvenlik|469.518||`,
+};
+// Yaklaşık net → puan → yüzdelik (2025-2026 sonuçlarından derlenmiş, ±; o yılın soru zorluğuna ve ortalamalara göre değişir)
+const KS_LGS_NET_PUAN = [[90, 500, 0.01], [85, 482, 0.3], [80, 462, 1.2], [75, 442, 3.5], [70, 422, 7], [65, 400, 12], [60, 380, 18], [55, 355, 25], [50, 330, 34], [45, 305, 43], [40, 280, 53], [30, 235, 70], [20, 195, 85]];
+const KS_TABAN_TUR_AD = { fen: "Fen Lisesi", anadolu: "Anadolu Lisesi", sosyal: "Sosyal Bilimler Lisesi", aihl: "Anadolu İmam Hatip", mtal: "Mesleki ve Teknik" };
+function ksTabanSatirlar() {
+  const l = [];
+  Object.entries(KS_LISE_TABAN_2026).forEach(([ilce, metin]) => metin.split("\n").forEach(sat => {
+    const [okul, tur, alan, t26, y26, t25, y25] = sat.split("|");
+    const n = (v) => { const x = parseFloat(v); return isNaN(x) ? null : x; };
+    l.push({ ilce, okul, tur, alan, taban: n(t26), yuzdelik: n(y26), taban25: n(t25), yuzdelik25: n(y25) });
+  }));
+  return l;
+}
+function ksNetPuanTahmin(net) {
+  const t = KS_LGS_NET_PUAN;
+  if (net >= t[0][0]) return { puan: t[0][1], yuzdelik: t[0][2] };
+  for (let i = 0; i < t.length - 1; i++) {
+    const [n1, p1, y1] = t[i], [n2, p2, y2] = t[i + 1];
+    if (net <= n1 && net >= n2) { const r = (net - n2) / (n1 - n2); return { puan: Math.round(p2 + r * (p1 - p2)), yuzdelik: +(y2 + r * (y1 - y2)).toFixed(1) }; }
+  }
+  return { puan: t[t.length - 1][1], yuzdelik: t[t.length - 1][2] };
+}
+function ksYuzdelikPuanTahmin(y) {
+  const t = KS_LGS_NET_PUAN;
+  if (y <= t[0][2]) return t[0][1];
+  for (let i = 0; i < t.length - 1; i++) {
+    const [, p1, y1] = t[i], [, p2, y2] = t[i + 1];
+    if (y >= y1 && y <= y2) return Math.round(p1 + (y - y1) / (y2 - y1) * (p2 - p1));
+  }
+  return t[t.length - 1][1];
+}
+function ksLiseTaban(g) {
+  const sade = (x) => ksSade(String(x || ""));
+  const ilceG = sade(g.ilce), turG = sade(g.okul_turu || g.tur);
+  const turAnahtar = !turG ? "" : turG.includes("fen") ? "fen" : turG.includes("sosyal") ? "sosyal" : (turG.includes("imam") || turG.includes("aihl")) ? "aihl" : (turG.includes("mesleki") || turG.includes("mtal") || turG.includes("teknik")) ? "mtal" : turG.includes("anadolu") ? "anadolu" : "";
+  let satirlar = ksTabanSatirlar();
+  const ilceler = Object.keys(KS_LISE_TABAN_2026);
+  if (ilceG) {
+    const es = ilceler.filter(i => sade(i).includes(ilceG) || ilceG.includes(sade(i).split(" ")[0]));
+    if (!es.length) return `"${g.ilce}" için kayıtlı veri yok. Programda olan ilçeler: ${ilceler.join(", ")}. Diğer ilçeler için MEB e-Okul tercih kılavuzuna bak.`;
+    satirlar = satirlar.filter(s => es.includes(s.ilce));
+  }
+  if (turAnahtar) satirlar = satirlar.filter(s => s.tur === turAnahtar);
+  const sayi = (v) => { const x = parseFloat(String(v ?? "").replace(",", ".")); return isNaN(x) ? null : x; };
+  let puan = sayi(g.puan), yuz = sayi(g.yuzdelik), net = sayi(g.net), aciklama = "";
+  if (puan === null && net !== null) { const t = ksNetPuanTahmin(net); puan = t.puan; if (yuz === null) yuz = t.yuzdelik; aciklama = `${net} net ≈ ${t.puan} puan ≈ %${String(t.yuzdelik).replace(".", ",")} dilim (yaklaşık; yılın zorluğuna göre ±15-20 puan oynar).`; }
+  else if (puan === null && yuz !== null) { puan = ksYuzdelikPuanTahmin(yuz); aciklama = `%${yuz} dilim ≈ ${puan} puan (yaklaşık).`; }
+  const bicim = (s) => `• ${s.okul} — ${s.alan} [${KS_TABAN_TUR_AD[s.tur] || s.tur}${!ilceG ? ", " + s.ilce : ""}]: 2026 taban ${s.taban != null ? s.taban.toFixed(3).replace(".", ",") : "?"}${s.yuzdelik != null ? " (%" + String(s.yuzdelik).replace(".", ",") + ")" : ""}${s.taban25 != null ? " · 2025: " + s.taban25.toFixed(3).replace(".", ",") + (s.yuzdelik25 != null ? " (%" + String(s.yuzdelik25).replace(".", ",") + ")" : "") : ""}`;
+  satirlar.sort((a, b) => (b.taban || 0) - (a.taban || 0));
+  const not = "\n\nNot: 2026 yerleştirme tabanlarıdır (MEB tercih kılavuzu verisi). Taban her yıl kontenjana, soru zorluğuna ve tercihlere göre değişir; tercihten önce o yılın resmî MEB kılavuzuyla doğrulanmalı. Yüzdelik dilim, puandan daha kararlı bir karşılaştırma ölçüsüdür. Yalnızca sınavla öğrenci alan programlar listelenir; adrese dayalı (sınavsız) yerleştirme ayrıdır.";
+  if (puan === null) {
+    return `İstanbul LGS taban puanları${ilceG ? " — " + satirlar[0]?.ilce : ""}${turAnahtar ? " (" + KS_TABAN_TUR_AD[turAnahtar] + ")" : ""} — ${satirlar.length} program:\n${satirlar.map(bicim).join("\n")}${not}`;
+  }
+  const fark = (s) => puan - (s.taban || 0);
+  const hayal = satirlar.filter(s => fark(s) < -12 && fark(s) >= -40);
+  const gercekci = satirlar.filter(s => fark(s) >= -12 && fark(s) <= 12);
+  const garanti = satirlar.filter(s => fark(s) > 12).slice(0, 8);
+  const ust = `${aciklama ? aciklama + "\n" : ""}Ölçüt: ${puan} puan${yuz !== null ? " (≈ %" + String(yuz).replace(".", ",") + " dilim)" : ""}.`;
+  const blok = (bas, l) => `\n${bas} (${l.length}):\n${l.length ? l.map(bicim).join("\n") : "• (bu aralıkta kayıtlı program yok)"}`;
+  return `${ust}${blok("🎯 Hedef/zorlayıcı — tabanın biraz üstünde, birkaç net artışla ulaşılabilir", hayal)}${blok("✅ Gerçekçi — tabana yakın (±12 puan)", gercekci)}${blok("🛡 Güvenli — tabanın rahat üstünde", garanti)}\n\nTercih ipucu: 20 tercihin üstten hedef, ortada gerçekçi, altta güvenli okullarla doldurulması önerilir; güvenli tercih koymamak açıkta kalma riskini artırır.${not}`;
+}
 // LGS / YKS bilgi ve koçluk rehberi (sinav_rehberi aracı)
 const KS_SINAV_REHBERI = {
   lgs: `LGS (Liselere Geçiş Sistemi — merkezi sınav)
@@ -12469,6 +12611,7 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - Akademik düzey taraması (ilkokul/ortaokul/lise) sonucu, yorumu ya da "nasıl uygularım, hangi setleri sorayım" sorulduğunda duzey_taramasi kullan. Öğretim yılı içinde beklenen düzeyin TAMAMLADIĞI sınıf olduğunu unutma (8. sınıfın başındaki öğrencide 7 çıkması normaldir); çıkarımları "işaret ediyor olabilir" diliyle aktar.
 - LGS/YKS sistemi, tercih ya da öğrenci koçluğu (çalışma planı, hedef, süre yönetimi, deneme analizi yöntemi) sorulduğunda sinav_rehberi'ni çağır ve öğrencinin kendi verileriyle (deneme_analizi, lgs_konu_onceligi) birleştir. Taban puanı, kontenjan ya da tarih uydurma.
 - Sınıf mevcudu, şube listesi ya da yeni gelen/nakil öğrenci sorulduğunda sinif_bilgisi kullan.
+- Lise taban puanı, yüzdelik dilim, "kaç netle hangi okul", tercih listesi sorulduğunda lise_taban_puanlari kullan (Beylikdüzü, Esenyurt, Başakşehir, Büyükçekmece, Avcılar ayrıntılı). Öğrenci adı geçiyorsa önce deneme_analizi ile ortalama netini al. Araçta olmayan okulun puanını uydurma; değerlerin 2026 tabanı olduğunu ve her yıl değiştiğini söyle.
 - Veri girişi: deneme netleri → deneme_kaydet; Profil 1 boyut puanları → profil_puanla; kariyer hedefi, ilgi, aile notu, d2 → profil2_guncelle; devamsızlık → devamsizlik_kaydet; yeni öğrenci → ogrenci_ekle (önce ogrenci_ara); konu tamamlama yüzdesi → konu_guncelle; risk kapatma → risk_kapat; plan durumu → mudahale_durum; hatırlatmayı bitirme → hatirlatma_tamamla. Hepsi onay ister; danışmanın söylediği değerleri aynen ver, tahmin etme.
 - Danışman öğrencinin yazılı sınav puanını ya da yıl sonu not ortalamasını söylerse not_kaydet kullan (birden çok dersi tek çağrıda ver). Sayıları aynen yaz; hangi yazılı olduğu belli değilse yazili alanını boş bırak, program boş olana yazar.
 - Danışman bir yanıtı ya da bu sohbeti öğrencinin dosyasına kaydetmek/göndermek isterse asistan_notu_kaydet kullan (kapsam: son ya da hepsi). Kaydedilecek metni yeniden yazma; program yanıtları aynen kaydeder.
@@ -31117,7 +31260,7 @@ const PDR_ASISTAN_ARAC_AD = {
   ekranda_ac: "📍 Ekran açıldı", ekranda_gorusme: "👀 Görüşme formu ekranda dolduruldu", ekranda_hatirlatma: "👀 Hatırlatma ekranda dolduruldu",
   ekranda_risk: "👀 Risk formu ekranda hazırlandı", ekranda_mudahale: "👀 Müdahale planı ekranda dolduruldu",
   asistan_notu_kaydet: "📌 Öğrenciye not kaydı", not_kaydet: "📚 Yazılı / yıl sonu notu kaydı",
-  deneme_kaydet: "📊 Deneme kaydı", sinav_rehberi: "📘 LGS/YKS rehberi", sinif_bilgisi: "🏫 Sınıf bilgisi", profil_puanla: "📋 Profil 1 puanları", profil2_guncelle: "📋 Profil 2 güncelleme", devamsizlik_kaydet: "📅 Devamsızlık kaydı",
+  deneme_kaydet: "📊 Deneme kaydı", sinav_rehberi: "📘 LGS/YKS rehberi", lise_taban_puanlari: "🏫 Lise taban puanları", sinif_bilgisi: "🏫 Sınıf bilgisi", profil_puanla: "📋 Profil 1 puanları", profil2_guncelle: "📋 Profil 2 güncelleme", devamsizlik_kaydet: "📅 Devamsızlık kaydı",
   ogrenci_ekle: "👤 Öğrenci eklendi", konu_guncelle: "📚 Konu Haritası", risk_kapat: "✅ Risk kapatma", mudahale_durum: "🎯 Plan durumu", hatirlatma_tamamla: "✔️ Hatırlatma tamamlandı",
 };
 // ── Asistan notları: yanıtı öğrencinin dosyasına kaydetme ──

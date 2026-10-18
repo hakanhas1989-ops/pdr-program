@@ -11767,6 +11767,33 @@ const KS_ASISTAN_ARACLAR = {
     girdi: '{"konu": "lgs_kocluk"}', yontem: "hepsi",
     calistir: (g) => { const k = ksSade(String(g.konu || "")).replace(/[^a-z_]/g, ""); const anahtar = Object.keys(KS_SINAV_REHBERI).find(x => k === x) || (k.includes("yks") ? (k.includes("koc") ? "yks_kocluk" : "yks") : (k.includes("koc") ? "lgs_kocluk" : "lgs")); return KS_SINAV_REHBERI[anahtar] + "\n(Kaynak: MEB/ÖSYM kılavuzları; tarih ve tercih sayıları her yıl değişebilir, güncel kılavuzla doğrulanmalı.)"; },
   },
+  grafik_ciz: {
+    aciklama: "Program verisinden grafik çizer ve sohbette gösterir (danışman PNG olarak indirebilir). veri: gorusme_konu | gorusme_aylik | gorusme_sinif | gorusme_tur | risk | risk_oncelik | sevk | deneme_ogrenci (ogrenci gerekir; ders isteğe bağlı) | deneme_sinif (sinif isteğe bağlı). Süre: ay (örn. Ekim) ya da donem (1 | 2); boşsa bütün eğitim yılı. sinif ile süzülebilir. tur (sutun | yatay | cizgi | pasta) isteğe bağlı; program okunabilirlik için gerekirse değiştirir. Sayıları program hesaplar; sen yalnızca kısa yorum yaz, sayıları yeniden listeleme.",
+    girdi: '{"veri": "gorusme_konu", "ay": "isteğe bağlı", "donem": "isteğe bağlı", "sinif": "isteğe bağlı", "ogrenci": "deneme_ogrenci için", "ders": "isteğe bağlı", "tur": "isteğe bağlı"}', yontem: "hepsi",
+    calistir: (g, ctx) => {
+      let o = null;
+      if (g && g.veri === "deneme_ogrenci") {
+        const r = ksAsistanOgrenciBul(ctx, g.ogrenci, g.sinif) || {};
+        if (r.aday) return "Birden fazla öğrenci eşleşti: " + r.aday.map(x => ksAsistanEtiket(x)).join(", ") + ". Sınıfı da belirterek tekrar çağır.";
+        o = r.tek || null;
+        if (!o) return "Grafik için öğrenci bulunamadı; adı ve sınıfı netleştir.";
+      }
+      const r = pdrGrafikOlustur(g, ctx, o);
+      if (r.hata) return r.hata;
+      const id = pdrGrafikKaydet(r.spec);
+      return `Grafik hazır [[GRAFIK:${id}]] — ${r.spec.baslik}. Veri: ${pdrGrafikOzet(r.spec)}.${r.notlar.length ? " Kontrol notu: " + r.notlar.join(" ") : ""} (Grafik sohbette gösteriliyor; danışman PNG olarak indirebilir.)`;
+    },
+  },
+  infografik_rapor: {
+    aciklama: "Rehberlik servisinin tek sayfalık, yazdırılabilir infografik özetini hazırlar: toplam görüşme, görüşülen öğrenci, veli görüşmesi, açık risk, sevk kutuları + aylık görüşme, konu, sınıf, risk ve (ortaokul/lisede) sınıf deneme ortalaması grafikleri ve kısa öne çıkanlar. Öğrenci adı içermez. Dönem sonu raporu, öğretmenler kurulu ya da veli toplantısı için. ay ya da donem (1 | 2) isteğe bağlı; boşsa bütün eğitim yılı.",
+    girdi: '{"donem": "1", "ay": "isteğe bağlı"}', yontem: "hepsi",
+    calistir: (g, ctx) => {
+      const v = pdrInfografikVeri(g || {}, ctx);
+      if (!v.kutular[0].deger && !v.grafikler.length) return "Bu dönem için infografik hazırlanacak kayıt yok.";
+      const id = "i" + Date.now().toString(36); PDR_INFOGRAFIK_KAYIT[id] = v;
+      return `İnfografik hazır [[INFOGRAFIK:${id}]] — ${v.baslik}. ${v.kutular.map(k => `${k.ad}: ${k.deger}`).join(", ")}. ${v.grafikler.length} grafik. ${v.one.join(" ")} (Sohbette "Aç / Yazdır" düğmesiyle tam sayfa açılır.)`;
+    },
+  },
   alan_bilgisi: {
     aciklama: "Mesleki bilgi kitaplığı: eğitim psikolojisi (gelişim kuramları, öğrenme, kanıta dayalı çalışma teknikleri, üstbiliş, motivasyon, zekâ ve yürütücü işlevler, kaynaştırma/BEP), pozitif psikoloji (PERMA, karakter güçleri, umut, akış, sağlamlık, öz-şefkat), psikolojik danışma ve rehberlik (kuramlar: BDT, ADDT, çözüm odaklı, gerçeklik, Adler, öyküsel, motivasyonel görüşme; görüşme becerileri, veli görüşmesi, grup, MEB yönetmeliği ve RAM süreçleri, etik ve gizlilik, kriz ve intihar riski, ihmal-istismar bildirimi, kariyer), klinik psikoloji (tarama-tanı ayrımı, yönlendirme aciliyeti, kaygı, depresyon, DEHB, OSB, özgül öğrenme güçlüğü, davranış sorunları, zorbalık, travma, OKB, yeme, uyku, madde, dijital bağımlılık, psikoz belirtileri), ölçme-değerlendirme (standart puanlar, ölçme hatası, güvenirlik, geçerlik, sonuç bildirme, madde analizi, deneme yorumu), bireyi tanıma (gözlem, sosyometri, Kimdir Bu, otobiyografi, vaka formülasyonu) ve psikolojik testler (türler, uygulama yetkisi, programdaki testlerin ne ölçtüğü). alan: egitim | pozitif | pdr | klinik | olcme | bireyi_tanima | testler; konu: bölüm anahtarı (örn. klinik.dehb) ya da birkaç kelime; ara: serbest arama. Hiçbiri verilmezse dizini döndürür.",
     girdi: '{"alan": "klinik", "konu": "dehb", "ara": "isteğe bağlı"}', yontem: "hepsi",
@@ -12391,6 +12418,271 @@ function ksSonradanEklenenler(ctx, gun = 60) {
     .sort((a, c) => (tarihMs(c.tarih) || 0) - (tarihMs(a.tarih) || 0))
     .map(o => ({ ad: o.studentName || o.name, sinif: o.className, tarih: o.tarih, numara: o.numara || "" }));
 }
+// ── GRAFİK VE İNFOGRAFİK (asistan: grafik_ciz, infografik_rapor) ──
+// Sayılar programda hesaplanır, grafik tarayıcıda SVG olarak çizilir; yapay zekâya
+// yalnızca grafiğin kısa metin özeti gider. Çizimden önce pdrGrafikKontrol okunabilirlik
+// denetimi yapar (boş veri, çok dilim, uzun etiket, tek noktalı çizgi) ve düzeltir.
+const PDR_GRAFIK_RENK = ["#127C56", "#E07A2F", "#3B6FB6", "#9A4FB0", "#C9A227", "#D1495B", "#2A9D8F", "#6C757D", "#8C6D46", "#5B8C2A", "#B5577D", "#4E5BA6"];
+const PDR_GRAFIK_KAYIT = {};
+const PDR_GRAFIK_AYLAR = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
+function pdrGrafikEsc(t) { return String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+function pdrGrafikSayi(v) { return Number.isInteger(v) ? String(v) : (Math.round(v * 10) / 10).toLocaleString("tr-TR"); }
+
+// Okunabilirlik denetimi: grafiği çizmeden önce düzeltir, yapılanları not olarak döndürür
+function pdrGrafikKontrol(spec) {
+  const s = JSON.parse(JSON.stringify(spec)); const notlar = [];
+  s.seriler = (s.seriler || []).filter(x => x && Array.isArray(x.degerler));
+  const toplam = s.seriler.reduce((t, x) => t + x.degerler.reduce((a, b) => a + (Number(b) || 0), 0), 0);
+  if (!s.etiketler || !s.etiketler.length || !s.seriler.length || toplam === 0) return { hata: "Bu seçim için çizilecek veri yok (kayıt bulunamadı ya da hepsi sıfır)." };
+  if (s.tur === "cizgi" && s.etiketler.length < 2) { s.tur = "sutun"; notlar.push("Tek nokta olduğu için çizgi yerine sütun grafiği kullanıldı."); }
+  if (s.tur === "pasta" && (s.seriler.length > 1 || s.etiketler.length > 6)) { s.tur = "yatay"; notlar.push("Dilim sayısı fazla olduğu için pasta yerine yatay çubuk grafiği kullanıldı (daha kolay okunur)."); }
+  if (!s.zaman && s.etiketler.length > 12) {
+    const sira = s.etiketler.map((e, i) => [e, s.seriler.reduce((t, x) => t + (x.degerler[i] || 0), 0), i]).sort((a, b) => b[1] - a[1]);
+    const ust = sira.slice(0, 11), alt = sira.slice(11);
+    s.etiketler = [...ust.map(x => x[0]), `Diğer (${alt.length})`];
+    s.seriler = s.seriler.map(x => ({ ...x, degerler: [...ust.map(u => x.degerler[u[2]] || 0), alt.reduce((t, a) => t + (x.degerler[a[2]] || 0), 0)] }));
+    notlar.push(`${sira.length} kategori vardı; en büyük 11'i gösterildi, kalanlar "Diğer"de toplandı.`);
+  }
+  if (s.tur === "yatay" && !s.zaman && s.seriler.length === 1) {
+    const sira = s.etiketler.map((e, i) => [e, s.seriler[0].degerler[i]]).sort((a, b) => b[1] - a[1]);
+    s.etiketler = sira.map(x => x[0]); s.seriler[0].degerler = sira.map(x => x[1]);
+  }
+  const uzun = s.etiketler.some(e => String(e).length > 22);
+  s.etiketlerKisa = s.etiketler.map(e => String(e).length > 22 ? String(e).slice(0, 21) + "…" : String(e));
+  if (uzun) notlar.push("Uzun etiketler kısaltıldı.");
+  if (s.tur === "sutun" && s.etiketler.length > 7 && s.etiketlerKisa.some(e => e.length > 8)) { s.tur = "yatay"; notlar.push("Etiketler sığmadığı için yatay çubuk kullanıldı."); }
+  return { spec: s, notlar };
+}
+
+// SVG üretimi (ekranda ve yazdırılabilir sayfada aynı fonksiyon kullanılır)
+function pdrGrafikSvg(s, gen) {
+  gen = gen || 640;
+  const R = (i) => PDR_GRAFIK_RENK[i % PDR_GRAFIK_RENK.length], E = pdrGrafikEsc, Y = pdrGrafikSayi;
+  const font = `font-family="Segoe UI, Roboto, Arial, sans-serif"`;
+  const coklu = s.seriler.length > 1;
+  const lejant = (x0, y0) => coklu ? s.seriler.map((sr, i) => `<rect x="${x0 + i * 130}" y="${y0}" width="12" height="12" rx="2" fill="${R(i)}"/><text x="${x0 + i * 130 + 17}" y="${y0 + 10}" font-size="12" fill="#374151" ${font}>${E(sr.ad)}</text>`).join("") : "";
+  if (s.tur === "pasta") {
+    const deg = s.seriler[0].degerler, top = deg.reduce((a, b) => a + b, 0) || 1, cx = 170, cy = 150, r = 120, ri = 66, H = 300;
+    let a0 = -Math.PI / 2, dilim = "";
+    deg.forEach((v, i) => {
+      if (!v) return;
+      const a1 = a0 + (v / top) * Math.PI * 2, buyuk = a1 - a0 > Math.PI ? 1 : 0;
+      const p = (a, rr) => `${(cx + rr * Math.cos(a)).toFixed(1)} ${(cy + rr * Math.sin(a)).toFixed(1)}`;
+      dilim += v === top ? `<circle cx="${cx}" cy="${cy}" r="${(r + ri) / 2}" fill="none" stroke="${R(i)}" stroke-width="${r - ri}"/>` : `<path d="M ${p(a0, r)} A ${r} ${r} 0 ${buyuk} 1 ${p(a1, r)} L ${p(a1, ri)} A ${ri} ${ri} 0 ${buyuk} 0 ${p(a0, ri)} Z" fill="${R(i)}" stroke="#fff" stroke-width="2"/>`;
+      a0 = a1;
+    });
+    const lj = s.etiketlerKisa.map((e, i) => `<rect x="330" y="${40 + i * 34}" width="14" height="14" rx="3" fill="${R(i)}"/><text x="352" y="${52 + i * 34}" font-size="14" fill="#1F2937" ${font}>${E(e)}</text><text x="${gen - 16}" y="${52 + i * 34}" text-anchor="end" font-size="14" font-weight="700" fill="#1F2937" ${font}>${Y(deg[i])} · %${Math.round(deg[i] / top * 100)}</text>`).join("");
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${gen} ${H}" width="100%" role="img" aria-label="${E(s.baslik)}">${dilim}<text x="${cx}" y="${cy + 2}" text-anchor="middle" font-size="26" font-weight="800" fill="#111827" ${font}>${Y(top)}</text><text x="${cx}" y="${cy + 22}" text-anchor="middle" font-size="12" fill="#6B7280" ${font}>${E(s.birim || "toplam")}</text>${lj}</svg>`;
+  }
+  if (s.tur === "yatay") {
+    const n = s.etiketler.length, sat = coklu ? 18 * s.seriler.length + 10 : 28, ust = coklu ? 34 : 12, H = ust + n * sat + 14, sol = 170, sag = gen - 60;
+    const maks = Math.max(1, ...s.seriler.flatMap(x => x.degerler));
+    let g = lejant(sol, 10);
+    s.etiketlerKisa.forEach((e, i) => {
+      const y0 = ust + i * sat;
+      g += `<text x="${sol - 8}" y="${y0 + sat / 2 + 4}" text-anchor="end" font-size="12.5" fill="#1F2937" ${font}>${E(e)}</text>`;
+      s.seriler.forEach((sr, j) => {
+        const v = sr.degerler[i] || 0, w = (v / maks) * (sag - sol), yy = coklu ? y0 + 4 + j * 18 : y0 + 4, h = coklu ? 15 : sat - 8;
+        g += `<rect x="${sol}" y="${yy}" width="${Math.max(v ? 2 : 0, w).toFixed(1)}" height="${h}" rx="3" fill="${R(coklu ? j : 0)}"/><text x="${sol + w + 6}" y="${yy + h / 2 + 4}" font-size="12" font-weight="700" fill="#374151" ${font}>${Y(v)}</text>`;
+      });
+    });
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${gen} ${H}" width="100%" role="img" aria-label="${E(s.baslik)}">${g}</svg>`;
+  }
+  // sütun ve çizgi: ortak eksen
+  const H = 300, sol = 44, sag = gen - 14, ust = coklu ? 36 : 16, alt = H - 58, n = s.etiketler.length;
+  const tum = s.seriler.flatMap(x => x.degerler.filter(v => v != null));
+  let maks = Math.max(1, ...tum), min = s.tur === "cizgi" && s.eksenSifir === false ? Math.min(...tum) : 0;
+  const adim = (() => { const ham = (maks - min) / 4, us = Math.pow(10, Math.floor(Math.log10(ham || 1))), k = [1, 2, 2.5, 5, 10].find(x => x * us >= ham) * us; return k || 1; })();
+  min = Math.floor(min / adim) * adim; maks = Math.ceil(maks / adim) * adim || adim;
+  const yk = (v) => alt - ((v - min) / (maks - min || 1)) * (alt - ust);
+  let g = lejant(sol, 8);
+  for (let v = min; v <= maks + 1e-9; v += adim) g += `<line x1="${sol}" x2="${sag}" y1="${yk(v).toFixed(1)}" y2="${yk(v).toFixed(1)}" stroke="#E5E7EB"/><text x="${sol - 6}" y="${(yk(v) + 4).toFixed(1)}" text-anchor="end" font-size="11" fill="#6B7280" ${font}>${Y(v)}</text>`;
+  const bant = (sag - sol) / n;
+  const egik = s.etiketlerKisa.some(e => e.length * 6.5 > bant);
+  s.etiketlerKisa.forEach((e, i) => {
+    const x = sol + bant * (i + 0.5);
+    g += egik ? `<text transform="translate(${x.toFixed(1)},${alt + 14}) rotate(-35)" text-anchor="end" font-size="11" fill="#374151" ${font}>${E(e)}</text>` : `<text x="${x.toFixed(1)}" y="${alt + 18}" text-anchor="middle" font-size="12" fill="#374151" ${font}>${E(e)}</text>`;
+  });
+  if (s.tur === "cizgi") {
+    s.seriler.forEach((sr, j) => {
+      const pts = sr.degerler.map((v, i) => v == null ? null : [sol + bant * (i + 0.5), yk(v), v]).filter(Boolean);
+      g += `<polyline points="${pts.map(p => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ")}" fill="none" stroke="${R(j)}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`;
+      pts.forEach((p, k) => { g += `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="${k === pts.length - 1 ? 5.5 : 4}" fill="#fff" stroke="${R(j)}" stroke-width="2.5"/>`; if (!coklu || k === pts.length - 1) g += `<text x="${p[0].toFixed(1)}" y="${(p[1] - 10).toFixed(1)}" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1F2937" ${font}>${Y(p[2])}</text>`; });
+    });
+  } else {
+    const m = s.seriler.length, bw = Math.min(46, (bant * 0.7) / m);
+    s.seriler.forEach((sr, j) => sr.degerler.forEach((v, i) => {
+      if (!v) return;
+      const x = sol + bant * (i + 0.5) - (bw * m) / 2 + j * bw, y = yk(v);
+      g += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(bw - 2).toFixed(1)}" height="${(alt - y).toFixed(1)}" rx="3" fill="${R(j)}"/>`;
+      if (m <= 3) g += `<text x="${(x + bw / 2 - 1).toFixed(1)}" y="${(y - 5).toFixed(1)}" text-anchor="middle" font-size="11" font-weight="700" fill="#374151" ${font}>${Y(v)}</text>`;
+    }));
+  }
+  g += `<line x1="${sol}" x2="${sag}" y1="${alt}" y2="${alt}" stroke="#9CA3AF"/>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${gen} ${H}" width="100%" role="img" aria-label="${E(s.baslik)}">${g}</svg>`;
+}
+
+// SVG → PNG indirme (rapora eklemek için)
+function pdrGrafikPngIndir(spec) {
+  try {
+    const svg = pdrGrafikSvg(spec, 900).replace('width="100%"', 'width="1800"');
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement("canvas"); c.width = img.width; c.height = img.height + 90;
+      const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height);
+      x.fillStyle = "#111827"; x.font = "bold 40px Segoe UI, Roboto, Arial, sans-serif"; x.fillText(spec.baslik || "Grafik", 30, 56);
+      x.drawImage(img, 0, 90);
+      const url = c.toDataURL("image/png"), a = document.createElement("a");
+      a.href = url; a.download = (spec.baslik || "grafik").replace(/[^\p{L}\p{N}]+/gu, "_").slice(0, 60) + ".png";
+      document.body.appendChild(a); a.click(); a.remove();
+    };
+    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+  } catch (e) { alert("Görsel oluşturulamadı: " + e.message); }
+}
+
+// ── Veri toplama ──
+function pdrGrafikDonem(g, ctx) {
+  const yilBas = parseInt(String(ctx.aktifYil || "").split("-")[0], 10) || (new Date().getMonth() >= 8 ? new Date().getFullYear() : new Date().getFullYear() - 1);
+  const ayG = ksSade(String(g.ay || "")).trim(), donemG = ksSade(String(g.donem || "")).trim();
+  const ayIdx = ayG ? PDR_GRAFIK_AYLAR.findIndex(a => ksSade(a) === ayG || ksSade(a).startsWith(ayG.slice(0, 3))) : -1;
+  if (ayIdx >= 0) { const yil = ayIdx >= 8 ? yilBas : yilBas + 1; return { bas: new Date(yil, ayIdx, 1), son: new Date(yil, ayIdx + 1, 1), ad: `${PDR_GRAFIK_AYLAR[ayIdx]} ${yil}`, aylik: false }; }
+  if (/^1|birinci|ilk/.test(donemG)) return { bas: new Date(yilBas, 8, 1), son: new Date(yilBas + 1, 1, 1), ad: `${yilBas}-${yilBas + 1} 1. Dönem`, aylik: true };
+  if (/^2|ikinci/.test(donemG)) return { bas: new Date(yilBas + 1, 1, 1), son: new Date(yilBas + 1, 8, 1), ad: `${yilBas}-${yilBas + 1} 2. Dönem`, aylik: true };
+  return { bas: new Date(yilBas, 8, 1), son: new Date(yilBas + 1, 8, 1), ad: `${yilBas}-${yilBas + 1} eğitim yılı`, aylik: true };
+}
+function pdrGrafikTarih(t) { const p = String(t || "").split("."); if (p.length !== 3) return null; const d = new Date(+p[2], +p[1] - 1, +p[0]); return isNaN(d) ? null : d; }
+function pdrGrafikKayitlar(ctx, d, sinif) {
+  const sn = sinif ? ksSinifNormal(sinif) : "";
+  return (ctx.records || []).filter(r => {
+    const t = pdrGrafikTarih(r.date); if (!t || t < d.bas || t >= d.son) return false;
+    if (ctx.kademe && typeof pdrKademeUyumlu === "function" && !pdrKademeUyumlu(r.className, ctx.kademe)) return false;
+    if (sn && ksSinifNormal(r.className) !== sn) return false;
+    return true;
+  });
+}
+function pdrGrafikSay(liste, fn) { const m = new Map(); liste.forEach(x => { const k = fn(x); if (k) m.set(k, (m.get(k) || 0) + 1); }); return m; }
+function pdrGrafikAylar(d) { const l = []; for (let t = new Date(d.bas); t < d.son; t = new Date(t.getFullYear(), t.getMonth() + 1, 1)) l.push({ ad: PDR_GRAFIK_AYLAR[t.getMonth()], y: t.getFullYear(), m: t.getMonth() }); return l.filter(a => a.m !== 6 && a.m !== 7); }
+
+const PDR_GRAFIK_VERILER = {
+  gorusme_konu: "Görüşme konuları", gorusme_aylik: "Aylara göre görüşme sayısı", gorusme_sinif: "Sınıflara göre görüşme", gorusme_tur: "Görüşme türleri (öğrenci/veli…)",
+  risk: "Açık risk kayıtları (türe göre)", risk_oncelik: "Risk öncelik dağılımı", deneme_ogrenci: "Öğrencinin deneme netleri", deneme_sinif: "Sınıf deneme ortalamaları", sevk: "Sevkler (kuruma göre)",
+};
+function pdrGrafikOlustur(g, ctx, o) {
+  g = g || {};
+  const veri = String(g.veri || "").trim(), d = pdrGrafikDonem(g, ctx), sinif = g.sinif ? ksSinifNormal(g.sinif) : "";
+  const ek = (sinif ? ` · ${sinif}` : "");
+  let spec = null;
+  if (veri === "gorusme_konu" || veri === "gorusme_sinif" || veri === "gorusme_tur") {
+    const k = pdrGrafikKayitlar(ctx, d, sinif);
+    const m = veri === "gorusme_konu" ? pdrGrafikSay(k, r => (r.topic || "Belirtilmemiş").trim()) : veri === "gorusme_sinif" ? pdrGrafikSay(k, r => ksSinifNormal(r.className) || "Sınıfsız") : pdrGrafikSay(k, r => r.meetingType || "Öğrenci");
+    let et = [...m.keys()];
+    if (veri === "gorusme_sinif") et.sort((a, b) => a.localeCompare(b, "tr", { numeric: true }));
+    spec = { baslik: `${PDR_GRAFIK_VERILER[veri]} — ${d.ad}${ek}`, tur: veri === "gorusme_tur" ? "pasta" : veri === "gorusme_sinif" ? "sutun" : "yatay", etiketler: et, seriler: [{ ad: "Görüşme", degerler: et.map(e => m.get(e)) }], birim: "görüşme" };
+  } else if (veri === "gorusme_aylik") {
+    const k = pdrGrafikKayitlar(ctx, d, sinif), aylar = pdrGrafikAylar(d);
+    const turler = ["Öğrenci", "Veli"], diger = k.some(r => !turler.includes(r.meetingType || "Öğrenci"));
+    const seri = (f) => aylar.map(a => k.filter(r => { const t = pdrGrafikTarih(r.date); return t.getMonth() === a.m && t.getFullYear() === a.y && f(r); }).length);
+    const seriler = [{ ad: "Öğrenci", degerler: seri(r => (r.meetingType || "Öğrenci") === "Öğrenci") }, { ad: "Veli", degerler: seri(r => r.meetingType === "Veli") }];
+    if (diger) seriler.push({ ad: "Diğer", degerler: seri(r => !turler.includes(r.meetingType || "Öğrenci")) });
+    spec = { baslik: `${PDR_GRAFIK_VERILER[veri]} — ${d.ad}${ek}`, tur: "sutun", zaman: true, etiketler: aylar.map(a => a.ad), seriler, birim: "görüşme" };
+  } else if (veri === "risk" || veri === "risk_oncelik") {
+    const l = (ctx.riskListesi || []).filter(r => !r.kapandi && (!sinif || ksSinifNormal(r.className) === sinif));
+    const m = pdrGrafikSay(l, r => veri === "risk" ? (r.riskTuru || "Belirtilmemiş") : (r.oncelik || "Belirtilmemiş"));
+    let et = [...m.keys()];
+    if (veri === "risk_oncelik") et = ["Yüksek", "Orta", "Düşük", ...et.filter(x => !["Yüksek", "Orta", "Düşük"].includes(x))].filter(x => m.has(x));
+    spec = { baslik: `${PDR_GRAFIK_VERILER[veri]}${ek}`, tur: veri === "risk" ? "yatay" : "pasta", etiketler: et, seriler: [{ ad: "Kayıt", degerler: et.map(e => m.get(e)) }], birim: "açık kayıt" };
+  } else if (veri === "sevk") {
+    const l = (ctx.sevkler || []).filter(r => { const t = pdrGrafikTarih(r.tarih || r.date); return !t || (t >= d.bas && t < d.son); });
+    const m = pdrGrafikSay(l, r => r.sevkYeri || r.kurum || "Belirtilmemiş");
+    const et = [...m.keys()];
+    spec = { baslik: `${PDR_GRAFIK_VERILER[veri]} — ${d.ad}`, tur: "yatay", etiketler: et, seriler: [{ ad: "Sevk", degerler: et.map(e => m.get(e)) }], birim: "sevk" };
+  } else if (veri === "deneme_ogrenci") {
+    if (!o) return { hata: "Öğrenci belirtilmedi." };
+    const den = pdrSozlukOku(ctx.denemeler, o.name, o.className, o.numara) || pdrSozlukOku(ctx.denemeler, o.name, o.className) || {};
+    const dersler = aktifDersler(ctx.sinavTuru);
+    const nolar = Object.keys(den).filter(k => /^\d+$/.test(k)).sort((a, b) => a - b);
+    const top = nolar.map(n => Math.round(dersler.reduce((t, dd) => t + (parseFloat(den[n][dd.key]) || 0), 0) * 100) / 100);
+    const dersSec = g.ders ? dersler.find(dd => ksSade(dd.label).startsWith(ksSade(String(g.ders)).slice(0, 3))) : null;
+    const seriler = dersSec ? [{ ad: dersSec.label, degerler: nolar.map(n => parseFloat(den[n][dersSec.key]) || 0) }] : [{ ad: "Toplam net", degerler: top }];
+    spec = { baslik: `${ksAsistanEtiket(o)} — deneme ${dersSec ? dersSec.label + " neti" : "toplam neti"}`, tur: "cizgi", zaman: true, eksenSifir: false, etiketler: nolar.map(n => `${n}. deneme`), seriler, birim: "net" };
+  } else if (veri === "deneme_sinif") {
+    const liste = (ctx.ogrenciler || ctx.ogrenciListesi || []).filter(x => !sinif || ksSinifNormal(x.className) === sinif);
+    const dersler = aktifDersler(ctx.sinavTuru);
+    const gruplar = new Map(); // sınıf → deneme no → [toplamlar]
+    liste.forEach(x => {
+      const den = pdrSozlukOku(ctx.denemeler, x.studentName, x.className, x.numara) || pdrSozlukOku(ctx.denemeler, x.studentName, x.className) || {};
+      Object.keys(den).filter(k => /^\d+$/.test(k)).forEach(n => {
+        const t = dersler.reduce((s, dd) => s + (parseFloat(den[n][dd.key]) || 0), 0);
+        const sn = ksSinifNormal(x.className); if (!gruplar.has(sn)) gruplar.set(sn, new Map());
+        const gm = gruplar.get(sn); if (!gm.has(n)) gm.set(n, []); gm.get(n).push(t);
+      });
+    });
+    const nolar = [...new Set([...gruplar.values()].flatMap(m => [...m.keys()]))].sort((a, b) => a - b);
+    const siniflar = [...gruplar.keys()].sort((a, b) => a.localeCompare(b, "tr", { numeric: true })).slice(0, 8);
+    spec = { baslik: `Sınıf deneme ortalamaları (toplam net)${ek}`, tur: "cizgi", zaman: true, eksenSifir: false, etiketler: nolar.map(n => `${n}. deneme`),
+      seriler: siniflar.map(sn => ({ ad: sn, degerler: nolar.map(n => { const a = gruplar.get(sn).get(n); return a && a.length ? Math.round(a.reduce((p, q) => p + q, 0) / a.length * 10) / 10 : null; }) })), birim: "ortalama net" };
+  } else {
+    return { hata: `Bilinmeyen veri türü "${veri}". Seçenekler: ${Object.entries(PDR_GRAFIK_VERILER).map(([k, v]) => `${k} (${v})`).join(", ")}.` };
+  }
+  if (g.tur && ["sutun", "yatay", "cizgi", "pasta"].includes(g.tur)) spec.tur = g.tur;
+  if (g.baslik) spec.baslik = String(g.baslik).slice(0, 90);
+  const k = pdrGrafikKontrol(spec);
+  if (k.hata) return k;
+  return { spec: k.spec, notlar: k.notlar };
+}
+function pdrGrafikOzet(s) {
+  if (s.seriler.length === 1) return s.etiketler.map((e, i) => `${e}: ${pdrGrafikSayi(s.seriler[0].degerler[i] ?? 0)}`).join("; ");
+  return s.seriler.map(x => `${x.ad} → ` + s.etiketler.map((e, i) => `${e}: ${x.degerler[i] == null ? "-" : pdrGrafikSayi(x.degerler[i])}`).join(", ")).join(" | ");
+}
+function pdrGrafikKaydet(spec) { const id = "g" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); PDR_GRAFIK_KAYIT[id] = { ...spec, id }; return id; }
+
+// ── İnfografik: tek sayfalık yazdırılabilir özet ──
+function pdrInfografikVeri(g, ctx) {
+  const d = pdrGrafikDonem(g || {}, ctx);
+  const k = pdrGrafikKayitlar(ctx, d, "");
+  const ogrSet = new Set(k.filter(r => (r.meetingType || "Öğrenci") === "Öğrenci").map(r => pdrOgrAnahtar(r.studentName, r.className, r.numara)));
+  const acikRisk = (ctx.riskListesi || []).filter(r => !r.kapandi);
+  const sevk = (ctx.sevkler || []).filter(r => { const t = pdrGrafikTarih(r.tarih || r.date); return t && t >= d.bas && t < d.son; });
+  const kutular = [
+    { ad: "Toplam görüşme", deger: k.length },
+    { ad: "Görüşülen öğrenci", deger: ogrSet.size },
+    { ad: "Veli görüşmesi", deger: k.filter(r => r.meetingType === "Veli").length },
+    { ad: "Açık risk kaydı", deger: acikRisk.length },
+    { ad: "Sevk", deger: sevk.length },
+  ];
+  const ag = { ...(g || {}) };
+  const grafikler = [];
+  const ekle = (gg) => { const r = pdrGrafikOlustur({ ...ag, ...gg }, ctx, null); if (r.spec) grafikler.push(r.spec); };
+  ekle({ veri: "gorusme_aylik" }); ekle({ veri: "gorusme_konu" }); ekle({ veri: "gorusme_sinif" }); ekle({ veri: "risk" });
+  if ((ksKademeAnahtar(ctx) === "ortaokul" || ksKademeAnahtar(ctx) === "lise") && ctx.denemeler && Object.keys(ctx.denemeler).length) ekle({ veri: "deneme_sinif" });
+  const konuSay = pdrGrafikSay(k, r => r.topic || ""); const enCok = [...konuSay.entries()].sort((a, b) => b[1] - a[1])[0];
+  const one = [];
+  if (enCok) one.push(`En sık görüşme konusu: ${enCok[0]} (${enCok[1]} görüşme, %${Math.round(enCok[1] / Math.max(1, k.length) * 100)}).`);
+  if (k.length) one.push(`Veli görüşmelerinin tüm görüşmelere oranı: %${Math.round(kutular[2].deger / k.length * 100)}.`);
+  const yuksek = acikRisk.filter(r => r.oncelik === "Yüksek").length; if (yuksek) one.push(`${yuksek} yüksek öncelikli açık risk kaydı izleniyor.`);
+  return { baslik: `Rehberlik Servisi Faaliyet Özeti — ${d.ad}`, donem: d.ad, kutular, grafikler, one };
+}
+function pdrInfografikHtml(v, okulAdi) {
+  const E = pdrGrafikEsc;
+  const kart = (s, genis) => `<div class="kart${genis ? " genis" : ""}"><h3>${E(s.baslik)}</h3>${pdrGrafikSvg(s, genis ? 640 : 420)}</div>`;
+  return `<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${E(v.baslik)}</title>
+<style>@page{size:A4;margin:10mm}body{font-family:"Segoe UI",Roboto,Arial,sans-serif;color:#111827;margin:0;background:#fff}
+.sayfa{max-width:190mm;margin:0 auto;padding:6mm 4mm}header{border-bottom:3px solid #127C56;padding-bottom:4mm;margin-bottom:5mm}
+header .ust{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#127C56;font-weight:700}h1{font-size:22px;margin:2px 0 0}
+.kutular{display:grid;grid-template-columns:repeat(5,1fr);gap:3mm;margin-bottom:5mm}.kutu{border:1px solid #D1E7DD;background:#F2FAF6;border-radius:6px;padding:3mm;text-align:center}
+.kutu b{display:block;font-size:24px;color:#127C56;font-variant-numeric:tabular-nums}.kutu span{font-size:10.5px;color:#374151}
+.izgara{display:grid;grid-template-columns:1fr 1fr;gap:4mm}.kart{border:1px solid #E5E7EB;border-radius:6px;padding:3mm;break-inside:avoid}.kart.genis{grid-column:1/-1}
+.kart h3{font-size:12.5px;margin:0 0 2mm}ul{margin:4mm 0 0;padding-left:5mm;font-size:12px}footer{margin-top:5mm;font-size:9.5px;color:#6B7280;border-top:1px solid #E5E7EB;padding-top:2mm}
+@media(max-width:700px){.kutular{grid-template-columns:repeat(2,1fr)}.izgara{grid-template-columns:1fr}}@media print{.noprint{display:none}}</style></head><body><div class="sayfa">
+<header><div class="ust">${E(okulAdi || "Rehberlik ve Psikolojik Danışma Servisi")}</div><h1>${E(v.baslik)}</h1></header>
+<div class="kutular">${v.kutular.map(k => `<div class="kutu"><b>${k.deger}</b><span>${E(k.ad)}</span></div>`).join("")}</div>
+<div class="izgara">${v.grafikler.map((s, i) => kart(s, i === 0 || s.tur === "cizgi")).join("")}</div>
+${v.one.length ? `<ul>${v.one.map(x => `<li>${E(x)}</li>`).join("")}</ul>` : ""}
+<footer>Bu özet programdaki kayıtlardan otomatik hazırlanmıştır; öğrenci adı içermez. Oluşturma: ${new Date().toLocaleDateString("tr-TR")}</footer>
+</div></body></html>`;
+}
+const PDR_INFOGRAFIK_KAYIT = {};
+// ── GRAFİK VE İNFOGRAFİK BİTİŞ ──
 // ── ALAN BİLGİSİ BAŞLANGIÇ (alanbilgisi/gom.py ile üretilir; elle düzenleme) ──
 // Asistanın mesleki bilgi kitaplığı: eğitim psikolojisi, pozitif psikoloji, PDR, klinik psikoloji, ölçme-değerlendirme, bireyi tanıma, psikolojik testler.
 // Model bu metni yalnızca alan_bilgisi aracını çağırınca görür; böylece her istekte token harcanmaz.
@@ -12834,6 +13126,7 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - Akademik düzey taraması (ilkokul/ortaokul/lise) sonucu, yorumu ya da "nasıl uygularım, hangi setleri sorayım" sorulduğunda duzey_taramasi kullan. Öğretim yılı içinde beklenen düzeyin TAMAMLADIĞI sınıf olduğunu unutma (8. sınıfın başındaki öğrencide 7 çıkması normaldir); çıkarımları "işaret ediyor olabilir" diliyle aktar.
 - LGS/YKS sistemi, tercih ya da öğrenci koçluğu (çalışma planı, hedef, süre yönetimi, deneme analizi yöntemi) sorulduğunda sinav_rehberi'ni çağır ve öğrencinin kendi verileriyle (deneme_analizi, lgs_konu_onceligi) birleştir. Taban puanı, kontenjan ya da tarih uydurma.
 - Sınıf mevcudu, şube listesi ya da yeni gelen/nakil öğrenci sorulduğunda sinif_bilgisi kullan.
+- Danışman grafik, şema, "göster", "çiz" isterse grafik_ciz kullan (sayıları kendin hesaplama). Dönem/ay özeti, faaliyet raporu görseli, kurul ya da veli toplantısı sunumu isterse infografik_rapor kullan. Yanıtında grafikteki sayıları tekrar listeleme; 1-2 cümlelik yorum yeter.
 - Mesleki/kuramsal sorularda (gelişim, öğrenme, motivasyon, çalışma teknikleri, üstbiliş, pozitif psikoloji, danışma kuramları ve teknikleri, görüşme becerileri, grup, etik ve gizlilik, mevzuat ve RAM süreçleri, klinik belirtiler ve yönlendirme, ölçme-değerlendirme, test yorumu, bireyi tanıma teknikleri) önce alan_bilgisi'ni çağır, gerekirse ikinci bir bölüm aç; bilgiyi öğrencinin kendi verisiyle birleştir. Belirti konuşurken tanı koyma ("… belirtileri gözleniyor, … açısından değerlendirme önerilir"), ilaç önerme. Kendine zarar, intihar, istismar ya da psikoz belirtisi geçen her durumda alan_bilgisi'nden pdr.kriz veya pdr.ihmal_istismar bölümünü aç ve okulun yapması gerekenleri sırayla, açıkça yaz.
 - Lise taban puanı, yüzdelik dilim, "kaç netle hangi okul", tercih listesi sorulduğunda lise_taban_puanlari kullan (Beylikdüzü, Esenyurt, Başakşehir, Büyükçekmece, Avcılar ayrıntılı). Öğrenci adı geçiyorsa önce deneme_analizi ile ortalama netini al. Araçta olmayan okulun puanını uydurma; değerlerin 2026 tabanı olduğunu ve her yıl değiştiğini söyle.
 - Veri girişi: deneme netleri → deneme_kaydet; Profil 1 boyut puanları → profil_puanla; kariyer hedefi, ilgi, aile notu, d2 → profil2_guncelle; devamsızlık → devamsizlik_kaydet; yeni öğrenci → ogrenci_ekle (önce ogrenci_ara); konu tamamlama yüzdesi → konu_guncelle; risk kapatma → risk_kapat; plan durumu → mudahale_durum; hatırlatmayı bitirme → hatirlatma_tamamla. Hepsi onay ister; danışmanın söylediği değerleri aynen ver, tahmin etme.
@@ -31484,7 +31777,7 @@ const PDR_ASISTAN_ARAC_AD = {
   ekranda_ac: "📍 Ekran açıldı", ekranda_gorusme: "👀 Görüşme formu ekranda dolduruldu", ekranda_hatirlatma: "👀 Hatırlatma ekranda dolduruldu",
   ekranda_risk: "👀 Risk formu ekranda hazırlandı", ekranda_mudahale: "👀 Müdahale planı ekranda dolduruldu",
   asistan_notu_kaydet: "📌 Öğrenciye not kaydı", not_kaydet: "📚 Yazılı / yıl sonu notu kaydı",
-  deneme_kaydet: "📊 Deneme kaydı", sinav_rehberi: "📘 LGS/YKS rehberi", alan_bilgisi: "📚 Mesleki bilgi", lise_taban_puanlari: "🏫 Lise taban puanları", sinif_bilgisi: "🏫 Sınıf bilgisi", profil_puanla: "📋 Profil 1 puanları", profil2_guncelle: "📋 Profil 2 güncelleme", devamsizlik_kaydet: "📅 Devamsızlık kaydı",
+  deneme_kaydet: "📊 Deneme kaydı", sinav_rehberi: "📘 LGS/YKS rehberi", grafik_ciz: "📊 Grafik", infografik_rapor: "🖼 İnfografik", alan_bilgisi: "📚 Mesleki bilgi", lise_taban_puanlari: "🏫 Lise taban puanları", sinif_bilgisi: "🏫 Sınıf bilgisi", profil_puanla: "📋 Profil 1 puanları", profil2_guncelle: "📋 Profil 2 güncelleme", devamsizlik_kaydet: "📅 Devamsızlık kaydı",
   ogrenci_ekle: "👤 Öğrenci eklendi", konu_guncelle: "📚 Konu Haritası", risk_kapat: "✅ Risk kapatma", mudahale_durum: "🎯 Plan durumu", hatirlatma_tamamla: "✔️ Hatırlatma tamamlandı",
 };
 // ── Asistan notları: yanıtı öğrencinin dosyasına kaydetme ──
@@ -31887,7 +32180,10 @@ async function pdrAsistanIstek(m, kullanilan, ctx) {
     const s = await pdrAsistanCalistir({
       gecmis: S.gecmis, ayar: kullanilan, ctx, iptal,
       olay: (o) => {
-        if (o.tip === "arac") adimlar.push({ ad: o.ad, ogrenci: o.ogrenci, ogrKimlik: o.ogrKimlik || null, sonuc: o.sonuc });
+        if (o.tip === "arac") {
+          const gm = /\[\[GRAFIK:(\w+)\]\]/.exec(String(o.sonuc || "")), im = /\[\[INFOGRAFIK:(\w+)\]\]/.exec(String(o.sonuc || ""));
+          adimlar.push({ ad: o.ad, ogrenci: o.ogrenci, ogrKimlik: o.ogrKimlik || null, sonuc: o.sonuc, grafik: gm ? PDR_GRAFIK_KAYIT[gm[1]] || null : null, infografik: im ? PDR_INFOGRAFIK_KAYIT[im[1]] || null : null });
+        }
         if (o.tip === "onay_sonuc") adimlar.push({ ad: o.ad, onay: o.ok });
         S.durum = o.tip; S.adimlar = [...adimlar]; pdrAsistanBildir();
       },
@@ -32232,6 +32528,24 @@ function AsistanEkrani({
                 })}
               </div>
             )}
+            {(m.adimlar || []).filter(a => a.grafik || a.infografik).map((a, j) => a.grafik ? (
+              <div key={"gr" + j} data-testid="asistan-grafik" style={{ background: "#fff", border: `1px solid ${BORDER}`, borderRadius: 10, padding: "8px 10px", marginBottom: 8 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 800, color: TEXT, marginBottom: 4 }}>{a.grafik.baslik}</div>
+                <div dangerouslySetInnerHTML={{ __html: pdrGrafikSvg(a.grafik, 640) }} />
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4 }}>
+                  <button onClick={() => pdrGrafikPngIndir(a.grafik)} style={{ background: "none", border: "none", color: ACCENT, fontSize: 11, fontWeight: 800, cursor: "pointer", padding: 0 }}>⬇ PNG indir</button>
+                </div>
+              </div>
+            ) : (
+              <div key={"if" + j} data-testid="asistan-infografik" style={{ background: "#F2FAF6", border: "1px solid #CFE7DB", borderRadius: 10, padding: "10px 12px", marginBottom: 8 }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: "#127C56" }}>🖼 {a.infografik.baslik}</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(92px, 1fr))", gap: 6, margin: "8px 0" }}>
+                  {a.infografik.kutular.map(k => <div key={k.ad} style={{ background: "#fff", borderRadius: 8, padding: "6px 4px", textAlign: "center" }}><div style={{ fontSize: 18, fontWeight: 800, color: "#127C56" }}>{k.deger}</div><div style={{ fontSize: 10, color: MUTED }}>{k.ad}</div></div>)}
+                </div>
+                <div style={{ fontSize: 11, color: MUTED, marginBottom: 8 }}>{a.infografik.grafikler.length} grafik · tek sayfa (A4) · öğrenci adı içermez</div>
+                <button onClick={() => ootBelgeAc(pdrInfografikHtml(a.infografik), "infografik")} style={{ padding: "7px 12px", borderRadius: 8, border: "none", background: "#127C56", color: "#fff", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>Aç / Yazdır</button>
+              </div>
+            ))}
             <div style={{ fontSize: 13, color: m.hata ? "#B42318" : TEXT, whiteSpace: "pre-wrap", lineHeight: 1.55, wordBreak: "break-word" }}>{m.hata ? "⚠ " : ""}{temizMetin(m.metin)}</div>
             {m.hata && !S.calisiyor && i === S.gorunen.length - 1 && S.gorunen[i - 1] && S.gorunen[i - 1].rol === "ben" && (
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
@@ -45111,6 +45425,12 @@ function pdrBaslangicSekmesi() {
 
         {tab === "istatistik" && (
           <div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+              {[["1", "1. Dönem"], ["2", "2. Dönem"], ["", "Bütün yıl"]].map(([dn, et]) => (
+                <button key={et} data-testid={"infografik-" + (dn || "yil")} onClick={() => { const v = pdrInfografikVeri({ donem: dn }, { records, riskListesi, sevkler, denemeler, sinavTuru, aktifYil, kademe, ogrenciler }); ootBelgeAc(pdrInfografikHtml(v), "infografik"); }}
+                  style={{ padding: "8px 12px", borderRadius: 10, border: `1px solid ${ACCENT}`, background: ACCENT_LIGHT, color: ACCENT, fontSize: 12, fontWeight: 800, cursor: "pointer" }}>🖼 İnfografik: {et}</button>
+              ))}
+            </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
               {[
                 { label: "Toplam Görüşme", value: totalRecs, color: ACCENT },

@@ -33862,6 +33862,17 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
                 k.kacinciGorusme = sayacSayilar[a];
                 k.tekrarli = toplamSayilar[a] > 1;
               });
+              // Sıra numaraları: ay içindeki kaçıncı görüşme ve eğitim-öğretim yılı
+              // başından (1 Eylül) bu yana kaçıncı görüşme. Liste kronolojik sıralı
+              // olduğu için sayaçlar eskiden yeniye artar (en son kayıt en büyük sayı).
+              const aySayac = {}, yilSayac = {};
+              tumKayitlarDuz.forEach(k => {
+                const [, ay, yil] = k.date.split(".").map(x => parseInt(x, 10));
+                const egitimYili = ay >= 9 ? yil : yil - 1;
+                const ayA = `${yil}-${ay}`;
+                aySayac[ayA] = (aySayac[ayA] || 0) + 1; yilSayac[egitimYili] = (yilSayac[egitimYili] || 0) + 1;
+                k.aySira = aySayac[ayA]; k.yilSira = yilSayac[egitimYili];
+              });
 
               const gruplar = {};
               tumKayitlarDuz.forEach(k => {
@@ -33915,6 +33926,7 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
                                     <span style={{ flexShrink:0, lineHeight:1.2, textAlign:"center" }}>
                                       <span style={{ display:"block", fontSize:10.5, color:MUTED }}>{k.date}</span>
                                       <span style={{ display:"block", fontSize:8.5, color:MUTED, opacity:0.75 }}>{pdrGunAdi(k.date)}</span>
+                                      <span title={`Bu ayın ${k.aySira}. görüşmesi · Eylülden bu yana ${k.yilSira}. görüşme`} style={{ display:"block", fontSize:10, fontWeight:800, color:ACCENT, marginTop:2 }}>{k.aySira} <span style={{ fontWeight:600, color:MUTED }}>({k.yilSira})</span></span>
                                     </span>
                                     <span style={{ flex:1, minWidth:0 }}>
                                       <span style={{ fontSize:12, fontWeight:700, color:TEXT, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", display:"flex", alignItems:"center", gap:5 }}>

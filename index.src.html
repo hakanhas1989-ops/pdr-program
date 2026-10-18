@@ -43448,15 +43448,24 @@ export default function App() {
   // 30+ gün geçmiş öğrenciler — hiç görüşülmemiş öğrenciler burada YER ALMAZ,
   // bu sadece "açık bir vakayı/takibi unutmuş olabilirim" uyarısı.
   const TAKIP_ESIK_GUN = 30;
-  const ogrSonGorusme = {};
+  // DÜZELTME: eskiden anahtar kaydın birebir "Ad || Sınıf || Numara" metniydi; ilk
+  // görüşmede numara boş, sonrakinde dolu girilince aynı öğrenci iki ayrı kişi
+  // sayılıyor, eski kayıt "30+ gündür görüşülmedi" uyarısı veriyordu. Artık her
+  // kayıt önce kayıtlı öğrenciye (pdrAyniOgrenci) bağlanıyor ve aynı öğrencinin
+  // tüm görüşmeleri tek satırda birleşiyor; en son görüşme tarihi esas alınıyor.
+  const ogrSonGorusme = [];
   studentRecs.forEach(r => {
-    const key = pdrOgrAnahtar(r.studentName, r.className, r.numara);
     const ms = pdrTarihMs(r.date);
-    if (!ogrSonGorusme[key] || ms > ogrSonGorusme[key].ms) {
-      ogrSonGorusme[key] = { ms, studentName: r.studentName, className: r.className, numara: r.numara, tarih: r.date };
+    const kayitli = ogrenciler.find(o => pdrAyniOgrenci(o.studentName, o.className, r.studentName, r.className, o.numara, r.numara));
+    const ad = kayitli?.studentName || r.studentName, sinif = kayitli?.className || r.className, no = kayitli?.numara || r.numara || "";
+    const var_ = ogrSonGorusme.find(e => pdrAyniOgrenci(e.studentName, e.className, ad, sinif, e.numara, no));
+    if (!var_) ogrSonGorusme.push({ ms, studentName: ad, className: sinif, numara: no, tarih: r.date });
+    else {
+      if (ms > var_.ms) { var_.ms = ms; var_.tarih = r.date; }
+      if (!var_.numara && no) var_.numara = no;
     }
   });
-  const takipListesi = Object.values(ogrSonGorusme)
+  const takipListesi = ogrSonGorusme
     .map(o => ({ ...o, gunFarki: Math.floor((Date.now() - o.ms) / (1000 * 60 * 60 * 24)), riskAcik: riskListesi.some(r => pdrAyniOgrenci(r.studentName, r.className, o.studentName, o.className, r.numara, o.numara) && !r.kapandi) }))
     .filter(o => o.gunFarki >= TAKIP_ESIK_GUN)
     .sort((a, b) => b.gunFarki - a.gunFarki);

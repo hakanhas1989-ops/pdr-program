@@ -34642,6 +34642,9 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
                   const yAd = pdrSoyadMaskele(yeniAdDegeri.trim()), yeSinif = yeniSinifDegeri.trim();
                   if (!yAd || !yeSinif || (yAd === seciliOgrenci && yeSinif === seciliOgrenciSinif)) { setSinifGuncelleAcik(false); return; }
                   await onSinifGuncelle(seciliOgrenci, seciliOgrenciSinif, seciliOgrenciNumara, yAd, yeSinif);
+                  // Ekran yeni ad/sınıftaki öğrencide kalsın (ad değiştiyse seçim kaybolmasın)
+                  setSeciliOgrenci(yAd);
+                  if (setAktifOgrenci) setAktifOgrenci({ name: yAd, className: yeSinif, numara: seciliOgrenciNumara || "" });
                   setSinifGuncelleAcik(false);
                 }} disabled={!yeniAdDegeri.trim() || !yeniSinifDegeri.trim()} style={{ padding:"8px 14px", background:(yeniAdDegeri.trim()&&yeniSinifDegeri.trim())?ACCENT:BORDER, color:(yeniAdDegeri.trim()&&yeniSinifDegeri.trim())?"#fff":MUTED, border:"none", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer" }}>💾 Kaydet</button>
               </div>
@@ -44801,23 +44804,33 @@ function pdrBaslangicSekmesi() {
 
               // İsimle anahtarlanan sözlükler: eski anahtardaki veriyi yeni (ad/sınıf güncellenmiş) anahtara taşı
               function pdrSozlukTasi(sozluk) {
-                // pdrSozlukOku ÜÇ anahtarı sırayla dener: isim+sınıf+numara,
-                // isim+sınıf, sadece isim. Bu fonksiyon ÖNCEDEN sadece ikisini
-                // kontrol ediyordu (numaralı anahtarı atlıyordu) — deneme/GDO
-                // verisi genelde numaralı anahtarda saklandığı için, isim
-                // güncellemesinde bu veri "kayboluyormuş" gibi görünüyordu.
-                // Artık üçünü de sırayla kontrol edip, bulduğunu YENİ numaralı
-                // anahtara taşıyor.
-                const eskiKeyNumarali = pdrOgrAnahtar(eskiAd, eskiSinif, eskiNumara);
-                const eskiKeySinif = pdrOgrAnahtar(eskiAd, eskiSinif);
-                let veri, eskiKeyBulunan;
-                if (eskiNumara && sozluk[eskiKeyNumarali] !== undefined) { veri = sozluk[eskiKeyNumarali]; eskiKeyBulunan = eskiKeyNumarali; }
-                else if (sozluk[eskiKeySinif] !== undefined) { veri = sozluk[eskiKeySinif]; eskiKeyBulunan = eskiKeySinif; }
-                else if (sozluk[eskiAd] !== undefined) { veri = sozluk[eskiAd]; eskiKeyBulunan = eskiAd; }
-                else return sozluk;
+                // Öğrencinin bu sözlükteki TÜM anahtarlarını bulur ("Ad || Sınıf || No",
+                // "Ad || Sınıf", farklı sınıf yazımı "8B"/"8-B", numarasız eski kayıt) ve
+                // hepsini yeni ad/sınıf anahtarında birleştirir. Eskiden yalnız ilk bulunan
+                // anahtar taşınıyordu; ikinci bir anahtarda kalan veri eski sınıfta kalıp
+                // "kayboluyordu". Yalnız adla tutulmuş çok eski anahtar, başka anahtar
+                // bulunamazsa taşınır (aynı adlı başka öğrenciye ait olabilir).
+                if (!sozluk || typeof sozluk !== "object") return sozluk;
+                const bulunan = Object.keys(sozluk).filter(k => {
+                  const p = k.split(" || ");
+                  if (p.length < 2) return false;
+                  return pdrAyniOgrenci(p[0], p[1], eskiAd, eskiSinif, p[2] || "", eskiNumara);
+                });
+                if (!bulunan.length && sozluk[eskiAd] !== undefined) bulunan.push(eskiAd);
+                if (!bulunan.length) return sozluk;
+                // Numaralı anahtar öncelikli (en güncel biçim); nesneler alan alan birleşir
+                bulunan.sort((a, b) => b.split(" || ").length - a.split(" || ").length);
+                let veri;
+                bulunan.slice().reverse().forEach(k => {
+                  const v = sozluk[k];
+                  if (veri === undefined) veri = v;
+                  else if (Array.isArray(veri) && Array.isArray(v)) veri = [...veri, ...v.filter(x => !veri.some(y => y && x && y.id && y.id === x.id))];
+                  else if (veri && v && typeof veri === "object" && typeof v === "object" && !Array.isArray(veri) && !Array.isArray(v)) veri = { ...veri, ...v };
+                  else veri = v;
+                });
                 const yeniKey = pdrOgrAnahtar(yeniAd, yeniSinif, eskiNumara);
                 const guncel = { ...sozluk };
-                delete guncel[eskiKeyBulunan];
+                bulunan.forEach(k => { delete guncel[k]; });
                 guncel[yeniKey] = veri;
                 return guncel;
               }

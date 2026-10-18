@@ -11784,6 +11784,16 @@ const KS_ASISTAN_ARACLAR = {
       return `Grafik hazır [[GRAFIK:${id}]] — ${r.spec.baslik}. Veri: ${pdrGrafikOzet(r.spec)}.${r.notlar.length ? " Kontrol notu: " + r.notlar.join(" ") : ""} (Grafik sohbette gösteriliyor; danışman PNG olarak indirebilir.)`;
     },
   },
+  diyagram_ciz: {
+    aciklama: "Şema/diyagram çizer ve sohbette gösterir (PNG indirilebilir). tur: akis (sıralı adımlar, en çok 8) | dongu (tekrarlayan süreç, 3-6 öğe, merkez isteğe bağlı) | zihin (merkez + en çok 8 dal; her dalda alt: en çok 3 kısa madde) | karsilastirma (sol ve sag: {baslik, ogeler: [kısa maddeler]}) | zaman (zaman çizelgesi: baslik = tarih/dönem, aciklama = olay) | piramit (kademeler, üstten alta, en çok 5). ogeler: [{baslik, aciklama, alt}]. Kısa yaz: başlık en çok 4-5 kelime, açıklama en çok 12 kelime. Sınıf rehberlik etkinliği, veli/öğretmen sunumu, müdahale planı, çalışma yöntemi anlatımı için kullan. Öğrenci adı yazma.",
+    girdi: '{"tur": "dongu", "baslik": "Deneme analiz döngüsü", "merkez": "Öğrenme", "ogeler": [{"baslik": "Çöz", "aciklama": "Gerçek süreyle"}, {"baslik": "Yanlışı bul"}, {"baslik": "Sebebini bul"}, {"baslik": "3 gün sonra tekrar"}]}', yontem: "hepsi",
+    calistir: (g) => {
+      const r = pdrDiyagramKontrol(g || {});
+      if (r.hata) return r.hata;
+      const id = pdrGrafikKaydet(r.spec);
+      return `Diyagram hazır [[GRAFIK:${id}]] — ${r.spec.baslik} (${PDR_DIY_TURLER[r.spec.tur]}).${r.notlar.length ? " Kontrol notu: " + r.notlar.join(" ") : ""} Sohbette gösteriliyor; danışman PNG olarak indirebilir. Yanıtında diyagram içeriğini tekrar yazma.`;
+    },
+  },
   infografik_rapor: {
     aciklama: "Rehberlik servisinin tek sayfalık, yazdırılabilir infografik özetini hazırlar: toplam görüşme, görüşülen öğrenci, veli görüşmesi, açık risk, sevk kutuları + aylık görüşme, konu, sınıf, risk ve (ortaokul/lisede) sınıf deneme ortalaması grafikleri ve kısa öne çıkanlar. Öğrenci adı içermez. Dönem sonu raporu, öğretmenler kurulu ya da veli toplantısı için. ay ya da donem (1 | 2) isteğe bağlı; boşsa bütün eğitim yılı.",
     girdi: '{"donem": "1", "ay": "isteğe bağlı"}', yontem: "hepsi",
@@ -12525,7 +12535,7 @@ function pdrGrafikSvg(s, gen) {
 // SVG → PNG indirme (rapora eklemek için)
 function pdrGrafikPngIndir(spec) {
   try {
-    const svg = pdrGrafikSvg(spec, 900).replace('width="100%"', 'width="1800"');
+    const svg = (spec.diyagram ? pdrDiyagramSvg(spec) : pdrGrafikSvg(spec, 900)).replace('width="100%"', 'width="1800"').replace(/ style="max-width:[^"]*"/, "");
     const img = new Image();
     img.onload = () => {
       const c = document.createElement("canvas"); c.width = img.width; c.height = img.height + 90;
@@ -12533,7 +12543,7 @@ function pdrGrafikPngIndir(spec) {
       x.fillStyle = "#111827"; x.font = "bold 40px Segoe UI, Roboto, Arial, sans-serif"; x.fillText(spec.baslik || "Grafik", 30, 56);
       x.drawImage(img, 0, 90);
       const url = c.toDataURL("image/png"), a = document.createElement("a");
-      a.href = url; a.download = (spec.baslik || "grafik").replace(/[^\p{L}\p{N}]+/gu, "_").slice(0, 60) + ".png";
+      a.href = url; a.download = (spec.baslik || "grafik").replace(/[^0-9A-Za-zçğıöşüÇĞİÖŞÜ]+/g, "_").slice(0, 60) + ".png";
       document.body.appendChild(a); a.click(); a.remove();
     };
     img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
@@ -12683,6 +12693,109 @@ ${v.one.length ? `<ul>${v.one.map(x => `<li>${E(x)}</li>`).join("")}</ul>` : ""}
 }
 const PDR_INFOGRAFIK_KAYIT = {};
 // ── GRAFİK VE İNFOGRAFİK BİTİŞ ──
+// ── DİYAGRAM (asistan: diyagram_ciz) ──
+// Akış şeması, döngü, zihin haritası, karşılaştırma, zaman çizelgesi ve piramit.
+// İçeriği model yazar (genel kavramlar); çizimi program SVG olarak yapar. Metin kutulara
+// sığacak biçimde satırlara bölünür; öğe sayısı sınırlanır (okunabilirlik denetimi).
+const PDR_DIY_RENK = [["#127C56", "#E8F5EE"], ["#E07A2F", "#FDF0E6"], ["#3B6FB6", "#EAF1FA"], ["#9A4FB0", "#F4EAF7"], ["#C9A227", "#FBF6E3"], ["#D1495B", "#FBEAEC"], ["#2A9D8F", "#E6F5F3"], ["#6C757D", "#F1F2F3"]];
+const PDR_DIY_TURLER = { akis: "Akış şeması (sıralı adımlar)", dongu: "Döngü (tekrarlayan süreç)", zihin: "Zihin haritası (merkez + dallar)", karsilastirma: "İki sütunlu karşılaştırma", zaman: "Zaman çizelgesi", piramit: "Piramit / kademeler" };
+function pdrDiySat(t, n) {
+  const k = String(t || "").split(/\s+/).filter(Boolean), l = []; let c = "";
+  k.forEach(w => { if ((c + " " + w).trim().length > n && c) { l.push(c); c = w; } else c = (c + " " + w).trim(); });
+  if (c) l.push(c);
+  return l.length > 4 ? [...l.slice(0, 3), l.slice(3).join(" ").slice(0, n - 1) + "…"] : l;
+}
+function pdrDiyMetin(x, y, satirlar, o) {
+  o = o || {}; const fs = o.fs || 15, lh = fs * 1.3, E = pdrGrafikEsc;
+  const y0 = y - ((satirlar.length - 1) * lh) / 2;
+  return `<text x="${x}" y="${y0 + fs * 0.35}" text-anchor="${o.anchor || "middle"}" font-size="${fs}" font-weight="${o.fw || 600}" fill="${o.renk || "#1F2937"}" font-family="Segoe UI, Roboto, Arial, sans-serif">${satirlar.map((s, i) => `<tspan x="${x}" dy="${i ? lh : 0}">${E(s)}</tspan>`).join("")}</text>`;
+}
+function pdrDiyOk(x1, y1, x2, y2, renk) {
+  const a = Math.atan2(y2 - y1, x2 - x1), u = 10;
+  return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${(x2 - Math.cos(a) * 4).toFixed(1)}" y2="${(y2 - Math.sin(a) * 4).toFixed(1)}" stroke="${renk}" stroke-width="2.5"/><path d="M ${x2.toFixed(1)} ${y2.toFixed(1)} L ${(x2 - u * Math.cos(a - 0.45)).toFixed(1)} ${(y2 - u * Math.sin(a - 0.45)).toFixed(1)} L ${(x2 - u * Math.cos(a + 0.45)).toFixed(1)} ${(y2 - u * Math.sin(a + 0.45)).toFixed(1)} Z" fill="${renk}"/>`;
+}
+function pdrDiyagramKontrol(g) {
+  const notlar = [], tur = Object.keys(PDR_DIY_TURLER).includes(g.tur) ? g.tur : "akis";
+  const temiz = (o) => typeof o === "string" ? { baslik: o } : { baslik: String(o && (o.baslik || o.ad || o.metin) || "").trim(), aciklama: String(o && (o.aciklama || "") || "").trim(), alt: Array.isArray(o && o.alt) ? o.alt.map(String).slice(0, 4) : [] };
+  let ogeler = (Array.isArray(g.ogeler) ? g.ogeler : []).map(temiz).filter(o => o.baslik);
+  const sinir = { akis: 8, dongu: 6, zihin: 8, zaman: 8, piramit: 5, karsilastirma: 0 }[tur];
+  if (sinir && ogeler.length > sinir) { notlar.push(`${ogeler.length} öğe vardı; okunabilirlik için ilk ${sinir} öğe çizildi.`); ogeler = ogeler.slice(0, sinir); }
+  const kol = (k) => k ? { baslik: String(k.baslik || "").trim(), ogeler: (Array.isArray(k.ogeler) ? k.ogeler : []).map(String).filter(Boolean).slice(0, 7) } : null;
+  const sol = kol(g.sol), sag = kol(g.sag);
+  if (tur === "karsilastirma" ? !(sol && sag && (sol.ogeler.length || sag.ogeler.length)) : ogeler.length < (tur === "dongu" ? 3 : 2)) return { hata: tur === "karsilastirma" ? "Karşılaştırma için sol ve sag sütunlarının başlık ve öğeleri gerekli." : `Bu diyagram için en az ${tur === "dongu" ? 3 : 2} öğe gerekli.` };
+  if (tur === "dongu" && ogeler.length < 3) return { hata: "Döngü için en az 3 öğe gerekli." };
+  return { spec: { diyagram: true, tur, baslik: String(g.baslik || PDR_DIY_TURLER[tur]).slice(0, 90), merkez: String(g.merkez || "").slice(0, 60), ogeler, sol, sag }, notlar };
+}
+function pdrDiyagramSvg(s, gen) {
+  gen = gen || 640; const W = ["akis", "karsilastirma", "zaman"].includes(s.tur) ? 540 : 640; let H = 400, g = "";
+  const R = (i) => PDR_DIY_RENK[i % PDR_DIY_RENK.length];
+  const kutu = (x, y, w, h, i, r) => `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" rx="${r == null ? 12 : r}" fill="${R(i)[1]}" stroke="${R(i)[0]}" stroke-width="2"/>`;
+  if (s.tur === "akis") {
+    const n = s.ogeler.length, kh = s.ogeler.some(o => o.aciklama) ? 92 : 62, ara = 28; H = 20 + n * kh + (n - 1) * ara + 20;
+    s.ogeler.forEach((o, i) => {
+      const y = 20 + i * (kh + ara), x = 70, w = W - 86;
+      g += kutu(x, y, w, kh, i);
+      g += `<circle cx="38" cy="${y + kh / 2}" r="20" fill="${R(i)[0]}"/>` + pdrDiyMetin(38, y + kh / 2, [String(i + 1)], { fs: 17, fw: 800, renk: "#fff" });
+      if (o.aciklama) { g += pdrDiyMetin(x + 16, y + 26, pdrDiySat(o.baslik, 38).slice(0, 1), { fs: 18, fw: 800, anchor: "start", renk: R(i)[0] }); g += pdrDiyMetin(x + 16, y + 62, pdrDiySat(o.aciklama, 48).slice(0, 2), { fs: 15, fw: 500, anchor: "start" }); }
+      else g += pdrDiyMetin(x + 16, y + kh / 2, pdrDiySat(o.baslik, 40).slice(0, 2), { fs: 18, fw: 700, anchor: "start" });
+      if (i < n - 1) g += pdrDiyOk(38, y + kh / 2 + 22, 38, y + kh + ara + kh / 2 - 22, "#9CA3AF");
+    });
+  } else if (s.tur === "dongu") {
+    const n = s.ogeler.length, cx = W / 2, cy = 270, Rr = 185, kw = 164, kh = 84; H = 550;
+    g += `<circle cx="${cx}" cy="${cy}" r="${Rr}" fill="none" stroke="#E5E7EB" stroke-width="2" stroke-dasharray="6 6"/>`;
+    const pos = s.ogeler.map((o, i) => { const a = -Math.PI / 2 + (i * 2 * Math.PI) / n; return [cx + Rr * Math.cos(a), cy + Rr * Math.sin(a), a]; });
+    pos.forEach((p, i) => {
+      const q = pos[(i + 1) % n], bos = n <= 4 ? 0.6 : 0.5, a1 = p[2] + bos, a2 = q[2] - bos + (i === n - 1 ? 2 * Math.PI : 0);
+      const ra = Rr; const x1 = cx + ra * Math.cos(a1), y1 = cy + ra * Math.sin(a1), x2 = cx + ra * Math.cos(a2), y2 = cy + ra * Math.sin(a2);
+      g += `<path d="M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${ra} ${ra} 0 0 1 ${x2.toFixed(1)} ${y2.toFixed(1)}" fill="none" stroke="${R(i)[0]}" stroke-width="3"/>`;
+      const t = a2, ax = x2, ay = y2, dx = -Math.sin(t), dy = Math.cos(t);
+      g += `<path d="M ${(ax + dx * 4).toFixed(1)} ${(ay + dy * 4).toFixed(1)} L ${(ax - dx * 8 + Math.cos(t) * 7).toFixed(1)} ${(ay - dy * 8 + Math.sin(t) * 7).toFixed(1)} L ${(ax - dx * 8 - Math.cos(t) * 7).toFixed(1)} ${(ay - dy * 8 - Math.sin(t) * 7).toFixed(1)} Z" fill="${R(i)[0]}"/>`;
+    });
+    pos.forEach((p, i) => { const o = s.ogeler[i]; g += kutu(p[0] - kw / 2, p[1] - kh / 2, kw, kh, i, 16); g += pdrDiyMetin(p[0], p[1] - (o.aciklama ? 16 : 0), pdrDiySat(o.baslik, 18).slice(0, 2), { fs: 15, fw: 800, renk: R(i)[0] }); if (o.aciklama) g += pdrDiyMetin(p[0], p[1] + 24, pdrDiySat(o.aciklama, 22).slice(0, 2), { fs: 12, fw: 500 }); });
+    if (s.merkez) { g += `<circle cx="${cx}" cy="${cy}" r="66" fill="#fff" stroke="#127C56" stroke-width="2.5"/>` + pdrDiyMetin(cx, cy, pdrDiySat(s.merkez, 14).slice(0, 3), { fs: 14, fw: 800, renk: "#127C56" }); }
+  } else if (s.tur === "zihin") {
+    const n = s.ogeler.length, cx = W / 2, cy = 270, Rr = 205; H = 560;
+    s.ogeler.forEach((o, i) => {
+      const a = -Math.PI / 2 + (i * 2 * Math.PI) / n, x = cx + Rr * Math.cos(a), y = cy + Rr * Math.sin(a) * 0.9;
+      g += `<path d="M ${cx} ${cy} Q ${(cx + (x - cx) * 0.5 + Math.sin(a) * 20).toFixed(1)} ${(cy + (y - cy) * 0.5 - Math.cos(a) * 20).toFixed(1)} ${x.toFixed(1)} ${y.toFixed(1)}" fill="none" stroke="${R(i)[0]}" stroke-width="3.5" stroke-linecap="round"/>`;
+    });
+    s.ogeler.forEach((o, i) => {
+      const a = -Math.PI / 2 + (i * 2 * Math.PI) / n, x = cx + Rr * Math.cos(a), y = cy + Rr * Math.sin(a) * 0.9;
+      const alt = o.alt.slice(0, 3), kw = 160, kh = 44 + alt.length * 17;
+      g += kutu(x - kw / 2, y - kh / 2, kw, kh, i, 14);
+      g += pdrDiyMetin(x, y - kh / 2 + 22, pdrDiySat(o.baslik, 18).slice(0, 1), { fs: 14.5, fw: 800, renk: R(i)[0] });
+      alt.forEach((t, j) => { g += pdrDiyMetin(x, y - kh / 2 + 42 + j * 17, [pdrDiySat(t, 24)[0]], { fs: 11.5, fw: 500 }); });
+    });
+    g += `<ellipse cx="${cx}" cy="${cy}" rx="92" ry="50" fill="#127C56"/>` + pdrDiyMetin(cx, cy, pdrDiySat(s.merkez || s.baslik, 14).slice(0, 3), { fs: 15, fw: 800, renk: "#fff" });
+  } else if (s.tur === "karsilastirma") {
+    const n = Math.max(s.sol.ogeler.length, s.sag.ogeler.length), sh = 54; H = 90 + n * sh + 20;
+    [[s.sol, 20, 0], [s.sag, W / 2 + 10, 1]].forEach(([k, x, i]) => {
+      const w = W / 2 - 30;
+      g += `<rect x="${x}" y="20" width="${w}" height="54" rx="12" fill="${R(i)[0]}"/>` + pdrDiyMetin(x + w / 2, 47, pdrDiySat(k.baslik, 22).slice(0, 1), { fs: 18, fw: 800, renk: "#fff" });
+      k.ogeler.forEach((t, j) => { const y = 84 + j * sh; g += kutu(x, y, w, sh - 8, i, 8) + pdrDiyMetin(x + 12, y + (sh - 8) / 2, pdrDiySat(t, 26).slice(0, 2), { fs: 15, fw: 600, anchor: "start" }); });
+    });
+    g += `<circle cx="${W / 2}" cy="47" r="20" fill="#fff" stroke="#9CA3AF" stroke-width="2"/>` + pdrDiyMetin(W / 2, 47, ["vs"], { fs: 13, fw: 800, renk: "#6B7280" });
+  } else if (s.tur === "zaman") {
+    const n = s.ogeler.length, ad = 96, lx = 160; H = 30 + n * ad;
+    g += `<line x1="${lx}" y1="20" x2="${lx}" y2="${H - 20}" stroke="#D1D5DB" stroke-width="4" stroke-linecap="round"/>`;
+    s.ogeler.forEach((o, i) => {
+      const y = 52 + i * ad;
+      g += `<circle cx="${lx}" cy="${y}" r="13" fill="#fff" stroke="${R(i)[0]}" stroke-width="5"/>`;
+      g += pdrDiyMetin(lx - 22, y, pdrDiySat(o.baslik, 14).slice(0, 2), { fs: 15, fw: 800, anchor: "end", renk: R(i)[0] });
+      g += kutu(lx + 26, y - 36, W - lx - 40, 72, i, 10) + pdrDiyMetin(lx + 40, y, pdrDiySat(o.aciklama || o.baslik, 34).slice(0, 2), { fs: 15, fw: 600, anchor: "start" });
+    });
+  } else if (s.tur === "piramit") {
+    const n = s.ogeler.length, kh = 92, ust = 20; H = ust + n * kh + 20;
+    s.ogeler.forEach((o, i) => {
+      const y = ust + i * kh, w0 = 230 + (i / n) * 380, w1 = 230 + ((i + 1) / n) * 380, cx = W / 2;
+      g += `<path d="M ${cx - w0 / 2} ${y} L ${cx + w0 / 2} ${y} L ${cx + w1 / 2} ${y + kh - 4} L ${cx - w1 / 2} ${y + kh - 4} Z" fill="${R(i)[0]}" opacity="${0.92 - i * 0.08}"/>`;
+      g += pdrDiyMetin(cx, y + (o.aciklama ? 24 : kh / 2 - 2), pdrDiySat(o.baslik, 30).slice(0, 1), { fs: 17, fw: 800, renk: "#fff" });
+      if (o.aciklama) g += pdrDiyMetin(cx, y + 58, pdrDiySat(o.aciklama, Math.round(w0 / 8.5)).slice(0, 2), { fs: 13.5, fw: 600, renk: "#fff" });
+    });
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${pdrGrafikEsc(s.baslik)}" style="max-width:${gen}px">${g}</svg>`;
+}
+// ── DİYAGRAM BİTİŞ ──
 // ── ALAN BİLGİSİ BAŞLANGIÇ (alanbilgisi/gom.py ile üretilir; elle düzenleme) ──
 // Asistanın mesleki bilgi kitaplığı: eğitim psikolojisi, pozitif psikoloji, PDR, klinik psikoloji, ölçme-değerlendirme, bireyi tanıma, psikolojik testler.
 // Model bu metni yalnızca alan_bilgisi aracını çağırınca görür; böylece her istekte token harcanmaz.
@@ -13126,7 +13239,7 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - Akademik düzey taraması (ilkokul/ortaokul/lise) sonucu, yorumu ya da "nasıl uygularım, hangi setleri sorayım" sorulduğunda duzey_taramasi kullan. Öğretim yılı içinde beklenen düzeyin TAMAMLADIĞI sınıf olduğunu unutma (8. sınıfın başındaki öğrencide 7 çıkması normaldir); çıkarımları "işaret ediyor olabilir" diliyle aktar.
 - LGS/YKS sistemi, tercih ya da öğrenci koçluğu (çalışma planı, hedef, süre yönetimi, deneme analizi yöntemi) sorulduğunda sinav_rehberi'ni çağır ve öğrencinin kendi verileriyle (deneme_analizi, lgs_konu_onceligi) birleştir. Taban puanı, kontenjan ya da tarih uydurma.
 - Sınıf mevcudu, şube listesi ya da yeni gelen/nakil öğrenci sorulduğunda sinif_bilgisi kullan.
-- Danışman grafik, şema, "göster", "çiz" isterse grafik_ciz kullan (sayıları kendin hesaplama). Dönem/ay özeti, faaliyet raporu görseli, kurul ya da veli toplantısı sunumu isterse infografik_rapor kullan. Yanıtında grafikteki sayıları tekrar listeleme; 1-2 cümlelik yorum yeter.
+- Danışman sayısal veri grafiği isterse grafik_ciz kullan (sayıları kendin hesaplama). Şema, akış şeması, döngü, zihin haritası, karşılaştırma, zaman çizelgesi ya da kademe/piramit görseli isterse diyagram_ciz kullan; maddeleri kısa ve öz yaz. Dönem/ay özeti, faaliyet raporu görseli, kurul ya da veli toplantısı sunumu isterse infografik_rapor kullan. Yanıtında grafikteki sayıları tekrar listeleme; 1-2 cümlelik yorum yeter.
 - Mesleki/kuramsal sorularda (gelişim, öğrenme, motivasyon, çalışma teknikleri, üstbiliş, pozitif psikoloji, danışma kuramları ve teknikleri, görüşme becerileri, grup, etik ve gizlilik, mevzuat ve RAM süreçleri, klinik belirtiler ve yönlendirme, ölçme-değerlendirme, test yorumu, bireyi tanıma teknikleri) önce alan_bilgisi'ni çağır, gerekirse ikinci bir bölüm aç; bilgiyi öğrencinin kendi verisiyle birleştir. Belirti konuşurken tanı koyma ("… belirtileri gözleniyor, … açısından değerlendirme önerilir"), ilaç önerme. Kendine zarar, intihar, istismar ya da psikoz belirtisi geçen her durumda alan_bilgisi'nden pdr.kriz veya pdr.ihmal_istismar bölümünü aç ve okulun yapması gerekenleri sırayla, açıkça yaz.
 - Lise taban puanı, yüzdelik dilim, "kaç netle hangi okul", tercih listesi sorulduğunda lise_taban_puanlari kullan (Beylikdüzü, Esenyurt, Başakşehir, Büyükçekmece, Avcılar ayrıntılı). Öğrenci adı geçiyorsa önce deneme_analizi ile ortalama netini al. Araçta olmayan okulun puanını uydurma; değerlerin 2026 tabanı olduğunu ve her yıl değiştiğini söyle.
 - Veri girişi: deneme netleri → deneme_kaydet; Profil 1 boyut puanları → profil_puanla; kariyer hedefi, ilgi, aile notu, d2 → profil2_guncelle; devamsızlık → devamsizlik_kaydet; yeni öğrenci → ogrenci_ekle (önce ogrenci_ara); konu tamamlama yüzdesi → konu_guncelle; risk kapatma → risk_kapat; plan durumu → mudahale_durum; hatırlatmayı bitirme → hatirlatma_tamamla. Hepsi onay ister; danışmanın söylediği değerleri aynen ver, tahmin etme.
@@ -31777,7 +31890,7 @@ const PDR_ASISTAN_ARAC_AD = {
   ekranda_ac: "📍 Ekran açıldı", ekranda_gorusme: "👀 Görüşme formu ekranda dolduruldu", ekranda_hatirlatma: "👀 Hatırlatma ekranda dolduruldu",
   ekranda_risk: "👀 Risk formu ekranda hazırlandı", ekranda_mudahale: "👀 Müdahale planı ekranda dolduruldu",
   asistan_notu_kaydet: "📌 Öğrenciye not kaydı", not_kaydet: "📚 Yazılı / yıl sonu notu kaydı",
-  deneme_kaydet: "📊 Deneme kaydı", sinav_rehberi: "📘 LGS/YKS rehberi", grafik_ciz: "📊 Grafik", infografik_rapor: "🖼 İnfografik", alan_bilgisi: "📚 Mesleki bilgi", lise_taban_puanlari: "🏫 Lise taban puanları", sinif_bilgisi: "🏫 Sınıf bilgisi", profil_puanla: "📋 Profil 1 puanları", profil2_guncelle: "📋 Profil 2 güncelleme", devamsizlik_kaydet: "📅 Devamsızlık kaydı",
+  deneme_kaydet: "📊 Deneme kaydı", sinav_rehberi: "📘 LGS/YKS rehberi", grafik_ciz: "📊 Grafik", diyagram_ciz: "🧩 Diyagram", infografik_rapor: "🖼 İnfografik", alan_bilgisi: "📚 Mesleki bilgi", lise_taban_puanlari: "🏫 Lise taban puanları", sinif_bilgisi: "🏫 Sınıf bilgisi", profil_puanla: "📋 Profil 1 puanları", profil2_guncelle: "📋 Profil 2 güncelleme", devamsizlik_kaydet: "📅 Devamsızlık kaydı",
   ogrenci_ekle: "👤 Öğrenci eklendi", konu_guncelle: "📚 Konu Haritası", risk_kapat: "✅ Risk kapatma", mudahale_durum: "🎯 Plan durumu", hatirlatma_tamamla: "✔️ Hatırlatma tamamlandı",
 };
 // ── Asistan notları: yanıtı öğrencinin dosyasına kaydetme ──
@@ -32531,7 +32644,7 @@ function AsistanEkrani({
             {(m.adimlar || []).filter(a => a.grafik || a.infografik).map((a, j) => a.grafik ? (
               <div key={"gr" + j} data-testid="asistan-grafik" style={{ background: "#fff", border: `1px solid ${BORDER}`, borderRadius: 10, padding: "8px 10px", marginBottom: 8 }}>
                 <div style={{ fontSize: 12.5, fontWeight: 800, color: TEXT, marginBottom: 4 }}>{a.grafik.baslik}</div>
-                <div dangerouslySetInnerHTML={{ __html: pdrGrafikSvg(a.grafik, 640) }} />
+                <div dangerouslySetInnerHTML={{ __html: a.grafik.diyagram ? pdrDiyagramSvg(a.grafik) : pdrGrafikSvg(a.grafik, 640) }} />
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4 }}>
                   <button onClick={() => pdrGrafikPngIndir(a.grafik)} style={{ background: "none", border: "none", color: ACCENT, fontSize: 11, fontWeight: 800, cursor: "pointer", padding: 0 }}>⬇ PNG indir</button>
                 </div>

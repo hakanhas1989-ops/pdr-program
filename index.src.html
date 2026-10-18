@@ -11762,6 +11762,31 @@ const KS_ASISTAN_ARACLAR = {
     girdi: '{"program": "sdb-psikoegitim", "oturum": 3, "parca": 1}', yontem: "hepsi",
     calistir: (g) => ksAsistanProgramOturumu(g),
   },
+  sinav_rehberi: {
+    aciklama: "LGS ve YKS hakkında doğrulanmış bilgi ve öğrenci koçluğu çerçevesi getirir. konu: lgs (oturumlar, soru sayıları, süre, puanlama, yerleştirme, tercih) | yks (TYT/AYT/YDT, puan türleri, OBP, alan seçimi) | lgs_kocluk (hedef, öncelik, haftalık plan, hata analizi, süre yönetimi, kaygı, veli, tercih) | yks_kocluk. Sınav sistemi ya da koçluk sorulduğunda, öğrenciye çalışma planı hazırlarken önce bunu çağır; öğrenciye özel veriler için deneme_analizi, lgs_konu_onceligi, duzey_taramasi ile birleştir.",
+    girdi: '{"konu": "lgs_kocluk"}', yontem: "hepsi",
+    calistir: (g) => { const k = ksSade(String(g.konu || "")).replace(/[^a-z_]/g, ""); const anahtar = Object.keys(KS_SINAV_REHBERI).find(x => k === x) || (k.includes("yks") ? (k.includes("koc") ? "yks_kocluk" : "yks") : (k.includes("koc") ? "lgs_kocluk" : "lgs")); return KS_SINAV_REHBERI[anahtar] + "\n(Kaynak: MEB/ÖSYM kılavuzları; tarih ve tercih sayıları her yıl değişebilir, güncel kılavuzla doğrulanmalı.)"; },
+  },
+  sinif_bilgisi: {
+    aciklama: "Bir sınıfın (şubenin) öğrenci sayısını ve listesini getirir; öğrencilerin sınıfa eklenme tarihleri ve SONRADAN eklenenler (nakil/yeni kayıt olabilir) işaretlenir. sinif boşsa bütün şubelerin öğrenci sayıları ve son 60 günde sonradan eklenenler.",
+    girdi: '{"sinif": "8-C"}', yontem: "hepsi",
+    calistir: (g, ctx) => {
+      const liste = ctx.ogrenciler || ctx.ogrenciListesi || [];
+      const yeniler = ksSonradanEklenenler(ctx, 3650);
+      const yeniMi = (o) => yeniler.some(y => y.ad === o.studentName && y.sinif === o.className);
+      const q = ksSade(ksSinifNormal(g.sinif || "")).replace(/[^a-z0-9]/g, "");
+      if (!q) {
+        const say = new Map(); liste.forEach(o => say.set(o.className || "?", (say.get(o.className || "?") || 0) + 1));
+        const y60 = ksSonradanEklenenler(ctx, 60);
+        return `ŞUBELER (${liste.length} öğrenci): ${[...say.entries()].sort((a, c) => a[0].localeCompare(c[0], "tr", { numeric: true })).map(([c, n]) => `${c}: ${n}`).join(", ")}${y60.length ? `\nSon 60 günde sonradan eklenenler: ${y60.map(y => `${y.ad} (${y.sinif}, ${y.tarih})`).join("; ")}` : "\nSon 60 günde sonradan eklenen öğrenci yok."}`;
+      }
+      const s = liste.filter(o => ksSade(o.className || "").replace(/[^a-z0-9]/g, "") === q);
+      if (!s.length) return `"${g.sinif}" sınıfında kayıtlı öğrenci yok.`;
+      const sirali = [...s].sort((a, c) => (parseInt(a.numara) || 9999) - (parseInt(c.numara) || 9999));
+      const yeniSay = sirali.filter(yeniMi).length;
+      return `${s[0].className} — ${s.length} öğrenci${yeniSay ? ` (${yeniSay} öğrenci sonradan eklendi)` : ""}:\n${sirali.map(o => `• ${o.studentName}${o.numara ? " (No " + o.numara + ")" : ""}${yeniMi(o) ? ` — SONRADAN EKLENDİ ${o.tarih}` : ""}`).join("\n")}${yeniSay ? "\nSonradan eklenen öğrenciler için okula uyum görüşmesi ve Uyum İzleme formu önerilir." : ""}`;
+    },
+  },
   deneme_kaydet: {
     aciklama: "Öğrencinin deneme sınavı netlerini kaydeder (ONAY GEREKİR; Öğrenciler → öğrenci → Deneme). deneme: deneme numarası (1-10; boşsa ilk boş numara). netler: {ders: net} — LGS'de Türkçe, Matematik, Fen, Sosyal (İnkılap), İngilizce, Din; lisede seçili sınav türünün dersleri. gdo: önceki yılın deneme ortalaması (toplam net), isteğe bağlı. Sayıları aynen yaz.",
     girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "deneme": 3, "netler": {"Türkçe": 15.33, "Matematik": 12}, "tarih": "GG.AA.YYYY", "gdo": null}', ogrenciIster: true, yazma: true, yontem: "hepsi",
@@ -11838,7 +11863,8 @@ const KS_ASISTAN_ARACLAR = {
       const yeni = { id: uid(), studentName: ad, className: sn, numara: no, yil: ctx.aktifYil, tarih: today() };
       const guncel = [yeni, ...(ctx.ogrenciler || [])];
       ctx.ogrenciler = guncel; await ctx.kaydet.ogrenciler(guncel);
-      return `Öğrenci eklendi: ${ad} (${sn}${no ? ", No: " + no : ""}).`;
+      const mevcut = (ctx.ogrenciler || []).filter(x => x.className === sn).length;
+      return `Öğrenci eklendi: ${ad} (${sn}${no ? ", No: " + no : ""}); ${sn} sınıfında artık ${mevcut} öğrenci var. Sonradan katılan bir öğrenciyse okula uyum görüşmesi ve Uyum İzleme formu önerilir.`;
     },
   },
   konu_guncelle: {
@@ -12327,12 +12353,12 @@ const KS_KADEME = {
     araclar: "Okul olgunluğu, okuma-yazma değerlendirmesi ve programı, ilkokul düzey taraması (1-4), Koppitz/İnsan Çiz, kaynaştırma/BEP" },
   ortaokul: { ad: "Ortaokul", alt: 5, ust: 8, yas: "yaklaşık 10-14 yaş",
     dersler: "Türkçe, Matematik, Fen Bilimleri, Sosyal Bilgiler (5-7. sınıf), İnkılap Tarihi (8. sınıf), İngilizce, Din Kültürü ve Ahlak Bilgisi ve diğerleri",
-    sinav: "LGS 8. sınıfın sonunda yapılır (Türkçe 20, Matematik 20, Fen 20, İnkılap 10, Din 10, İngilizce 10 soru). Deneme sınavları ve LGS konu haritası esas olarak 7-8. sınıflar içindir.",
+    sinav: "LGS 8. sınıfın sonunda, haziranda tek gün iki oturumda yapılır: sözel oturum 75 dk (Türkçe 20, İnkılap Tarihi 10, Din Kültürü 10, İngilizce 10) ve sayısal oturum 80 dk (Matematik 20, Fen Bilimleri 20); toplam 90 soru. 3 yanlış 1 doğruyu götürür; Türkçe, Matematik ve Fen'in katsayısı 4, diğerlerinin 1; puan en fazla 500. Tercihte en fazla 20 okul: merkezi yerleştirme 10, yerel yerleştirme 5 (ilk 3'ü kayıt alanından), pansiyonlu 5. Deneme sınavları ve LGS konu haritası esas olarak 7-8. sınıflar içindir. Ayrıntı ve koçluk için sinav_rehberi aracı.",
     odak: "ergenliğe geçiş (Erikson: kimlik - rol karmaşası evresinin başı), akran ilişkileri ve zorbalık, sınav kaygısı (LGS), çalışma becerileri, lise tercihi ve meslekleri tanıma, aile ile çatışmalar",
     araclar: "Ortaokul düzey taraması (5-8), deneme analizi, LGS konu önceliği, Konu Haritası, mesleki eğilim/ilgi envanterleri" },
   lise: { ad: "Lise", alt: 9, ust: 12, yas: "yaklaşık 14-18 yaş",
     dersler: "Türk Dili ve Edebiyatı, Matematik, Fizik, Kimya, Biyoloji, Tarih, Coğrafya, Felsefe, İngilizce ve alan dersleri",
-    sinav: "YKS (TYT ve AYT) 12. sınıfın sonunda yapılır; 9-10. sınıflarda TYT temeli, 11-12. sınıflarda alan (AYT) çalışması. LGS ve LGS konuları bu kademede kullanılmaz.",
+    sinav: "YKS 12. sınıfın sonunda, haziranda yapılır: TYT 120 soru 165 dk (Türkçe 40, Sosyal 20, Temel Matematik 40, Fen 20; herkes girer), AYT 160 soru 180 dk (Edebiyat-Sosyal-1 40, Sosyal-2 40, Matematik 40, Fen 40; puan türüne göre), YDT 80 soru 120 dk. 4 yanlış 1 doğruyu götürür. Puan türleri SAY, EA, SÖZ, DİL. Diploma notu ×5 = OBP ve yerleştirme puanına eklenir. 9-10. sınıflarda TYT temeli, 10. sınıf sonunda alan seçimi, 11-12. sınıflarda AYT. LGS ve LGS konuları bu kademede kullanılmaz. Ayrıntı ve koçluk için sinav_rehberi aracı.",
     odak: "kimlik gelişimi (Erikson: kimlik - rol karmaşası), alan seçimi (10. sınıf sonu), kariyer planlama ve üniversite tercihi, romantik ilişkiler, madde kullanımı ve dijital bağımlılık riskleri, öz zarar ve intihar riskine dikkat, özerkliğe saygı",
     araclar: "Lise düzey taraması (9-12), TYT/AYT deneme analizi, kariyer/mesleki yönlendirme" },
 };
@@ -12344,6 +12370,54 @@ function ksKademeDisi(ctx, duzey) {
   if (!duzey) return "";
   return duzey < k.alt || duzey > k.ust ? `${duzey}. sınıf, programın kademesi olan ${k.ad.toLocaleLowerCase("tr")} (${k.alt}-${k.ust}. sınıf) dışında` : "";
 }
+// Sınıfına toplu listeden sonra eklenen öğrenciler: eklenme tarihi, o sınıfın ilk kayıtlarından 14+ gün sonra olanlar
+function ksSonradanEklenenler(ctx, gun = 60) {
+  const liste = ((ctx && (ctx.ogrenciler || ctx.ogrenciListesi)) || []).filter(o => !o.yil || !ctx.aktifYil || o.yil === ctx.aktifYil);
+  const tarihMs = (t) => { const k = ksTarihAnahtar(t); if (!k || k === "00000000") return null; const d = new Date(+k.slice(0, 4), +k.slice(4, 6) - 1, +k.slice(6, 8)); return isNaN(d) ? null : d.getTime(); };
+  const sinifIlk = new Map();
+  liste.forEach(o => { const t = tarihMs(o.tarih); const c = o.className || ""; if (t !== null && c) sinifIlk.set(c, Math.min(sinifIlk.get(c) ?? t, t)); });
+  const simdi = Date.now(), G = 86400000;
+  return liste.filter(o => { const t = tarihMs(o.tarih), ilk = sinifIlk.get(o.className || ""); return t !== null && ilk !== undefined && t - ilk >= 14 * G && simdi - t <= gun * G; })
+    .sort((a, c) => (tarihMs(c.tarih) || 0) - (tarihMs(a.tarih) || 0))
+    .map(o => ({ ad: o.studentName || o.name, sinif: o.className, tarih: o.tarih, numara: o.numara || "" }));
+}
+// LGS / YKS bilgi ve koçluk rehberi (sinav_rehberi aracı)
+const KS_SINAV_REHBERI = {
+  lgs: `LGS (Liselere Geçiş Sistemi — merkezi sınav)
+- Kim, ne zaman: 8. sınıf öğrencileri; haziranda tek gün (2026'da 13 Haziran'daydı; 2027 tarihi MEB takviminde açıklanır). İsteğe bağlıdır; girmeyen öğrenci yerel yerleştirmeyle liseye yerleşir.
+- Oturumlar: Sözel 75 dk — Türkçe 20, T.C. İnkılap Tarihi 10, Din Kültürü 10, Yabancı Dil 10 (50 soru). Sayısal 80 dk — Matematik 20, Fen Bilimleri 20 (40 soru). Toplam 90 soru, 155 dk.
+- Puanlama: Ders neti = doğru − yanlış/3 (3 yanlış 1 doğruyu götürür; boş etkilemez). Netler standart puana çevrilir; Türkçe, Matematik ve Fen'in ağırlığı 4, İnkılap, Din ve İngilizcenin ağırlığı 1. Puan en fazla 500; sonuçla birlikte yüzdelik dilim açıklanır.
+- Kapsam: 8. sınıf öğretim programı (2020 ve 2023'te yalnız 1. dönem konuları soruldu; diğer yıllarda yılın tamamı).
+- Yerleştirme: Merkezi sınavla öğrenci alan okullar (fen, sosyal bilimler, proje okulları, Anadolu liseleri, Anadolu imam hatip ve MTAL Anadolu teknik programları) LGS puanına göre; diğerleri adrese dayalı yerel yerleştirmeyle (adres, okul başarı puanı, devamsızlık).
+- Tercih: En fazla 20 okul — merkezi yerleştirme 10, yerel yerleştirme 5 (ilk 3'ü kayıt alanındaki okullardan; aynı türden en fazla 3), pansiyonlu okullar 5. Tercih dönemi sonuçlardan sonra e-Okul üzerinden yapılır.`,
+  yks: `YKS (Yükseköğretim Kurumları Sınavı — ÖSYM)
+- Kim, ne zaman: Lise 12. sınıf ve mezunlar; haziranda iki gün (tarih ÖSYM takviminde açıklanır).
+- Oturumlar: TYT 120 soru, 165 dk — Türkçe 40, Sosyal Bilimler 20, Temel Matematik 40, Fen Bilimleri 20 (herkes girer). AYT 160 soru, 180 dk — Türk Dili ve Edebiyatı-Sosyal Bilimler-1 40, Sosyal Bilimler-2 40, Matematik 40, Fen Bilimleri 40 (öğrenci puan türüne göre ilgili testleri çözer). YDT 80 soru, 120 dk (dil puanı için).
+- Puanlama: Net = doğru − yanlış/4. Puan türleri: TYT (önlisans), SAY, EA, SÖZ, DİL. Diploma notu ×5 = Ortaöğretim Başarı Puanı (OBP); belirli bir katsayıyla yerleştirme puanına eklenir.
+- Puan hesaplanması için TYT'de Türkçe ya da Temel Matematikten en az 0,5 ham puan gerekir. Genel bir baraj puanı yok; bazı lisans programları (tıp, hukuk, öğretmenlik, mühendislik vb.) en düşük başarı sırası şartı arar.
+- Alan seçimi: 10. sınıfın sonunda (sayısal, eşit ağırlık, sözel, dil); alan seçimi AYT'de çözülecek testleri ve hedeflenebilecek bölümleri belirler.
+- Ayrıntılı ve güncel kurallar için her yıl ÖSYM YKS kılavuzuna bakılmalı.`,
+  lgs_kocluk: `LGS ÖĞRENCİ KOÇLUĞU (danışmanın öğrenciyle kullanabileceği çerçeve)
+1) Başlangıç ölçümü: Son 2-3 denemenin ders netleri, Konu Haritası tamamlama durumu, düzey taraması ve sınav kaygısı ölçümü. Programdaki deneme_analizi, lgs_konu_onceligi ve duzey_taramasi araçlarıyla öğrenciye özel tablo çıkar.
+2) Hedef: Gerçekçi ve ölçülebilir hedef (örn. "3 deneme içinde Matematik netini 8'den 11'e çıkarmak"). Büyük hedef (okul/yüzdelik) + küçük haftalık hedefler. Kıyaslama başkalarıyla değil öğrencinin kendi önceki netiyle.
+3) Öncelik: Katsayısı 4 olan Türkçe, Matematik, Fen puanın büyük bölümünü belirler; ama İnkılap, Din, İngilizcede kolay net bırakılmamalı. Konu seçiminde "LGS'de çok soru çıkan + öğrencinin eksik olduğu" konular önce (lgs_konu_onceligi).
+4) Haftalık düzen: Her gün Türkçe paragraf (20-30 soru) ve Matematik; Fen'de kavram + soru; 20-30 dk kitap okuma. Aralıklı tekrar (1-3-7-30 gün). 25-30 dk çalışma + 5 dk mola (pomodoro). Hafta sonu 1 deneme + analiz.
+5) Deneme sonrası hata analizi: Her yanlış/boş için neden yazılır — bilgi eksiği, dikkat/okuma hatası, süre, soruyu yorumlama. Yanlış defteri tutulur; aynı hata türü tekrar ediyorsa çalışma o yöne çevrilir.
+6) Süre yönetimi: Sözelde soru başına ≈1,5 dk (50 soru/75 dk), sayısalda ≈2 dk (40 soru/80 dk). Turlama: önce bildiklerini çöz, takılanları işaretle, sonra dön. 3 yanlış 1 doğruyu götürdüğü için hiç fikri olmayan soru boş bırakılabilir; iki şıkka indirebildiği soruda işaretlemek genelde avantajlıdır.
+7) Dönem planı: Eylül-Ocak konu tamamlama ve düzenli deneme; Şubat-Nisan eksik konular + haftada 1-2 deneme; Mayıs-Haziran genel tekrar, çıkmış sorular ve sınav provası (gerçek saatlerde deneme). Son hafta yeni konu yok; uyku ve rutin.
+8) Kaygı ve motivasyon: Felaketleştirme ve "ya hep ya hiç" düşüncelerine BDT ile çalış (düşünce kaydı, kanıt sorgulama); nefes egzersizi; başarı günlüğü. Uyku 8-9 saat, düzenli beslenme ve hareket. Sınav günü: tanıdık kahvaltı, erken çıkış, kimlik ve kalem hazırlığı.
+9) Veli işbirliği: Baskı ve kıyaslama yerine ilgi ve düzen; deneme sonuçlarını suçlamadan konuşmak; ekran süresine birlikte kural; tercih döneminde öğrencinin ilgi ve hedefini merkeze almak.
+10) Tercih danışmanlığı: Öğrencinin yüzdelik dilimi (programda GDO ve deneme ortalamasından tahmin vardır) + ilgi/kariyer hedefi + okul türü ve uzaklık birlikte değerlendirilir. Merkezi tercihlerde hayal-gerçekçi-garanti dengesi; yerel yerleştirme bir B planı olarak ciddiyetle yazılır.
+Not: Danışman hedef okul ya da puan sorarsa kesin taban puanı uydurma; geçmiş yıl yüzdelik dilimlerinin her yıl değiştiğini belirt.`,
+  yks_kocluk: `YKS ÖĞRENCİ KOÇLUĞU (lise)
+1) 9-10. sınıf: Okul derslerinde temel (TYT konuları), okuma alışkanlığı, ilgi-yetenek keşfi; 10. sınıf sonunda alan seçimi (kariyer hedefi + ders başarısı + ilgi envanteri birlikte).
+2) 11. sınıf: AYT konularına başlama, düzenli TYT denemesi, hedef bölüm ve başarı sırası araştırması.
+3) 12. sınıf: Eylül-Şubat konu tamamlama + haftalık TYT/AYT denemesi; Mart-Haziran tekrar, çıkmış sorular, deneme sıklığını artırma.
+4) Deneme analizi ve hata defteri LGS'deki gibi; TYT'de Türkçe ve Temel Matematik, AYT'de puan türünün testleri önceliklidir. 4 yanlış 1 doğruyu götürür.
+5) Diploma notu (OBP) yerleştirme puanına katkı sağladığı için okul başarısı ihmal edilmemeli.
+6) Kaygı, uyku, motivasyon ve veli işbirliği ilkeleri LGS koçluğundaki gibidir; lisede öğrencinin özerkliğine ve kendi kararına daha çok alan bırakılır.
+7) Tercih: başarı sırası (puan değil sıra) esas alınır; hayal-gerçekçi-garanti dengesi; burs, şehir, meslek koşulları birlikte değerlendirilir.`,
+};
 function ksKademeMetni(ctx) {
   const anahtar = ksKademeAnahtar(ctx), k = KS_KADEME[anahtar];
   const liste = (ctx && ctx.ogrenciListesi) || [];
@@ -12353,9 +12427,10 @@ function ksKademeMetni(ctx) {
   const duzeyler = {};
   siniflar.forEach(([c, n]) => { const d = ksSinifDuzeyi(c); if (d) { duzeyler[d] = duzeyler[d] || { sube: 0, ogr: 0 }; duzeyler[d].sube++; duzeyler[d].ogr += n; } });
   const disarida = siniflar.filter(([c]) => ksKademeDisi(ctx, ksSinifDuzeyi(c)));
+  const yeniler = ksSonradanEklenenler(ctx, 60);
   return `KADEME: ${k.ad.toLocaleUpperCase("tr")} (${k.alt}-${k.ust}. sınıf, ${k.yas})
 - Bu okulda sınıf düzeyleri YALNIZCA ${Array.from({ length: k.ust - k.alt + 1 }, (_, i) => k.alt + i).map(d => d + ".").join(", ")} sınıflardır. Bu aralık dışında bir sınıf düzeyinden söz etme, örnek verirken de bu düzeyleri kullan.
-- Kayıtlı sınıflar ve öğrenci sayıları (programdaki gerçek liste; sayı gerektiğinde buradan ya da araçlardan al, asla tahmin etme): ${siniflar.length ? Object.entries(duzeyler).map(([d, v]) => `${d}. sınıf: ${v.sube} şube, ${v.ogr} öğrenci`).join("; ") + `. Toplam ${liste.length} öğrenci.` : "henüz kayıtlı öğrenci yok."}${disarida.length ? `\n- Not: listede kademe dışı görünen sınıf(lar) var (${disarida.map(([c]) => c).join(", ")}); bunlar eski ya da hatalı kayıt olabilir, danışmana belirt.` : ""}
+- Kayıtlı sınıflar ve öğrenci sayıları (programdaki gerçek liste; sayı gerektiğinde buradan ya da araçlardan al, asla tahmin etme): ${siniflar.length ? Object.entries(duzeyler).map(([d, v]) => `${d}. sınıf: ${v.sube} şube, ${v.ogr} öğrenci`).join("; ") + `. Toplam ${liste.length} öğrenci.` : "henüz kayıtlı öğrenci yok."}${siniflar.length ? `\n- Şube şube öğrenci sayıları: ${siniflar.map(([c, n]) => `${c}: ${n}`).join(", ")}.` : ""}${yeniler.length ? `\n- Son 60 günde sınıfına SONRADAN eklenen öğrenciler (nakil/yeni kayıt olabilir; uyum açısından takip önerilir): ${yeniler.slice(0, 15).map(y => `${y.ad} (${y.sinif}, ${y.tarih})`).join("; ")}${yeniler.length > 15 ? ` ve ${yeniler.length - 15} öğrenci daha` : ""}.` : ""}${disarida.length ? `\n- Not: listede kademe dışı görünen sınıf(lar) var (${disarida.map(([c]) => c).join(", ")}); bunlar eski ya da hatalı kayıt olabilir, danışmana belirt.` : ""}
 - Dersler: ${k.dersler}.
 - Sınavlar: ${k.sinav}
 - Bu kademede öncelikli konular: ${k.odak}.
@@ -12392,6 +12467,8 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - Sınıf, okul ya da öğrenci düzeyinde "hangi konular konuşulmuş", "kaç veli görüşmesi", "en çok hangi sınıfla", "eğilim", "karşılaştır", "dönem özeti", "kaç öğrencide zorbalık geçti" gibi sayı/analiz sorularında gorusme_analizi kullan; sayıları kendin tahmin etme. Yorum yaparken bulguyu, olası anlamını ve somut bir sonraki adımı söyle (örn. sınıf rehberlik etkinliği, veli toplantısı, grup çalışması).
 - Test sonucu sorulduğunda ya da test sonucuna göre plan/veli anlatımı istendiğinde test_sonucu kullan.
 - Akademik düzey taraması (ilkokul/ortaokul/lise) sonucu, yorumu ya da "nasıl uygularım, hangi setleri sorayım" sorulduğunda duzey_taramasi kullan. Öğretim yılı içinde beklenen düzeyin TAMAMLADIĞI sınıf olduğunu unutma (8. sınıfın başındaki öğrencide 7 çıkması normaldir); çıkarımları "işaret ediyor olabilir" diliyle aktar.
+- LGS/YKS sistemi, tercih ya da öğrenci koçluğu (çalışma planı, hedef, süre yönetimi, deneme analizi yöntemi) sorulduğunda sinav_rehberi'ni çağır ve öğrencinin kendi verileriyle (deneme_analizi, lgs_konu_onceligi) birleştir. Taban puanı, kontenjan ya da tarih uydurma.
+- Sınıf mevcudu, şube listesi ya da yeni gelen/nakil öğrenci sorulduğunda sinif_bilgisi kullan.
 - Veri girişi: deneme netleri → deneme_kaydet; Profil 1 boyut puanları → profil_puanla; kariyer hedefi, ilgi, aile notu, d2 → profil2_guncelle; devamsızlık → devamsizlik_kaydet; yeni öğrenci → ogrenci_ekle (önce ogrenci_ara); konu tamamlama yüzdesi → konu_guncelle; risk kapatma → risk_kapat; plan durumu → mudahale_durum; hatırlatmayı bitirme → hatirlatma_tamamla. Hepsi onay ister; danışmanın söylediği değerleri aynen ver, tahmin etme.
 - Danışman öğrencinin yazılı sınav puanını ya da yıl sonu not ortalamasını söylerse not_kaydet kullan (birden çok dersi tek çağrıda ver). Sayıları aynen yaz; hangi yazılı olduğu belli değilse yazili alanını boş bırak, program boş olana yazar.
 - Danışman bir yanıtı ya da bu sohbeti öğrencinin dosyasına kaydetmek/göndermek isterse asistan_notu_kaydet kullan (kapsam: son ya da hepsi). Kaydedilecek metni yeniden yazma; program yanıtları aynen kaydeder.
@@ -31040,7 +31117,7 @@ const PDR_ASISTAN_ARAC_AD = {
   ekranda_ac: "📍 Ekran açıldı", ekranda_gorusme: "👀 Görüşme formu ekranda dolduruldu", ekranda_hatirlatma: "👀 Hatırlatma ekranda dolduruldu",
   ekranda_risk: "👀 Risk formu ekranda hazırlandı", ekranda_mudahale: "👀 Müdahale planı ekranda dolduruldu",
   asistan_notu_kaydet: "📌 Öğrenciye not kaydı", not_kaydet: "📚 Yazılı / yıl sonu notu kaydı",
-  deneme_kaydet: "📊 Deneme kaydı", profil_puanla: "📋 Profil 1 puanları", profil2_guncelle: "📋 Profil 2 güncelleme", devamsizlik_kaydet: "📅 Devamsızlık kaydı",
+  deneme_kaydet: "📊 Deneme kaydı", sinav_rehberi: "📘 LGS/YKS rehberi", sinif_bilgisi: "🏫 Sınıf bilgisi", profil_puanla: "📋 Profil 1 puanları", profil2_guncelle: "📋 Profil 2 güncelleme", devamsizlik_kaydet: "📅 Devamsızlık kaydı",
   ogrenci_ekle: "👤 Öğrenci eklendi", konu_guncelle: "📚 Konu Haritası", risk_kapat: "✅ Risk kapatma", mudahale_durum: "🎯 Plan durumu", hatirlatma_tamamla: "✔️ Hatırlatma tamamlandı",
 };
 // ── Asistan notları: yanıtı öğrencinin dosyasına kaydetme ──

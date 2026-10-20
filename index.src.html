@@ -33324,17 +33324,24 @@ function ProfDanismaEkrani({
   kayitliListesi, aktifOgrenci, records, profiles, profiles2,
   denemeler, riskListesi, mudahalePlan, sevkler,
   hazirlikNotlari, ilerlemeNotlari, profNotlari, setProfNotlari, sinavTuru,
-  akademikTaramalar, liseTaramalar, benlikOlcekleri, testKayitlari
+  akademikTaramalar, liseTaramalar, benlikOlcekleri, testKayitlari, setAktifOgrenci
 }) {
   const [seciliAd, setSeciliAd] = useState(aktifOgrenci?.name || "");
   const [aramaMetni, setAramaMetni] = useState("");
+  const [degistir, setDegistir] = useState(false); // seçili öğrenci varken listeyi açıp başka öğrenci seçme
   const [soru, setSoru] = useState("");
   const [loading, setLoading] = useState(false);
   const [mod, setMod] = useState("genel"); // genel | soru
 
-  useEffect(() => { if (aktifOgrenci?.name) setSeciliAd(aktifOgrenci.name); }, [aktifOgrenci?.name]);
+  // Diğer sekmelerde seçili öğrenci burada da seçili gelir; burada seçilen de diğer sekmelere geçer
+  useEffect(() => { if (aktifOgrenci?.name) { setSeciliAd(aktifOgrenci.name); setDegistir(false); } }, [aktifOgrenci?.name, aktifOgrenci?.className]);
+  function ogrenciSec(o) {
+    setSeciliAd(o.name); setDegistir(false); setAramaMetni("");
+    if (setAktifOgrenci) setAktifOgrenci({ name: o.name, className: o.className || "", numara: o.numara || "" });
+  }
 
-  const seciliSinif = pdrSeciliOgr(kayitliListesi, seciliAd, aktifOgrenci)?.className || aktifOgrenci?.className || "";
+  const seciliOgrKayit = pdrSeciliOgr(kayitliListesi, seciliAd, aktifOgrenci);
+  const seciliSinif = seciliOgrKayit?.className || aktifOgrenci?.className || "";
   const ogrKonusma = pdrSozlukOku(profNotlari, seciliAd, seciliSinif) || [];
 
   function tumVeriHazirla(ad, sinif) {
@@ -33565,14 +33572,23 @@ Bu soruyu tüm verileri ve Dr. Ayşe Kara'nın değerlendirmelerini göz önünd
         <div style={{fontSize:11, opacity:0.8, marginTop:2}}>Klinik Psikoloji · Çocuk-Ergen Psikiyatrisi · Eğitim Psikolojisi · PDR</div>
       </div>
 
-      {/* Öğrenci seç */}
+      {/* Seçili öğrenci (diğer sekmelerden gelir) */}
+      {seciliAd && !degistir && (
+        <div data-testid="prof-secili" style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,background:"#1a1a2e",color:"#fff",borderRadius:10,padding:"8px 12px",marginBottom:14}}>
+          <span style={{fontSize:13,fontWeight:800}}>👤 {seciliAd}{seciliSinif ? ` · ${seciliSinif}` : ""}{seciliOgrKayit?.numara ? ` · No: ${seciliOgrKayit.numara}` : ""}</span>
+          <button data-testid="prof-degistir" onClick={()=>{ setDegistir(true); setAramaMetni(""); }} style={{background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.5)",color:"#fff",borderRadius:8,padding:"4px 10px",fontSize:11.5,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>✕ Değiştir</button>
+        </div>
+      )}
+      {/* Öğrenci seç (öğrenci seçili değilse ya da "Değiştir"e basıldıysa) */}
+      {(!seciliAd || degistir) && <>
       <input placeholder="Öğrenci ara..." value={aramaMetni} onChange={e=>setAramaMetni(e.target.value)} style={{...inp, marginBottom:8}} />
       <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:14}}>
         {kayitliListesi.filter(o=>o.name.toLocaleLowerCase("tr").includes(aramaMetni.toLocaleLowerCase("tr")) || o.numara?.includes(aramaMetni)).slice(0,15).map(o=>{
-          const s=seciliAd===o.name;
-          return <button key={pdrOgrAnahtar(o.name, o.className, o.numara)} onClick={()=>setSeciliAd(o.name)} style={{padding:"4px 10px",borderRadius:16,border:`2px solid ${s?"#1a1a2e":BORDER}`,background:s?"#1a1a2e":CARD,color:s?"#fff":MUTED,fontSize:11,fontWeight:s?700:500,cursor:"pointer"}}>{o.name}</button>;
+          const s=seciliAd===o.name && (!seciliSinif || (o.className||"")===seciliSinif);
+          return <button key={pdrOgrAnahtar(o.name, o.className, o.numara)} onClick={()=>ogrenciSec(o)} style={{padding:"4px 10px",borderRadius:16,border:`2px solid ${s?"#1a1a2e":BORDER}`,background:s?"#1a1a2e":CARD,color:s?"#fff":MUTED,fontSize:11,fontWeight:s?700:500,cursor:"pointer"}}>{o.name}</button>;
         })}
       </div>
+      </>}
 
       {seciliAd && (
         <>
@@ -44923,6 +44939,7 @@ function pdrBaslangicSekmesi() {
             liseTaramalar={liseTaramalar}
             benlikOlcekleri={benlikOlcekleri}
             testKayitlari={testKayitlari}
+            setAktifOgrenci={setAktifOgrenci}
           />
         )}
 

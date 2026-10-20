@@ -11008,6 +11008,7 @@ const PDR_ASISTAN_VARSAYILAN_AYAR = {
   kayitYontemi: "ekran",
   yuzenDugme: true,                          // her ekranda sol altta bas-konuş düğmesi
   hizliKomut: true,
+  supervizyon: true,                         // 🎓 Prof. Hakan süpervizyonu (müdahale planı ve risk değerlendirmesi)
   onbellek: true,                            // Claude istem önbelleği (sabit talimat + önceki konuşma)                          // net ekran açma/liste isteklerini modele gitmeden yap
   acilistaAsistan: false,                    // program açılınca asistan ekranıyla başla                     // "ekran" (formu ekranda doldurur, Kaydet'e danışman basar) | "sohbet" (sohbette onay kartı)
 };
@@ -12169,7 +12170,7 @@ const KS_ASISTAN_ARACLAR = {
     calistir: (g, ctx, o) => ksMpAra(g, ctx, o),
   },
   mudahale_programi_kaydet: {
-    aciklama: "mudahale_programi_ara'nın getirdiği oturumlardan seçtiklerini öğrencinin 'Müdahale Programları' önerilerine kaydeder (ONAY GEREKİR). oturumlar: en fazla 3, baslik aday listesindeki gibi BİREBİR; aciklama: neden uygun (1 kısa cümle). plana_ekle: true ise oturumlar öğrencinin devam eden en son müdahale planının adımlarına da eklenir. 'Görüşme notlarına göre öner' düğmesinin önerileri silinmez; ikisi ayrı görünür.",
+    aciklama: "mudahale_programi_ara'nın getirdiği oturumlardan seçtiklerini öğrencinin 'Müdahale Programları' önerilerine kaydeder (ONAY GEREKİR). oturumlar: en fazla 3, baslik aday listesindeki (ya da program_ara / program_oturumu sonucundaki) gibi BİREBİR; aciklama: neden uygun (1 kısa cümle). plana_ekle: true ise oturumlar öğrencinin devam eden en son müdahale planının adımlarına da eklenir. 'Görüşme notlarına göre öner' düğmesinin önerileri silinmez; ikisi ayrı görünür.",
     girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "oturumlar": [{"baslik": "Kaygımı Fark Ediyorum", "aciklama": "..."}], "plana_ekle": true}', ogrenciIster: true, yazma: true, yontem: "hepsi",
     onayOzeti: (g, ctx, o) => {
       const r = ksMpEsle(g.oturumlar);
@@ -13352,6 +13353,7 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - Danışman sayısal veri grafiği isterse grafik_ciz kullan (sayıları kendin hesaplama). Şema, akış şeması, döngü, zihin haritası, karşılaştırma, zaman çizelgesi ya da kademe/piramit görseli isterse diyagram_ciz kullan; maddeleri kısa ve öz yaz. Dönem/ay özeti, faaliyet raporu görseli, kurul ya da veli toplantısı sunumu isterse infografik_rapor kullan. Yanıtında grafikteki sayıları tekrar listeleme; 1-2 cümlelik yorum yeter.
 - Mesleki/kuramsal sorularda (gelişim, öğrenme, motivasyon, çalışma teknikleri, üstbiliş, pozitif psikoloji, danışma kuramları ve teknikleri, görüşme becerileri, grup, etik ve gizlilik, mevzuat ve RAM süreçleri, klinik belirtiler ve yönlendirme, ölçme-değerlendirme, test yorumu, bireyi tanıma teknikleri) önce alan_bilgisi'ni çağır, gerekirse ikinci bir bölüm aç; bilgiyi öğrencinin kendi verisiyle birleştir. Belirti konuşurken tanı koyma ("… belirtileri gözleniyor, … açısından değerlendirme önerilir"), ilaç önerme. Kendine zarar, intihar, istismar ya da psikoz belirtisi geçen her durumda alan_bilgisi'nden pdr.kriz veya pdr.ihmal_istismar bölümünü aç ve okulun yapması gerekenleri sırayla, açıkça yaz.
 - Bir öğrenci için müdahale planı yaptığında ya da kaydettiğinde, ardından mudahale_programi_ara ile (aranan: planın anahtar kavramları, ogrenci: öğrenci) Müdahale Programları kütüphanesinden aday oturumları al; en uygun 1-3 oturumu seçip mudahale_programi_kaydet ile (plan kaydedildiyse plana_ekle: true) onaya sun. Danışman 'program/etkinlik/oturum öner' dediğinde de aynısını yap. Listede olmayan oturum adı uydurma.
+- Bir araç sonucunda "🎓 SÜPERVİZÖR … düzeltme istedi" yazarsa notları uygula ve aracı düzeltilmiş içerikle hemen yeniden çağır; danışmana soru sorma. Süpervizör notu "uygun" ise yanıtında tek cümleyle belirtebilirsin.
 - Lise taban puanı, yüzdelik dilim, "kaç netle hangi okul", tercih listesi sorulduğunda lise_taban_puanlari kullan (Beylikdüzü, Esenyurt, Başakşehir, Büyükçekmece, Avcılar ayrıntılı). Öğrenci adı geçiyorsa önce deneme_analizi ile ortalama netini al. Araçta olmayan okulun puanını uydurma; değerlerin 2026 tabanı olduğunu ve her yıl değiştiğini söyle.
 - Veri girişi: deneme netleri → deneme_kaydet; Profil 1 boyut puanları → profil_puanla; kariyer hedefi, ilgi, aile notu, d2 → profil2_guncelle; devamsızlık → devamsizlik_kaydet; yeni öğrenci → ogrenci_ekle (önce ogrenci_ara); konu tamamlama yüzdesi → konu_guncelle; risk kapatma → risk_kapat; plan durumu → mudahale_durum; hatırlatmayı bitirme → hatirlatma_tamamla. Hepsi onay ister; danışmanın söylediği değerleri aynen ver, tahmin etme.
 - Danışman öğrencinin yazılı sınav puanını ya da yıl sonu not ortalamasını söylerse not_kaydet kullan (birden çok dersi tek çağrıda ver). Sayıları aynen yaz; hangi yazılı olduğu belli değilse yazili alanını boş bırak, program boş olana yazar.
@@ -13526,11 +13528,121 @@ function ksAsistanGecmisDuzenle(gecmis) {
   gecmis.length = 0; sonuc.forEach(m => gecmis.push(m));
   return gecmis;
 }
+// ── 🎓 PROF. HAKAN SÜPERVİZYONU BAŞLANGIÇ ──
+// Asistanın müdahale planı ve risk değerlendirmesi çıktılarını ikinci bir "deneyimli süpervizör"
+// gözüyle denetler. Kayıttan önce planı inceler (gerekirse bir kez düzelttirir), plan/risk
+// yanıtlarını danışmana gitmeden önce gözden geçirir; danışman "🎓 Süpervizöre sor" diyerek
+// son yanıtı da incelettirebilir. Aynı model, aynı gizlilik kalkanı (maskeli metin) kullanılır.
+const KS_SUP_KAYIT_ARACLARI = { mudahale_kaydet: "plan", ekranda_mudahale: "plan", risk_kaydet: "risk", ekranda_risk: "risk" };
+const KS_SUP_OKUMA_ARACLARI = new Set(["mudahale_plani", "risk_analizi"]);
+const KS_SUP_SISTEM = `Sen Prof. Dr. Hakan'sın: okul psikolojik danışmanlığı, çocuk ve ergen klinik psikolojisi, eğitim psikolojisi ve PDR süpervizyonunda 30 yıllık deneyimi olan bir süpervizörsün. Bir yapay zekâ asistanının, ortaokulda çalışan bir psikolojik danışman için hazırladığı müdahale planını ya da risk değerlendirmesini, öğrencinin dosya özetiyle karşılaştırarak denetlersin. Danışmanla değil asistanla konuşuyorsun; amacın taslağı danışmana gitmeden önce güvenli ve sağlam hâle getirmek.
+
+DENETİM ÖLÇÜTLERİN (önem sırasıyla):
+1. Güvenlik: Dosyada kendine zarar, intihar düşüncesi, istismar/ihmal, şiddet, madde kullanımı gibi kritik işaret varsa taslak bunu ilk sıraya almış mı; güvenlik planı, okul yönetimi ve veli bilgilendirmesi, gerekiyorsa sağlık kuruluşu/RAM yönlendirmesi ve MEB kriz ve çocuk koruma süreçleri var mı? Kritik işaret varken atlanması her zaman DÜZELT sebebidir.
+2. Dosyaya dayanma: Taslaktaki her önemli iddia dosyadaki gerçek bulgulara dayanıyor mu? Dosyada olmayan bilgi, olay ya da tanı uydurulmuş mu?
+3. Hedef ve yöntem: Hedef ölçülebilir, gerçekçi ve süreli mi? Adımlar hedefe hizmet ediyor mu, kanıta dayalı mı (BDT, çözüm odaklı, psikoeğitim, beceri eğitimi, aile ve öğretmen iş birliği gibi)?
+4. Rol sınırı ve dil: Okul danışmanının yetkisi dışında tanı koyma, ilaç önerme, terapi vaadi var mı? Öğrenciyi etiketleyen, damgalayan ya da suçlayan bir dil var mı?
+5. Etik ve gizlilik: Gizlilik, bilgilendirilmiş onam, veli ve öğretmenle paylaşılacak bilginin sınırı gözetilmiş mi?
+6. Uygulanabilirlik: Türkiye'de bir devlet ortaokulunda, tek danışmanın zamanı ve imkânlarıyla yapılabilir mi?
+7. Risk değerlendirmesinde ayrıca: Risk düzeyi kanıtla tutarlı mı (abartılmamış, küçümsenmemiş)? Koruyucu faktörler ve izlem (ne zaman tekrar bakılacağı) var mı?
+
+KARAR KURALI: Yalnızca gerçekten önemli bir eksik ya da hata varsa DÜZELT de. Üslup, kelime seçimi ya da küçük ekleme önerileri için DÜZELT deme; taslak genel olarak sağlamsa UYGUN de ve en fazla 2 kısa geliştirme önerisi yaz.
+
+YANIT BİÇİMİ (başka hiçbir şey yazma, Markdown kullanma):
+KARAR: UYGUN
+ya da
+KARAR: DÜZELT
+NOTLAR:
+- en fazla 4 madde; her biri tek cümle, somut: neyin eksik ya da yanlış olduğu ve nasıl düzeltileceği
+GÜÇLÜ YAN: taslağın en güçlü yanı, tek cümle
+
+Öğrenci, veli, okul ve yer adları kodlanmış olabilir (Öğrenci-1, [OKUL-1] gibi); kodları olduğu gibi kullan, gerçek ad tahmin etme.`;
+function ksSupManuelMi(m) {
+  return /^\s*(🎓\s*)?(prof\.?\s*hakan[a-zçğıöşü']*\s+)?(süperviz(ö|o)r(e|den)?\s+(sor|danış|göster|bak|incele\w*|kontrol\s+et\w*)|süpervizyon(a\s+(sun|gönder)|dan\s+geçir|\s+(yap|iste))?)\s*[.!?]*\s*$/i.test(String(m || ""));
+}
+function ksSupNiyet(m) { return /müdahale\s*plan|eylem\s*plan|risk\s*(değerlendir|analiz)|ne\s+kadar\s+riskli/i.test(String(m || "")); }
+function ksSupCozumle(t) {
+  const s = String(t || "").replace(/\*+/g, "").replace(/\r/g, "");
+  const km = s.match(/KARAR\s*:\s*(UYGUN|DÜZELT|DUZELT)/i);
+  if (!km) return null;
+  const nb = (s.split(/NOTLAR\s*:/i)[1] || "").split(/GÜÇLÜ\s*YAN\s*:/i)[0];
+  const notlar = nb.split("\n").map(x => x.replace(/^\s*(?:[-•*]|\d+[.)])\s*/, "").trim()).filter(x => x.length > 3 && !/^(yok|-+)$/i.test(x)).slice(0, 4);
+  const guclu = ((s.match(/GÜÇLÜ\s*YAN\s*:\s*(.+)/i) || [])[1] || "").trim().slice(0, 300);
+  const karar = /UYGUN/i.test(km[1]) ? "UYGUN" : (notlar.length ? "DÜZELT" : "UYGUN");
+  return { karar, notlar: notlar.map(n => n.slice(0, 400)), guclu };
+}
+// Kayıttan önce incelenecek içerik: asistanın yazdığı plan ya da kapalı sistemin üreteceği plan/risk
+function ksSupKayitIcerik(ad, g, ctx, o) {
+  g = g || {};
+  const G = ksAsistanGirdi(ctx, o);
+  if (KS_SUP_KAYIT_ARACLARI[ad] === "plan") {
+    if (String(g.hedef || "").trim()) return `Hedef: ${g.hedef}\nAdımlar:\n${String(g.adimlar || "").replace(/\\n/g, "\n")}\nSüre: ${g.sure || "(yok)"}${g.oncelik ? "\nÖncelik: " + g.oncelik : ""}`;
+    return "(Kapalı sistemin hazırladığı plan)\n" + ksAsistanKisalt(pdrKapaliMudahalePlani({ ek: G.ek, gorusmeler: G.gorusmeler, kademe: G.kademe, profil1: G.profil1, programlar: typeof MUDAHALE_PROGRAMLARI !== "undefined" ? MUDAHALE_PROGRAMLARI : null }), 3000);
+  }
+  const r = pdrKapaliRiskAnalizi({ riskTuru: "", oncelik: "Orta", aciklama: "" }, G.gorusmeler, G.profil1, G.kademe, ksDenemeOzetHesapla(G.denemeGirilen, G.sinavTuru), G.ek);
+  return `(Kaydedilecek risk kaydı — kapalı sistem analizi)\nTür: ${r.tur} · Düzey: ${r.duzey}${r.acil ? " · ACİL" : ""}${g.aciklama ? "\nAsistanın açıklaması: " + g.aciklama : ""}\n${ksAsistanKisalt(r.metin || "", 2200)}`;
+}
+async function ksSupIncele({ ayar, ctx, ogr, tur, talep, icerik, iptal }) {
+  let dosya = "", kritik = "";
+  if (ogr) {
+    try { dosya = String(await KS_ASISTAN_ARACLAR.ogrenci_ozeti.calistir({}, ctx, ogr)); } catch (e) {}
+    try { const X = ksSupBaglam(ksAsistanGirdi(ctx, ogr)); if (X.c.kritikTurler.length) kritik = `⚠ DOSYADA KRİTİK İFADE VAR: ${X.c.kritikTurler.join(", ")}`; } catch (e) {}
+  }
+  const mesaj = `İNCELENECEK: ${tur}\nDANIŞMANIN İSTEĞİ: ${ksAsistanKisalt(String(talep || ""), 400)}\n${kritik ? kritik + "\n" : ""}\nÖĞRENCİ DOSYASI ÖZETİ (asistanın dayandığı veri):\n${ksAsistanKisalt(dosya, 3500) || "(öğrenci dosyası yok)"}\n\nASİSTANIN TASLAĞI:\n${ksAsistanKisalt(String(icerik || ""), 6000)}`;
+  const y = await ksAsistanModelCagir(ayar, KS_SUP_SISTEM, [{ role: "user", content: mesaj }], iptal);
+  const c = ksSupCozumle(y.metin);
+  return { ...(c || { karar: "UYGUN", notlar: [ksAsistanKisalt(String(y.metin || "").replace(/\s+/g, " "), 400)].filter(Boolean), guclu: "", okunamadi: true }), y };
+}
+function ksSupOzet(r, ikinci) {
+  return `🎓 Süpervizör${ikinci ? " (düzeltme sonrası)" : ""}: ${r.karar === "UYGUN" ? "uygun" : "dikkat"}${r.notlar.length ? "\n" + r.notlar.map(n => "• " + n).join("\n") : (r.guclu ? " — " + r.guclu : "")}`;
+}
+// ── 🎓 PROF. HAKAN SÜPERVİZYONU BİTİŞ ──
 async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTur = 8, iptal = null }) {
   const sistem = ksAsistanSistem(ayar, ctx);
   ksAsistanGecmisDuzenle(gecmis);
   let toplamGiris = 0, toplamCikis = 0, toplamUcret = 0, toplamOnb = 0, sonGiden = "", model = "", yedek = false, kritik = false, ekranIsi = false;
   let birikmis = "", devamBas = -1, devamSay = 0;   // yarıda kesilen yanıtın parçaları
+  // 🎓 Süpervizyon durumu
+  const supAcik = ayar.supervizyon !== false;
+  const supervizyon = [];                 // ekranda gösterilecek süpervizör notları
+  const supDuzeltilen = new Set();        // kayıttan önce bir kez düzelttirilen araçlar
+  const kullanilanAraclar = new Set();
+  let supYanitYapildi = false, supRevizyonBas = -1, sonOgr = null;
+  const supTopla = (y) => { toplamGiris += y.giris; toplamCikis += y.cikis; toplamUcret += y.ucretGiris ?? y.giris; toplamOnb += y.onbellek || 0; };
+  const sonKullanici = String(([...gecmis].reverse().find(x => x.role === "user" && !String(x.content).startsWith("<sonuc")) || {}).content || "");
+  const bitir = (yanit) => ({ yanit, giris: toplamGiris, cikis: toplamCikis, ucretGiris: toplamUcret, onbellek: toplamOnb, giden: sonGiden, model, yedek, kritik, supervizyon });
+  // Danışman "🎓 Süpervizöre sor" dediyse: önceki yanıtı incelet, gerekirse asistan düzeltsin
+  if (ksSupManuelMi(sonKullanici)) {
+    supYanitYapildi = true;
+    let oncekiYanit = "", oncekiTalep = "";
+    for (let j = gecmis.length - 2; j >= 0; j--) {
+      const x = gecmis[j];
+      if (!oncekiYanit && x.role === "assistant" && !/^\((Hızlı komut|Danışman bu isteği|Süpervizör)/.test(String(x.content))) oncekiYanit = String(x.content).replace(/<arac>[\s\S]*?<\/arac>/g, "").trim();
+      else if (oncekiYanit && x.role === "user" && !String(x.content).startsWith("<sonuc") && !ksSupManuelMi(x.content)) { oncekiTalep = String(x.content); break; }
+    }
+    if (!oncekiYanit) { gecmis.push({ role: "assistant", content: "(Süpervizör: incelenecek önceki yanıt yok.)" }); return bitir("🎓 İncelenecek bir önceki yanıt yok. Önce bir plan ya da değerlendirme iste, sonra \"Süpervizöre sor\" de."); }
+    try {
+      const sonMsj = [...((typeof PDR_ASISTAN_SOHBET !== "undefined" && PDR_ASISTAN_SOHBET.gorunen) || [])].reverse().find(m => m.rol === "asistan" && (m.adimlar || []).some(a => a.ogrKimlik));
+      const k = sonMsj ? [...sonMsj.adimlar].reverse().find(a => a.ogrKimlik).ogrKimlik : null;
+      if (k) { const b = ksAsistanOgrenciBul(ctx, k.name, k.className); sonOgr = b.tek || null; }
+    } catch (e) {}
+    olay({ tip: "supervizyon" });
+    try {
+      const r = await ksSupIncele({ ayar, ctx, ogr: sonOgr, tur: "Asistanın danışmana verdiği önceki yanıt", talep: oncekiTalep, icerik: oncekiYanit, iptal });
+      supTopla(r.y); model = r.y.model; sonGiden = r.y.giden;
+      supervizyon.push({ asama: "yanıt", tur: "elle", karar: r.karar, notlar: r.notlar, guclu: r.guclu, okunamadi: !!r.okunamadi });
+      if (r.karar === "UYGUN") {
+        gecmis.push({ role: "assistant", content: "(Süpervizör önceki yanıtı uygun buldu.)" });
+        return bitir("🎓 Prof. Hakan önceki yanıtı inceledi: uygun." + (r.notlar.length ? " Geliştirme önerileri aşağıda." : ""));
+      }
+      gecmis[gecmis.length - 1] = { role: "user", content: `${sonKullanici}\n(Süpervizör Prof. Hakan önceki yanıtını inceledi ve şu düzeltmeleri istedi:\n${r.notlar.map(n => "- " + n).join("\n")}\nÖnceki yanıtını bu notlara göre düzelt ve danışmana düzeltilmiş TAM yanıtı yaz. Süpervizörden ya da notlardan söz etme.)` };
+      supRevizyonBas = -2; // düzeltilmiş yanıt gelince işaretlenecek
+    } catch (e) {
+      if (e && e.durduruldu) throw e;
+      gecmis.push({ role: "assistant", content: "(Süpervizör yanıt veremedi.)" });
+      return bitir("🎓 Süpervizör şu an yanıt veremedi: " + ksAsistanKisalt((e && e.message) || String(e), 160));
+    }
+  }
   for (let tur = 0; tur < enFazlaTur; tur++) {
     olay({ tip: "dusunuyor" });
     ksAsistanDurdu(iptal);
@@ -13558,8 +13670,33 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
         yanit = ksAsistanBirlestir(birikmis, yanit);
         gecmis.splice(devamBas, gecmis.length - devamBas, { role: "assistant", content: yanit });
       }
+      // Süpervizörün istediği düzeltme geldiyse: geçmişte yalnız düzeltilmiş yanıt kalsın
+      if (supRevizyonBas >= 0) { gecmis.splice(supRevizyonBas, gecmis.length - supRevizyonBas, { role: "assistant", content: yanit }); supRevizyonBas = -1; const sn = supervizyon[supervizyon.length - 1]; if (sn) sn.duzeltildi = true; }
+      else if (supRevizyonBas === -2) { supRevizyonBas = -1; const sn = supervizyon[supervizyon.length - 1]; if (sn) sn.duzeltildi = true; }
+      // 🎓 Plan / risk yanıtı danışmana gitmeden önce süpervizörden geçer (kayıt öncesi plan incelemesi yapıldıysa tekrar edilmez)
+      else if (supAcik && !supYanitYapildi && !y.kesinKesildi && yanit.length > 250
+        && ([...kullanilanAraclar].some(a => KS_SUP_OKUMA_ARACLARI.has(a)) || ksSupNiyet(sonKullanici))
+        && !supervizyon.some(x => x.asama === "kayıt öncesi" && x.tur === "plan")) {
+        supYanitYapildi = true;
+        olay({ tip: "supervizyon" });
+        try {
+          const turAd = /risk/i.test(sonKullanici) || kullanilanAraclar.has("risk_analizi") ? "Risk değerlendirmesi yanıtı" : "Müdahale planı yanıtı";
+          const r = await ksSupIncele({ ayar, ctx, ogr: sonOgr, tur: turAd, talep: sonKullanici, icerik: yanit, iptal });
+          supTopla(r.y);
+          supervizyon.push({ asama: "yanıt", tur: /Risk/.test(turAd) ? "risk" : "plan", karar: r.karar, notlar: r.notlar, guclu: r.guclu, okunamadi: !!r.okunamadi });
+          if (r.karar === "DÜZELT") {
+            supRevizyonBas = gecmis.length - 1;
+            birikmis = ""; devamBas = -1; devamSay = 0;
+            gecmis.push({ role: "user", content: `(Süpervizör Prof. Hakan yanıtını danışmana gitmeden önce inceledi ve şu düzeltmeleri istedi:\n${r.notlar.map(n => "- " + n).join("\n")}\nYanıtını bu notlara göre düzelt ve danışmana düzeltilmiş TAM yanıtı yaz. Süpervizörden ya da notlardan söz etme, araç çağırma.)` });
+            continue;
+          }
+        } catch (e) {
+          if (e && e.durduruldu) throw e;
+          supervizyon.push({ asama: "yanıt", karar: "HATA", notlar: ["Süpervizör yanıt veremedi; yanıt incelenmeden gösterildi."], guclu: "" });
+        }
+      }
       if (y.kesinKesildi) yanit += "\n\n(…yanıt çok uzun olduğu için kısaltıldı; devamını istersen \"devam et\" yaz.)";
-      return { yanit, giris: toplamGiris, cikis: toplamCikis, ucretGiris: toplamUcret, onbellek: toplamOnb, giden: sonGiden, model, yedek, kritik };
+      return bitir(yanit);
     }
     const sonuclar = [], dogrudan = [];
     for (const h of hatalar) sonuclar.push(`<sonuc ad="hata">Araç çağrısı okunamadı (geçerli JSON değil): ${ksAsistanKisalt(h, 150)}</sonuc>`);
@@ -13571,15 +13708,38 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
       else if (!ksAsistanAracAcik(c.ad, ayar)) sonuc = (ayar.kayitYontemi === "sohbet") ? "Bu araç kapalı (kayıt yöntemi: sohbette onay). gorusme_kaydet, hatirlatma_ekle, risk_kaydet ya da mudahale_kaydet kullan." : "Bu araç kapalı (kayıt yöntemi: ekranda doldurma). ekranda_gorusme, ekranda_hatirlatma, ekranda_risk ya da ekranda_mudahale kullan.";
       else if (a.ekran && ekranIsi) sonuc = "Ekranda zaten bir işlem yapıldı. Aynı yanıtta ikinci ekran işlemi yapılmaz; danışman formu kaydettikten sonra iste.";
       else {
+        kullanilanAraclar.add(c.ad);
         if (a.ogrenciIster || c.girdi.ogrenci) {
           const b = ksAsistanOgrenciBul(ctx, c.girdi.ogrenci, c.girdi.sinif);
-          if (b.tek) ogr = b.tek;
+          if (b.tek) { ogr = b.tek; sonOgr = b.tek; }
           else if (a.ogrenciIster || a.yazma || a.ekran) sonuc = b.aday ? `Birden çok öğrenci eşleşti, "sinif" ekleyerek tekrar dene:\n${b.aday.map(ksAsistanEtiket).join("\n")}` : `"${c.girdi.ogrenci || ""}" adında kayıtlı öğrenci bulunamadı. ogrenci_ara aracıyla arayabilirsin.`;
+        }
+        // 🎓 Kayıttan önce süpervizör: planı inceler, önemli eksik varsa bir kez düzelttirir; risk kaydında not düşer
+        let supNot = "";
+        if (sonuc === undefined && supAcik && ogr && KS_SUP_KAYIT_ARACLARI[c.ad]) {
+          const tur = KS_SUP_KAYIT_ARACLARI[c.ad];
+          const ilk = !supDuzeltilen.has(c.ad);
+          olay({ tip: "supervizyon" });
+          try {
+            const r = await ksSupIncele({ ayar, ctx, ogr, tur: tur === "plan" ? "Müdahale planı (kaydedilmeden önce)" : "Risk kaydı (kaydedilmeden önce)", talep: sonKullanici, icerik: ksSupKayitIcerik(c.ad, c.girdi, ctx, ogr), iptal });
+            supTopla(r.y);
+            supervizyon.push({ asama: "kayıt öncesi", tur, arac: c.ad, ogrenci: ksAsistanEtiket(ogr), karar: r.karar, notlar: r.notlar, guclu: r.guclu, ikinci: !ilk, okunamadi: !!r.okunamadi });
+            if (r.karar === "DÜZELT" && tur === "plan" && ilk) {
+              supDuzeltilen.add(c.ad);
+              supervizyon[supervizyon.length - 1].engelledi = true;
+              sonuc = `🎓 SÜPERVİZÖR (Prof. Hakan) kaydetmeden önce düzeltme istedi — kayıt YAPILMADI:\n${r.notlar.map(n => "- " + n).join("\n")}\nBu notlara göre planı düzelt (hedef, adimlar, sure ver) ve ${c.ad} aracını düzeltilmiş içerikle YENİDEN çağır. Danışmana soru sorma.`;
+            } else supNot = ksSupOzet(r, !ilk);
+          } catch (e) {
+            if (e && e.durduruldu) throw e;
+            supervizyon.push({ asama: "kayıt öncesi", tur, arac: c.ad, karar: "HATA", notlar: ["Süpervizör yanıt veremedi; kayıt incelenmeden onaya sunuldu."], guclu: "" });
+          }
+          // Düzeltme sonrası yeniden çağrıldıysa ilk incelemeyi "düzeltildi" say
+          if (!ilk && sonuc === undefined) { const once = supervizyon.find(x => x.engelledi && x.arac === c.ad); if (once) once.duzeltildi = true; }
         }
         if (sonuc === undefined) {
           try {
             if (a.yazma) {
-              const ozet = a.onayOzeti ? a.onayOzeti(c.girdi, ctx, ogr) : c.ad;
+              const ozet = (a.onayOzeti ? a.onayOzeti(c.girdi, ctx, ogr) : c.ad) + (supNot ? "\n\n" + supNot : "");
               olay({ tip: "onay_bekliyor", ad: c.ad, ozet });
               const cevap = await onayIste(ozet);
               const ok = cevap === true || !!(cevap && cevap.ok);
@@ -13590,6 +13750,7 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
               if (a.ekran) { ekranIsi = true; olay({ tip: "ekran", ad: c.ad }); }
               sonuc = await a.calistir(c.girdi, ctx, ogr);
             }
+            if (supNot) sonuc = String(sonuc) + "\n" + supNot;
           } catch (e) { sonuc = "Araç çalışırken hata oluştu: " + (e && e.message ? e.message : String(e)); }
         }
       }
@@ -13601,7 +13762,7 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
       if (/⚠ KRİTİK/.test(sonuc)) kritik = true;
       olay({ tip: "arac", ad: c.ad, ogrenci: ogr ? ksAsistanEtiket(ogr) : "", ogrKimlik: ogr ? { name: ogr.name, className: ogr.className || "", numara: ogr.numara || "" } : null, sonuc });
       sonuclar.push(`<sonuc ad="${c.ad}">\n${sonuc}\n</sonuc>`);
-      dogrudan.push(ksAsistanDogrudanYanit(c.ad, sonuc));
+      dogrudan.push(/🎓 SÜPERVİZÖR/.test(String(sonuc)) ? null : ksAsistanDogrudanYanit(c.ad, sonuc));
     }
     gecmis.push({ role: "user", content: sonuclar.join("\n") });
     // Hız: yalnızca ekran açma / ekranda kayıt gibi sonucu kendini anlatan işler yapıldıysa
@@ -13609,10 +13770,10 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
     if (!hatalar.length && dogrudan.length && dogrudan.every(Boolean)) {
       const yanit = dogrudan.join("\n");
       gecmis.push({ role: "assistant", content: yanit });
-      return { yanit, giris: toplamGiris, cikis: toplamCikis, ucretGiris: toplamUcret, onbellek: toplamOnb, giden: sonGiden, model, yedek, kritik };
+      return bitir(yanit);
     }
   }
-  return { yanit: "İşlem çok fazla adım gerektirdi ve durduruldu. İsteği daha küçük parçalara bölerek tekrar deneyebilirsin.", giris: toplamGiris, cikis: toplamCikis, ucretGiris: toplamUcret, onbellek: toplamOnb, giden: sonGiden, model, yedek, kritik };
+  return bitir("İşlem çok fazla adım gerektirdi ve durduruldu. İsteği daha küçük parçalara bölerek tekrar deneyebilirsin.");
 }
 // Sonucu kendini anlatan araçlar için modelsiz kısa yanıt (yoksa null → model yorumlar)
 function ksAsistanDogrudanYanit(ad, sonuc) {
@@ -32469,7 +32630,7 @@ async function pdrAsistanIstek(m, kullanilan, ctx) {
     });
     const dolar = kullanilan.saglayici === "ucretsiz" ? null : ksAsistanMaliyet(s.model, s.ucretGiris ?? s.giris, s.cikis);
     if (dolar) S.toplamDolar += dolar;
-    S.gorunen = [...S.gorunen, { rol: "asistan", soru: m, metin: s.yanit, adimlar, model: s.model, giris: s.giris, cikis: s.cikis, onbellek: s.onbellek || 0, dolar, giden: s.giden, kritik: s.kritik, yedek: s.yedek, ucretsiz: kullanilan.saglayici === "ucretsiz" }];
+    S.gorunen = [...S.gorunen, { rol: "asistan", soru: m, metin: s.yanit, adimlar, supervizyon: s.supervizyon && s.supervizyon.length ? s.supervizyon : null, model: s.model, giris: s.giris, cikis: s.cikis, onbellek: s.onbellek || 0, dolar, giden: s.giden, kritik: s.kritik, yedek: s.yedek, ucretsiz: kullanilan.saglayici === "ucretsiz" }];
     // Sesli modda cevap kendiliğinden okunur
     if (kullanilan.sesliMod && dinleyenVar()) pdrAsistanSesliOkuOrtak(S.gorunen.length - 1, s.yanit);
   } catch (e) {
@@ -32490,6 +32651,28 @@ async function pdrAsistanIstek(m, kullanilan, ctx) {
   }
 }
 
+// 🎓 Asistan yanıtının altındaki süpervizyon kutusu
+function PdrSupervizyonKutusu({ liste }) {
+  if (!liste || !liste.length) return null;
+  const turAd = (x) => x.tur === "risk" ? "Risk" : x.tur === "elle" ? "Önceki yanıt" : "Müdahale planı";
+  const durum = (x) => x.karar === "HATA" ? { t: "yanıt veremedi", r: MUTED }
+    : x.okunamadi ? { t: "incelendi (yanıt beklenen biçimde değil; notu kendin değerlendir)", r: MUTED }
+    : x.karar === "UYGUN" ? { t: x.ikinci ? "✓ düzeltme sonrası uygun" : "✓ uygun", r: "#127C56" }
+    : x.duzeltildi ? { t: "✎ düzeltme istedi → asistan düzeltti", r: "#7A5300" }
+    : { t: "⚠ dikkat", r: "#B42318" };
+  return (
+    <div data-testid="supervizyon-kutusu" style={{ marginTop: 8, background: "#F5F1FB", border: "1px solid #D9CCF0", borderRadius: 10, padding: "8px 10px" }}>
+      <div style={{ fontSize: 11.5, fontWeight: 800, color: PURPLE, marginBottom: 4 }}>🎓 Prof. Hakan süpervizyonu</div>
+      {liste.map((x, i) => { const d = durum(x); return (
+        <div key={i} style={{ fontSize: 11.5, color: TEXT, lineHeight: 1.5, marginTop: i ? 6 : 0, paddingTop: i ? 6 : 0, borderTop: i ? "1px dashed #D9CCF0" : "none" }}>
+          <div><b>{turAd(x)}</b>{x.asama === "kayıt öncesi" ? " · kayıttan önce" : " · yanıt"}: <span style={{ color: d.r, fontWeight: 800 }}>{d.t}</span></div>
+          {(x.notlar || []).length > 0 && <div style={{ color: MUTED, whiteSpace: "pre-wrap" }}>{x.notlar.map(n => "• " + n).join("\n")}</div>}
+          {x.guclu && x.karar !== "HATA" && <div style={{ color: MUTED }}><i>Güçlü yan: {x.guclu}</i></div>}
+        </div>
+      ); })}
+    </div>
+  );
+}
 function AsistanEkrani({
   kayitliListesi, records, setRecords, riskListesi, setRiskListesi, hatirlatmalar, setHatirlatmalar,
   mudahalePlan, setMudahalePlan, profiles, profiles2, denemeler, sevkler, testKayitlari,
@@ -32689,6 +32872,10 @@ function AsistanEkrani({
             Program açılınca asistan ekranıyla başla
           </label>
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: TEXT, marginBottom: 10, marginTop: -4, cursor: "pointer" }}>
+            <input type="checkbox" data-testid="ayar-supervizyon" checked={ayar.supervizyon !== false} onChange={e => ayarDegis({ supervizyon: e.target.checked })} />
+            🎓 Prof. Hakan süpervizyonu (müdahale planı ve risk değerlendirmesini danışmana gitmeden önce ikinci bir göz inceler; o yanıtlar biraz uzar)
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: TEXT, marginBottom: 10, marginTop: -4, cursor: "pointer" }}>
             <input type="checkbox" checked={ayar.hizliKomut !== false} onChange={e => ayarDegis({ hizliKomut: e.target.checked })} />
             ⚡ Hızlı komutlar ("Ali'nin dosyasını aç" gibi net istekleri modele gitmeden anında yap)
           </label>
@@ -32813,6 +33000,7 @@ function AsistanEkrani({
               </div>
             ))}
             <div style={{ fontSize: 13, color: m.hata ? "#B42318" : TEXT, whiteSpace: "pre-wrap", lineHeight: 1.55, wordBreak: "break-word" }}>{m.hata ? "⚠ " : ""}{temizMetin(m.metin)}</div>
+            <PdrSupervizyonKutusu liste={m.supervizyon} />
             {m.hata && !S.calisiyor && i === S.gorunen.length - 1 && S.gorunen[i - 1] && S.gorunen[i - 1].rol === "ben" && (
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
                 {m.ucretsizIdi && <button onClick={() => claudeIleSor(i - 1)} style={{ padding: "6px 10px", borderRadius: 8, border: "none", background: ACCENT, color: "#fff", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>🧠 Claude ile tekrar sor</button>}
@@ -32826,6 +33014,7 @@ function AsistanEkrani({
                 <span style={{ display: "flex", gap: 10 }}>
                   <button onClick={() => sesliOku(i, m.metin)} style={{ background: "none", border: "none", color: ACCENT, fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: 0 }}>{okunan === i ? "⏹ Sustur" : "🔊 Sesli oku"}</button>
                   <button onClick={() => { try { navigator.clipboard.writeText(temizMetin(m.metin)); } catch (e) {} }} style={{ background: "none", border: "none", color: ACCENT, fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: 0 }}>📋 Kopyala</button>
+                  {!m.yerel && !S.calisiyor && i === S.gorunen.length - 1 && !(m.supervizyon || []).some(x => x.tur === "elle") && <button data-testid="supervizore-sor" onClick={() => gonder("🎓 Süpervizöre sor")} style={{ background: "none", border: "none", color: PURPLE, fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: 0 }}>🎓 Süpervizöre sor</button>}
                   {setAsistanNotlari && <button data-testid="ogrenciye-kaydet" onClick={() => notDugmesi(i, m)} style={{ background: "none", border: "none", color: (m.kaydedildi || []).length ? "#166534" : ACCENT, fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: 0 }}>{(m.kaydedildi || []).length ? `✓ Kaydedildi (${m.kaydedildi.map(k => k.split("||")[0].split(" ")[0]).join(", ")})` : "📌 Öğrenciye kaydet"}</button>}
                   <button onClick={() => ac("g" + i)} style={{ background: "none", border: "none", color: ACCENT, fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: 0 }}>🔍 Modele ne gitti? {acik["g" + i] ? "▲" : "▼"}</button>
                 </span>
@@ -32874,7 +33063,7 @@ function AsistanEkrani({
               </div>
             ) : (
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                <div style={{ fontSize: 12, color: MUTED }}>⏳ {S.durum === "durduruluyor" ? "Durduruluyor…" : S.durum === "arac" ? "Araç çalıştı, sonuç değerlendiriliyor…" : "Düşünüyor…"}</div>
+                <div style={{ fontSize: 12, color: MUTED }}>⏳ {S.durum === "durduruluyor" ? "Durduruluyor…" : S.durum === "arac" ? "Araç çalıştı, sonuç değerlendiriliyor…" : S.durum === "supervizyon" ? "🎓 Süpervizör (Prof. Hakan) inceliyor…" : "Düşünüyor…"}</div>
                 <button onClick={pdrAsistanDurdur} disabled={S.durum === "durduruluyor"} style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid #FDA29B", background: "#fff", color: "#B42318", fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>⏹ Durdur</button>
               </div>
             )}
@@ -33021,6 +33210,7 @@ function AsistanYuzen(props) {
               <div key={i} style={{ alignSelf: "stretch", background: m.hata ? "#FEF3F2" : "#fff", border: `1px solid ${m.hata ? "#FDA29B" : BORDER}`, borderRadius: "12px 12px 12px 3px", padding: "8px 10px" }}>
                 {m.kritik && <div style={{ background: "#B42318", color: "#fff", borderRadius: 6, padding: "4px 8px", fontSize: 11.5, fontWeight: 800, marginBottom: 6 }}>⚠ Kritik ifade bulundu — önce güvenlik adımları.</div>}
                 <div style={{ fontSize: 12.5, color: m.hata ? "#B42318" : TEXT, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{pdrKalinTemizle(m.metin)}</div>
+                <PdrSupervizyonKutusu liste={m.supervizyon} />
                 {m.yerel && <div style={{ fontSize: 10, color: MUTED, marginTop: 4 }}>⚡ Hızlı komut · model kullanılmadı</div>}
               </div>
             ))}
@@ -33039,7 +33229,7 @@ function AsistanYuzen(props) {
                   </div>
                 ) : (
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ fontSize: 12, color: MUTED }}>⏳ {S.durum === "durduruluyor" ? "Durduruluyor…" : "Çalışıyor…"}</span>
+                    <span style={{ fontSize: 12, color: MUTED }}>⏳ {S.durum === "durduruluyor" ? "Durduruluyor…" : S.durum === "supervizyon" ? "🎓 Süpervizör inceliyor…" : "Çalışıyor…"}</span>
                     <button onClick={pdrAsistanDurdur} style={{ padding: "4px 9px", borderRadius: 8, border: "1px solid #FDA29B", background: "#fff", color: "#B42318", fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>⏹ Durdur</button>
                   </div>
                 )}

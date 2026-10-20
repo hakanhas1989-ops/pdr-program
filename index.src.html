@@ -13534,8 +13534,8 @@ function ksAsistanGecmisDuzenle(gecmis) {
 // yanıtlarını danışmana gitmeden önce gözden geçirir; danışman "🎓 Süpervizöre sor" diyerek
 // son yanıtı da incelettirebilir. Aynı model, aynı gizlilik kalkanı (maskeli metin) kullanılır.
 const KS_SUP_KAYIT_ARACLARI = { mudahale_kaydet: "plan", ekranda_mudahale: "plan", risk_kaydet: "risk", ekranda_risk: "risk" };
-const KS_SUP_OKUMA_ARACLARI = new Set(["mudahale_plani", "risk_analizi"]);
-const KS_SUP_SISTEM = `Sen Prof. Dr. Hakan'sın: okul psikolojik danışmanlığı, çocuk ve ergen klinik psikolojisi, eğitim psikolojisi ve PDR süpervizyonunda 30 yıllık deneyimi olan bir süpervizörsün. Bir yapay zekâ asistanının, ortaokulda çalışan bir psikolojik danışman için hazırladığı müdahale planını ya da risk değerlendirmesini, öğrencinin dosya özetiyle karşılaştırarak denetlersin. Danışmanla değil asistanla konuşuyorsun; amacın taslağı danışmana gitmeden önce güvenli ve sağlam hâle getirmek.
+const KS_SUP_OKUMA_ARACLARI = new Set(["mudahale_plani", "risk_analizi", "veli_mektubu", "meb_raporu"]);
+const KS_SUP_SISTEM = `Sen Prof. Dr. Hakan'sın: okul psikolojik danışmanlığı, çocuk ve ergen klinik psikolojisi, eğitim psikolojisi ve PDR süpervizyonunda 30 yıllık deneyimi olan bir süpervizörsün. Bir yapay zekâ asistanının, ortaokulda çalışan bir psikolojik danışman için hazırladığı müdahale planını, risk değerlendirmesini, veli yazısını ya da MEB rehberlik raporunu, dayandığı veriyle (öğrencinin dosya özeti ya da araç verisi) karşılaştırarak denetlersin. Danışmanla değil asistanla konuşuyorsun; amacın taslağı danışmana gitmeden önce güvenli ve sağlam hâle getirmek.
 
 DENETİM ÖLÇÜTLERİN (önem sırasıyla):
 1. Güvenlik: Dosyada kendine zarar, intihar düşüncesi, istismar/ihmal, şiddet, madde kullanımı gibi kritik işaret varsa taslak bunu ilk sıraya almış mı; güvenlik planı, okul yönetimi ve veli bilgilendirmesi, gerekiyorsa sağlık kuruluşu/RAM yönlendirmesi ve MEB kriz ve çocuk koruma süreçleri var mı? Kritik işaret varken atlanması her zaman DÜZELT sebebidir.
@@ -13545,6 +13545,8 @@ DENETİM ÖLÇÜTLERİN (önem sırasıyla):
 5. Etik ve gizlilik: Gizlilik, bilgilendirilmiş onam, veli ve öğretmenle paylaşılacak bilginin sınırı gözetilmiş mi?
 6. Uygulanabilirlik: Türkiye'de bir devlet ortaokulunda, tek danışmanın zamanı ve imkânlarıyla yapılabilir mi?
 7. Risk değerlendirmesinde ayrıca: Risk düzeyi kanıtla tutarlı mı (abartılmamış, küçümsenmemiş)? Koruyucu faktörler ve izlem (ne zaman tekrar bakılacağı) var mı?
+8. Veli yazısında ayrıca: Öğrencinin danışmanla gizli paylaştığı ayrıntılar (özel yaşantılar, aile içi konular, akran ilişkilerindeki mahrem olaylar) veliye açılmış mı? Güvenlik gerektiren durum dışında bunlar yazıya girmemeli. Dil suçlayıcı, korkutucu ya da etiketleyici mi; tanı ya da teşhis ifadesi var mı? Resmî ama sıcak, anlaşılır ve kısa mı? Veliden ne beklendiği (görüşme günü, iş birliği) somut mu?
+9. MEB rehberlik faaliyet raporunda ayrıca: Rapordaki sayılar dayanak verideki sayılarla birebir tutarlı mı, uydurma ya da yuvarlanmış sayı var mı? Öğrenci adı ya da kimliği belirtilmiş mi (olmamalı)? Resmî yazışma diline ve rehberlik hizmetleri yönetmeliğinin kavramlarına uygun mu? Sonuç ve öneriler veriden çıkıyor mu?
 
 KARAR KURALI: Yalnızca gerçekten önemli bir eksik ya da hata varsa DÜZELT de. Üslup, kelime seçimi ya da küçük ekleme önerileri için DÜZELT deme; taslak genel olarak sağlamsa UYGUN de ve en fazla 2 kısa geliştirme önerisi yaz.
 
@@ -13560,7 +13562,15 @@ GÜÇLÜ YAN: taslağın en güçlü yanı, tek cümle
 function ksSupManuelMi(m) {
   return /^\s*(🎓\s*)?(prof\.?\s*hakan[a-zçğıöşü']*\s+)?(süperviz(ö|o)r(e|den)?\s+(sor|danış|göster|bak|incele\w*|kontrol\s+et\w*)|süpervizyon(a\s+(sun|gönder)|dan\s+geçir|\s+(yap|iste))?)\s*[.!?]*\s*$/i.test(String(m || ""));
 }
-function ksSupNiyet(m) { return /müdahale\s*plan|eylem\s*plan|risk\s*(değerlendir|analiz)|ne\s+kadar\s+riskli/i.test(String(m || "")); }
+function ksSupNiyet(m) { return /müdahale\s*plan|eylem\s*plan|risk\s*(değerlendir|analiz)|ne\s+kadar\s+riskli|veli(ye)?\s*(mektub|yazı|davet|bilgilendirme\s*yazı)|\bmeb\b[^.?!]{0,20}rapor|faaliyet\s*rapor|dönem\s*sonu\s*rapor|yıl\s*sonu\s*rapor/i.test(String(m || "")); }
+// Yanıtın türü (süpervizörün hangi ölçütlere ağırlık vereceği ve kutudaki başlık)
+function ksSupYanitTuru(talep, araclar) {
+  const t = String(talep || "");
+  if (araclar.has("veli_mektubu") || /veli(ye)?\s*(mektub|yazı|davet|bilgilendirme\s*yazı)/i.test(t)) return { tur: "veli", ad: "Veli yazısı" };
+  if (araclar.has("meb_raporu") || /\bmeb\b[^.?!]{0,20}rapor|faaliyet\s*rapor|dönem\s*sonu\s*rapor|yıl\s*sonu\s*rapor/i.test(t)) return { tur: "meb", ad: "MEB rehberlik raporu" };
+  if (araclar.has("risk_analizi") || /risk/i.test(t)) return { tur: "risk", ad: "Risk değerlendirmesi" };
+  return { tur: "plan", ad: "Müdahale planı" };
+}
 function ksSupCozumle(t) {
   const s = String(t || "").replace(/\*+/g, "").replace(/\r/g, "");
   const km = s.match(/KARAR\s*:\s*(UYGUN|DÜZELT|DUZELT)/i);
@@ -13582,13 +13592,13 @@ function ksSupKayitIcerik(ad, g, ctx, o) {
   const r = pdrKapaliRiskAnalizi({ riskTuru: "", oncelik: "Orta", aciklama: "" }, G.gorusmeler, G.profil1, G.kademe, ksDenemeOzetHesapla(G.denemeGirilen, G.sinavTuru), G.ek);
   return `(Kaydedilecek risk kaydı — kapalı sistem analizi)\nTür: ${r.tur} · Düzey: ${r.duzey}${r.acil ? " · ACİL" : ""}${g.aciklama ? "\nAsistanın açıklaması: " + g.aciklama : ""}\n${ksAsistanKisalt(r.metin || "", 2200)}`;
 }
-async function ksSupIncele({ ayar, ctx, ogr, tur, talep, icerik, iptal }) {
+async function ksSupIncele({ ayar, ctx, ogr, tur, talep, icerik, iptal, dayanak }) {
   let dosya = "", kritik = "";
   if (ogr) {
     try { dosya = String(await KS_ASISTAN_ARACLAR.ogrenci_ozeti.calistir({}, ctx, ogr)); } catch (e) {}
     try { const X = ksSupBaglam(ksAsistanGirdi(ctx, ogr)); if (X.c.kritikTurler.length) kritik = `⚠ DOSYADA KRİTİK İFADE VAR: ${X.c.kritikTurler.join(", ")}`; } catch (e) {}
   }
-  const mesaj = `İNCELENECEK: ${tur}\nDANIŞMANIN İSTEĞİ: ${ksAsistanKisalt(String(talep || ""), 400)}\n${kritik ? kritik + "\n" : ""}\nÖĞRENCİ DOSYASI ÖZETİ (asistanın dayandığı veri):\n${ksAsistanKisalt(dosya, 3500) || "(öğrenci dosyası yok)"}\n\nASİSTANIN TASLAĞI:\n${ksAsistanKisalt(String(icerik || ""), 6000)}`;
+  const mesaj = `İNCELENECEK: ${tur}\nDANIŞMANIN İSTEĞİ: ${ksAsistanKisalt(String(talep || ""), 400)}\n${kritik ? kritik + "\n" : ""}\nÖĞRENCİ DOSYASI ÖZETİ (asistanın dayandığı veri):\n${ksAsistanKisalt(dosya, 3500) || "(öğrenci dosyası yok)"}${dayanak ? `\n\nARAÇ VERİSİ (asistanın kullandığı ham sonuç):\n${ksAsistanKisalt(String(dayanak), 3500)}` : ""}\n\nASİSTANIN TASLAĞI:\n${ksAsistanKisalt(String(icerik || ""), 6000)}`;
   const y = await ksAsistanModelCagir(ayar, KS_SUP_SISTEM, [{ role: "user", content: mesaj }], iptal);
   const c = ksSupCozumle(y.metin);
   return { ...(c || { karar: "UYGUN", notlar: [ksAsistanKisalt(String(y.metin || "").replace(/\s+/g, " "), 400)].filter(Boolean), guclu: "", okunamadi: true }), y };
@@ -13607,6 +13617,7 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
   const supervizyon = [];                 // ekranda gösterilecek süpervizör notları
   const supDuzeltilen = new Set();        // kayıttan önce bir kez düzelttirilen araçlar
   const kullanilanAraclar = new Set();
+  const aracSonuclari = {};             // süpervizöre dayanak olarak (ör. MEB raporu verisi)
   let supYanitYapildi = false, supRevizyonBas = -1, sonOgr = null;
   const supTopla = (y) => { toplamGiris += y.giris; toplamCikis += y.cikis; toplamUcret += y.ucretGiris ?? y.giris; toplamOnb += y.onbellek || 0; };
   const sonKullanici = String(([...gecmis].reverse().find(x => x.role === "user" && !String(x.content).startsWith("<sonuc")) || {}).content || "");
@@ -13630,7 +13641,7 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
     try {
       const r = await ksSupIncele({ ayar, ctx, ogr: sonOgr, tur: "Asistanın danışmana verdiği önceki yanıt", talep: oncekiTalep, icerik: oncekiYanit, iptal });
       supTopla(r.y); model = r.y.model; sonGiden = r.y.giden;
-      supervizyon.push({ asama: "yanıt", tur: "elle", karar: r.karar, notlar: r.notlar, guclu: r.guclu, okunamadi: !!r.okunamadi });
+      supervizyon.push({ asama: "yanıt", tur: "elle", karar: r.karar, notlar: r.notlar, guclu: r.guclu, okunamadi: !!r.okunamadi, ilkTaslak: r.karar === "DÜZELT" ? oncekiYanit : "" });
       if (r.karar === "UYGUN") {
         gecmis.push({ role: "assistant", content: "(Süpervizör önceki yanıtı uygun buldu.)" });
         return bitir("🎓 Prof. Hakan önceki yanıtı inceledi: uygun." + (r.notlar.length ? " Geliştirme önerileri aşağıda." : ""));
@@ -13680,10 +13691,11 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
         supYanitYapildi = true;
         olay({ tip: "supervizyon" });
         try {
-          const turAd = /risk/i.test(sonKullanici) || kullanilanAraclar.has("risk_analizi") ? "Risk değerlendirmesi yanıtı" : "Müdahale planı yanıtı";
-          const r = await ksSupIncele({ ayar, ctx, ogr: sonOgr, tur: turAd, talep: sonKullanici, icerik: yanit, iptal });
+          const yt = ksSupYanitTuru(sonKullanici, kullanilanAraclar);
+          const dayanak = yt.tur === "meb" ? aracSonuclari.meb_raporu : yt.tur === "veli" ? aracSonuclari.veli_mektubu : "";
+          const r = await ksSupIncele({ ayar, ctx, ogr: yt.tur === "meb" ? null : sonOgr, tur: yt.ad + " (danışmana gitmeden önce)", talep: sonKullanici, icerik: yanit, iptal, dayanak });
           supTopla(r.y);
-          supervizyon.push({ asama: "yanıt", tur: /Risk/.test(turAd) ? "risk" : "plan", karar: r.karar, notlar: r.notlar, guclu: r.guclu, okunamadi: !!r.okunamadi });
+          supervizyon.push({ asama: "yanıt", tur: yt.tur, karar: r.karar, notlar: r.notlar, guclu: r.guclu, okunamadi: !!r.okunamadi, ilkTaslak: r.karar === "DÜZELT" ? yanit : "" });
           if (r.karar === "DÜZELT") {
             supRevizyonBas = gecmis.length - 1;
             birikmis = ""; devamBas = -1; devamSay = 0;
@@ -13721,9 +13733,10 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
           const ilk = !supDuzeltilen.has(c.ad);
           olay({ tip: "supervizyon" });
           try {
-            const r = await ksSupIncele({ ayar, ctx, ogr, tur: tur === "plan" ? "Müdahale planı (kaydedilmeden önce)" : "Risk kaydı (kaydedilmeden önce)", talep: sonKullanici, icerik: ksSupKayitIcerik(c.ad, c.girdi, ctx, ogr), iptal });
+            const icerik = ksSupKayitIcerik(c.ad, c.girdi, ctx, ogr);
+            const r = await ksSupIncele({ ayar, ctx, ogr, tur: tur === "plan" ? "Müdahale planı (kaydedilmeden önce)" : "Risk kaydı (kaydedilmeden önce)", talep: sonKullanici, icerik, iptal });
             supTopla(r.y);
-            supervizyon.push({ asama: "kayıt öncesi", tur, arac: c.ad, ogrenci: ksAsistanEtiket(ogr), karar: r.karar, notlar: r.notlar, guclu: r.guclu, ikinci: !ilk, okunamadi: !!r.okunamadi });
+            supervizyon.push({ asama: "kayıt öncesi", tur, arac: c.ad, ogrenci: ksAsistanEtiket(ogr), karar: r.karar, notlar: r.notlar, guclu: r.guclu, ikinci: !ilk, okunamadi: !!r.okunamadi, ilkTaslak: r.karar === "DÜZELT" && tur === "plan" && ilk ? icerik : "" });
             if (r.karar === "DÜZELT" && tur === "plan" && ilk) {
               supDuzeltilen.add(c.ad);
               supervizyon[supervizyon.length - 1].engelledi = true;
@@ -13760,6 +13773,7 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
       }
       sonuc = ksAsistanKisalt(String(sonuc), c.ad === "alan_bilgisi" ? 7000 : 4500); // bilgi kitaplığı bölümleri bütün gelsin
       if (/⚠ KRİTİK/.test(sonuc)) kritik = true;
+      aracSonuclari[c.ad] = sonuc;
       olay({ tip: "arac", ad: c.ad, ogrenci: ogr ? ksAsistanEtiket(ogr) : "", ogrKimlik: ogr ? { name: ogr.name, className: ogr.className || "", numara: ogr.numara || "" } : null, sonuc });
       sonuclar.push(`<sonuc ad="${c.ad}">\n${sonuc}\n</sonuc>`);
       dogrudan.push(/🎓 SÜPERVİZÖR/.test(String(sonuc)) ? null : ksAsistanDogrudanYanit(c.ad, sonuc));
@@ -32653,8 +32667,9 @@ async function pdrAsistanIstek(m, kullanilan, ctx) {
 
 // 🎓 Asistan yanıtının altındaki süpervizyon kutusu
 function PdrSupervizyonKutusu({ liste }) {
+  const [taslakAcik, setTaslakAcik] = useState({});
   if (!liste || !liste.length) return null;
-  const turAd = (x) => x.tur === "risk" ? "Risk" : x.tur === "elle" ? "Önceki yanıt" : "Müdahale planı";
+  const turAd = (x) => ({ risk: "Risk", elle: "Önceki yanıt", veli: "Veli yazısı", meb: "MEB raporu" })[x.tur] || "Müdahale planı";
   const durum = (x) => x.karar === "HATA" ? { t: "yanıt veremedi", r: MUTED }
     : x.okunamadi ? { t: "incelendi (yanıt beklenen biçimde değil; notu kendin değerlendir)", r: MUTED }
     : x.karar === "UYGUN" ? { t: x.ikinci ? "✓ düzeltme sonrası uygun" : "✓ uygun", r: "#127C56" }
@@ -32668,6 +32683,8 @@ function PdrSupervizyonKutusu({ liste }) {
           <div><b>{turAd(x)}</b>{x.asama === "kayıt öncesi" ? " · kayıttan önce" : " · yanıt"}: <span style={{ color: d.r, fontWeight: 800 }}>{d.t}</span></div>
           {(x.notlar || []).length > 0 && <div style={{ color: MUTED, whiteSpace: "pre-wrap" }}>{x.notlar.map(n => "• " + n).join("\n")}</div>}
           {x.guclu && x.karar !== "HATA" && <div style={{ color: MUTED }}><i>Güçlü yan: {x.guclu}</i></div>}
+          {x.ilkTaslak && <button data-testid="ilk-taslak-dugme" onClick={() => setTaslakAcik(a => ({ ...a, [i]: !a[i] }))} style={{ marginTop: 4, background: "#fff", border: "1px solid #D9CCF0", borderRadius: 6, color: PURPLE, fontSize: 11, fontWeight: 700, cursor: "pointer", padding: "3px 8px" }}>📄 Asistanın ilk taslağı {taslakAcik[i] ? "▲" : "▼"}</button>}
+          {x.ilkTaslak && taslakAcik[i] && <div data-testid="ilk-taslak" style={{ marginTop: 4, background: "#fff", border: "1px dashed #D9CCF0", borderRadius: 8, padding: 8, fontSize: 11.5, color: TEXT, whiteSpace: "pre-wrap", maxHeight: 260, overflowY: "auto" }}>{pdrKalinTemizle(String(x.ilkTaslak))}</div>}
         </div>
       ); })}
     </div>
@@ -32873,7 +32890,7 @@ function AsistanEkrani({
           </label>
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: TEXT, marginBottom: 10, marginTop: -4, cursor: "pointer" }}>
             <input type="checkbox" data-testid="ayar-supervizyon" checked={ayar.supervizyon !== false} onChange={e => ayarDegis({ supervizyon: e.target.checked })} />
-            🎓 Prof. Hakan süpervizyonu (müdahale planı ve risk değerlendirmesini danışmana gitmeden önce ikinci bir göz inceler; o yanıtlar biraz uzar)
+            🎓 Prof. Hakan süpervizyonu (müdahale planı, risk değerlendirmesi, veli yazısı ve MEB raporunu danışmana gitmeden önce ikinci bir göz inceler; o yanıtlar biraz uzar)
           </label>
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: TEXT, marginBottom: 10, marginTop: -4, cursor: "pointer" }}>
             <input type="checkbox" checked={ayar.hizliKomut !== false} onChange={e => ayarDegis({ hizliKomut: e.target.checked })} />

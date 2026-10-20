@@ -2169,6 +2169,7 @@ function MudahaleKutuphanesiEkrani({ kayitliListesi, records, aktifOgrenci, setA
   const [seciliProgram, setSeciliProgram] = useState(null); // null = tüm programlar
   const [aiOnerileri, setAiOnerileri] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [notBos, setNotBos] = useState(false); // düğmeyle aranıp uygun oturum çıkmadıysa
 
   // Diğer ekranlarla aynı davranış: uygulamanın herhangi bir yerinde seçilen
   // "aktif öğrenci" buraya da yansır, burada seçilen de diğer ekranlara yansır.
@@ -2189,7 +2190,11 @@ function MudahaleKutuphanesiEkrani({ kayitliListesi, records, aktifOgrenci, setA
     if (!seciliAd) { setAiOnerileri(null); return; }
     const kayitli = pdrSozlukOku(mudahaleOnerileri, seciliAd, seciliOgr?.className, seciliOgr?.numara);
     setAiOnerileri(kayitli !== undefined ? kayitli : null);
-  }, [seciliAd, seciliOgr?.className, seciliOgr?.numara]);
+  }, [seciliAd, seciliOgr?.className, seciliOgr?.numara, mudahaleOnerileri]);
+  useEffect(() => { setNotBos(false); }, [seciliAd, seciliOgr?.className, seciliOgr?.numara]);
+  // İki öneri yolu ayrı tutulur: düğmenin (görüşme notlarına göre) önerileri ve asistanın önerileri
+  const notOnerileri = (aiOnerileri || []).filter(o => o && o.kaynak !== "asistan");
+  const asistanOnerileri = (aiOnerileri || []).filter(o => o && o.kaynak === "asistan");
 
   const aramaMetniNorm = aramaMetni.trim().toLocaleLowerCase("tr");
   const filtrelenmis = aramaMetniNorm.length < 2 ? havuz : havuz.filter(o =>
@@ -2203,8 +2208,7 @@ function MudahaleKutuphanesiEkrani({ kayitliListesi, records, aktifOgrenci, setA
 
   async function handleAiAra() {
     if (!seciliAd) return;
-    setAiLoading(true);
-    setAiOnerileri(null);
+    setAiLoading(true); setNotBos(false);
     try {
       const ogrGorusmeler = records.filter(r => pdrAyniOgrenci(r.studentName, r.className, seciliAd, seciliOgr?.className, r.numara, seciliOgr?.numara));
       const gorusmeler = pdrGorusmeListesiMetni(ogrGorusmeler, { limit: 8 });
@@ -2227,13 +2231,16 @@ function MudahaleKutuphanesiEkrani({ kayitliListesi, records, aktifOgrenci, setA
         const oneriAdi = (oneri.baslik || "").trim().toLocaleLowerCase("tr").replace(/^["']|["']$/g, "");
         const kayit = havuz.find(o => o.baslik.trim().toLocaleLowerCase("tr") === oneriAdi)
           || havuz.find(o => oneriAdi.length > 3 && (o.baslik.trim().toLocaleLowerCase("tr").includes(oneriAdi) || oneriAdi.includes(o.baslik.trim().toLocaleLowerCase("tr"))));
-        return kayit ? { ...kayit, aciklama: oneri.aciklama || "" } : null;
+        return kayit ? { ...kayit, aciklama: oneri.aciklama || "", kaynak: "not", tarih: today() } : null;
       }).filter(Boolean);
-      setAiOnerileri(eslesenler);
+      // Asistanın önerileri silinmez; yalnız düğmenin eski önerileri yenilenir
+      const eskiAsistan = (pdrSozlukOku(mudahaleOnerileri, seciliAd, seciliOgr?.className, seciliOgr?.numara) || []).filter(o => o && o.kaynak === "asistan");
+      const birlesik = [...eslesenler, ...eskiAsistan];
+      setAiOnerileri(birlesik); setNotBos(eslesenler.length === 0);
       // Kalıcı sakla — öğrenci anahtarına göre, tekrar sekmeye girince ya da
       // uygulamayı yeniden açınca kaybolmasın.
       const anahtar = pdrOgrAnahtar(seciliAd, seciliOgr?.className, seciliOgr?.numara);
-      const guncel = { ...(mudahaleOnerileri||{}), [anahtar]: eslesenler };
+      const guncel = { ...(mudahaleOnerileri||{}), [anahtar]: birlesik };
       setMudahaleOnerileri(guncel);
       await saveMudahaleOnerileri(guncel);
     } catch (e) {
@@ -2279,12 +2286,13 @@ function MudahaleKutuphanesiEkrani({ kayitliListesi, records, aktifOgrenci, setA
           width:"100%", padding:"8px", background: (!seciliAd||aiLoading)?BORDER:PURPLE, color:(!seciliAd||aiLoading)?MUTED:"#fff", border:"none", borderRadius:8, fontSize:12.5, fontWeight:700, cursor:"pointer"
         }}>{aiLoading?"⏳ Aranıyor…":"Görüşme Notlarına Göre Öner"}</button>
 
-        {aiOnerileri && aiOnerileri.length===0 && (
+        {(notBos || (aiOnerileri && aiOnerileri.length===0)) && (
           <div style={{ fontSize:11.5, color:MUTED, textAlign:"center", padding:"10px 0" }}>Görüşme temalarına gerçekten uygun bir oturum bulunamadı.</div>
         )}
-        {aiOnerileri && aiOnerileri.length>0 && (
-          <div style={{ display:"flex", flexDirection:"column", gap:6, marginTop:10 }}>
-            {aiOnerileri.map((o,i)=>(
+        {notOnerileri.length>0 && (
+          <div data-testid="mp-not-onerileri" style={{ display:"flex", flexDirection:"column", gap:6, marginTop:10 }}>
+            <div style={{ fontSize:10.5, fontWeight:800, color:PURPLE }}>✦ Görüşme notlarına göre öneri{notOnerileri[0].tarih ? ` · ${notOnerileri[0].tarih}` : ""}</div>
+            {notOnerileri.map((o,i)=>(
               <div key={i} onClick={()=>pdfAc(o)} style={{ background:"#fff", borderRadius:8, padding:"9px 11px", cursor:"pointer", border:`1px solid ${PURPLE}` }}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:6 }}>
                   <div style={{ fontSize:12, fontWeight:700, color:TEXT }}>{o.baslik}</div>
@@ -2292,6 +2300,21 @@ function MudahaleKutuphanesiEkrani({ kayitliListesi, records, aktifOgrenci, setA
                 </div>
                 <div style={{ fontSize:10, color:MUTED, marginTop:1 }}>{o.programAdi}{o.modul?` — ${o.modul}`:""}</div>
                 <div style={{ fontSize:10.5, color:MUTED, marginTop:2, lineHeight:1.4 }}>{o.aciklama}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        {asistanOnerileri.length>0 && (
+          <div data-testid="mp-asistan-onerileri" style={{ display:"flex", flexDirection:"column", gap:6, marginTop:12 }}>
+            <div style={{ fontSize:10.5, fontWeight:800, color:ACCENT }}>🤖 Asistanın önerisi (müdahale planına göre){asistanOnerileri[0].tarih ? ` · ${asistanOnerileri[0].tarih}` : ""}</div>
+            {asistanOnerileri.map((o,i)=>(
+              <div key={i} onClick={()=>pdfAc(o)} style={{ background:"#fff", borderRadius:8, padding:"9px 11px", cursor:"pointer", border:`1px solid ${ACCENT}` }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:6 }}>
+                  <div style={{ fontSize:12, fontWeight:700, color:TEXT }}>{o.baslik}</div>
+                  <span style={{ fontSize:9, color:ACCENT, fontWeight:700, flexShrink:0 }}>📄 Aç</span>
+                </div>
+                <div style={{ fontSize:10, color:MUTED, marginTop:1 }}>{o.programAdi}{o.modul?` — ${o.modul}`:""}</div>
+                {o.aciklama && <div style={{ fontSize:10.5, color:MUTED, marginTop:2, lineHeight:1.4 }}>{o.aciklama}</div>}
               </div>
             ))}
           </div>
@@ -11644,6 +11667,53 @@ function ksAnzKategori(liste, k, adAlan) {
 // ── Araçlar ──────────────────────────────────────────────────────────────────
 // her araç: aciklama, girdi (modelin göreceği tanım), yazma (onay gerekir mi),
 // calistir(girdi, ctx) → metin, onayOzeti(girdi, ctx) → danışmana gösterilecek özet
+// ── Müdahale Programları kütüphanesi: asistan için aday oturum arama / eşleştirme ──
+const KS_MP_DURAK = new Set(["için", "olarak", "daha", "gibi", "olan", "ile", "veya", "ancak", "çok", "her", "bir", "bu", "şu", "kendi", "öğrenci", "öğrencinin", "öğrenciye", "görüşme", "görüşmede", "hafta", "haftalık", "adım", "hedef", "yapma", "etme", "kazanma", "geliştirmek", "geliştirme", "becerileri", "becerisi", "beceri", "program", "oturum", "nasıl", "neden", "sonra", "önce"]);
+function ksMpKokler(t) {
+  return String(t || "").toLocaleLowerCase("tr").replace(/[^0-9a-zçğıöşü\s]/g, " ").split(/\s+/)
+    .filter(w => w.length >= 3 && !KS_MP_DURAK.has(w)).map(w => w.slice(0, Math.max(4, Math.min(6, w.length - 2))));
+}
+function ksMpEslesir(k, metinKok) { return metinKok.some(m => m.startsWith(k) || k.startsWith(m)); }
+function ksMpSonPlan(ctx, o) {
+  const l = (pdrSozlukOku(ctx.mudahalePlan, o.name, o.className) || []).filter(p => p.durum === "Devam Ediyor");
+  return l.sort((a, b) => pdrTarihMs(b.tarih) - pdrTarihMs(a.tarih))[0] || null;
+}
+function ksMpAra(g, ctx, o) {
+  const havuz = mudahaleOturumHavuzu();
+  const aranan = ksMpKokler(g.aranan);
+  let baglam = [];
+  if (o) {
+    const plan = ksMpSonPlan(ctx, o);
+    if (plan) baglam.push(plan.hedef, plan.adimlar);
+    (ctx.records || []).filter(r => pdrAyniOgrenci(r.studentName, r.className, o.name, o.className, r.numara, o.numara))
+      .sort((a, b) => pdrTarihMs(b.date) - pdrTarihMs(a.date)).slice(0, 6).forEach(r => baglam.push(r.topic, r.altKonu || ""));
+  }
+  const bk = [...new Set(ksMpKokler(baglam.join(" ")))];
+  const ak = [...new Set(aranan)];
+  if (!ak.length && !bk.length) return "Aranacak kavram yok. aranan alanına ihtiyacın anahtar kavramlarını yaz (örn. \"kaygı, öfke, zorbalık, ders çalışma\").\nProgramlar: " + MUDAHALE_PROGRAMLARI.map(p => `${p.ad} (${p.oturumlar.length} oturum)`).join("; ");
+  const puanli = havuz.map(x => {
+    const bas = ksMpKokler(x.baslik + " " + (x.modul || "")), ozet = ksMpKokler(x.ozet), prog = ksMpKokler(x.programAdi + " " + x.hedefKitle);
+    let puan = 0;
+    ak.forEach(k => { if (ksMpEslesir(k, bas)) puan += 6; else if (ksMpEslesir(k, ozet)) puan += 3; else if (ksMpEslesir(k, prog)) puan += 1; });
+    bk.forEach(k => { if (ksMpEslesir(k, bas)) puan += 2; else if (ksMpEslesir(k, ozet)) puan += 1; });
+    return { x, puan };
+  }).filter(y => y.puan > 0).sort((a, b) => b.puan - a.puan).slice(0, 12);
+  if (!puanli.length) return "Kütüphanede bu kavramlarla eşleşen oturum bulunamadı. Başka/eş anlamlı kavramlarla tekrar dene.\nProgramlar: " + MUDAHALE_PROGRAMLARI.map(p => `${p.ad} (${p.oturumlar.length} oturum)`).join("; ");
+  return `Aday oturumlar (en uygundan başlayarak; kaydederken başlığı BİREBİR yaz):\n` + puanli.map((y, i) => `${i + 1}. "${y.x.baslik}"${y.x.modul ? ` [${y.x.modul}]` : ""} — ${y.x.programAdi} (Hedef kitle: ${y.x.hedefKitle}) — ${ksAsistanKisalt(y.x.ozet, 170)}`).join("\n");
+}
+function ksMpEsle(liste) {
+  const havuz = mudahaleOturumHavuzu();
+  const bulunan = [], bulunamayan = [];
+  (Array.isArray(liste) ? liste : []).slice(0, 5).forEach(t => {
+    const ad = String((t && (t.baslik || t)) || "").trim().replace(/^["'“”]+|["'“”]+$/g, "").toLocaleLowerCase("tr");
+    if (!ad) return;
+    const k = havuz.find(o => o.baslik.trim().toLocaleLowerCase("tr") === ad)
+      || havuz.find(o => ad.length > 3 && (o.baslik.trim().toLocaleLowerCase("tr").includes(ad) || ad.includes(o.baslik.trim().toLocaleLowerCase("tr"))));
+    if (k && !bulunan.some(b => b.baslik === k.baslik && b.programKey === k.programKey)) bulunan.push({ ...k, aciklama: String((t && t.aciklama) || "").slice(0, 300) });
+    else if (!k) bulunamayan.push(String(t && (t.baslik || t)));
+  });
+  return { bulunan: bulunan.slice(0, 3), bulunamayan };
+}
 const KS_ASISTAN_ARACLAR = {
   ogrenci_ara: {
     aciklama: "Ada, soyada ya da sınıfa göre kayıtlı öğrenci arar.", girdi: '{"sorgu": "ad ya da sınıf"}',
@@ -12091,6 +12161,43 @@ const KS_ASISTAN_ARACLAR = {
       const guncel = [item, ...(ctx.riskListesi || [])];
       ctx.riskListesi = guncel; await ctx.kaydet.riskListesi(guncel);
       return `Risk listesine kaydedildi: ${ks.tur}, düzey ${ks.duzey}.`;
+    },
+  },
+  mudahale_programi_ara: {
+    aciklama: "Müdahale Programları kütüphanesinde (8 kaynak program, 132 oturum: akademik beceriler, akran zorbalığı yapan/maruz kalan, sosyal duygusal beceriler, psikolojik sağlamlık, akran nezaketi) öğrenciye uygun ADAY oturumları getirir (kaydetmez). aranan: planın/ihtiyacın anahtar kavramları (örn. \"kaygı, duygu düzenleme, sınır koyma\"); ogrenci verirsen aktif müdahale planı ve görüşme konuları da hesaba katılır. Sonra uygun olanları mudahale_programi_kaydet ile kaydet.",
+    girdi: '{"ogrenci": "isteğe bağlı", "sinif": "isteğe bağlı", "aranan": "kaygı, duygu düzenleme"}', yontem: "hepsi",
+    calistir: (g, ctx, o) => ksMpAra(g, ctx, o),
+  },
+  mudahale_programi_kaydet: {
+    aciklama: "mudahale_programi_ara'nın getirdiği oturumlardan seçtiklerini öğrencinin 'Müdahale Programları' önerilerine kaydeder (ONAY GEREKİR). oturumlar: en fazla 3, baslik aday listesindeki gibi BİREBİR; aciklama: neden uygun (1 kısa cümle). plana_ekle: true ise oturumlar öğrencinin devam eden en son müdahale planının adımlarına da eklenir. 'Görüşme notlarına göre öner' düğmesinin önerileri silinmez; ikisi ayrı görünür.",
+    girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "oturumlar": [{"baslik": "Kaygımı Fark Ediyorum", "aciklama": "..."}], "plana_ekle": true}', ogrenciIster: true, yazma: true, yontem: "hepsi",
+    onayOzeti: (g, ctx, o) => {
+      const r = ksMpEsle(g.oturumlar);
+      const plan = g.plana_ekle ? ksMpSonPlan(ctx, o) : null;
+      return `📁 Müdahale programı önerisi\nÖğrenci: ${ksAsistanEtiket(o)}\n${r.bulunan.length ? r.bulunan.map(x => `• ${x.baslik} (${x.programAdi}${x.modul ? " — " + x.modul : ""})`).join("\n") : "⚠ Kütüphanede eşleşen oturum yok."}${r.bulunamayan.length ? `\n⚠ Bulunamadı: ${r.bulunamayan.join("; ")}` : ""}${g.plana_ekle ? (plan ? `\nPlana da eklenecek: ${ksAsistanKisalt(plan.hedef || "", 90)}` : "\n⚠ Devam eden plan yok; yalnız önerilere kaydedilecek.") : ""}`;
+    },
+    calistir: async (g, ctx, o) => {
+      const r = ksMpEsle(g.oturumlar);
+      if (!r.bulunan.length) return "Kütüphanede eşleşen oturum bulunamadı; önce mudahale_programi_ara ile aday listesini al ve başlıkları birebir yaz.";
+      if (!ctx.kaydet.mudahaleOnerileri) return "Öneriler bu ekrandan kaydedilemedi.";
+      const yeni = r.bulunan.map(x => ({ ...x, kaynak: "asistan", tarih: today() }));
+      const eski = pdrSozlukOku(ctx.mudahaleOnerileri, o.name, o.className, o.numara) || [];
+      const deger = [...eski.filter(x => x && x.kaynak !== "asistan"), ...yeni];
+      const guncel = pdrSozlukYaz(ctx.mudahaleOnerileri || {}, o.name, o.className, deger, o.numara);
+      ctx.mudahaleOnerileri = guncel; await ctx.kaydet.mudahaleOnerileri(guncel);
+      let ek = "";
+      if (g.plana_ekle) {
+        const plan = ksMpSonPlan(ctx, o);
+        if (plan) {
+          const satir = "📁 Önerilen program oturumları:\n" + yeni.map(x => `• ${x.baslik} (${x.programAdi}${x.modul ? " — " + x.modul : ""}, s. ${x.sayfa})`).join("\n");
+          const adimlar = String(plan.adimlar || "").replace(/\n*📁 Önerilen program oturumları:[\s\S]*$/, "").trim();
+          const liste = pdrSozlukOku(ctx.mudahalePlan, o.name, o.className) || [];
+          const gp = pdrSozlukYaz(ctx.mudahalePlan || {}, o.name, o.className, liste.map(p => p.id === plan.id ? { ...p, adimlar: (adimlar ? adimlar + "\n\n" : "") + satir, programOturumlari: yeni.map(x => x.baslik) } : p));
+          ctx.mudahalePlan = gp; await ctx.kaydet.mudahalePlan(gp);
+          ek = " Oturumlar devam eden planın adımlarına da eklendi.";
+        } else ek = " Devam eden plan olmadığı için plana eklenmedi.";
+      }
+      return `${yeni.length} oturum öğrencinin Müdahale Programları önerilerine kaydedildi: ${yeni.map(x => x.baslik).join(", ")}.${ek} (Müdahale › Müdahale Programları ekranında, PDF sayfasıyla birlikte görünür.)`;
     },
   },
   mudahale_kaydet: {
@@ -13244,6 +13351,7 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - Sınıf mevcudu, şube listesi ya da yeni gelen/nakil öğrenci sorulduğunda sinif_bilgisi kullan.
 - Danışman sayısal veri grafiği isterse grafik_ciz kullan (sayıları kendin hesaplama). Şema, akış şeması, döngü, zihin haritası, karşılaştırma, zaman çizelgesi ya da kademe/piramit görseli isterse diyagram_ciz kullan; maddeleri kısa ve öz yaz. Dönem/ay özeti, faaliyet raporu görseli, kurul ya da veli toplantısı sunumu isterse infografik_rapor kullan. Yanıtında grafikteki sayıları tekrar listeleme; 1-2 cümlelik yorum yeter.
 - Mesleki/kuramsal sorularda (gelişim, öğrenme, motivasyon, çalışma teknikleri, üstbiliş, pozitif psikoloji, danışma kuramları ve teknikleri, görüşme becerileri, grup, etik ve gizlilik, mevzuat ve RAM süreçleri, klinik belirtiler ve yönlendirme, ölçme-değerlendirme, test yorumu, bireyi tanıma teknikleri) önce alan_bilgisi'ni çağır, gerekirse ikinci bir bölüm aç; bilgiyi öğrencinin kendi verisiyle birleştir. Belirti konuşurken tanı koyma ("… belirtileri gözleniyor, … açısından değerlendirme önerilir"), ilaç önerme. Kendine zarar, intihar, istismar ya da psikoz belirtisi geçen her durumda alan_bilgisi'nden pdr.kriz veya pdr.ihmal_istismar bölümünü aç ve okulun yapması gerekenleri sırayla, açıkça yaz.
+- Bir öğrenci için müdahale planı yaptığında ya da kaydettiğinde, ardından mudahale_programi_ara ile (aranan: planın anahtar kavramları, ogrenci: öğrenci) Müdahale Programları kütüphanesinden aday oturumları al; en uygun 1-3 oturumu seçip mudahale_programi_kaydet ile (plan kaydedildiyse plana_ekle: true) onaya sun. Danışman 'program/etkinlik/oturum öner' dediğinde de aynısını yap. Listede olmayan oturum adı uydurma.
 - Lise taban puanı, yüzdelik dilim, "kaç netle hangi okul", tercih listesi sorulduğunda lise_taban_puanlari kullan (Beylikdüzü, Esenyurt, Başakşehir, Büyükçekmece, Avcılar ayrıntılı). Öğrenci adı geçiyorsa önce deneme_analizi ile ortalama netini al. Araçta olmayan okulun puanını uydurma; değerlerin 2026 tabanı olduğunu ve her yıl değiştiğini söyle.
 - Veri girişi: deneme netleri → deneme_kaydet; Profil 1 boyut puanları → profil_puanla; kariyer hedefi, ilgi, aile notu, d2 → profil2_guncelle; devamsızlık → devamsizlik_kaydet; yeni öğrenci → ogrenci_ekle (önce ogrenci_ara); konu tamamlama yüzdesi → konu_guncelle; risk kapatma → risk_kapat; plan durumu → mudahale_durum; hatırlatmayı bitirme → hatirlatma_tamamla. Hepsi onay ister; danışmanın söylediği değerleri aynen ver, tahmin etme.
 - Danışman öğrencinin yazılı sınav puanını ya da yıl sonu not ortalamasını söylerse not_kaydet kullan (birden çok dersi tek çağrıda ver). Sayıları aynen yaz; hangi yazılı olduğu belli değilse yazili alanını boş bırak, program boş olana yazar.
@@ -19010,7 +19118,7 @@ function RaporModalIc({ rapor, onKapat }) {
                         Küçük punto, sadece başlık + program adı; tam açıklama için PDF'e
                         değil uygulamanın kendisine bakılmalı (yer kaplamasın diye). */}
                     {(() => {
-                      const oneriler = pdrSozlukOku(raporMudahaleOnerileri, ogrenci, ogrenciSinif) || [];
+                      const oneriler = (pdrSozlukOku(raporMudahaleOnerileri, ogrenci, ogrenciSinif) || []).filter((o, i, l) => o && l.findIndex(y => y && y.baslik === o.baslik && y.programAdi === o.programAdi) === i);
                       if (oneriler.length === 0) return null;
                       return (
                         <div style={{ marginBottom:10 }}>
@@ -31930,7 +32038,7 @@ const PDR_ASISTAN_ARAC_AD = {
   risk_analizi: "Risk analizi (kapalı sistem)", seans_hazirlik: "Seans hazırlığı (kapalı sistem)", mudahale_plani: "Müdahale planı önerisi (kapalı sistem)",
   deneme_analizi: "Deneme analizi (kapalı sistem)", profil_analizi: "Profil analizi (kapalı sistem)", supervizyon: "Süpervizyon raporu (kapalı sistem)",
   veli_mektubu: "Veli yazısı taslağı", liste: "Liste çıkarıldı", meb_raporu: "MEB raporu taslağı",
-  gorusme_kaydet: "Görüşme kaydı", hatirlatma_ekle: "Hatırlatma", risk_kaydet: "Risk kaydı", mudahale_kaydet: "Müdahale planı kaydı",
+  gorusme_kaydet: "Görüşme kaydı", hatirlatma_ekle: "Hatırlatma", risk_kaydet: "Risk kaydı", mudahale_kaydet: "Müdahale planı kaydı", mudahale_programi_ara: "📁 Program oturumları arandı", mudahale_programi_kaydet: "📁 Program oturumu önerisi kaydı",
   ekranda_ac: "📍 Ekran açıldı", ekranda_gorusme: "👀 Görüşme formu ekranda dolduruldu", ekranda_hatirlatma: "👀 Hatırlatma ekranda dolduruldu",
   ekranda_risk: "👀 Risk formu ekranda hazırlandı", ekranda_mudahale: "👀 Müdahale planı ekranda dolduruldu",
   asistan_notu_kaydet: "📌 Öğrenciye not kaydı", not_kaydet: "📚 Yazılı / yıl sonu notu kaydı",
@@ -32274,8 +32382,9 @@ function pdrAsistanCtx(p) {
     akademikTaramalar: p.akademikTaramalar, liseTaramalar: p.liseTaramalar, benlikOlcekleri: p.benlikOlcekleri,
     sinavTuru: p.sinavTuru, aktifYil: p.aktifYil, ogrenciListesi: p.kayitliListesi,
     bdtAnaliz: p.bdtAnaliz, bireyiTanima: p.bireyiTanima, ogrenciler: p.ogrenciler, uyumIzleme: p.uyumIzleme, kademe: p.kademe || "", konuHaritasiVerisi: p.konuHaritasiVerisi || {}, ilkokulTaramalar: p.ilkokulTaramalar || [],
-    asistanNotlari: p.asistanNotlari || [],
+    asistanNotlari: p.asistanNotlari || [], mudahaleOnerileri: p.mudahaleOnerileri || {},
     kaydet: {
+      mudahaleOnerileri: p.setMudahaleOnerileri ? async (v) => { p.setMudahaleOnerileri(v); await saveMudahaleOnerileri(v); } : null,
       asistanNotlari: p.setAsistanNotlari ? async (l) => { p.setAsistanNotlari(l); await saveAsistanNotlari(l); } : null,
       profiles2: p.setProfiles2 ? async (l) => { p.setProfiles2(l); await saveProfiles2(l); } : null,
       profiles: p.setProfiles ? async (l) => { p.setProfiles(l); await saveProfiles(l); } : null,
@@ -32386,7 +32495,7 @@ function AsistanEkrani({
   mudahalePlan, setMudahalePlan, profiles, profiles2, denemeler, sevkler, testKayitlari,
   akademikTaramalar, liseTaramalar, benlikOlcekleri, sinavTuru, aktifYil, setTab,
   bdtAnaliz, bireyiTanima, ogrenciler, uyumIzleme, setBdtAnaliz, setBireyiTanima, setUyumIzleme, kademe, setSevkler, konuHaritasiVerisi, ilkokulTaramalar,
-  asistanNotlari, setAsistanNotlari, setProfiles2, setProfiles, setDenemeler, setOgrenciler, setKonuHaritasiVerisi
+  asistanNotlari, setAsistanNotlari, setProfiles2, setProfiles, setDenemeler, setOgrenciler, setKonuHaritasiVerisi, mudahaleOnerileri, setMudahaleOnerileri
 }) {
   const S = PDR_ASISTAN_SOHBET;
   const [notSec, setNotSec] = useState(null);       // hangi yanıt için öğrenci seçiliyor
@@ -32463,7 +32572,7 @@ function AsistanEkrani({
     return pdrAsistanCtx({ kayitliListesi, records, setRecords, riskListesi, setRiskListesi, hatirlatmalar, setHatirlatmalar,
       mudahalePlan, setMudahalePlan, profiles, profiles2, denemeler, sevkler, testKayitlari,
       akademikTaramalar, liseTaramalar, benlikOlcekleri, sinavTuru, aktifYil, bdtAnaliz, bireyiTanima, ogrenciler, uyumIzleme,
-      setBdtAnaliz, setBireyiTanima, setUyumIzleme, kademe, setSevkler, konuHaritasiVerisi, ilkokulTaramalar, asistanNotlari, setAsistanNotlari, setProfiles2, setProfiles, setDenemeler, setOgrenciler, setKonuHaritasiVerisi });
+      setBdtAnaliz, setBireyiTanima, setUyumIzleme, kademe, setSevkler, konuHaritasiVerisi, ilkokulTaramalar, asistanNotlari, setAsistanNotlari, setProfiles2, setProfiles, setDenemeler, setOgrenciler, setKonuHaritasiVerisi, mudahaleOnerileri, setMudahaleOnerileri });
   }
   // 📌 Yanıtı öğrencinin dosyasına kaydet
   async function notaKaydet(i, ogr) {
@@ -44593,6 +44702,7 @@ function pdrBaslangicSekmesi() {
             kademe={kademe} setSevkler={setSevkler} konuHaritasiVerisi={konuHaritasiVerisi} ilkokulTaramalar={ilkokulTaramalar}
             asistanNotlari={asistanNotlari} setAsistanNotlari={setAsistanNotlari} setProfiles2={setProfiles2}
             setProfiles={setProfiles} setDenemeler={setDenemeler} setOgrenciler={setOgrenciler} setKonuHaritasiVerisi={setKonuHaritasiVerisi}
+            mudahaleOnerileri={mudahaleOnerileri} setMudahaleOnerileri={setMudahaleOnerileri}
           />
         )}
         {/* ── PDR ASİSTANI: her ekranda bas-konuş düğmesi ── */}
@@ -44612,6 +44722,7 @@ function pdrBaslangicSekmesi() {
             kademe={kademe} setSevkler={setSevkler} konuHaritasiVerisi={konuHaritasiVerisi} ilkokulTaramalar={ilkokulTaramalar}
             asistanNotlari={asistanNotlari} setAsistanNotlari={setAsistanNotlari} setProfiles2={setProfiles2}
             setProfiles={setProfiles} setDenemeler={setDenemeler} setOgrenciler={setOgrenciler} setKonuHaritasiVerisi={setKonuHaritasiVerisi}
+            mudahaleOnerileri={mudahaleOnerileri} setMudahaleOnerileri={setMudahaleOnerileri}
           />
         )}
 

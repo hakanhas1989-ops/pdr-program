@@ -13606,6 +13606,38 @@ async function ksSupIncele({ ayar, ctx, ogr, tur, talep, icerik, iptal, dayanak 
 function ksSupOzet(r, ikinci) {
   return `🎓 Süpervizör${ikinci ? " (düzeltme sonrası)" : ""}: ${r.karar === "UYGUN" ? "uygun" : "dikkat"}${r.notlar.length ? "\n" + r.notlar.map(n => "• " + n).join("\n") : (r.guclu ? " — " + r.guclu : "")}`;
 }
+// Asistan süpervizyonunu öğrencinin "🎓 Prof. Hakan › Süpervizyon Geçmişi"ne kaydeder (öğrenci başına tek kayıt)
+function ksSupKayitMetni(liste, yanit, talep) {
+  const karar = (x) => x.karar === "HATA" ? "Süpervizör yanıt veremedi" : x.okunamadi ? "İncelendi (yanıt beklenen biçimde değil)"
+    : x.karar === "UYGUN" ? (x.ikinci ? "Düzeltme sonrası uygun" : "Uygun") : x.duzeltildi ? "Düzeltme istedi → asistan düzeltti" : "Dikkat";
+  const turAd = (x) => ({ risk: "Risk", elle: "Önceki yanıt", veli: "Veli yazısı", meb: "MEB raporu" })[x.tur] || "Müdahale planı";
+  const b = [`DANIŞMANIN İSTEĞİ: ${String(talep || "").trim()}`];
+  liste.forEach(x => {
+    b.push(`\n── ${turAd(x)} · ${x.asama === "kayıt öncesi" ? "kayıttan önce" : "yanıt"}: ${karar(x)} ──`);
+    if ((x.notlar || []).length) b.push(x.notlar.map(n => "• " + n).join("\n"));
+    if (x.guclu && x.karar !== "HATA") b.push(`Güçlü yan: ${x.guclu}`);
+    if (x.asama === "kayıt öncesi" && x.icerik) b.push(`\n${x.engelledi ? "ASİSTANIN İLK TASLAĞI" : x.ikinci ? "DÜZELTİLMİŞ HÂLİ" : "İNCELENEN PLAN / KAYIT"}:\n${pdrKalinTemizle(String(x.icerik))}`);
+    else if (x.ilkTaslak) b.push(`\nASİSTANIN İLK TASLAĞI:\n${pdrKalinTemizle(String(x.ilkTaslak))}`);
+  });
+  if (liste.some(x => x.asama === "yanıt") && yanit) b.push(`\nDANIŞMANA GİDEN SON YANIT:\n${pdrKalinTemizle(String(yanit))}`);
+  return b.join("\n").trim();
+}
+async function ksSupKaydet(ctx, liste, yanit, talep) {
+  if (!ctx || !ctx.kaydet || !ctx.kaydet.profNotlari || !(liste || []).length) return;
+  const gruplar = new Map();
+  liste.filter(x => x.ogrKimlik && x.ogrKimlik.name).forEach(x => { const k = x.ogrKimlik.name + "||" + x.ogrKimlik.className; if (!gruplar.has(k)) gruplar.set(k, { o: x.ogrKimlik, l: [] }); gruplar.get(k).l.push(x); });
+  if (!gruplar.size) return;
+  let sozluk = ctx.profNotlari || {};
+  for (const { o, l } of gruplar.values()) {
+    const turler = [...new Set(l.map(x => ({ risk: "Risk", elle: "Önceki yanıt", veli: "Veli yazısı", meb: "MEB raporu" })[x.tur] || "Müdahale planı"))].join(", ");
+    const kayit = { id: uid(), tarih: today(), tip: "asistan", kaynak: "asistan", soru: `Asistan süpervizyonu — ${turler}`, cevap: ksSupKayitMetni(l, yanit, talep) };
+    // Prof. Hakan ekranı "Ad || Sınıf" anahtarıyla okur/yazar; aynı anahtar kullanılır
+    const mevcut = pdrSozlukOku(sozluk, o.name, o.className) || [];
+    sozluk = pdrSozlukYaz(sozluk, o.name, o.className, [kayit, ...mevcut]);
+  }
+  ctx.profNotlari = sozluk;
+  await ctx.kaydet.profNotlari(sozluk);
+}
 // ── 🎓 PROF. HAKAN SÜPERVİZYONU BİTİŞ ──
 async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTur = 8, iptal = null }) {
   const sistem = ksAsistanSistem(ayar, ctx);
@@ -13641,7 +13673,7 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
     try {
       const r = await ksSupIncele({ ayar, ctx, ogr: sonOgr, tur: "Asistanın danışmana verdiği önceki yanıt", talep: oncekiTalep, icerik: oncekiYanit, iptal });
       supTopla(r.y); model = r.y.model; sonGiden = r.y.giden;
-      supervizyon.push({ asama: "yanıt", tur: "elle", karar: r.karar, notlar: r.notlar, guclu: r.guclu, okunamadi: !!r.okunamadi, ilkTaslak: r.karar === "DÜZELT" ? oncekiYanit : "" });
+      supervizyon.push({ asama: "yanıt", tur: "elle", ogrKimlik: sonOgr ? { name: sonOgr.name, className: sonOgr.className || "", numara: sonOgr.numara || "" } : null, karar: r.karar, notlar: r.notlar, guclu: r.guclu, okunamadi: !!r.okunamadi, ilkTaslak: r.karar === "DÜZELT" ? oncekiYanit : "" });
       if (r.karar === "UYGUN") {
         gecmis.push({ role: "assistant", content: "(Süpervizör önceki yanıtı uygun buldu.)" });
         return bitir("🎓 Prof. Hakan önceki yanıtı inceledi: uygun." + (r.notlar.length ? " Geliştirme önerileri aşağıda." : ""));
@@ -13695,7 +13727,7 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
           const dayanak = yt.tur === "meb" ? aracSonuclari.meb_raporu : yt.tur === "veli" ? aracSonuclari.veli_mektubu : "";
           const r = await ksSupIncele({ ayar, ctx, ogr: yt.tur === "meb" ? null : sonOgr, tur: yt.ad + " (danışmana gitmeden önce)", talep: sonKullanici, icerik: yanit, iptal, dayanak });
           supTopla(r.y);
-          supervizyon.push({ asama: "yanıt", tur: yt.tur, karar: r.karar, notlar: r.notlar, guclu: r.guclu, okunamadi: !!r.okunamadi, ilkTaslak: r.karar === "DÜZELT" ? yanit : "" });
+          supervizyon.push({ asama: "yanıt", tur: yt.tur, ogrKimlik: yt.tur !== "meb" && sonOgr ? { name: sonOgr.name, className: sonOgr.className || "", numara: sonOgr.numara || "" } : null, karar: r.karar, notlar: r.notlar, guclu: r.guclu, okunamadi: !!r.okunamadi, ilkTaslak: r.karar === "DÜZELT" ? yanit : "" });
           if (r.karar === "DÜZELT") {
             supRevizyonBas = gecmis.length - 1;
             birikmis = ""; devamBas = -1; devamSay = 0;
@@ -13736,7 +13768,7 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
             const icerik = ksSupKayitIcerik(c.ad, c.girdi, ctx, ogr);
             const r = await ksSupIncele({ ayar, ctx, ogr, tur: tur === "plan" ? "Müdahale planı (kaydedilmeden önce)" : "Risk kaydı (kaydedilmeden önce)", talep: sonKullanici, icerik, iptal });
             supTopla(r.y);
-            supervizyon.push({ asama: "kayıt öncesi", tur, arac: c.ad, ogrenci: ksAsistanEtiket(ogr), karar: r.karar, notlar: r.notlar, guclu: r.guclu, ikinci: !ilk, okunamadi: !!r.okunamadi, ilkTaslak: r.karar === "DÜZELT" && tur === "plan" && ilk ? icerik : "" });
+            supervizyon.push({ asama: "kayıt öncesi", tur, arac: c.ad, ogrenci: ksAsistanEtiket(ogr), ogrKimlik: { name: ogr.name, className: ogr.className || "", numara: ogr.numara || "" }, icerik, karar: r.karar, notlar: r.notlar, guclu: r.guclu, ikinci: !ilk, okunamadi: !!r.okunamadi, ilkTaslak: r.karar === "DÜZELT" && tur === "plan" && ilk ? icerik : "" });
             if (r.karar === "DÜZELT" && tur === "plan" && ilk) {
               supDuzeltilen.add(c.ad);
               supervizyon[supervizyon.length - 1].engelledi = true;
@@ -32557,8 +32589,9 @@ function pdrAsistanCtx(p) {
     akademikTaramalar: p.akademikTaramalar, liseTaramalar: p.liseTaramalar, benlikOlcekleri: p.benlikOlcekleri,
     sinavTuru: p.sinavTuru, aktifYil: p.aktifYil, ogrenciListesi: p.kayitliListesi,
     bdtAnaliz: p.bdtAnaliz, bireyiTanima: p.bireyiTanima, ogrenciler: p.ogrenciler, uyumIzleme: p.uyumIzleme, kademe: p.kademe || "", konuHaritasiVerisi: p.konuHaritasiVerisi || {}, ilkokulTaramalar: p.ilkokulTaramalar || [],
-    asistanNotlari: p.asistanNotlari || [], mudahaleOnerileri: p.mudahaleOnerileri || {},
+    asistanNotlari: p.asistanNotlari || [], mudahaleOnerileri: p.mudahaleOnerileri || {}, profNotlari: p.profNotlari || {},
     kaydet: {
+      profNotlari: p.setProfNotlari ? async (v) => { p.setProfNotlari(v); await saveProfNotlari(v); } : null,
       mudahaleOnerileri: p.setMudahaleOnerileri ? async (v) => { p.setMudahaleOnerileri(v); await saveMudahaleOnerileri(v); } : null,
       asistanNotlari: p.setAsistanNotlari ? async (l) => { p.setAsistanNotlari(l); await saveAsistanNotlari(l); } : null,
       profiles2: p.setProfiles2 ? async (l) => { p.setProfiles2(l); await saveProfiles2(l); } : null,
@@ -32642,6 +32675,7 @@ async function pdrAsistanIstek(m, kullanilan, ctx) {
         }
       }),
     });
+    try { await ksSupKaydet(ctx, s.supervizyon, s.yanit, m); } catch (e) { console.warn("Süpervizyon kaydedilemedi", e); }
     const dolar = kullanilan.saglayici === "ucretsiz" ? null : ksAsistanMaliyet(s.model, s.ucretGiris ?? s.giris, s.cikis);
     if (dolar) S.toplamDolar += dolar;
     S.gorunen = [...S.gorunen, { rol: "asistan", soru: m, metin: s.yanit, adimlar, supervizyon: s.supervizyon && s.supervizyon.length ? s.supervizyon : null, model: s.model, giris: s.giris, cikis: s.cikis, onbellek: s.onbellek || 0, dolar, giden: s.giden, kritik: s.kritik, yedek: s.yedek, ucretsiz: kullanilan.saglayici === "ucretsiz" }];
@@ -32695,7 +32729,7 @@ function AsistanEkrani({
   mudahalePlan, setMudahalePlan, profiles, profiles2, denemeler, sevkler, testKayitlari,
   akademikTaramalar, liseTaramalar, benlikOlcekleri, sinavTuru, aktifYil, setTab,
   bdtAnaliz, bireyiTanima, ogrenciler, uyumIzleme, setBdtAnaliz, setBireyiTanima, setUyumIzleme, kademe, setSevkler, konuHaritasiVerisi, ilkokulTaramalar,
-  asistanNotlari, setAsistanNotlari, setProfiles2, setProfiles, setDenemeler, setOgrenciler, setKonuHaritasiVerisi, mudahaleOnerileri, setMudahaleOnerileri
+  asistanNotlari, setAsistanNotlari, setProfiles2, setProfiles, setDenemeler, setOgrenciler, setKonuHaritasiVerisi, mudahaleOnerileri, setMudahaleOnerileri, profNotlari, setProfNotlari
 }) {
   const S = PDR_ASISTAN_SOHBET;
   const [notSec, setNotSec] = useState(null);       // hangi yanıt için öğrenci seçiliyor
@@ -32772,7 +32806,7 @@ function AsistanEkrani({
     return pdrAsistanCtx({ kayitliListesi, records, setRecords, riskListesi, setRiskListesi, hatirlatmalar, setHatirlatmalar,
       mudahalePlan, setMudahalePlan, profiles, profiles2, denemeler, sevkler, testKayitlari,
       akademikTaramalar, liseTaramalar, benlikOlcekleri, sinavTuru, aktifYil, bdtAnaliz, bireyiTanima, ogrenciler, uyumIzleme,
-      setBdtAnaliz, setBireyiTanima, setUyumIzleme, kademe, setSevkler, konuHaritasiVerisi, ilkokulTaramalar, asistanNotlari, setAsistanNotlari, setProfiles2, setProfiles, setDenemeler, setOgrenciler, setKonuHaritasiVerisi, mudahaleOnerileri, setMudahaleOnerileri });
+      setBdtAnaliz, setBireyiTanima, setUyumIzleme, kademe, setSevkler, konuHaritasiVerisi, ilkokulTaramalar, asistanNotlari, setAsistanNotlari, setProfiles2, setProfiles, setDenemeler, setOgrenciler, setKonuHaritasiVerisi, mudahaleOnerileri, setMudahaleOnerileri, profNotlari, setProfNotlari });
   }
   // 📌 Yanıtı öğrencinin dosyasına kaydet
   async function notaKaydet(i, ogr) {
@@ -33623,7 +33657,7 @@ Bu soruyu tüm verileri ve Dr. Ayşe Kara'nın değerlendirmelerini göz önünd
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                     <div style={{display:"flex",gap:6,alignItems:"center"}}>
                       <span style={{background:"#1a1a2e",color:"#fff",borderRadius:20,padding:"2px 10px",fontSize:10,fontWeight:700}}>
-                        {k.tip === "genel" ? "📊 Genel Süpervizyon" : "💬 Soru-Cevap"}{k.kapali ? " · 🔒 Kapalı" : ""}
+                        {k.tip === "genel" ? "📊 Genel Süpervizyon" : k.tip === "asistan" ? "🤖 Asistan Süpervizyonu" : "💬 Soru-Cevap"}{k.kapali ? " · 🔒 Kapalı" : ""}
                       </span>
                       <span style={{fontSize:10,color:MUTED}}>{k.tarih}</span>
                     </div>
@@ -33632,9 +33666,9 @@ Bu soruyu tüm verileri ve Dr. Ayşe Kara'nın değerlendirmelerini göz önünd
                       setProfNotlari(updated);await saveProfNotlari(updated);
                     }} style={{background:"none",border:"none",color:MUTED,cursor:"pointer",fontSize:12}}>✕</button>
                   </div>
-                  {k.tip === "soru" && (
+                  {(k.tip === "soru" || k.tip === "asistan") && (
                     <div style={{fontSize:12,fontWeight:700,color:"#1a1a2e",marginBottom:8,background:"#f0f0f8",borderRadius:6,padding:"6px 10px"}}>
-                      ❓ {k.soru}
+                      {k.tip === "asistan" ? "🤖" : "❓"} {k.soru}
                     </div>
                   )}
                   <div style={{fontSize:13,color:TEXT,lineHeight:1.8,whiteSpace:"pre-wrap"}}>{k.cevap}</div>
@@ -33674,7 +33708,7 @@ Bu soruyu tüm verileri ve Dr. Ayşe Kara'nın değerlendirmelerini göz önünd
                         <table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:12px">
                           <tr><td style="padding:4px 8px;background:#f5f5f5;font-weight:700;width:140px">Öğrenci</td><td style="padding:4px 8px">${seciliAd}</td></tr>
                           <tr><td style="padding:4px 8px;background:#f5f5f5;font-weight:700">Tarih</td><td style="padding:4px 8px">${k.tarih}</td></tr>
-                          <tr><td style="padding:4px 8px;background:#f5f5f5;font-weight:700">Tür</td><td style="padding:4px 8px">${k.tip === "genel" ? "Genel Süpervizyon" : "Soru-Cevap"}</td></tr>
+                          <tr><td style="padding:4px 8px;background:#f5f5f5;font-weight:700">Tür</td><td style="padding:4px 8px">${k.tip === "genel" ? "Genel Süpervizyon" : k.tip === "asistan" ? "Asistan Süpervizyonu" : "Soru-Cevap"}</td></tr>
                           ${k.tip === "soru" ? `<tr><td style="padding:4px 8px;background:#f5f5f5;font-weight:700">Soru</td><td style="padding:4px 8px">${k.soru}</td></tr>` : ""}
                         </table>
                         <div style="font-size:11px;font-weight:700;color:#1a1a2e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;padding-bottom:4px;border-bottom:1px solid #ddd">Süpervizyon Değerlendirmesi</div>
@@ -44910,6 +44944,7 @@ function pdrBaslangicSekmesi() {
             asistanNotlari={asistanNotlari} setAsistanNotlari={setAsistanNotlari} setProfiles2={setProfiles2}
             setProfiles={setProfiles} setDenemeler={setDenemeler} setOgrenciler={setOgrenciler} setKonuHaritasiVerisi={setKonuHaritasiVerisi}
             mudahaleOnerileri={mudahaleOnerileri} setMudahaleOnerileri={setMudahaleOnerileri}
+            profNotlari={profNotlari} setProfNotlari={setProfNotlari}
           />
         )}
         {/* ── PDR ASİSTANI: her ekranda bas-konuş düğmesi ── */}
@@ -44930,6 +44965,7 @@ function pdrBaslangicSekmesi() {
             asistanNotlari={asistanNotlari} setAsistanNotlari={setAsistanNotlari} setProfiles2={setProfiles2}
             setProfiles={setProfiles} setDenemeler={setDenemeler} setOgrenciler={setOgrenciler} setKonuHaritasiVerisi={setKonuHaritasiVerisi}
             mudahaleOnerileri={mudahaleOnerileri} setMudahaleOnerileri={setMudahaleOnerileri}
+            profNotlari={profNotlari} setProfNotlari={setProfNotlari}
           />
         )}
 

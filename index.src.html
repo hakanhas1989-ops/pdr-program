@@ -2620,12 +2620,12 @@ function DevamsizlikEkrani({ ogrenciler, setOgrenciler, kademe, aktifYil, setTab
           style={{ width:"100%", padding:"7px 10px", border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius:8, fontSize:12, boxSizing:"border-box", marginBottom:10 }} />
         <label style={{ display:"block", width:"100%", padding:14, background:"#fff", border:"2px dashed #C0392B", borderRadius:12, textAlign:"center", color:"#C0392B", fontWeight:700, cursor:"pointer", boxSizing:"border-box" }}>
           {excelYukleniyor ? "⏳ İşleniyor…" : "📂 Excel Dosyası Seç (.xlsx)"}
-          <input type="file" accept=".xlsx,.xls,.csv" onChange={handleExcelYukle} style={{ display:"none" }} disabled={excelYukleniyor} />
+          <input data-asistan="excel-dosya-devamsizlik" type="file" accept=".xlsx,.xls,.csv" onChange={handleExcelYukle} style={{ display:"none" }} disabled={excelYukleniyor} />
         </label>
       </div>
 
       {sonuc && (
-        <div style={{ background:"#E6F5EE", borderRadius:8, padding:10, marginBottom:16 }}>
+        <div data-asistan="excel-sonuc" style={{ background:"#E6F5EE", borderRadius:8, padding:10, marginBottom:16 }}>
           <div style={{ fontSize:12, fontWeight:700, color:"#1A8C5B" }}>✓ {sonuc.islenen} öğrenci işlendi.</div>
           {sonuc.esikGecenSayisi > 0 && (
             <div style={{ fontSize:11, color:"#B07D1A", marginTop:4, fontWeight:600 }}>🔔 {sonuc.esikGecenSayisi} öğrenci "Takip Edilmeli" eşiğine yeni girdi — Hatırlatıcı'ya otomatik eklendi.</div>
@@ -14118,6 +14118,112 @@ function ksEkranKararMetni(d, ad) {
 }
 
 // Bir ekran işini çalıştırır: kalkan + durdur düğmesi + hata yönetimi
+// ── 📎 ASİSTAN: EXCEL'İ TANIYIP İLGİLİ SEKMEYE AKTARMA ──
+// Dosya telefonda okunur ve tanınır; yapay zekâya hiçbir şey gitmez. Kaydetmeyi
+// sekmenin kendi (test edilmiş) yükleyicisi yapar; asistan yalnızca önizleme
+// gösterir, onay alır ve dosyayı o yükleyiciye verir.
+const PDR_EXCEL_DOSYALAR = {};
+const PDR_EXCEL_TURLER = {
+  devamsizlik: { ad: "Devamsızlık raporu", sekme: "devamsizlik", yer: "📅 Devamsızlık › Excel ile Toplu Yükle" },
+  deneme: { ad: "Deneme sonucu (toplam net)", sekme: "deneme", yer: "📊 Deneme › Bu Yılın Denemesi", ac: "deneme-guncel-ac" },
+  gdo: { ad: "Geçmiş dönem listesi (öğrenciler + 7. sınıf deneme netleri)", sekme: "deneme", yer: "📊 Deneme › Geçmiş Dönem Excel", ac: "deneme-gdo-ac" },
+  mes: { ad: "Mesleki Eğilim Testi yanıtları (Google Forms)", sekme: "testler", yer: "🧪 Testler › Mesleki Eğilim Toplu Yükle", ac: "mes-toplu-ac" },
+};
+function pdrExcelNorm(s) {
+  return String(s || "").toUpperCase().replace(/İ/g, "I").replace(/Ş/g, "S").replace(/Ğ/g, "G").replace(/Ü/g, "U").replace(/Ö/g, "O").replace(/Ç/g, "C").replace(/\s+/g, " ").trim();
+}
+function pdrExcelTani(rows, ctx, dosyaAdi) {
+  rows = (rows || []).filter(r => Array.isArray(r));
+  const hi = rows.findIndex((r, i) => i < 15 && r.some(c => /AD SOYAD|ADI SOYADI|ISIM/.test(pdrExcelNorm(c))));
+  if (hi < 0) return { tur: null, neden: "Dosyada \"Ad Soyad\" başlıklı bir sütun bulamadım. Programın Excel yükleyicileri bu sütunu arıyor." };
+  const h = rows[hi].map(pdrExcelNorm);
+  const bul = (f) => h.findIndex(f);
+  const colAd = bul(x => x.includes("AD SOYAD") || x.includes("ADI SOYADI") || x.includes("ISIM"));
+  const colSinif = bul(x => x.includes("SINIF") || x.includes("SUBE"));
+  const colNo = bul(x => x.includes("NUMARA") || x === "NO" || x.includes("OKUL NO") || (x.includes("OGRENCI") && !x.includes("AD")));
+  const veri = rows.slice(hi + 1).filter(r => { const a = String(r[colAd] || "").trim(); return a && !a.startsWith("*") && !/AD SOYAD|^OKUL|^SINIF/.test(pdrExcelNorm(a)); });
+  const madde = (typeof MESLEKI_EGILIM_MADDELERI !== "undefined" ? MESLEKI_EGILIM_MADDELERI : []);
+  const mesSay = veri.slice(0, 3).reduce((t, r) => { const m = r.join(" | "); return t + madde.filter(x => m.includes(x)).length; }, 0);
+  let tur = null;
+  if (madde.length && mesSay >= 5) tur = "mes";
+  else if (bul(x => x.includes("DEVAMSIZLIK")) >= 0 || (bul(x => /\bGUN\b/.test(x)) >= 0 && bul(x => x.includes("NET")) < 0)) tur = "devamsizlik";
+  else if (h.filter(x => /^D\d+\b/.test(x) || x.includes("GELISIM-")).length >= 2) tur = "gdo";
+  else if (bul(x => x.includes("NET") || x.includes("PUAN")) >= 0) tur = "deneme";
+  if (!tur) return { tur: null, neden: "Dosyanın türünü tanıyamadım. Tanıdıklarım: devamsızlık raporu, deneme toplam netleri, geçmiş dönem (D1–D9) listesi, Mesleki Eğilim Google Forms yanıtları." };
+  if (tur !== "gdo" && hi !== 0) return { tur: null, neden: `Dosya “${PDR_EXCEL_TURLER[tur].ad}” gibi görünüyor ama başlık satırı ilk satırda değil (${hi + 1}. satırda). Excel'de üstteki satırları silip dosyayı yeniden seç.` };
+  const ogr = (ctx && ctx.ogrenciler) || [];
+  const eslesen = [], eslesmeyen = [];
+  veri.forEach(r => {
+    const ad = String(r[colAd] || "").trim(), sinif = colSinif >= 0 ? String(r[colSinif] || "").trim() : "", no = colNo >= 0 ? String(r[colNo] || "").trim() : "";
+    const o = ogr.find(x => pdrAyniOgrenci(x.studentName, x.className, ad, sinif, x.numara, no));
+    if (o) eslesen.push(o); else eslesmeyen.push(pdrSoyadMaskele(ad) + (sinif ? ` (${sinif})` : ""));
+  });
+  const uyari = [];
+  let denemeNo = null;
+  if (tur === "devamsizlik") {
+    const bugun = eslesen.filter(o => (o.devamsizlikGecmisi || []).some(g => g.tarih === today())).length;
+    if (bugun) uyari.push(`${bugun} öğrencide bugünün tarihli devamsızlık kaydı zaten var. Aynı raporu ikinci kez yüklüyor olabilirsin; yüklersen geçmişe bir kayıt daha eklenir.`);
+  }
+  if (tur === "deneme") {
+    const ad = String(dosyaAdi || "");
+    const m = ad.match(/(\d{1,2})\s*\.?\s*deneme|deneme\s*[-_ ]?\s*(\d{1,2})/i);
+    const N = typeof DENEME_SAYISI !== "undefined" ? DENEME_SAYISI : 9;
+    if (m) denemeNo = Math.min(N, Math.max(1, parseInt(m[1] || m[2])));
+    if (!denemeNo) {
+      for (let n = 1; n <= N; n++) { const dolu = eslesen.some(o => { const d = pdrSozlukOku((ctx && ctx.denemeler) || {}, o.studentName, o.className, o.numara); return d && d[n]; }); if (!dolu) { denemeNo = n; break; } }
+      denemeNo = denemeNo || 1;
+    }
+  }
+  if (tur === "gdo" && eslesmeyen.length) uyari.push(`${eslesmeyen.length} kişi kayıtlı değil; yüklenirse bunlar YENİ ÖĞRENCİ olarak eklenir.`);
+  if (tur === "mes" && eslesmeyen.length) uyari.push(`${eslesmeyen.length} satır kayıtlı bir öğrenciyle eşleşmedi; bunların sonucu yine kaydedilir ama bir öğrenci kartına bağlanmaz.`);
+  return { tur, satir: veri.length, eslesen: eslesen.length, eslesmeyen, uyari, denemeNo };
+}
+// Deneme numarası değişince (kart üzerindeki seçim) o denemede zaten veri olan öğrenci sayısı
+function pdrExcelDenemeDolu(ctx, no, ogrSay) {
+  const d = (ctx && ctx.denemeler) || {};
+  return Object.values(d).filter(v => v && typeof v === "object" && v[no]).length;
+}
+async function ksEkranDosyaAlani(secici, ms = 5000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < ms) { ksEkranKontrol(); const el = document.querySelector(secici); if (el) return el; await ksEkranBekle(80); }
+  return null;
+}
+async function ksEkranExcelAktar(m) {
+  const x = m.excel, T = PDR_EXCEL_TURLER[x.tur];
+  return ksEkranCalistir("Excel aktarımı", async () => {
+    const f = PDR_EXCEL_DOSYALAR[x.id];
+    if (!f) throw new Error("Dosya artık bellekte değil (program yeniden açılmış olabilir). Dosyayı 📎 ile yeniden seç.");
+    ksEkranBalon(`🤖 <b>${pdrHtmlKac(T.yer)}</b> açılıyor…`);
+    await ksEkranSekme(T.sekme);
+    const giris = `[data-asistan="excel-dosya-${x.tur}"]`;
+    if (T.ac && !document.querySelector(giris)) {
+      const b = await ksEkranBul(`[data-asistan="${T.ac}"]`, 4000);
+      if (!b) throw new Error("Yükleme bölümü açılamadı.");
+      await ksEkranTikla(b);
+    }
+    if (x.tur === "deneme") {
+      const sec = await ksEkranBul('[data-asistan="deneme-guncel-no"]');
+      if (!sec) throw new Error("Deneme seçimi bulunamadı.");
+      ksEkranBalon(`🤖 <b>Deneme ${x.denemeNo}</b> seçiliyor…`);
+      await ksEkranSec(sec, String(x.denemeNo));
+    }
+    const inp = await ksEkranDosyaAlani(giris);
+    if (!inp) throw new Error("Dosya alanı bulunamadı.");
+    const onceki = new Set(document.querySelectorAll('[data-asistan="excel-sonuc"]'));
+    ksEkranBalon(`🤖 <b>${pdrHtmlKac(x.dosyaAdi)}</b> yükleniyor…`);
+    try { const dt = new window.DataTransfer(); dt.items.add(f); inp.files = dt.files; }
+    catch (e) { throw new Error("Bu tarayıcı dosyayı otomatik aktaramıyor. Sekme açıldı; dosyayı oradaki “Excel Dosyası Seç” düğmesiyle seçebilirsin."); }
+    inp.dispatchEvent(new Event("change", { bubbles: true }));
+    const t0 = Date.now(); let el = null;
+    while (Date.now() - t0 < 20000 && !el) { await ksEkranBekle(150); el = [...document.querySelectorAll('[data-asistan="excel-sonuc"]')].find(e => !onceki.has(e)) || null; }
+    if (!el) throw new Error("Yüklemenin sonucunu ekranda göremedim. Sekmeye bakıp kontrol et.");
+    try { el.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) {}
+    const metin = String(el.innerText || "").trim();
+    ksEkranBalon(`✅ ${pdrHtmlKac(metin.split("\n")[0])}`, [{ ad: "🤖 Asistana dön", renk: "#E9B949", yazi: "#3A2A00", fn: ksEkranAsistanaDon }, { ad: "Kapat", fn: ksEkranKapat }]);
+    return metin;
+  });
+}
+// ── 📎 ASİSTAN EXCEL BİTİŞ ──
 async function ksEkranCalistir(ad, is) {
   if (PDR_EKRAN.calisiyor) return "Ekranda başka bir işlem sürüyor.";
   PDR_EKRAN.calisiyor = true; PDR_EKRAN.durdur = false;
@@ -26808,7 +26914,7 @@ function testFormGecerliMi(tip, form) {
 // kullanılır; kimlik sütunları dışındaki her hücre madde metinleriyle
 // karşılaştırılır (Google Forms'ta çoklu seçim soruları virgülle ayrılmış
 // metin olarak tek hücrede gelir).
-function MesEgilimTopluYukle({ testKayitlari, setTestKayitlari, onKapat }) {
+function MesEgilimTopluYukle({ testKayitlari, setTestKayitlari, onKapat, ogrenciler }) {
   const [yukleniyor, setYukleniyor] = useState(false);
   const [sonuc, setSonuc] = useState(null);
 
@@ -26861,8 +26967,13 @@ function MesEgilimTopluYukle({ testKayitlari, setTestKayitlari, onKapat }) {
           if (isaretli.length === 0) { eslesmeyenSatir.push(adSoyad); continue; }
 
           const yeni = { id: uid(), kategori: "objektif", testAdi: "Mesleki Eğilim Belirleme Testi (160 Madde)", tip: "mesleki_egilim_160", tarih: today(), not: "Google Forms toplu yükleme", veri: { isaretliMaddeler: isaretli, genelYorum: "", guvenlikUyarisi: "" } };
-          const key = pdrOgrAnahtar(adSoyad, sinif, numara);
-          const mevcutListe = pdrSozlukOku(yeniKayitlar, adSoyad, sinif, numara) || [];
+          // Kayıtlı öğrenciyle eşleşirse onun kendi ad/sınıf/numarasıyla kaydedilir
+          // (öğrenci kartında görünsün); eşleşmezse soyadı maskelenerek saklanır.
+          const kayitli = (ogrenciler || []).find(o => pdrAyniOgrenci(o.studentName, o.className, adSoyad, sinif, o.numara, numara));
+          const yAd = kayitli ? kayitli.studentName : pdrSoyadMaskele(adSoyad);
+          const ySinif = kayitli ? kayitli.className : sinif, yNo = kayitli ? kayitli.numara : numara;
+          const key = pdrOgrAnahtar(yAd, ySinif, yNo);
+          const mevcutListe = pdrSozlukOku(yeniKayitlar, yAd, ySinif, yNo) || [];
           yeniKayitlar[key] = [yeni, ...mevcutListe];
           islenenOgrenci++;
           toplamIsaretli += isaretli.length;
@@ -26890,10 +27001,10 @@ function MesEgilimTopluYukle({ testKayitlari, setTestKayitlari, onKapat }) {
       </div>
       <label style={{ display:"block", width:"100%", padding:14, background:"#fff", border:`2px dashed ${PURPLE}`, borderRadius:12, textAlign:"center", color:PURPLE, fontWeight:700, cursor:"pointer", boxSizing:"border-box" }}>
         {yukleniyor ? "⏳ İşleniyor…" : "📂 Excel Dosyası Seç (.xlsx)"}
-        <input type="file" accept=".xlsx,.xls,.csv" onChange={handleDosya} style={{ display:"none" }} disabled={yukleniyor} />
+        <input data-asistan="excel-dosya-mes" type="file" accept=".xlsx,.xls,.csv" onChange={handleDosya} style={{ display:"none" }} disabled={yukleniyor} />
       </label>
       {sonuc && (
-        <div style={{ marginTop:10, background:"#E6F5EE", borderRadius:8, padding:10 }}>
+        <div data-asistan="excel-sonuc" style={{ marginTop:10, background:"#E6F5EE", borderRadius:8, padding:10 }}>
           <div style={{ fontSize:12, fontWeight:700, color:"#1A8C5B" }}>✓ {sonuc.islenenOgrenci} öğrenci işlendi, toplam {sonuc.toplamIsaretli} madde işaretlendi.</div>
           {sonuc.eslesmeyenSatir.length > 0 && (
             <div style={{ fontSize:11, color:"#B07D1A", marginTop:6, lineHeight:1.5 }}>⚠️ {sonuc.eslesmeyenSatir.length} satırda hiç madde eşleşmedi ({sonuc.eslesmeyenSatir.slice(0,5).join(", ")}{sonuc.eslesmeyenSatir.length>5?"...":""}) — cevap metinleri madde listesiyle tam eşleşmiyor olabilir.</div>
@@ -27357,9 +27468,9 @@ KURALLAR:
 
       {/* Mesleki Eğilim Testi — Google Forms/Excel toplu yükleme (öğrenci seçiminden bağımsız, sınıf/okul geneli) */}
       {topluYuklemeAcik ? (
-        <MesEgilimTopluYukle testKayitlari={testKayitlari} setTestKayitlari={setTestKayitlari} onKapat={()=>setTopluYuklemeAcik(false)} />
+        <MesEgilimTopluYukle testKayitlari={testKayitlari} setTestKayitlari={setTestKayitlari} ogrenciler={ogrenciler} onKapat={()=>setTopluYuklemeAcik(false)} />
       ) : (
-        <button onClick={()=>setTopluYuklemeAcik(true)} style={{
+        <button data-asistan="mes-toplu-ac" onClick={()=>setTopluYuklemeAcik(true)} style={{
           width:"100%", padding:"10px 14px", background:"#fff", border:`2px dashed ${PURPLE}`, borderRadius:12,
           color:PURPLE, fontWeight:700, fontSize:12.5, cursor:"pointer", marginBottom:16, textAlign:"left"
         }}>📊 Mesleki Eğilim Testi — Google Forms/Excel Toplu Yükle (tüm sınıf birden)</button>
@@ -32746,6 +32857,38 @@ function AsistanEkrani({
   const setOkunan = (v) => { S.okunan = typeof v === "function" ? v(S.okunan) : v; pdrAsistanBildir(); };
   const tanimaRef = useRef(null);
   const altRef = useRef(null);
+  // 📎 Excel: telefonda okunur, tanınır, önizleme kartı gösterilir (yapay zekâya gitmez)
+  function excelSec(file) {
+    if (!file) return;
+    const S2 = PDR_ASISTAN_SOHBET;
+    const r = new FileReader();
+    r.onload = (evt) => {
+      let t;
+      try {
+        const wb = XLSX.read(evt.target.result, { type: "binary" });
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "" });
+        t = pdrExcelTani(rows, { ogrenciler, denemeler }, file.name);
+      } catch (e) { t = { tur: null, neden: "Dosya okunamadı: " + ((e && e.message) || e) }; }
+      const id = uid();
+      if (t.tur) PDR_EXCEL_DOSYALAR[id] = file;
+      const T = t.tur ? PDR_EXCEL_TURLER[t.tur] : null;
+      S2.gorunen = [...S2.gorunen, { rol: "ben", metin: "📎 " + file.name },
+        { rol: "asistan", yerel: true, excel: { id, dosyaAdi: file.name, ...t }, metin: T
+          ? `📎 Dosya türü: ${T.ad}. ${t.satir} satır var; ${t.eslesen} tanesi kayıtlı öğrencilerinle eşleşti${t.eslesmeyen.length ? `, ${t.eslesmeyen.length} tanesi eşleşmedi` : ""}.\nİşlenecek yer: ${T.yer}`
+          : "📎 " + t.neden }];
+      pdrAsistanBildir();
+    };
+    r.onerror = () => { S2.gorunen = [...S2.gorunen, { rol: "asistan", yerel: true, hata: true, metin: "Dosya okunamadı." }]; pdrAsistanBildir(); };
+    r.readAsBinaryString(file);
+  }
+  async function excelIsle(m) {
+    m.excel.durum = "isleniyor"; pdrAsistanBildir();
+    const sonuc = await ksEkranExcelAktar(m);
+    const hata = /^Ekranda yapılamadı: |^Ekranda başka/.test(String(sonuc));
+    m.excel.durum = hata ? "hata" : "bitti"; m.excel.sonuc = String(sonuc).replace(/^Ekranda yapılamadı: /, "");
+    PDR_ASISTAN_SOHBET.gorunen = [...PDR_ASISTAN_SOHBET.gorunen];
+    pdrAsistanBildir();
+  }
 
   useEffect(() => { S.dinle = yenile; return () => { if (S.dinle === yenile) S.dinle = null; sesDurdur.current = true; try { tanimaRef.current && tanimaRef.current.abort(); } catch (e) {} pdrAsistanSustur(); }; }, []);
 
@@ -33052,6 +33195,30 @@ function AsistanEkrani({
             ))}
             <div style={{ fontSize: 13, color: m.hata ? "#B42318" : TEXT, whiteSpace: "pre-wrap", lineHeight: 1.55, wordBreak: "break-word" }}>{m.hata ? "⚠ " : ""}{temizMetin(m.metin)}</div>
             <PdrSupervizyonKutusu liste={m.supervizyon} />
+            {m.excel && m.excel.tur && (
+              <div data-testid="excel-kart" style={{ marginTop: 8, background: "#F2FAF6", border: "1px solid #CFE7DB", borderRadius: 10, padding: "10px 12px", fontSize: 12, color: TEXT }}>
+                {(m.excel.uyari || []).map((u, k) => <div key={k} style={{ color: "#92400E", fontWeight: 700, marginBottom: 6 }}>⚠ {u}</div>)}
+                {(m.excel.eslesmeyen || []).length > 0 && <div style={{ color: MUTED, marginBottom: 6 }}>Eşleşmeyenler: {m.excel.eslesmeyen.slice(0, 6).join(", ")}{m.excel.eslesmeyen.length > 6 ? ` ve ${m.excel.eslesmeyen.length - 6} kişi daha` : ""}</div>}
+                {m.excel.tur === "deneme" && !m.excel.durum && (() => { const dolu = pdrExcelDenemeDolu({ denemeler }, m.excel.denemeNo); return (
+                  <div style={{ marginBottom: 8 }}>
+                    <label style={{ fontWeight: 700 }}>Hangi deneme? </label>
+                    <select data-testid="excel-deneme-no" value={m.excel.denemeNo} onChange={e => { m.excel.denemeNo = parseInt(e.target.value); pdrAsistanBildir(); }} style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${BORDER}`, fontWeight: 700 }}>
+                      {Array.from({ length: typeof DENEME_SAYISI !== "undefined" ? DENEME_SAYISI : 9 }, (_, k) => k + 1).map(n => <option key={n} value={n}>Deneme {n}</option>)}
+                    </select>
+                    {dolu > 0 && <div style={{ color: "#92400E", fontWeight: 700, marginTop: 4 }}>⚠ Deneme {m.excel.denemeNo} verisi {dolu} öğrencide zaten var; yüklenirse bu öğrencilerin Deneme {m.excel.denemeNo} toplam neti yenisiyle değişir.</div>}
+                  </div>); })()}
+                {!m.excel.durum && (
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button data-testid="excel-isle" disabled={S.calisiyor} onClick={() => excelIsle(m)} style={{ flex: 1, padding: "8px", borderRadius: 8, border: "none", background: ACCENT, color: "#fff", fontWeight: 800, fontSize: 12.5, cursor: "pointer" }}>✅ İlgili sekmeye işle</button>
+                    <button data-testid="excel-vazgec" onClick={() => { m.excel.durum = "vazgecildi"; delete PDR_EXCEL_DOSYALAR[m.excel.id]; pdrAsistanBildir(); }} style={{ flex: 1, padding: "8px", borderRadius: 8, border: `1px solid ${BORDER}`, background: "#fff", color: TEXT, fontWeight: 800, fontSize: 12.5, cursor: "pointer" }}>✋ Vazgeç</button>
+                  </div>
+                )}
+                {m.excel.durum === "isleniyor" && <div style={{ fontWeight: 700, color: MUTED }}>⏳ Sekmede işleniyor…</div>}
+                {m.excel.durum === "vazgecildi" && <div style={{ fontWeight: 700, color: MUTED }}>✋ Vazgeçildi, hiçbir şey kaydedilmedi.</div>}
+                {m.excel.durum === "bitti" && <div data-testid="excel-sonuc-ozet" style={{ fontWeight: 700, color: "#127C56", whiteSpace: "pre-wrap" }}>✅ İşlendi ({PDR_EXCEL_TURLER[m.excel.tur].yer}{m.excel.tur === "deneme" ? ` · Deneme ${m.excel.denemeNo}` : ""}):{"\n"}{m.excel.sonuc}</div>}
+                {m.excel.durum === "hata" && <div style={{ fontWeight: 700, color: "#B42318" }}>⚠ {m.excel.sonuc}</div>}
+              </div>
+            )}
             {m.hata && !S.calisiyor && i === S.gorunen.length - 1 && S.gorunen[i - 1] && S.gorunen[i - 1].rol === "ben" && (
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
                 {m.ucretsizIdi && <button onClick={() => claudeIleSor(i - 1)} style={{ padding: "6px 10px", borderRadius: 8, border: "none", background: ACCENT, color: "#fff", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>🧠 Claude ile tekrar sor</button>}
@@ -33133,6 +33300,9 @@ function AsistanEkrani({
           onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent || "")) { e.preventDefault(); gonder(); } }}
           placeholder={S.onay ? "Yanıtla: \"kaydet\", \"bekle\", \"ben yaparım\" ya da ne değişsin…" : S.calisiyor ? "Asistan çalışıyor…" : "Ne yapayım? Örn: Ali için yarınki görüşmeye hazırlık yap"} style={{ ...inp, resize: "vertical", marginBottom: 6 }} />
         <div style={{ display: "flex", gap: 8 }}>
+          <label data-testid="asistan-excel" title="Excel dosyası ekle (telefonda okunur, yapay zekâya gitmez)" style={{ flex: "0 0 auto", padding: "11px 13px", borderRadius: 10, border: `2px solid ${ACCENT}`, background: "#fff", color: ACCENT, fontSize: 18, cursor: S.calisiyor ? "default" : "pointer", opacity: S.calisiyor ? 0.5 : 1, display: "flex", alignItems: "center" }}>📎
+            <input type="file" accept=".xlsx,.xls,.csv" disabled={S.calisiyor} onChange={e => { excelSec(e.target.files && e.target.files[0]); e.target.value = ""; }} style={{ display: "none" }} />
+          </label>
           <button onClick={dinle} disabled={S.calisiyor && !S.onay} title="Sesle yaz" style={{ flex: "0 0 auto", padding: "11px 14px", borderRadius: 10, border: dinliyor ? "none" : `2px solid ${ACCENT}`, background: dinliyor ? "#B42318" : "#fff", color: dinliyor ? "#fff" : ACCENT, fontWeight: 800, fontSize: 14, cursor: "pointer" }}>{dinliyor ? (ayar.sesliMod ? "⏹ Bitir ve gönder" : "⏹ Bitir") : "🎤 Konuş"}</button>
           {S.calisiyor && S.onay && girdi.trim()
             ? <button onClick={() => gonder()} style={{ flex: 1, padding: "11px", borderRadius: 10, border: "none", background: ACCENT, color: "#fff", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>➤ Yanıtla</button>
@@ -33966,6 +34136,9 @@ function ExcelTopluYukle({ ogrenciler, setOgrenciler, denemeler, setDenemeler, a
           }
         }
 
+        // Başlık satırı bulunduysa veri ondan SONRA başlar (küçük harfli "Ad Soyad"
+        // başlığı yukarıdaki kontrolden geçip öğrenci gibi eklenmesin)
+        if (baslikSatiri !== -1 && baslangic <= baslikSatiri) baslangic = baslikSatiri + 1;
         for (let i = baslangic; i < rows.length; i++) {
           const row = rows[i];
           const no = String(row[colNo] || "").trim();
@@ -34070,7 +34243,7 @@ function ExcelTopluYukle({ ogrenciler, setOgrenciler, denemeler, setDenemeler, a
         <br/>Risk: 🔴 0-30 Yüksek · 🟡 30-55 Orta · 🟢 55+ Düşük
       </div>
 
-      <input type="file" accept=".xlsx,.xls" onChange={handleDosya} style={{display:"none"}} id="excel7-input" />
+      <input data-asistan="excel-dosya-gdo" type="file" accept=".xlsx,.xls" onChange={handleDosya} style={{display:"none"}} id="excel7-input" />
       <label htmlFor="excel7-input" style={{
         display:"block", width:"100%", padding:"12px",
         background:yukleniyor?"#ccc":"#1A8C5B", color:"#fff",
@@ -34099,7 +34272,7 @@ function ExcelTopluYukle({ ogrenciler, setOgrenciler, denemeler, setDenemeler, a
       )}
 
       {sonuc && !sonuc.hata && (
-        <div style={{marginTop:12}}>
+        <div data-asistan="excel-sonuc" style={{marginTop:12}}>
           <div style={{background:"#E6F5EE", borderRadius:8, padding:10, marginBottom:8}}>
             <div style={{fontSize:13, fontWeight:700, color:"#1A8C5B", marginBottom:6}}>✓ Yükleme Tamamlandı!</div>
             <div style={{fontSize:12, color:TEXT}}>{sonuc.eklenen} yeni öğrenci eklendi · Toplam: {sonuc.toplam}</div>
@@ -34125,7 +34298,7 @@ function ExcelTopluYukle({ ogrenciler, setOgrenciler, denemeler, setDenemeler, a
       )}
 
       {sonuc?.hata && (
-        <div style={{marginTop:10, padding:10, background:"#FDECEA", borderRadius:8, fontSize:12, color:"#C0392B"}}>
+        <div data-asistan="excel-sonuc" style={{marginTop:10, padding:10, background:"#FDECEA", borderRadius:8, fontSize:12, color:"#C0392B"}}>
           Hata: {sonuc.hata}
         </div>
       )}
@@ -35934,17 +36107,17 @@ function DenemeGuncelYilTopluYukle({ ogrenciler, denemeler, setDenemeler, onKapa
         Okulda/sınıfta topluca yapılan bir denemenin sonuçlarını (sadece TOPLAM NET, ders kırılımı olmadan) tüm öğrenciler için tek seferde yükle. Excel'de "Ad Soyad" (zorunlu), varsa "Sınıf"/"Numara" ve "Toplam Net" (ya da "Net") sütunları olmalı.
       </div>
       <label style={{ fontSize:11, fontWeight:700, color:MUTED, display:"block", marginBottom:4 }}>HANGİ DENEME?</label>
-      <select value={denemeNo} onChange={e=>setDenemeNo(parseInt(e.target.value))} style={{
+      <select data-asistan="deneme-guncel-no" value={denemeNo} onChange={e=>setDenemeNo(parseInt(e.target.value))} style={{
         width:"100%", padding:"8px 10px", border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius:8, fontSize:13, fontWeight:700, color:TEXT, background:"#fff", marginBottom:10
       }}>
         {Array.from({length: DENEME_SAYISI}, (_,i)=>i+1).map(n => <option key={n} value={n}>Deneme {n}</option>)}
       </select>
       <label style={{ display:"block", width:"100%", padding:14, background:"#fff", border:`2px dashed ${BLUE}`, borderRadius:12, textAlign:"center", color:BLUE, fontWeight:700, cursor:"pointer", boxSizing:"border-box" }}>
         {yukleniyor ? "⏳ İşleniyor…" : "📂 Excel Dosyası Seç (.xlsx)"}
-        <input type="file" accept=".xlsx,.xls,.csv" onChange={handleDosya} style={{ display:"none" }} disabled={yukleniyor} />
+        <input data-asistan="excel-dosya-deneme" type="file" accept=".xlsx,.xls,.csv" onChange={handleDosya} style={{ display:"none" }} disabled={yukleniyor} />
       </label>
       {sonuc && (
-        <div style={{ marginTop:10, background:"#E6F5EE", borderRadius:8, padding:10 }}>
+        <div data-asistan="excel-sonuc" style={{ marginTop:10, background:"#E6F5EE", borderRadius:8, padding:10 }}>
           <div style={{ fontSize:12, fontWeight:700, color:"#1A8C5B" }}>✓ Deneme {denemeNo} — {sonuc.islenen} öğrenci işlendi.</div>
           {sonuc.eslesmeyen.length > 0 && (
             <div style={{ fontSize:11, color:"#B07D1A", marginTop:6, lineHeight:1.5 }}>⚠️ {sonuc.eslesmeyen.length} satırda geçerli bir net okunamadı ({sonuc.eslesmeyen.slice(0,5).join(", ")}{sonuc.eslesmeyen.length>5?"...":""}).</div>
@@ -36215,7 +36388,7 @@ function DenemeTabip({ denemeler, setDenemeler, kayitliListesi, aktifOgrenci, se
       <DenemeBazliRiskGosterimi denemeler={denemeler} kayitliListesi={kayitliListesi} dersler={dersler} />
 
       {!guncelYilExcelAcik && (
-        <button onClick={() => setGuncelYilExcelAcik(true)} style={{
+        <button data-asistan="deneme-guncel-ac" onClick={() => setGuncelYilExcelAcik(true)} style={{
           width: "100%", padding: "10px", marginBottom: 10,
           background: BLUE, color: "#fff", border: "none", borderRadius: 10,
           fontSize: 13, fontWeight: 800, cursor: "pointer"
@@ -36302,7 +36475,7 @@ function DenemeTabip({ denemeler, setDenemeler, kayitliListesi, aktifOgrenci, se
       )}
 
       {!excelPanelAcik && (
-        <button onClick={() => setExcelPanelAcik(true)} style={{
+        <button data-asistan="deneme-gdo-ac" onClick={() => setExcelPanelAcik(true)} style={{
           width: "100%", padding: "10px", marginBottom: 14,
           background: "#1A8C5B", color: "#fff", border: "none", borderRadius: 10,
           fontSize: 13, fontWeight: 800, cursor: "pointer"

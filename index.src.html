@@ -43489,6 +43489,28 @@ export default function App() {
   // 📋 Form ile görüşme: seçilen şablonun yanıtları (kaydedilince görüşme kaydının "form" alanına girer)
   const [gorusmeFormu, setGorusmeFormu] = useState(null);
   const [formSecAcik, setFormSecAcik] = useState(false);
+  const [formTumTurler, setFormTumTurler] = useState(false); // seçicide diğer görüşme türlerinin formları da görünsün mü
+  // Görüşme türü değişince açık form o türe ait değilse: boşsa kaldırılır, doluysa sorulur;
+  // yeni türün tek formu varsa (Veli, Öğretmen) o form kendiliğinden açılır, birden çoksa seçici açılır.
+  function gorusmeTuruDegistir(t) {
+    if (gorusmeFormu) {
+      const sb = pdrFormSablon(gorusmeFormu.sablon);
+      if (sb && sb.tur !== t) {
+        if (pdrFormDoluSayisi(sb, gorusmeFormu) && !window.confirm(`Açık form (${sb.ad}) ${sb.tur.toLocaleLowerCase("tr")} görüşmesi içindir ve işaretlenmiş yanıtları var.\n\n${t} görüşmesine geçilsin ve bu form kaldırılsın mı?`)) return;
+        const uygun = PDR_FORM_SABLONLARI.filter(x => x.tur === t);
+        if (uygun.length === 1) {
+          const sn = pdrFormSeansNo(records, uygun[0].id, form.studentName, form.className, form.numara);
+          setGorusmeFormu(pdrFormBos(uygun[0].id, sn)); setFormSecAcik(false);
+          setForm(f => ({ ...f, meetingType: t, topic: uygun[0].konu || "", altKonu: uygun[0].altkonu || "" }));
+        } else {
+          setGorusmeFormu(null); setFormSecAcik(uygun.length > 0); setFormTumTurler(false);
+          setForm(f => ({ ...f, meetingType: t, topic: "", altKonu: "" }));
+        }
+        return;
+      }
+    }
+    setForm(f => ({ ...f, meetingType: t }));
+  }
   // Öğrenci değişince formun seans numarası o öğrencinin önceki formlarına göre yenilenir
   useEffect(() => {
     setGorusmeFormu(g => g ? { ...g, seans: pdrFormSeansNo(records, g.sablon, form.studentName, form.className, form.numara) } : g);
@@ -45218,7 +45240,7 @@ function pdrBaslangicSekmesi() {
               {/* Görüşme türü */}
               <div style={{ display:"flex", gap:8, marginBottom:12 }}>
                 {["Öğrenci","Veli","Öğretmen"].map(t=>(
-                  <button key={t} data-asistan="gorusme-tur" data-deger={t} onClick={()=>setForm(f=>({...f,meetingType:t}))} style={{ flex:1, padding:"8px", borderRadius:8, border:`2px solid ${PURPLE}`, background:form.meetingType===t?PURPLE:"#fff", color:form.meetingType===t?"#fff":PURPLE, fontSize:12, fontWeight:700, cursor:"pointer" }}>{t}</button>
+                  <button key={t} data-asistan="gorusme-tur" data-deger={t} onClick={()=>gorusmeTuruDegistir(t)} style={{ flex:1, padding:"8px", borderRadius:8, border:`2px solid ${PURPLE}`, background:form.meetingType===t?PURPLE:"#fff", color:form.meetingType===t?"#fff":PURPLE, fontSize:12, fontWeight:700, cursor:"pointer" }}>{t}</button>
                 ))}
               </div>
               {/* 📋 Form ile görüşme — işaretlerden özet oluşur, normal görüşme kaydı olarak düşer */}
@@ -45227,7 +45249,7 @@ function pdrBaslangicSekmesi() {
                   formSecAcik ? (
                     <div style={{ background:"#F2FAF6", border:`1px solid ${ACCENT}`, borderRadius:10, padding:10 }}>
                       <div style={{ fontSize:11.5, fontWeight:800, color:ACCENT, marginBottom:8 }}>📋 Hangi formla görüşeceksin?</div>
-                      {PDR_FORM_SABLONLARI.map(sb => (
+                      {PDR_FORM_SABLONLARI.filter(sb => formTumTurler || sb.tur === form.meetingType).map(sb => (
                         <div key={sb.id} style={{ display:"flex", gap:6, marginBottom:6 }}>
                           <button data-testid="form-sec" data-deger={sb.id} onClick={() => {
                             const sn = pdrFormSeansNo(records, sb.id, form.studentName, form.className, form.numara);
@@ -45240,10 +45262,13 @@ function pdrBaslangicSekmesi() {
                           <button title="Boş formu yazdır" onClick={() => ootBelgeAc(pdrFormHtml(sb, null, { ad: form.studentName, sinif: form.className, tarih: form.tarih }), sb.ad)} style={{ padding:"0 10px", borderRadius:9, border:`1px solid ${BORDER}`, background:"#fff", cursor:"pointer", fontSize:15 }}>🖨</button>
                         </div>
                       ))}
-                      <button onClick={() => setFormSecAcik(false)} style={{ fontSize:11, color:MUTED, background:"none", border:"none", cursor:"pointer", padding:0 }}>Vazgeç</button>
+                      <div style={{ display:"flex", gap:14 }}>
+                        {PDR_FORM_SABLONLARI.some(sb => sb.tur !== form.meetingType) && <button data-testid="form-tum-turler" onClick={() => setFormTumTurler(v => !v)} style={{ fontSize:11, color:ACCENT, fontWeight:700, background:"none", border:"none", cursor:"pointer", padding:0 }}>{formTumTurler ? `Yalnız ${form.meetingType.toLocaleLowerCase("tr")} formları` : "Diğer görüşme türlerinin formları"}</button>}
+                        <button onClick={() => setFormSecAcik(false)} style={{ fontSize:11, color:MUTED, background:"none", border:"none", cursor:"pointer", padding:0 }}>Vazgeç</button>
+                      </div>
                     </div>
                   ) : (
-                    <button data-testid="form-ile-gorusme" onClick={() => setFormSecAcik(true)} style={{ width:"100%", padding:"8px", background:"none", border:`1.5px dashed ${ACCENT}`, borderRadius:9, color:ACCENT, fontSize:12, fontWeight:800, cursor:"pointer" }}>📋 Form ile görüşme</button>
+                    <button data-testid="form-ile-gorusme" onClick={() => { setFormSecAcik(true); setFormTumTurler(false); }} style={{ width:"100%", padding:"8px", background:"none", border:`1.5px dashed ${ACCENT}`, borderRadius:9, color:ACCENT, fontSize:12, fontWeight:800, cursor:"pointer" }}>📋 Form ile görüşme</button>
                   )
                 ) : (() => { const sb = pdrFormSablon(gorusmeFormu.sablon); return sb ? (
                   <div style={{ background:"#F2FAF6", border:`1px solid ${ACCENT}`, borderRadius:10, padding:10 }}>

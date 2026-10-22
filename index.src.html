@@ -16372,6 +16372,323 @@ function pdrOncelikSkoruHesapla(ogrenciler, riskListesi, sosyometri, aktifYil, u
   return sonuclar.sort((a,b) => b.puan - a.puan);
 }
 
+// ── 📋 GÖRÜŞME FORMLARI BAŞLANGIÇ ──
+// Formlar ayrı bir köşe değil, görüşme kaydının parçasıdır: "Form ile görüşme"
+// seçilince işaretlerden kural tabanlı (kapalı sistem, yapay zekâsız) bir özet
+// üretilir ve normal görüşme kaydı olarak düşer (kayıt.form alanında yanıtlar).
+// Şablonlar tek kaynaktan gelir; yeni form = PDR_FORM_SABLONLARI'na yeni şablon.
+// Yanıtlar seçenek METNİYLE saklanır (şablon sırası değişse de bozulmaz):
+//   { sablon, ad, seans, c: { soruId: [seçenek metni…] }, n: { "soruId|seçenek" | soruId: not }, p: { soruId: sayı } }
+const PDR_FORM_SABLONLARI = [{"bolumler":[{"baslik":"Görüşme bilgileri","amac":"","sorular":[{"id":"yonlendiren","tip":"metin","etiket":"Yönlendiren","metin":"Yönlendiren (öğretmen / idare / veli)"},{"id":"neden","tip":"uzun","etiket":"Yönlendirme nedeni","metin":"Yönlendirme nedeni (öğretmenin ifadesiyle)"},{"id":"idare","tip":"sayi","etiket":"İdareye gönderilme (son 1 ay)","metin":"Son 1 ayda idareye gönderilme sayısı","takip":1},{"id":"ytur","tip":"coklu","etiket":"Yönlendirme türü","metin":"Yönlendirme türü","secenekler":[{"m":"Öğretmen yönlendirmesi"},{"m":"İdare yönlendirmesi"},{"m":"Veli talebi"},{"m":"Öğrencinin kendi isteği"}]},{"id":"dtur","tip":"coklu","etiket":"Davranış türü","metin":"Davranışın türü (birden fazla işaretlenebilir)","secenekler":[{"m":"Derste konuşma, dersi bölme"},{"m":"Öğretmene saygısızlık, karşılık verme"},{"m":"Akranla fiziksel kavga"},{"m":"Sözel saldırganlık, küfür, alay"},{"m":"Akran zorbalığı (uygulayan)"},{"m":"Kurallara uymama, sınıftan çıkma"},{"m":"Eşyaya zarar verme"},{"m":"Devamsızlık, derse geç kalma"},{"m":"Derse katılmama, ödev yapmama"},{"m":"Telefon kullanımı"},{"n":1,"m":"Diğer"}]}]},{"baslik":"Bölüm 1: Tanışma ve güven ilişkisi","amac":"Öğrencinin buraya ceza için gelmediğini hissetmesi. Sorun konuşmaya geçmeden önce 5-10 dakika ayır.","sorular":[{"id":"1.1","tip":"coklu","etiket":"Gelirken aklından geçen","metin":"1.1 \"Buraya gelirken aklından neler geçti?\"","secenekler":[{"m":"Azar işiteceğimi düşündüm"},{"m":"Ceza alacağımı düşündüm"},{"m":"Veli çağrılacak diye korktum"},{"m":"Umursamadım / farketmez"},{"m":"Rahatladım, dersten çıktım"},{"m":"Merak ettim"}]},{"id":"1.2","tip":"coklu","etiket":"Rehberlik servisine bakışı","metin":"1.2 \"Rehberlik servisi sence ne iş yapar?\"","secenekler":[{"m":"Ceza veren / idarenin bir parçası olarak görüyor"},{"m":"\"Sorunlu\" öğrencilerin gittiği yer olarak görüyor"},{"m":"Konuşulabilecek, destek alan bir yer olarak görüyor"},{"m":"Fikri yok"}]},{"id":"1.3","tip":"sorular","etiket":"Tanışma notları","metin":"1.3 Güven ilişkisi soruları (cevapları not al)","secenekler":[{"m":"Boş zamanlarında en çok ne yapmaktan hoşlanırsın?"},{"m":"Okulda en sevdiğin ders / kişi / saat hangisi?"},{"m":"Seni en iyi tanıyan arkadaşın seni nasıl anlatırdı?"},{"m":"Bir süper gücün olsaydı ne olurdu?"}]},{"id":"1.4","tip":"coklu","etiket":"Görüşme açılışı","metin":"1.4 Görüşme açılışı yapıldı mı?","secenekler":[{"m":"Rolümü açıkladım (ceza vermem, rapor yazmam)"},{"m":"Gizliliği ve sınırlarını anlattım"},{"m":"Öğrenci görüşmeye açık görünüyor"},{"m":"Öğrenci savunmacı / kapalı görünüyor"}]}]},{"baslik":"Bölüm 2: Olayın anlatımı ve tetikleyiciler","amac":"Son olayı önce / sırasında / sonra diye parçalamak. \"Neden yaptın?\" yerine \"Ne oldu, anlatır mısın?\" diye sor.","sorular":[{"id":"2.1","tip":"coklu","etiket":"Olaya bakışı","metin":"2.1 \"Seni bugün buraya getiren olayı kendi gözünden anlatır mısın?\"","secenekler":[{"m":"Olayı kabul ediyor, açık anlatıyor"},{"m":"Kısmen kabul ediyor, küçümsüyor"},{"m":"Başkasını suçluyor (öğretmen, arkadaş)"},{"m":"Haksızlığa uğradığını düşünüyor"},{"m":"Anlatmak istemiyor"}]},{"id":"2.2","tip":"coklu","etiket":"Tetikleyici","metin":"2.2 \"Olaydan hemen önce ne oldu?\" (tetikleyici)","secenekler":[{"m":"Öğretmen uyardı / sınıf önünde adını söyledi"},{"m":"Bir arkadaşı takıldı, alay etti, kışkırttı"},{"m":"Ders sıkıcı / anlamadığı bir konu"},{"m":"Zor bir görev, tahtaya kalkma, sınav"},{"m":"Haksız bir not / suçlama"},{"m":"Evden gergin geldi"},{"m":"Yorgun, uykusuz, aç"},{"m":"Tetikleyici yok, \"durduk yere oldu\""}]},{"id":"2.3","tip":"coklu","etiket":"Zaman ve yer","metin":"2.3 Olayın zamanı ve yeri","secenekler":[{"n":1,"ph":"hangi ders","m":"Belirli bir derste"},{"m":"Belirli bir öğretmenle"},{"m":"Teneffüs / koridor / bahçe"},{"m":"Servis / okul çıkışı"},{"m":"Günün ilk saatleri"},{"m":"Günün son saatleri"}]},{"id":"2.4","tip":"coklu","etiket":"Olayın sonucu","metin":"2.4 \"Olaydan sonra ne oldu?\" (sonuç)","secenekler":[{"m":"Sınıftan çıkarıldı"},{"m":"İdareye gönderildi"},{"m":"Arkadaşları güldü / destekledi"},{"m":"Öğretmen geri adım attı / derse devam etti"},{"m":"Veli arandı"},{"m":"Bir şey olmadı"}]},{"id":"2.5","tip":"tek","etiket":"Sıklık","metin":"2.5 \"Bu olay ilk kez mi oldu, daha önce benzeri olmuş muydu?\"","secenekler":[{"m":"İlk kez"},{"m":"Ara sıra"},{"m":"Haftada birkaç kez"},{"m":"Neredeyse her gün"}]},{"id":"2.6","tip":"tek","etiket":"Süre","metin":"Ne zamandan beri?","secenekler":[{"m":"Bu yıl başladı"},{"m":"Geçen yıllardan beri var"}]}]},{"baslik":"Bölüm 3: Duygular ve düşünceler","amac":"Öfkenin altındaki duyguyu ve araya giren düşünceyi bulmak. \"Aa\" anı en çok bu bölümde gelir.","sorular":[{"id":"3.1","tip":"coklu","etiket":"Yüzeydeki duygu","metin":"3.1 \"O an ne hissettin?\" (yüzeydeki duygu)","secenekler":[{"m":"Öfke"},{"m":"Sinir / gerginlik"},{"m":"Sıkıntı"},{"m":"Hiçbir şey / \"normal\""},{"m":"Duyguyu adlandıramıyor"}]},{"id":"3.2","tip":"coklu","etiket":"Öfkenin altındaki duygu","metin":"3.2 \"Öfkenin altında başka ne vardı?\" (buzdağının altı)","secenekler":[{"m":"Mahcubiyet, rezil olma (sınıf önünde)"},{"m":"Haksızlığa uğrama"},{"m":"Yetersizlik, \"yapamıyorum\" hissi"},{"m":"Dışlanma, yalnızlık"},{"m":"Korku, kaygı"},{"m":"Kıskançlık"},{"m":"Üzüntü, kırılma"},{"m":"Değersizlik, umursanmama"}]},{"id":"3.3","tip":"coklu","etiket":"Otomatik düşünce","metin":"3.3 \"O an aklından geçen cümle neydi?\" (otomatik düşünce)","secenekler":[{"m":"\"Hoca beni hep suçluyor / bana takık\""},{"m":"\"Herkes bana gülüyor\""},{"m":"\"Geri adım atarsam ezilirim\""},{"m":"\"Ben zaten kafası çalışmayan biriyim\""},{"m":"\"Bana saldırıldı, karşılık vermeliyim\""},{"m":"\"Ne yapsam fark etmez, zaten sorunlu biliniyorum\""},{"n":1,"m":"Diğer"}]},{"id":"3.4","tip":"coklu","etiket":"Bedensel işaretler","metin":"3.4 Bedensel işaretler: \"Öfkelenmeden önce vücudunda ne fark ediyorsun?\"","secenekler":[{"m":"Yüzü ısınıyor / kızarıyor"},{"m":"Yumrukları sıkılıyor"},{"m":"Kalbi hızlanıyor"},{"m":"Nefesi hızlanıyor"},{"m":"Hiçbir şey fark etmiyor (çalışılacak alan)"}]},{"id":"3.5","tip":"puan","etiket":"Öfke şiddeti","metin":"3.5 Öfke şiddeti (0-10): \"O an öfken kaçtı?\"","takip":1},{"id":"3.6","tip":"coklu","etiket":"El beyin modeli","metin":"3.6 El beyin modeli anlatıldı mı?","secenekler":[{"m":"Anlatıldı, öğrenci ilgiyle dinledi"},{"m":"Öğrenci \"kapak atma\" anını kendi örneğiyle eşleştirdi"},{"m":"Sonraki seansa bırakıldı"}]}]},{"baslik":"Bölüm 4: Davranışın işlevi ve kazancı","amac":"Davranışın hangi ihtiyacı karşıladığını öğrenciyle birlikte keşfetmek. Suçlayıcı değil, meraklı bir tonla sor.","sorular":[{"id":"4.1","tip":"coklu","etiket":"Davranışın kazancı","metin":"4.1 \"O davranışı yapınca ne kazandın, ne değişti?\"","secenekler":[{"m":"Dikkat / ilgi: herkes ona baktı"},{"m":"Statü: arkadaşları \"cesur, havalı\" buldu"},{"m":"Kaçış: zor dersten, sınavdan, tahtadan kurtuldu"},{"m":"Kontrol / güç: \"ben de bir şey diyebilirim\""},{"m":"İntikam / adalet: \"o da hak etti\""},{"m":"Rahatlama: içindeki gerginlik boşaldı"},{"m":"Ait olma: grubuna uydu"}]},{"id":"4.2","tip":"coklu","etiket":"Davranışın bedeli","metin":"4.2 \"Peki ne kaybettin?\"","secenekler":[{"m":"Öğretmenle ilişkisi bozuldu"},{"m":"Ders kaybetti, notları düştü"},{"m":"Ailesiyle sorun yaşadı"},{"m":"\"Sorunlu öğrenci\" etiketi güçlendi"},{"m":"Gerçek arkadaşlarını kaybetti / uzaklaştılar"},{"m":"Kendine kızdı, pişman oldu"},{"m":"Kayıp görmüyor"}]},{"id":"4.3","tip":"coklu","etiket":"Alternatif davranış","metin":"4.3 \"Aynı şeyi (dikkat, saygı, rahatlama...) başın belaya girmeden nasıl alabilirsin?\"","secenekler":[{"n":1,"m":"Kendisi bir alternatif önerdi"},{"n":1,"m":"Birlikte alternatif bulduk"},{"m":"Alternatif bulamadı, sonraki seansta çalışılacak"}]},{"id":"4.4","tip":"tek","etiket":"Farkındalık","metin":"4.4 Farkındalık düzeyi","secenekler":[{"m":"Davranışın bir ihtiyaca hizmet ettiğini fark etti (\"aa\" anı)"},{"m":"Kısmen fark etti"},{"m":"Henüz fark etmedi"}]}]},{"baslik":"Bölüm 5: Okul, öğretmen ve akran ilişkileri","amac":"","sorular":[{"id":"5.1","tip":"tek","etiket":"Okula bakışı","metin":"5.1 \"Okula gelmek sana nasıl hissettiriyor?\"","secenekler":[{"m":"Seviyor, isteğiyle geliyor"},{"m":"Nötr, \"gelmek zorundayım\""},{"m":"Sevmiyor, sıkılıyor"},{"m":"Okuldan kaçmak istiyor / devamsızlık var"}]},{"id":"5.2","tip":"coklu","etiket":"Akademik durum","metin":"5.2 Akademik durum: \"Derslerde zorlandığın bir yer var mı?\"","secenekler":[{"m":"Genel olarak başarılı"},{"n":1,"ph":"hangi","m":"Bazı derslerde zorlanıyor"},{"m":"Çoğu derste zorlanıyor"},{"m":"Okuma / yazma / dikkat güçlüğü işaretleri var (ÖÖG / DEHB açısından değerlendir)"}]},{"id":"5.3","tip":"coklu","etiket":"Öğretmenlerle ilişki","metin":"5.3 \"Hangi öğretmenle anlaşıyorsun, hangisiyle zorlanıyorsun? Fark ne?\"","secenekler":[{"m":"Sorun tek bir öğretmenle sınırlı"},{"m":"Birkaç öğretmenle sorun var"},{"m":"Tüm öğretmenlerle sorun var"},{"n":1,"ph":"kim","m":"İyi anlaştığı bir öğretmen var, kaynak kişi olabilir"}]},{"id":"5.3n","tip":"metin","etiket":"Anlaştığı öğretmenin farkı","metin":"Anlaştığı öğretmenin farkı (not)"},{"id":"5.4","tip":"coklu","etiket":"Akran ilişkileri","metin":"5.4 Akran ilişkileri: \"Sınıfta kimlerle vakit geçiriyorsun?\"","secenekler":[{"m":"Yakın arkadaşları var, kabul görüyor"},{"m":"Küçük bir grubu var"},{"m":"Gerçek arkadaşı yok, yalnız"},{"m":"Grup içinde \"lider / gülünecek çocuk\" rolünde"},{"m":"Olumsuz davranışları teşvik eden bir grupla takılıyor"}]},{"id":"5.5","tip":"coklu","etiket":"Zorbalık","metin":"5.5 Zorbalık: \"Seni rahatsız eden, alay eden biri var mı?\"","secenekler":[{"y":1,"m":"Yok"},{"m":"Mağdur (alay, dışlama, fiziksel)"},{"m":"Uygulayan"},{"m":"Hem mağdur hem uygulayan"},{"m":"Sanal ortamda (sosyal medya, oyun, WhatsApp grubu)"}]},{"id":"5.6","tip":"coklu","etiket":"Ekran süresi","metin":"5.6 Teknoloji ve ekran: \"Günde ne kadar telefonda / oyunda vakit geçiriyorsun?\"","secenekler":[{"m":"2 saatten az"},{"m":"2-4 saat"},{"m":"4 saatten fazla"},{"m":"Gece geç saatlere kadar, uykusunu etkiliyor"}]}]},{"baslik":"Bölüm 6: Aile ve ev ortamı","amac":"Davranışı besleyen ev koşullarını anlamak. Sorgulama gibi değil, sohbet gibi sor.","sorular":[{"id":"6.1","tip":"coklu","etiket":"Evde kimlerle yaşıyor","metin":"6.1 \"Evde kimlerle yaşıyorsun?\"","secenekler":[{"m":"Anne ve baba ile"},{"m":"Anne / baba ayrı, biriyle yaşıyor"},{"m":"Üvey ebeveyn var"},{"m":"Büyükanne / büyükbaba ya da akrabayla"},{"n":1,"m":"Kardeş sayısı ve sırası"}]},{"id":"6.2","tip":"coklu","etiket":"Evdeki değişiklikler","metin":"6.2 \"Evde işler nasıl gidiyor, son zamanlarda değişen bir şey oldu mu?\"","secenekler":[{"y":1,"m":"Önemli bir değişiklik yok"},{"m":"Yeni kardeş"},{"m":"Taşınma / okul değişikliği"},{"m":"Boşanma / ayrılık süreci"},{"m":"Kayıp / yas"},{"m":"Ebeveyn hastalığı"},{"m":"Ekonomik zorluk"},{"m":"Ebeveynin iş / şehir dışı nedeniyle uzaklığı"}]},{"id":"6.3","tip":"coklu","etiket":"Evde sorun çözme","metin":"6.3 \"Evde bir sorun olunca nasıl çözülür?\"","secenekler":[{"m":"Konuşarak"},{"m":"Bağırarak / tartışarak"},{"m":"Ceza / yasakla"},{"r":1,"m":"Fiziksel ceza var (dikkat: Bölüm 8)"},{"m":"Kimse bir şey demez, görmezden gelinir"}]},{"id":"6.4","tip":"coklu","etiket":"Ailenin olası tepkisi","metin":"6.4 \"Bu olayı ailen öğrenirse ne olur?\"","secenekler":[{"m":"Destek olurlar"},{"m":"Kızarlar ama geçer"},{"m":"Ağır ceza verirler"},{"m":"Umursamazlar"},{"r":1,"m":"Çok korkuyor (dikkat: Bölüm 8)"}]},{"id":"6.5","tip":"metin","etiket":"Evde onu en iyi anlayan","metin":"6.5 \"Evde seni en iyi anlayan kişi kim?\""},{"id":"6.6","tip":"coklu","etiket":"Veli görüşmesi","metin":"6.6 Veli ile görüşme","secenekler":[{"n":1,"ph":"tarih","m":"Gerekli, planlandı"},{"m":"Daha sonra değerlendirilecek"},{"n":1,"m":"Öğrenci şu an istemiyor, nedeni"}]}]},{"baslik":"Bölüm 7: Kendilik algısı, güçlü yönler ve istisnalar","amac":"\"Sorunlu öğrenci\" hikâyesinin dışındaki çocuğu bulmak (çözüm odaklı ve anlatı yaklaşımı).","sorular":[{"id":"7.1n","tip":"metin","etiket":"Kendini anlattığı üç kelime","metin":"7.1 \"Kendini üç kelimeyle anlatır mısın?\""},{"id":"7.1","tip":"tek","etiket":"Kendini anlatışı","metin":"Kullandığı sıfatlar","secenekler":[{"m":"Olumlu sıfatlar ağırlıkta"},{"m":"Karışık"},{"m":"Olumsuz sıfatlar ağırlıkta (\"tembel\", \"sorunlu\", \"aptal\")"}]},{"id":"7.2","tip":"tek","etiket":"Etiketle ilişkisi","metin":"7.2 \"Öğretmenlerin seni nasıl görüyor sence? Bu doğru mu?\"","secenekler":[{"m":"Etiketi kabullenmiş (\"zaten ben böyleyim\")"},{"m":"Etikete itiraz ediyor ama değişeceğine inanmıyor"},{"m":"Etiketin gerçek kendisini yansıtmadığını düşünüyor"}]},{"id":"7.3","tip":"coklu","etiket":"Güçlü yönler","metin":"7.3 Güçlü yönler: \"Ne yapmakta iyisin? Başkaları senden ne konuda yardım ister?\"","secenekler":[{"m":"Spor"},{"m":"Sanat, müzik, çizim"},{"m":"Teknoloji, oyun, bilgisayar"},{"m":"El becerisi, tamir"},{"m":"Liderlik, organize etme"},{"m":"Espri, insanları güldürme"},{"m":"Yardımsever, koruyucu (kardeş, arkadaş)"},{"n":1,"m":"Diğer"}]},{"id":"7.4","tip":"coklu","etiket":"İstisnalar","metin":"7.4 İstisnalar: \"Hangi derste / hangi gün hiç uyarı almıyorsun? Orada farklı olan ne?\"","secenekler":[{"m":"Öğretmenin tavrı farklı (saygılı, esprili, adil)"},{"m":"Ders ilgisini çekiyor / başarılı"},{"m":"Hareket edebiliyor, aktif bir ders"},{"m":"Oturduğu yer / yanındaki arkadaş farklı"},{"m":"Kendisi o gün farklı bir şey yapıyor"}]},{"id":"7.5","tip":"tek","etiket":"Kendini tutabildiği an","metin":"7.5 \"Öfkelendiğin ama kendini tutabildiğin bir anı hatırlıyor musun? Nasıl başardın?\"","secenekler":[{"n":1,"m":"Hatırlıyor, yöntemi"},{"m":"Hatırlamıyor"}]},{"id":"7.6","tip":"tek","etiket":"Dışsallaştırma","metin":"7.6 Dışsallaştırma: Soruna bir isim verildi mi?","secenekler":[{"n":1,"m":"Evet, adı"},{"m":"Henüz değil"}]}]},{"baslik":"Bölüm 8: Risk taraması","amac":"Davranış problemi bazen istismar, ihmal, depresyon ya da kendine zarar verme gibi daha derin bir durumun dışa vurumudur. Bu bölüm her öğrencide en az bir kez gözden geçirilmelidir. Herhangi bir işaret varsa okulun kriz ve çocuk koruma prosedürünü izle.","sorular":[{"id":"8.1","tip":"coklu","etiket":"Kendine zarar ve umutsuzluk","metin":"8.1 Kendine zarar ve umutsuzluk","riskTur":"Öz Zarar","secenekler":[{"r":1,"m":"\"Bazen her şeyin bitmesini istiyorum\" gibi ifadeler"},{"r":1,"m":"Kendine zarar verme belirtisi ya da anlatımı"},{"r":1,"m":"Yoğun umutsuzluk, \"hiçbir şey değişmez\""},{"r":1,"m":"Uyku, iştah, ilgi kaybında belirgin değişim"},{"y":1,"m":"Belirti yok"}]},{"id":"8.2","tip":"coklu","etiket":"İhmal ve istismar işaretleri","metin":"8.2 İhmal ve istismar işaretleri","riskTur":"İhmal / İstismar","secenekler":[{"r":1,"m":"Açıklanamayan yara, morluk"},{"r":1,"m":"Eve gitmekten korkma"},{"r":1,"m":"Temel bakım eksikliği (hijyen, beslenme, kıyafet)"},{"r":1,"m":"Yaşına uygun olmayan cinsel bilgi / davranış"},{"r":1,"m":"Öğrencinin açık beyanı"},{"y":1,"m":"İşaret yok"}]},{"id":"8.3","tip":"coklu","etiket":"Başkasına zarar ve madde","metin":"8.3 Başkasına zarar ve madde","riskTur":"Davranış","secenekler":[{"r":1,"m":"Başkasına zarar verme tehdidi / planı"},{"r":1,"m":"Kesici alet / silah taşıma"},{"r":1,"m":"Sigara, alkol, madde kullanımı şüphesi"},{"r":1,"m":"Okul dışında riskli bir grupla ilişki"},{"y":1,"m":"İşaret yok"}]},{"id":"8.4","tip":"coklu","etiket":"Ruhsal değerlendirme ihtiyacı","metin":"8.4 Ruhsal değerlendirme ihtiyacı","riskTur":"Duygusal","secenekler":[{"m":"Dikkat eksikliği / hiperaktivite belirtileri"},{"m":"Dürtü kontrolü ciddi düzeyde zayıf"},{"r":1,"m":"Kaygı / depresyon belirtileri"},{"r":1,"m":"Travma sonrası belirtiler"},{"r":1,"m":"Ruh sağlığı uzmanına yönlendirme gerekli"}]},{"id":"8.5","tip":"tek","etiket":"Risk düzeyi","metin":"Risk düzeyi (danışmanın değerlendirmesi)","secenekler":[{"y":1,"m":"Risk yok"},{"m":"Düşük: izlenecek"},{"r":1,"m":"Orta: veli ve idare bilgilendirilecek"},{"r":1,"m":"Yüksek: aynı gün ilgili prosedür başlatılacak"}]}]},{"baslik":"Bölüm 9: Değişim motivasyonu, hedef ve plan","amac":"Değişimi sen değil, öğrenci söylesin (motivasyonel görüşme + gerçeklik terapisi WDEP).","sorular":[{"id":"9.1","tip":"coklu","etiket":"İstediği","metin":"9.1 İstek (W): \"Okulda işlerin nasıl olmasını isterdin?\"","secenekler":[{"m":"Başı belaya girmesin, idareye gitmesin"},{"m":"Öğretmenlerle arası düzelsin"},{"m":"Notları yükselsin"},{"m":"Ailesi ona kızmasın / güvensin"},{"m":"Arkadaşları olsun / kabul görsün"},{"m":"Bir şey istemiyor (önce motivasyon çalışılacak)"}]},{"id":"9.2","tip":"tek","etiket":"Kendini değerlendirmesi","metin":"9.2 Değerlendirme (E): \"Şu an yaptığın şey seni istediğine götürüyor mu?\"","secenekler":[{"m":"Hayır, götürmediğini fark ediyor"},{"m":"Emin değil"},{"m":"Evet diyor (savunmacı)"}]},{"id":"9.3","tip":"puan","etiket":"Değişim isteği","metin":"9.3 Değişim hazırlığı (0-10): \"Değişmeyi ne kadar istiyorsun?\"","takip":1},{"id":"9.4","tip":"puan","etiket":"Değişebileceğine güven","metin":"9.4 Güven (0-10): \"Değişebileceğine ne kadar inanıyorsun?\"","takip":1},{"id":"9.4n","tip":"metin","etiket":"\"Neden 0 değil?\" cevabı","metin":"Takip sorusu: \"Neden 0 değil de bu puan?\" Öğrencinin cevabı"},{"id":"9.5","tip":"tek","etiket":"Değişim aşaması","metin":"9.5 Değişim aşaması (danışman işaretler)","secenekler":[{"m":"Farkında değil (\"sorun bende değil\")"},{"m":"Düşünüyor (\"belki ama...\")"},{"m":"Hazırlanıyor (\"bir şey yapmalıyım\")"},{"m":"Harekete geçmiş"}]},{"id":"9.6","tip":"coklu","etiket":"Plan","metin":"9.6 Plan (P): Bir sonraki görüşmeye kadar küçük ve somut bir adım","secenekler":[{"m":"Öfkelenince kullanacağı bir yöntem (nefes, 10'a kadar sayma, izin isteyip su içme)"},{"m":"Öğretmenle anlaşılmış bir \"mola işareti\""},{"m":"Tetikleyici durumda yer değiştirme / uzaklaşma"},{"m":"Günlük kısa öfke kaydı (ne oldu, ne hissettim, ne yaptım)"},{"m":"Başarılı geçen bir anı fark edip not alma"},{"n":1,"m":"Diğer"}]},{"id":"9.6n","tip":"metin","etiket":"Öğrencinin hedefi","metin":"Öğrencinin kendi cümlesiyle hedefi"},{"id":"9.7","tip":"uzun","etiket":"Aklında kalan","metin":"9.7 \"Bugün seninle konuştuklarımızdan aklında ne kaldı?\""}]},{"baslik":"Bölüm 10: Danışman değerlendirmesi ve takip","amac":"","sorular":[{"id":"10.1","tip":"coklu","etiket":"Çalışma hipotezi","metin":"10.1 Davranışın ana kaynağı (danışmanın çalışma hipotezi)","secenekler":[{"m":"Duygu düzenleme / öfke yönetimi güçlüğü"},{"m":"Akademik zorlanma ve kaçınma"},{"m":"Dikkat / dürtü kontrolü güçlüğü"},{"m":"Akran onayı ve statü ihtiyacı"},{"m":"Aile içi stres / değişim"},{"m":"Öğretmen-öğrenci ilişki sorunu"},{"m":"Olumsuz etiketlenme ve kendini gerçekleştiren beklenti"},{"m":"Daha derin bir sorunun belirtisi (Bölüm 8)"}]},{"id":"10.2","tip":"coklu","etiket":"Kullanılan teknikler","metin":"10.2 Bu seansta kullanılan teknikler","secenekler":[{"m":"El beyin modeli"},{"m":"Öfke buzdağı"},{"m":"ABC analizi (olay - düşünce - davranış)"},{"m":"Davranışın kazancı / bedeli"},{"m":"İstisna soruları"},{"m":"Ölçekleme"},{"m":"Dışsallaştırma"},{"m":"WDEP"},{"m":"Nefes / gevşeme çalışması"},{"m":"Rol oynama"}]},{"id":"10.3","tip":"coklu","etiket":"İşbirliği","metin":"10.3 Kimlerle işbirliği yapılacak","secenekler":[{"m":"Sınıf öğretmeni / rehber öğretmen"},{"n":1,"ph":"kim / hangi","m":"Ders öğretmeni: tetikleyiciler ve öneriler paylaşılacak"},{"m":"İdare: süreç bilgisi verilecek (içerik değil)"},{"m":"Veli görüşmesi"},{"m":"RAM / ruh sağlığı uzmanına yönlendirme"},{"m":"Okul dışı kurum (gerekiyorsa)"}]},{"id":"10.4","tip":"uzun","etiket":"Öğretmene geri bildirim","metin":"10.4 Öğretmene verilecek kısa geri bildirim (gizliliğe uygun)"},{"id":"10.5","tip":"coklu","etiket":"Seans değerlendirmesi","metin":"10.5 Seans sonu değerlendirme","secenekler":[{"m":"İşbirliği yüksekti"},{"m":"İşbirliği orta düzeydeydi"},{"m":"Direnç vardı"},{"m":"Öğrenci bir farkındalık ifade etti"}]},{"id":"sonraki","tip":"tarih","etiket":"Sonraki seans","metin":"Sonraki seans tarihi"},{"id":"odak","tip":"metin","etiket":"Sonraki seansın odağı","metin":"Sonraki seansın odak konusu"},{"id":"uyari","tip":"sayi","etiket":"Haftalık uyarı sayısı","metin":"Haftalık uyarı sayısı (bu hafta)","takip":1},{"id":"dnot","tip":"uzun","etiket":"Danışman notu","metin":"Danışman notu"}]}],"id":"davranis","ad":"Davranış Problemi Görüşme Formu","kisa":"Davranış problemi","ikon":"🧩","konu":"Davranış","tur":"Öğrenci","aciklama":"Davranış problemi nedeniyle yönlendirilen öğrencilerle görüşme. Her soruyu sırayla sormak gerekmez; akışa göre seç, cevaba en yakın kutuyu işaretle. İlk seansta Bölüm 1-4 ve 8 yeterlidir; diğerleri sonraki seanslara yayılabilir."},{"bolumler":[{"baslik":"Görüşme bilgileri","amac":"","sorular":[{"id":"kim","tip":"tek","etiket":"Görüşülen","metin":"Görüşülen kişi","secenekler":[{"m":"Anne"},{"m":"Baba"},{"m":"Anne ve baba birlikte"},{"n":1,"m":"Diğer (vasi, akraba)"}]},{"id":"isteyen","tip":"tek","etiket":"Görüşmeyi isteyen","metin":"Görüşmeyi kim istedi?","secenekler":[{"m":"Rehberlik servisi"},{"m":"Veli"},{"m":"Sınıf / ders öğretmeni"},{"m":"İdare"}]},{"id":"sekil","tip":"tek","etiket":"Görüşme şekli","metin":"Görüşme şekli","secenekler":[{"m":"Yüz yüze"},{"m":"Telefon"},{"m":"Çevrim içi"}]}]},{"baslik":"Bölüm 1: Görüşmenin amacı ve açılış","amac":"Görüşmenin amacını açıkça söyle ve önce çocuğun güçlü bir yönüyle başla. Veli kendini yargılanmış hissederse iş birliği kapanır.","sorular":[{"id":"1.1","tip":"coklu","etiket":"Görüşme nedeni","metin":"1.1 Görüşmenin nedeni","secenekler":[{"m":"Davranış problemi"},{"m":"Akademik düşüş"},{"m":"Devamsızlık"},{"m":"Akran ilişkileri / zorbalık"},{"m":"Duygusal değişim (içe kapanma, öfke, kaygı)"},{"m":"Risk durumu hakkında bilgilendirme"},{"m":"Rehberlik sürecine veliyi dahil etme"},{"m":"Olumlu bir gelişmeyi paylaşma"},{"n":1,"m":"Velinin kendi talebi"}]},{"id":"1.2","tip":"coklu","etiket":"Velinin tutumu","metin":"1.2 Görüşme başında velinin tutumu","secenekler":[{"m":"İş birliğine açık"},{"m":"Kaygılı, endişeli"},{"m":"Savunmacı"},{"m":"Okulu / öğretmeni suçluyor"},{"m":"İlgisiz, umursamaz"},{"m":"Kendini suçluyor, mahcup"}]},{"id":"1.3","tip":"coklu","etiket":"Açılış","metin":"1.3 Açılış yapıldı mı?","secenekler":[{"m":"Görüşmenin amacını açıkladım"},{"m":"Çocuğun güçlü bir yönüyle başladım"},{"m":"Gizlilik ve sınırlarını anlattım"}]}]},{"baslik":"Bölüm 2: Velinin gözünden çocuk","amac":"Velinin çocuğu nasıl gördüğünü ve evdeki tabloyu anlamak.","sorular":[{"id":"2.1","tip":"metin","etiket":"Velinin söylediği güçlü yönler","metin":"2.1 \"Çocuğunuzun en sevdiğiniz, en güçlü yanı ne?\""},{"id":"2.2","tip":"coklu","etiket":"Evdeki davranış","metin":"2.2 \"Evde nasıl biri, okulda anlatılanları evde de görüyor musunuz?\"","secenekler":[{"m":"Evde de benzer davranışlar var"},{"m":"Evde sorun yok, okulda farklı davranıyor"},{"m":"Evde daha uyumlu ve sakin"},{"m":"Kardeşleriyle sık çatışıyor"},{"m":"Odasına kapanıyor, az konuşuyor"},{"m":"Evde de öfke patlamaları oluyor"}]},{"id":"2.3","tip":"coklu","etiket":"Son dönem değişiklikler","metin":"2.3 \"Son zamanlarda evde ya da çocuğunuzda değişen bir şey oldu mu?\"","secenekler":[{"y":1,"m":"Önemli bir değişiklik yok"},{"m":"Yeni kardeş"},{"m":"Taşınma / okul değişikliği"},{"m":"Boşanma / ayrılık süreci"},{"m":"Kayıp / yas"},{"m":"Ebeveyn hastalığı"},{"m":"Ekonomik zorluk"},{"m":"Ebeveynin iş / şehir dışı nedeniyle uzaklığı"},{"m":"Uyku, iştah ya da ilgilerinde belirgin değişim"}]},{"id":"2.4","tip":"tek","etiket":"Okul hakkında anlattıkları","metin":"2.4 \"Çocuğunuz okulu evde nasıl anlatıyor?\"","secenekler":[{"m":"Severek anlatıyor"},{"m":"Pek anlatmıyor"},{"m":"Şikâyet ediyor (öğretmen, arkadaş, ders)"},{"m":"Okula gitmek istemediğini söylüyor"}]}]},{"baslik":"Bölüm 3: Ev düzeni ve rutinler","amac":"","sorular":[{"id":"3.1","tip":"tek","etiket":"Uyku","metin":"3.1 Uyku düzeni","secenekler":[{"m":"Düzenli, yeterli uyuyor"},{"m":"Geç yatıyor, sabah zor kalkıyor"},{"m":"Uyku sorunu var (dalamama, sık uyanma)"}]},{"id":"3.2","tip":"tek","etiket":"Ekran süresi","metin":"3.2 Günlük ekran / oyun süresi (velinin tahmini)","secenekler":[{"m":"2 saatten az"},{"m":"2-4 saat"},{"m":"4 saatten fazla"},{"m":"Bilmiyor / takip edemiyor"}]},{"id":"3.3","tip":"coklu","etiket":"Ders çalışma ortamı","metin":"3.3 Ders çalışma ortamı","secenekler":[{"m":"Kendi odası / masası var"},{"m":"Kalabalık, gürültülü ortam"},{"m":"Ödevlerini takip eden biri var"},{"m":"Takip eden kimse yok"},{"m":"Özel ders / kurs desteği alıyor"}]},{"id":"3.4","tip":"tek","etiket":"Beslenme","metin":"3.4 Kahvaltı ve beslenme","secenekler":[{"m":"Düzenli"},{"m":"Çoğu gün kahvaltı yapmadan geliyor"},{"m":"Beslenme yetersiz görünüyor"}]}]},{"baslik":"Bölüm 4: Aile içi iletişim ve disiplin","amac":"Sorgulama gibi değil, merak ederek sor. Fiziksel ceza ya da şiddet işareti varsa Bölüm 6'yı mutlaka değerlendir.","sorular":[{"id":"4.1","tip":"coklu","etiket":"Sorun çözme biçimi","metin":"4.1 \"Evde bir sorun olunca genelde nasıl çözülür?\"","secenekler":[{"m":"Konuşarak"},{"m":"Bağırarak / tartışarak"},{"m":"Ceza / yasakla"},{"r":1,"m":"Fiziksel ceza kullanılıyor"},{"m":"Görmezden geliniyor"}]},{"id":"4.2","tip":"tek","etiket":"Ebeveyn tutarlılığı","metin":"4.2 Anne ve baba arasında tutum","secenekler":[{"m":"Tutarlı, aynı kuralları uyguluyor"},{"m":"Anne ve baba farklı tavır gösteriyor"},{"m":"Bir ebeveyn uzak / süreçte yok"}]},{"id":"4.3","tip":"tek","etiket":"Kurallar","metin":"4.3 Evdeki kurallar","secenekler":[{"m":"Net ve tutarlı"},{"m":"Belirsiz, duruma göre değişiyor"},{"m":"Çok katı"}]},{"id":"4.4","tip":"tek","etiket":"Olumlu ilgi","metin":"4.4 Çocukla birlikte keyifli zaman geçiriliyor mu?","secenekler":[{"m":"Düzenli olarak"},{"m":"Ara sıra"},{"m":"Nadiren / hiç"}]}]},{"baslik":"Bölüm 5: Velinin beklentisi ve kaygısı","amac":"","sorular":[{"id":"5.1","tip":"coklu","etiket":"Velinin beklentisi","metin":"5.1 \"Bu görüşmeden ve okuldan beklentiniz ne?\"","secenekler":[{"m":"Davranışlarının düzelmesi"},{"m":"Ders başarısının artması"},{"m":"Sınıf / okul değişikliği"},{"m":"Çocuğa ceza verilmesi"},{"m":"Sadece bilgi almak"},{"m":"Kendisinin de destek alması (ebeveynlik)"}]},{"id":"5.2","tip":"puan","etiket":"Velinin kaygı düzeyi","metin":"5.2 Velinin kaygı düzeyi (0-10): \"Bu konu sizi ne kadar endişelendiriyor?\"","takip":1}]},{"baslik":"Bölüm 6: Sağlık, özel durumlar ve risk","amac":"Velinin paylaştığı sağlık ve risk bilgileri. Herhangi bir işaret varsa okulun kriz ve çocuk koruma prosedürünü izle.","sorular":[{"id":"6.1","tip":"coklu","etiket":"Sağlık ve özel durumlar","metin":"6.1 Sağlık ve özel durumlar","secenekler":[{"m":"Süreğen hastalık / düzenli ilaç kullanımı"},{"m":"Tanı ya da rapor var (RAM, DEHB, ÖÖG vb.)"},{"m":"Ruh sağlığı desteği alıyor / almış"},{"m":"Hukuki süreç (velayet, koruma kararı)"},{"y":1,"m":"Özel bir durum yok"}]},{"id":"6.2","tip":"coklu","etiket":"Risk işaretleri","metin":"6.2 Risk işaretleri","riskTur":"İhmal / İstismar","secenekler":[{"r":1,"m":"Aile içi şiddet şüphesi"},{"r":1,"m":"İhmal işaretleri (bakım, beslenme, gözetim)"},{"r":1,"m":"Çocukta kendine zarar / umutsuzluk ifadeleri (velinin anlatımı)"},{"r":1,"m":"Aile içinde madde / alkol kullanımı"},{"y":1,"m":"İşaret yok"}]}]},{"baslik":"Bölüm 7: Ortak plan ve takip","amac":"Görüşmeyi somut, küçük ve veliyle birlikte kararlaştırılmış adımlarla bitir.","sorular":[{"id":"7.1","tip":"coklu","etiket":"Veliye öneriler","metin":"7.1 Veliyle kararlaştırılan adımlar","secenekler":[{"m":"Evde okulla aynı dili kullanma (örn. ortak bir \"sakinleşme\" kelimesi)"},{"m":"Olumlu davranışı fark edip söyleme"},{"m":"Tutarlı kural ve sonuç uygulama"},{"m":"Ekran süresini düzenleme"},{"m":"Uyku düzenini düzeltme"},{"m":"Haftalık kısa okul-veli iletişimi"},{"m":"Uzman / RAM yönlendirmesi"},{"m":"Aile eğitimi / seminer önerisi"},{"n":1,"m":"Diğer"}]},{"id":"7.2","tip":"tek","etiket":"İş birliği düzeyi","metin":"7.2 Velinin iş birliği düzeyi (görüşme sonunda)","secenekler":[{"m":"Yüksek"},{"m":"Orta"},{"m":"Düşük"}]},{"id":"7.3","tip":"uzun","etiket":"Velinin taahhüdü","metin":"7.3 Velinin kendi cümlesiyle taahhüdü"},{"id":"sonraki","tip":"tarih","etiket":"Sonraki iletişim","metin":"Sonraki görüşme / iletişim tarihi"},{"id":"dnot","tip":"uzun","etiket":"Danışman notu","metin":"Danışman notu"}]}],"id":"veli","ad":"Veli Görüşme Formu","kisa":"Veli görüşmesi","ikon":"👪","konu":"Aile","tur":"Veli","aciklama":"Veliyle yapılan bilgilendirme, iş birliği ya da sorun odaklı görüşmeler için. Veliyi suçlamadan, çocuğun iyiliği için ortak bir dil kurmayı hedefler. Öğrencinin rehberlik servisiyle gizli paylaştıkları, güvenlik gerektirmedikçe veliye açılmaz."},{"bolumler":[{"baslik":"Görüşme bilgileri","amac":"","sorular":[{"id":"ogretmen","tip":"metin","etiket":"Öğretmen / branş","metin":"Görüşülen öğretmen ve branşı"},{"id":"ders","tip":"metin","etiket":"Ders","metin":"Sorunun en çok yaşandığı ders"}]},{"baslik":"Bölüm 1: Öğretmenin gözlemi","amac":"","sorular":[{"id":"1.1","tip":"coklu","etiket":"Sorun davranışlar","metin":"1.1 Gözlenen sorun davranışlar","secenekler":[{"m":"Derste konuşma, dersi bölme"},{"m":"Öğretmene saygısızlık, karşılık verme"},{"m":"Akranla fiziksel kavga"},{"m":"Sözel saldırganlık, küfür, alay"},{"m":"Akran zorbalığı (uygulayan)"},{"m":"Kurallara uymama, sınıftan çıkma"},{"m":"Eşyaya zarar verme"},{"m":"Derse katılmama, ödev yapmama"},{"m":"Telefon kullanımı"},{"m":"Aşırı içe kapanma, sessizlik"},{"n":1,"m":"Diğer"}]},{"id":"1.2","tip":"tek","etiket":"Sıklık","metin":"1.2 Sıklık","secenekler":[{"m":"Ara sıra"},{"m":"Haftada birkaç kez"},{"m":"Her gün"},{"m":"Her derste"}]},{"id":"1.3","tip":"coklu","etiket":"Tetikleyiciler","metin":"1.3 \"Davranış en çok hangi durumda ortaya çıkıyor?\"","secenekler":[{"m":"Uyarıldığında / sınıf önünde adı söylendiğinde"},{"m":"Arkadaşları kışkırttığında"},{"m":"Zor ya da sıkıcı bir görevde"},{"m":"Tahtaya kalkma / sınav anında"},{"m":"Serbest zaman ve geçişlerde (ders başı, teneffüs dönüşü)"},{"m":"Grup çalışmalarında"},{"m":"Belirli bir saatte (ilk / son ders)"},{"m":"Belli bir tetikleyici fark edilmedi"}]}]},{"baslik":"Bölüm 2: Sınıf içi işleyiş","amac":"","sorular":[{"id":"2.1","tip":"coklu","etiket":"Oturma düzeni","metin":"2.1 Oturma yeri","secenekler":[{"m":"Ön sıralarda"},{"m":"Arka sıralarda"},{"m":"Kapı / pencere yanında"},{"m":"Yanındaki arkadaş davranışını etkiliyor"}]},{"id":"2.2","tip":"tek","etiket":"Derse katılım","metin":"2.2 Derse katılım","secenekler":[{"m":"Aktif katılıyor"},{"m":"Ara ara katılıyor"},{"m":"Hiç katılmıyor"}]},{"id":"2.3","tip":"tek","etiket":"Görev tamamlama","metin":"2.3 Verilen görevleri tamamlama","secenekler":[{"m":"Tamamlıyor"},{"m":"Yarım bırakıyor"},{"m":"Hiç başlamıyor"}]},{"id":"2.4","tip":"tek","etiket":"Dikkat süresi","metin":"2.4 Derste dikkatini sürdürebildiği süre (öğretmenin tahmini)","secenekler":[{"m":"5 dakikadan az"},{"m":"5-15 dakika"},{"m":"15 dakikadan fazla"}]}]},{"baslik":"Bölüm 3: Öğretmenin müdahaleleri ve sonucu","amac":"","sorular":[{"id":"3.1","tip":"coklu","etiket":"Denenen müdahaleler","metin":"3.1 Şimdiye kadar denenenler","secenekler":[{"m":"Sözlü uyarı"},{"m":"Yer değiştirme"},{"m":"Sınıftan çıkarma"},{"m":"İdareye gönderme"},{"m":"Veliyi arama"},{"m":"Olumlu davranışı fark edip söyleme"},{"m":"Birebir, sınıf dışında konuşma"},{"m":"Sorumluluk verme"}]},{"id":"3.2","tip":"tek","etiket":"Müdahalelerin etkisi","metin":"3.2 Bu müdahalelerin etkisi","secenekler":[{"m":"İşe yaradı"},{"m":"Kısa süreli işe yaradı"},{"m":"İşe yaramadı / davranışı artırdı"}]}]},{"baslik":"Bölüm 4: Güçlü yönler ve istisnalar","amac":"İşe yarayan anlar, değişimin anahtarıdır.","sorular":[{"id":"4.1","tip":"coklu","etiket":"Güçlü yönler","metin":"4.1 Öğretmenin gördüğü güçlü yönler","secenekler":[{"m":"Spor / hareket gerektiren işler"},{"m":"Sanat, müzik, çizim"},{"m":"Teknoloji"},{"m":"Liderlik, organize etme"},{"m":"Yardımseverlik"},{"m":"Espri anlayışı"},{"n":1,"m":"Diğer"}]},{"id":"4.2","tip":"uzun","etiket":"İstisnalar","metin":"4.2 \"Sorunsuz geçen dersler ya da anlar oluyor mu? O zaman farklı olan ne?\""}]},{"baslik":"Bölüm 5: Akran ilişkileri ve sınıf dinamiği","amac":"","sorular":[{"id":"5.1","tip":"coklu","etiket":"Akranlarla ilişki","metin":"5.1 Akranlarla ilişkisi","secenekler":[{"m":"Kabul görüyor, arkadaşları var"},{"m":"Küçük bir grubu var"},{"m":"Yalnız, dışlanıyor"},{"m":"Grupta \"lider / gülünecek çocuk\" rolünde"},{"m":"Olumsuz davranışı destekleyen bir grupla"}]},{"id":"5.2","tip":"coklu","etiket":"Zorbalık","metin":"5.2 Zorbalık gözlemi","secenekler":[{"y":1,"m":"Gözlenmedi"},{"m":"Mağdur"},{"m":"Uygulayan"},{"m":"Hem mağdur hem uygulayan"}]}]},{"baslik":"Bölüm 6: Öğretmen-öğrenci ilişkisi","amac":"Öğretmenin yorgunluğunu da gör; tükenmiş bir öğretmenle önce ilişkiyi onarmak gerekir.","sorular":[{"id":"6.1","tip":"tek","etiket":"Öğretmenin bakışı","metin":"6.1 Öğretmenin öğrenciye bakışı","secenekler":[{"m":"Umutlu, destek olmak istiyor"},{"m":"Yorgun, tükenmiş"},{"m":"Öfkeli, kırgın"},{"m":"Öğrenciyi etiketlemiş (\"bu çocuk düzelmez\")"}]},{"id":"6.2","tip":"puan","etiket":"İlişki kalitesi","metin":"6.2 Öğretmen-öğrenci ilişki kalitesi (0-10, öğretmenin değerlendirmesi)","takip":1}]},{"baslik":"Bölüm 7: Sınıf içi gözlem (danışman)","amac":"Yapıldıysa doldur. Davranışın öncesini, kendisini ve sonrasını (ABC) kaydet.","sorular":[{"id":"7.1","tip":"tek","etiket":"Gözlem","metin":"7.1 Sınıf içi gözlem yapıldı mı?","secenekler":[{"m":"Evet"},{"m":"Hayır, planlandı"},{"m":"Gerek görülmedi"}]},{"id":"7.2","tip":"uzun","etiket":"Öncesi (A)","metin":"7.2 Öncesi (A): Davranıştan hemen önce ne oldu?"},{"id":"7.3","tip":"uzun","etiket":"Davranış (B)","metin":"7.3 Davranış (B): Ne yaptı?"},{"id":"7.4","tip":"uzun","etiket":"Sonrası (C)","metin":"7.4 Sonrası (C): Öğretmen ve akranlar nasıl tepki verdi?"},{"id":"7.5","tip":"sayi","etiket":"Gözlemde sorun davranış sayısı","metin":"7.5 Gözlem süresince (yaklaşık bir ders) sorun davranış sayısı","takip":1}]},{"baslik":"Bölüm 8: Risk işaretleri","amac":"Öğretmenin fark ettiği risk işaretleri. Herhangi bir işaret varsa okulun kriz ve çocuk koruma prosedürünü izle.","sorular":[{"id":"8.1","tip":"coklu","etiket":"Risk işaretleri","metin":"8.1 Öğretmenin fark ettiği işaretler","riskTur":"İhmal / İstismar","secenekler":[{"r":1,"m":"Açıklanamayan yara, morluk"},{"r":1,"m":"Aşırı içe kapanma, ani değişim"},{"r":1,"m":"Kendine zarar ifadesi, yazı ya da çizimi"},{"r":1,"m":"Sürekli aç, bakımsız"},{"r":1,"m":"Eve gitmekten korkma"},{"y":1,"m":"İşaret yok"}]}]},{"baslik":"Bölüm 9: Ortak strateji ve takip","amac":"Öğretmene uygulanabilir, küçük ve somut araçlar ver.","sorular":[{"id":"9.1","tip":"coklu","etiket":"Önerilen stratejiler","metin":"9.1 Öğretmenle kararlaştırılan stratejiler","secenekler":[{"m":"Anlaşılmış bir \"mola işareti\""},{"m":"Oturma yerini değiştirme"},{"m":"Olumlu davranışı fark etme (her uyarıya karşı dört olumlu geri bildirim)"},{"m":"Kısa ve net yönerge verme"},{"m":"Görevi küçük parçalara bölme"},{"m":"Sınıf içi sorumluluk verme"},{"m":"Uyarıyı sınıf önünde değil, birebir yapma"},{"m":"Günlük davranış kartı"},{"n":1,"m":"Diğer"}]},{"id":"9.2","tip":"tek","etiket":"Uygulama isteği","metin":"9.2 Öğretmenin uygulama isteği","secenekler":[{"m":"İstekli"},{"m":"Kararsız"},{"m":"İsteksiz"}]},{"id":"uyari","tip":"sayi","etiket":"Haftalık uyarı sayısı","metin":"Haftalık uyarı sayısı (öğretmenin bildirdiği)","takip":1},{"id":"sonraki","tip":"tarih","etiket":"Sonraki görüşme","metin":"Sonraki görüşme tarihi"},{"id":"dnot","tip":"uzun","etiket":"Danışman notu","metin":"Danışman notu"}]}],"id":"ogretmen","ad":"Öğretmen Görüşme ve Sınıf İçi Gözlem Formu","kisa":"Öğretmen görüşmesi","ikon":"🏫","konu":"Davranış","tur":"Öğretmen","aciklama":"Öğrencinin öğretmeniyle görüşme ve (yapıldıysa) danışmanın sınıf içi gözlemi için. Amaç suçlu aramak değil, tetikleyicileri ve işe yarayan anları bulup öğretmenle ortak bir strateji kurmak."}];
+function pdrFormSablon(id) { return PDR_FORM_SABLONLARI.find(s => s.id === id) || null; }
+function pdrFormBos(id, seans) { return { sablon: id, seans: seans || 1, c: {}, n: {}, p: {} }; }
+function pdrFormSorular(sab) { const l = []; (sab ? sab.bolumler : []).forEach((b, bi) => b.sorular.forEach(q => l.push({ ...q, bolum: b.baslik, bi }))); return l; }
+function pdrFormSoruDolu(q, f) {
+  if (!f) return false;
+  if (q.tip === "coklu" || q.tip === "tek") return ((f.c || {})[q.id] || []).length > 0;
+  if (q.tip === "puan" || q.tip === "sayi") return (f.p || {})[q.id] !== undefined && (f.p || {})[q.id] !== "";
+  return !!String((f.n || {})[q.id] || "").trim();
+}
+function pdrFormDoluSayisi(sab, f) { return pdrFormSorular(sab).filter(q => pdrFormSoruDolu(q, f)).length; }
+function pdrFormSecenekMetni(q, o, f) {
+  const not = String(((f && f.n) || {})[q.id + "|" + o.m] || "").trim();
+  return not ? `${o.m} (${not})` : o.m;
+}
+// Riskli işaretler: risk bölümündeki "!" seçenekleri
+function pdrFormRiskler(sab, f) {
+  const l = [];
+  pdrFormSorular(sab).forEach(q => (q.secenekler || []).forEach(o => {
+    if (o.r && ((f.c || {})[q.id] || []).includes(o.m)) l.push({ soru: q.etiket, secenek: o.m, riskTur: q.riskTur || "", qid: q.id });
+  }));
+  return l;
+}
+// Risk Listesi önerisi: tür ve öncelik (en ağır işaret belirler)
+function pdrFormRiskOnerisi(sab, f) {
+  const r = pdrFormRiskler(sab, f);
+  if (!r.length) return null;
+  const sira = ["Öz Zarar", "İhmal / İstismar", "Madde Kullanımı", "Davranış", "Duygusal"];
+  let tur = r.map(x => /madde/i.test(x.secenek) ? "Madde Kullanımı" : x.riskTur).filter(Boolean).sort((a, b) => (sira.indexOf(a) + 99) % 99 - (sira.indexOf(b) + 99) % 99)[0] || sab.konu || "Diğer";
+  if (!RISK_TURLERI.includes(tur)) tur = "Diğer";
+  const duzey = pdrFormSorular(sab).map(q => ((f.c || {})[q.id] || []).find(m => /^(Yüksek|Orta|Düşük):/.test(m))).find(Boolean) || "";
+  let oncelik = /^Yüksek/.test(duzey) ? "Yüksek" : /^Orta/.test(duzey) ? "Orta" : "";
+  if (!oncelik) oncelik = r.some(x => /Öz Zarar|İhmal/.test(x.riskTur) || /zarar|silah|kesici|morluk|beyan/i.test(x.secenek)) ? "Yüksek" : "Orta";
+  return { tur, oncelik, isaretler: r };
+}
+// Konu ve alt konu: şablondan; davranış türüne göre alt konu önerisi
+function pdrFormAltKonu(sab, f) {
+  const d = ((f.c || {}).dtur || ((f.c || {})["1.1"] || [])).join(" ");
+  if (sab.konu !== "Davranış") return "";
+  if (/kavga|saldırganlık|zarar verme/i.test(d)) return "Saldırganlık";
+  if (/Kurallara uymama|saygısızlık/i.test(d)) return "Kurallara Uyumsuzluk";
+  if (/Derste konuşma|dersi bölme/i.test(d)) return "Dikkat / Hareketlilik";
+  return "";
+}
+function pdrFormSeansNo(records, sablonId, ad, sinif, numara) {
+  return (records || []).filter(r => r.form && r.form.sablon === sablonId && pdrAyniOgrenci(r.studentName, r.className, ad, sinif, r.numara, numara)).length + 1;
+}
+// Kural tabanlı görüşme özeti (yapay zekâ kullanılmaz)
+function pdrFormOzet(sab, f) {
+  const sat = [`📋 ${sab.ad} · ${f.seans || 1}. seans`];
+  sab.bolumler.forEach(b => {
+    const parca = [];
+    b.sorular.forEach(q => {
+      if (!pdrFormSoruDolu(q, f)) return;
+      if (q.tip === "coklu" || q.tip === "tek") {
+        const secili = (q.secenekler || []).filter(o => ((f.c || {})[q.id] || []).includes(o.m)).map(o => pdrFormSecenekMetni(q, o, f));
+        parca.push(`${q.etiket}: ${secili.join("; ")}`);
+      } else if (q.tip === "puan") parca.push(`${q.etiket}: ${f.p[q.id]}/10`);
+      else if (q.tip === "sayi") parca.push(`${q.etiket}: ${f.p[q.id]}`);
+      else parca.push(`${q.etiket}: ${String(f.n[q.id]).trim().replace(/\s*\n\s*/g, " / ")}`);
+    });
+    if (!parca.length) return;
+    const bas = b.baslik.replace(/^Bölüm \d+:\s*/, "");
+    sat.push(b.baslik === "Görüşme bilgileri" ? parca.join(" · ") : `— ${bas}\n${parca.join("\n")}`);
+  });
+  const r = pdrFormRiskler(sab, f);
+  if (r.length) sat.push(`⚠ RİSK İŞARETİ: ${r.map(x => x.secenek).join("; ")}`);
+  return sat.join("\n");
+}
+function pdrFormTakipSerisi(kayitlar, sab) {
+  const sorular = pdrFormSorular(sab).filter(q => q.takip);
+  return sorular.map(q => ({ q, noktalar: kayitlar.filter(r => r.form && r.form.sablon === sab.id && r.form.p && r.form.p[q.id] !== undefined && r.form.p[q.id] !== "")
+    .sort((a, b) => (pdrTarihMs(a.date) - pdrTarihMs(b.date)) || ((Number(a.form.seans) || 0) - (Number(b.form.seans) || 0))).map(r => ({ tarih: r.date, seans: r.form.seans, v: Number(r.form.p[q.id]) })).filter(x => !isNaN(x.v)) }))
+    .filter(s => s.noktalar.length);
+}
+// Yazdırılabilir form (boş ya da dolu)
+function pdrFormHtml(sab, f, bilgi) {
+  const e = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const dolu = !!f;
+  const kutu = (v) => `<span class="k">${v ? "☑" : "☐"}</span>`;
+  let h = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${e(sab.ad)}</title><style>
+body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;margin:0;padding:18px;font-size:12.5px;line-height:1.45}
+h1{font-size:19px;margin:0 0 4px}h2{font-size:14px;margin:16px 0 4px;padding:4px 8px;background:#EEF4F1;border-left:4px solid #127C56}
+.amac{color:#555;font-style:italic;margin:2px 0 6px}.q{margin:8px 0 2px;font-weight:700}.o{display:inline-block;margin:2px 14px 2px 0}.k{font-size:15px;margin-right:4px}
+.cizgi{border-bottom:1px dotted #888;min-height:18px;margin:2px 0}.risk{color:#B42318;font-weight:700}.bilgi td{padding:3px 8px;border:1px solid #ccc}.not{color:#127C56}
+@media print{.noprint{display:none}body{padding:8mm}h2{break-after:avoid}}</style></head><body>
+<h1>${e(sab.ad)}</h1><table class="bilgi" style="border-collapse:collapse;margin:6px 0 4px">
+<tr><td><b>Öğrenci</b></td><td>${e((bilgi && bilgi.ad) || "")}&nbsp;</td><td><b>Sınıf</b></td><td>${e((bilgi && bilgi.sinif) || "")}&nbsp;</td></tr>
+<tr><td><b>Tarih</b></td><td>${e((bilgi && bilgi.tarih) || "")}&nbsp;</td><td><b>Seans</b></td><td>${e(dolu ? f.seans : "")}&nbsp;</td></tr></table>
+${dolu ? "" : `<div class="amac">${e(sab.aciklama || "")}</div>`}`;
+  sab.bolumler.forEach(b => {
+    const sorular = dolu ? b.sorular.filter(q => pdrFormSoruDolu(q, f)) : b.sorular;
+    if (dolu && !sorular.length) return;
+    h += `<h2>${e(b.baslik)}</h2>${b.amac && !dolu ? `<div class="amac">${e(b.amac)}</div>` : ""}`;
+    sorular.forEach(q => {
+      h += `<div class="q">${e(q.metin)}</div>`;
+      if (q.tip === "coklu" || q.tip === "tek" || q.tip === "sorular") {
+        const sec = dolu ? ((f.c || {})[q.id] || []) : [];
+        (q.secenekler || []).forEach(o => {
+          if (q.tip === "sorular") { h += `<div>• ${e(o.m)}</div>`; return; }
+          if (dolu && !sec.includes(o.m)) return;
+          const not = dolu ? String((f.n || {})[q.id + "|" + o.m] || "") : "";
+          h += `<span class="o${o.r ? " risk" : ""}">${kutu(dolu)}${e(o.m)}${o.n ? (not ? `: <span class="not">${e(not)}</span>` : (dolu ? "" : " ……………")) : ""}</span>`;
+        });
+        if (q.tip === "sorular") h += dolu ? `<div class="not">${e((f.n || {})[q.id] || "")}</div>` : `<div class="cizgi"></div><div class="cizgi"></div>`;
+      } else if (q.tip === "puan") {
+        h += dolu ? `<div><b>${e(f.p[q.id])}</b> / 10</div>` : `<div>${Array.from({ length: 11 }, (_, i) => `${kutu(false)}${i}`).join(" ")}</div>`;
+      } else {
+        const v = dolu ? ((q.tip === "sayi") ? f.p[q.id] : (f.n || {})[q.id]) : "";
+        h += dolu ? `<div class="not">${e(v).replace(/\n/g, "<br>")}</div>` : `<div class="cizgi"></div>${q.tip === "uzun" ? '<div class="cizgi"></div>' : ""}`;
+      }
+    });
+  });
+  if (dolu) { const r = pdrFormRiskler(sab, f); if (r.length) h += `<h2 class="risk">⚠ Risk işaretleri</h2><div class="risk">${r.map(x => e(x.secenek)).join("<br>")}</div>`; }
+  h += `<div style="margin-top:24px;display:flex;justify-content:space-between"><span>Psikolojik Danışman: ____________________</span><span>İmza: __________</span></div></body></html>`;
+  return h;
+}
+
+// Formu doldurma / gösterme (salt: yalnız okunur, yanıtlanmış sorular)
+function PdrFormDoldur({ sablon, deger, setDeger, salt }) {
+  const [acik, setAcik] = useState(() => salt ? Object.fromEntries(sablon.bolumler.map((_, i) => [i, true])) : { 0: true });
+  const f = deger || pdrFormBos(sablon.id);
+  const guncelle = (fn) => { if (salt || !setDeger) return; const y = { ...f, c: { ...(f.c || {}) }, n: { ...(f.n || {}) }, p: { ...(f.p || {}) } }; fn(y); setDeger(y); };
+  const sec = (q, o) => guncelle(y => {
+    let l = [...(y.c[q.id] || [])];
+    if (l.includes(o.m)) l = l.filter(x => x !== o.m);
+    else if (q.tip === "tek") l = [o.m];
+    else if (o.y) l = [o.m];                                   // "yok" seçilince diğerleri kalkar
+    else l = [...l.filter(x => !(q.secenekler.find(s => s.m === x) || {}).y), o.m];
+    if (l.length) y.c[q.id] = l; else delete y.c[q.id];
+  });
+  const riskler = pdrFormRiskler(sablon, f);
+  const doluSayi = pdrFormDoluSayisi(sablon, f), toplam = pdrFormSorular(sablon).length;
+  const chip = (secili, risk) => ({ padding: "6px 10px", borderRadius: 16, border: `1.5px solid ${secili ? (risk ? "#B42318" : ACCENT) : BORDER}`, background: secili ? (risk ? "#FEE4E2" : ACCENT_LIGHT) : "#fff", color: secili ? (risk ? "#B42318" : ACCENT) : TEXT, fontSize: 12, fontWeight: secili ? 700 : 500, cursor: salt ? "default" : "pointer", textAlign: "left", lineHeight: 1.35 });
+  const giris = { width: "100%", padding: "7px 9px", border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12.5, boxSizing: "border-box", background: "#fff" };
+  return (
+    <div data-testid="form-doldur">
+      {!salt && (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, fontSize: 11, color: MUTED, marginBottom: 8, flexWrap: "wrap" }}>
+          <span>{doluSayi}/{toplam} soru yanıtlandı · istediğin soruyu atlayabilirsin</span>
+          <span style={{ display: "flex", gap: 10 }}>
+            <button onClick={() => setAcik(Object.fromEntries(sablon.bolumler.map((_, i) => [i, true])))} style={{ background: "none", border: "none", color: ACCENT, fontSize: 11, fontWeight: 700, cursor: "pointer", padding: 0 }}>Tümünü aç</button>
+            <button onClick={() => setAcik({})} style={{ background: "none", border: "none", color: ACCENT, fontSize: 11, fontWeight: 700, cursor: "pointer", padding: 0 }}>Tümünü kapat</button>
+          </span>
+        </div>
+      )}
+      {riskler.length > 0 && (
+        <div data-testid="form-risk-uyari" style={{ background: "#B42318", color: "#fff", borderRadius: 10, padding: "8px 12px", fontSize: 12, fontWeight: 700, marginBottom: 8, lineHeight: 1.45 }}>
+          ⚠ Risk işareti: {riskler.map(r => r.secenek).join("; ")}.{!salt && " Okulun kriz ve çocuk koruma prosedürünü izle. Kaydederken Risk Listesi'ne kayıt açmak isteyip istemediğin sorulacak."}
+        </div>
+      )}
+      {sablon.bolumler.map((b, bi) => {
+        const sorular = salt ? b.sorular.filter(q => pdrFormSoruDolu(q, f)) : b.sorular;
+        if (salt && !sorular.length) return null;
+        const bDolu = b.sorular.filter(q => pdrFormSoruDolu(q, f)).length;
+        return (
+          <div key={bi} style={{ border: `1px solid ${BORDER}`, borderRadius: 10, marginBottom: 8, background: "#fff", overflow: "hidden" }}>
+            <button data-testid="form-bolum" onClick={() => setAcik(a => ({ ...a, [bi]: !a[bi] }))} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "9px 12px", background: acik[bi] ? ACCENT_LIGHT : "#FAFAF8", border: "none", cursor: "pointer", textAlign: "left" }}>
+              <span style={{ fontSize: 12.5, fontWeight: 800, color: TEXT }}>{b.baslik}</span>
+              <span style={{ fontSize: 11, color: bDolu ? ACCENT : MUTED, fontWeight: 700, whiteSpace: "nowrap" }}>{bDolu ? `${bDolu}/${b.sorular.length} ✓` : ""} {acik[bi] ? "▲" : "▼"}</span>
+            </button>
+            {acik[bi] && (
+              <div style={{ padding: "8px 12px 12px" }}>
+                {b.amac && !salt && <div style={{ fontSize: 11.5, color: MUTED, fontStyle: "italic", marginBottom: 8, lineHeight: 1.45 }}>{b.amac}</div>}
+                {sorular.map(q => (
+                  <div key={q.id} style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 700, color: TEXT, marginBottom: 6, lineHeight: 1.4 }}>{q.metin}{q.tip === "tek" && !salt ? <span style={{ fontWeight: 500, color: MUTED }}> (tek seçim)</span> : null}</div>
+                    {(q.tip === "coklu" || q.tip === "tek") && (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                        {(salt ? q.secenekler.filter(o => ((f.c || {})[q.id] || []).includes(o.m)) : q.secenekler).map(o => {
+                          const secili = ((f.c || {})[q.id] || []).includes(o.m);
+                          return (
+                            <span key={o.m} style={{ display: "contents" }}>
+                              <button data-testid="form-secenek" data-q={q.id} onClick={() => sec(q, o)} style={chip(secili, o.r)}>{secili ? (q.tip === "tek" ? "◉ " : "☑ ") : (q.tip === "tek" ? "○ " : "☐ ")}{o.m}</button>
+                              {o.n && secili && (salt
+                                ? (f.n[q.id + "|" + o.m] ? <span style={{ fontSize: 12, color: ACCENT, alignSelf: "center" }}>{f.n[q.id + "|" + o.m]}</span> : null)
+                                : <input data-testid="form-secenek-not" value={f.n[q.id + "|" + o.m] || ""} onChange={e => { const v = e.target.value; guncelle(y => { y.n[q.id + "|" + o.m] = v; }); }} placeholder={o.ph ? `${o.ph}…` : "yaz…"} style={{ ...giris, flexBasis: "100%" }} />)}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {q.tip === "sorular" && (
+                      <>
+                        {!salt && <ul style={{ margin: "0 0 6px", paddingLeft: 18, fontSize: 12, color: TEXT, lineHeight: 1.5 }}>{q.secenekler.map(o => <li key={o.m}>{o.m}</li>)}</ul>}
+                        {salt ? <div style={{ fontSize: 12.5, whiteSpace: "pre-wrap" }}>{f.n[q.id]}</div> : <textarea value={f.n[q.id] || ""} onChange={e => { const v = e.target.value; guncelle(y => { y.n[q.id] = v; }); }} rows={3} placeholder="Cevapları not al…" style={{ ...giris, resize: "vertical" }} />}
+                      </>
+                    )}
+                    {q.tip === "puan" && (salt
+                      ? <div style={{ fontSize: 14, fontWeight: 800, color: ACCENT }}>{f.p[q.id]} / 10</div>
+                      : <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                          {Array.from({ length: 11 }, (_, i) => i).map(i => {
+                            const s = Number(f.p[q.id]) === i && f.p[q.id] !== undefined && f.p[q.id] !== "";
+                            return <button key={i} data-testid="form-puan" data-q={q.id} onClick={() => guncelle(y => { if (s) delete y.p[q.id]; else y.p[q.id] = i; })} style={{ width: 32, height: 32, borderRadius: 8, border: `1.5px solid ${s ? ACCENT : BORDER}`, background: s ? ACCENT : "#fff", color: s ? "#fff" : TEXT, fontWeight: 800, fontSize: 12.5, cursor: "pointer" }}>{i}</button>;
+                          })}
+                        </div>)}
+                    {q.tip === "sayi" && (salt ? <div style={{ fontSize: 14, fontWeight: 800, color: ACCENT }}>{f.p[q.id]}</div>
+                      : <input inputMode="numeric" value={f.p[q.id] ?? ""} onChange={e => { const v = e.target.value.replace(/[^0-9]/g, ""); guncelle(y => { if (v === "") delete y.p[q.id]; else y.p[q.id] = Number(v); }); }} placeholder="sayı" style={{ ...giris, width: 120 }} />)}
+                    {(q.tip === "metin" || q.tip === "tarih") && (salt ? <div style={{ fontSize: 12.5 }}>{f.n[q.id]}</div>
+                      : <input data-testid="form-metin" data-q={q.id} value={f.n[q.id] || ""} onChange={e => { const v = e.target.value; guncelle(y => { if (v) y.n[q.id] = v; else delete y.n[q.id]; }); }} placeholder={q.tip === "tarih" ? "GG.AA.YYYY" : ""} style={giris} />)}
+                    {q.tip === "uzun" && (salt ? <div style={{ fontSize: 12.5, whiteSpace: "pre-wrap" }}>{f.n[q.id]}</div>
+                      : <textarea value={f.n[q.id] || ""} onChange={e => { const v = e.target.value; guncelle(y => { if (v) y.n[q.id] = v; else delete y.n[q.id]; }); }} rows={2} style={{ ...giris, resize: "vertical" }} />)}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Seanslar arası takip grafiği (0-10 ve sayılar)
+function PdrFormTakipGrafik({ seri }) {
+  const W = 300, H = 120, P = 26;
+  const n = seri.noktalar;
+  const maks = seri.q.tip === "puan" ? 10 : Math.max(5, ...n.map(x => x.v));
+  const x = (i) => n.length === 1 ? W / 2 : P + i * (W - 2 * P) / (n.length - 1);
+  const y = (v) => H - 22 - (v / maks) * (H - 40);
+  return (
+    <div data-testid="form-takip" style={{ background: "#fff", border: `1px solid ${BORDER}`, borderRadius: 10, padding: "8px 10px" }}>
+      <div style={{ fontSize: 11.5, fontWeight: 800, color: TEXT }}>{seri.q.etiket}{seri.q.tip === "puan" ? " (0-10)" : ""}</div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
+        <line x1={P} x2={W - P} y1={H - 22} y2={H - 22} stroke="#D9DED9" strokeWidth="1" />
+        {n.length > 1 && <polyline points={n.map((p, i) => `${x(i)},${y(p.v)}`).join(" ")} fill="none" stroke={ACCENT} strokeWidth="2.5" strokeLinejoin="round" />}
+        {n.map((p, i) => (
+          <g key={i}>
+            <circle cx={x(i)} cy={y(p.v)} r="4.5" fill={ACCENT} />
+            <text x={x(i)} y={y(p.v) - 8} textAnchor="middle" fontSize="11" fontWeight="700" fill={TEXT}>{p.v}</text>
+            <text x={x(i)} y={H - 8} textAnchor="middle" fontSize="9" fill={MUTED}>{`S${p.seans || i + 1}`}</text>
+          </g>
+        ))}
+      </svg>
+      {n.length > 1 && <div style={{ fontSize: 10.5, color: MUTED }}>İlk seans {n[0].v} → son seans {n[n.length - 1].v}</div>}
+    </div>
+  );
+}
+
+// Öğrenci detayındaki "📋 Formlar" sekmesi
+function PdrOgrenciFormlar({ kayitlar, ogrenci, sinif }) {
+  const [acik, setAcik] = useState({});
+  const formlu = (kayitlar || []).filter(r => r.form && pdrFormSablon(r.form.sablon)).sort((a, b) => (pdrTarihMs(b.date) - pdrTarihMs(a.date)) || ((Number(b.form.seans) || 0) - (Number(a.form.seans) || 0)));
+  if (!formlu.length) return <div style={{ fontSize: 12.5, color: MUTED, padding: "12px 4px", lineHeight: 1.5 }}>Bu öğrenci için form ile yapılmış görüşme yok. Görüşme Notu ekranında "📋 Form ile görüşme" seçeneğiyle başlayabilirsin.</div>;
+  const sablonlar = [...new Set(formlu.map(r => r.form.sablon))].map(pdrFormSablon);
+  return (
+    <div data-testid="ogr-formlar">
+      {sablonlar.map(sab => {
+        const seriler = pdrFormTakipSerisi(formlu, sab);
+        if (!seriler.length) return null;
+        return (
+          <div key={sab.id} style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: TEXT, marginBottom: 6 }}>{sab.ikon} {sab.ad} — seanslar arası takip</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+              {seriler.map(s => <PdrFormTakipGrafik key={s.q.id} seri={s} />)}
+            </div>
+          </div>
+        );
+      })}
+      {formlu.map(r => {
+        const sab = pdrFormSablon(r.form.sablon);
+        const risk = pdrFormRiskler(sab, r.form).length > 0;
+        return (
+          <div key={r.id} data-testid="ogr-form-kart" style={{ background: CARD, border: `1px solid ${risk ? "#FDA29B" : BORDER}`, borderRadius: 12, padding: "10px 12px", marginBottom: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <div style={{ fontSize: 12.5, fontWeight: 800, color: TEXT }}>{sab.ikon} {sab.ad}</div>
+              <div style={{ fontSize: 11, color: MUTED }}>{r.date} · {r.form.seans || 1}. seans · {pdrFormDoluSayisi(sab, r.form)} yanıt</div>
+            </div>
+            {risk && <div style={{ fontSize: 11, color: "#B42318", fontWeight: 800, marginTop: 4 }}>⚠ Risk işareti var</div>}
+            <div style={{ display: "flex", gap: 12, marginTop: 6 }}>
+              <button data-testid="ogr-form-goster" onClick={() => setAcik(a => ({ ...a, [r.id]: !a[r.id] }))} style={{ background: "none", border: "none", color: ACCENT, fontSize: 11.5, fontWeight: 800, cursor: "pointer", padding: 0 }}>{acik[r.id] ? "▲ Formu gizle" : "👁 Formu göster"}</button>
+              <button onClick={() => ootBelgeAc(pdrFormHtml(sab, r.form, { ad: ogrenci, sinif, tarih: r.date }), sab.ad)} style={{ background: "none", border: "none", color: ACCENT, fontSize: 11.5, fontWeight: 800, cursor: "pointer", padding: 0 }}>🖨 Yazdır / PDF</button>
+            </div>
+            {acik[r.id] && <div style={{ marginTop: 8 }}><PdrFormDoldur sablon={sab} deger={r.form} salt /></div>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// İşçi Raporu: formlardan çıkan takip bulguları
+function pdrFormTakipTara(records, riskListesi) {
+  const bulgular = [];
+  const sonFormlar = new Map();
+  (records || []).filter(r => r.form && pdrFormSablon(r.form.sablon)).forEach(r => {
+    const k = r.form.sablon + "||" + pdrOgrAnahtar(r.studentName, r.className, r.numara);
+    const o = sonFormlar.get(k);
+    if (!o || pdrTarihMs(r.date) > pdrTarihMs(o.date)) sonFormlar.set(k, r);
+  });
+  sonFormlar.forEach(r => {
+    const sab = pdrFormSablon(r.form.sablon);
+    const ogrKayit = (records || []).filter(x => pdrAyniOgrenci(x.studentName, x.className, r.studentName, r.className, x.numara, r.numara));
+    // 1) Formda risk işareti var, öğrencinin açık risk kaydı yok
+    if (pdrFormRiskler(sab, r.form).length && !(riskListesi || []).some(k => !k.kapandi && pdrAyniOgrenci(k.studentName, k.className, r.studentName, r.className, k.numara, r.numara))) {
+      bulgular.push({ tur: "form_risk", ad: r.studentName, sinif: r.className, numara: r.numara || "",
+        mesaj: `📋 ${r.studentName} — ${r.date} tarihli ${sab.kisa} formunda risk işareti var ama açık bir risk kaydı yok.` });
+    }
+    // 2) Formda planlanan sonraki seans tarihi geçti, o tarihten sonra görüşme yok
+    const sonraki = String((r.form.n || {}).sonraki || "").trim();
+    const ms = pdrTarihMs(sonraki);
+    if (ms && ms < pdrTarihMs(today()) && !ogrKayit.some(x => pdrTarihMs(x.date) >= ms)) {
+      bulgular.push({ tur: "form_seans", ad: r.studentName, sinif: r.className, numara: r.numara || "",
+        mesaj: `📋 ${r.studentName} — ${sab.kisa} formunda ${sonraki} için planlanan görüşme yapılmamış görünüyor.` });
+    }
+  });
+  return bulgular;
+}
+// ── 📋 GÖRÜŞME FORMLARI BİTİŞ ──
+
 // ── İşçi Raporu ──────────────────────────────────────────────────────────────
 // AMAÇ: Programı üç açıdan "kontrol edip" danışmana rapor veren, hiçbir şeyi
 // gizlice yazmayan bir özet ekranı — tüm hesaplamalar şeffaf, hiçbiri AI
@@ -16560,10 +16877,10 @@ function pdrOtomatikTakipOner(riskListesi, hatirlatmalar) {
   return oneriler;
 }
 
-function IsciRaporuEkrani({ hatirlatmalar, setHatirlatmalar, ogrenciler, riskListesi, sosyometri, aktifYil, uyumIzleme, krizKayitlari, denemeler, sinavTuru, setTab, setAktifOgrenci, testKayitlari }) {
+function IsciRaporuEkrani({ hatirlatmalar, setHatirlatmalar, ogrenciler, riskListesi, sosyometri, aktifYil, uyumIzleme, krizKayitlari, denemeler, sinavTuru, setTab, setAktifOgrenci, testKayitlari, records }) {
   const [acikBolum, setAcikBolum] = useState("ozet");
   const ozet = pdrGunlukOzetHesapla(hatirlatmalar, ogrenciler, riskListesi, sosyometri, aktifYil, uyumIzleme);
-  const bekci = pdrVeriBekcisiTara(riskListesi, uyumIzleme, ogrenciler, sosyometri, aktifYil, krizKayitlari, testKayitlari);
+  const bekci = [...pdrVeriBekcisiTara(riskListesi, uyumIzleme, ogrenciler, sosyometri, aktifYil, krizKayitlari, testKayitlari), ...pdrFormTakipTara(records, riskListesi)];
   const takip = pdrOtomatikTakipOner(riskListesi, hatirlatmalar);
   const akademik = pdrAkademikUyarilariTara(ogrenciler, denemeler, sinavTuru);
 
@@ -35282,6 +35599,7 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
             {[
               { key:"ozet", label:"Özet" },
               { key:"gorusme", label:`Görüşme (${ogrRec.length})` },
+              ...(ogrRec.some(r => r.form) ? [{ key:"formlar", label:`📋 Formlar (${ogrRec.filter(r => r.form).length})` }] : []),
               { key:"deneme", label:`Deneme (${Object.keys(ogrDeneme).length})` },
               { key:"profil", label:"Profil" },
               { key:"bireyi_tanima", label:"🔍 Bireyi Tanıma" },
@@ -35678,6 +35996,9 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
                 );
               })}
             </div>
+          )}
+          {aktifSekme === "formlar" && (
+            <PdrOgrenciFormlar kayitlar={ogrRec} ogrenci={seciliOgrenci} sinif={seciliOgrenciSinif} />
           )}
           {aktifSekme === "asistan_notlari" && (
             <AsistanNotlariSekmesi ogrenci={seciliOgrenci} sinif={seciliOgrenciSinif} numara={seciliOgrenciNumara}
@@ -43115,6 +43436,13 @@ export default function App() {
     kap.scrollTo({ left: Math.max(0, hedef), behavior: "smooth" });
   }, [tab]);
   const [form, setForm] = useState({ studentName: "", className: "", numara: "", meetingType: "Öğrenci", topic: "", altKonu: "", raw: "", summary: "", tarih: today() });
+  // 📋 Form ile görüşme: seçilen şablonun yanıtları (kaydedilince görüşme kaydının "form" alanına girer)
+  const [gorusmeFormu, setGorusmeFormu] = useState(null);
+  const [formSecAcik, setFormSecAcik] = useState(false);
+  // Öğrenci değişince formun seans numarası o öğrencinin önceki formlarına göre yenilenir
+  useEffect(() => {
+    setGorusmeFormu(g => g ? { ...g, seans: pdrFormSeansNo(records, g.sablon, form.studentName, form.className, form.numara) } : g);
+  }, [form.studentName, form.className, form.numara]);
   const [notOgrenciArama, setNotOgrenciArama] = useState("");
   // Grup görüşmesi: aynı anda birden fazla öğrenciyle (örn. aralarındaki
   // çatışma için) yapılan TEK görüşmenin, her öğrencinin kendi profiline de
@@ -43658,7 +43986,13 @@ export default function App() {
     // adı boşsa ya da not metni girilmemişse kayıt hiç olmuyordu ama kullanıcı
     // nedenini asla göremiyordu. Artık ne eksikse açıkça söyleniyor.
     if (!form.studentName.trim()) { alert("⚠️ Önce bir öğrenci seçmelisiniz (listeden tıklayın ya da adını yazın)."); return; }
-    if (!(form.summary.trim() || form.raw.trim())) { alert("⚠️ Not metni boş — lütfen görüşme notunu yazın."); return; }
+    // 📋 Form ile görüşme: özet işaretlerden kural tabanlı üretilir; ek not varsa sonuna eklenir
+    const formSab = gorusmeFormu ? pdrFormSablon(gorusmeFormu.sablon) : null;
+    if (formSab) {
+      if (digerKatilimcilar.length) { alert("⚠️ Form ile görüşme tek öğrenci içindir. Grup katılımcılarını çıkar ya da formu kaldır."); return; }
+      if (!pdrFormDoluSayisi(formSab, gorusmeFormu) && !(form.summary.trim() || form.raw.trim())) { alert("⚠️ Formda yanıtlanmış bir soru yok. En az bir soruyu işaretle ya da not yaz."); return; }
+    }
+    else if (!(form.summary.trim() || form.raw.trim())) { alert("⚠️ Not metni boş — lütfen görüşme notunu yazın."); return; }
     // AI ile özetlenmemişse (kullanıcı "AI Özetle" demeden direkt kaydetmek
     // istiyorsa), ham metni özet olarak kullan — kaydetmek için AI şart değil.
     // "tarih" alanı sadece form üzerinde kullanılıyor — kayıt her yerde "date"
@@ -43669,7 +44003,14 @@ export default function App() {
     // cihaz saati (HH:MM) alınıyor. Sadece bilgi amaçlı, hiçbir hesaplamada
     // kullanılmıyor (tarih bazlı sıralama/eşleştirmeler hep "date" üzerinden).
     const ortakSaat = new Date().toLocaleTimeString("tr-TR", { hour:"2-digit", minute:"2-digit" });
-    const ortakOzet = form.summary.trim() || form.raw.trim();
+    const ekNot = form.summary.trim() || form.raw.trim();
+    const ortakOzet = formSab ? pdrFormOzet(formSab, gorusmeFormu) + (ekNot ? "\n\nEk not: " + ekNot : "") : ekNot;
+    const formEk = formSab ? {
+      form: { ...gorusmeFormu, ad: formSab.ad },
+      topic: form.topic || formSab.konu,
+      altKonu: form.altKonu || pdrFormAltKonu(formSab, gorusmeFormu),
+      meetingType: form.meetingType,
+    } : {};
     const tumKatilimcilar = [
       { name: form.studentName, className: form.className, numara: form.numara },
       ...digerKatilimcilar,
@@ -43682,10 +44023,23 @@ export default function App() {
       id: uid(), date: formTarihi || today(), saat: ortakSaat, ...formGeri,
       studentName: k.name, className: k.className, numara: k.numara,
       summary: ortakOzet,
+      ...formEk,
       grupKatilimcilari: tumKatilimcilar.length > 1 ? tumKatilimcilar.filter(x => x !== k).map(x => x.name) : undefined,
     }));
     const updated = [...yeniKayitlar, ...records];
     setRecords(updated); await saveRecords(updated);
+    // Formun risk bölümünde işaret varsa Risk Listesi'ne kayıt ÖNERİLİR; onay danışmanda
+    if (formSab) {
+      const ro = pdrFormRiskOnerisi(formSab, gorusmeFormu);
+      if (ro && window.confirm(`⚠ ${formSab.kisa} formunun risk bölümünde işaret var:\n• ${ro.isaretler.map(x => x.secenek).join("\n• ")}\n\nRisk Listesi'ne "${ro.tur}" türünde, "${ro.oncelik}" öncelikli bir kayıt açılsın mı?\n(Açmasan da görüşme kaydedildi.)`)) {
+        const item = { id: uid(), tarih: formTarihi || today(), studentName: form.studentName, className: form.className, numara: form.numara,
+          riskTuru: ro.tur, oncelik: ro.oncelik, aciklama: `${formSab.ad} (${formTarihi || today()}, ${gorusmeFormu.seans || 1}. seans) risk işaretleri: ${ro.isaretler.map(x => x.secenek).join("; ")}`,
+          aiAnaliz: "", kapandi: false, teknolojiBagimliligi: false, teknolojiGerekce: "", kaynak: "Form" };
+        const ur = [item, ...riskListesi];
+        setRiskListesi(ur); await saveRiskListesi(ur);
+      }
+      setGorusmeFormu(null); setFormSecAcik(false);
+    }
     // Öğrenci bilgisini SİLMİYORUZ — aynı öğrenciye art arda birden fazla
     // görüşme notu eklenebilsin diye (sadece not içeriği temizleniyor).
     // Not: aktifOgrenci değişmediği için yukarıdaki useEffect burada tekrar
@@ -44820,6 +45174,47 @@ function pdrBaslangicSekmesi() {
                   <button key={t} data-asistan="gorusme-tur" data-deger={t} onClick={()=>setForm(f=>({...f,meetingType:t}))} style={{ flex:1, padding:"8px", borderRadius:8, border:`2px solid ${PURPLE}`, background:form.meetingType===t?PURPLE:"#fff", color:form.meetingType===t?"#fff":PURPLE, fontSize:12, fontWeight:700, cursor:"pointer" }}>{t}</button>
                 ))}
               </div>
+              {/* 📋 Form ile görüşme — işaretlerden özet oluşur, normal görüşme kaydı olarak düşer */}
+              <div data-testid="form-alani" style={{ marginBottom:12 }}>
+                {!gorusmeFormu ? (
+                  formSecAcik ? (
+                    <div style={{ background:"#F2FAF6", border:`1px solid ${ACCENT}`, borderRadius:10, padding:10 }}>
+                      <div style={{ fontSize:11.5, fontWeight:800, color:ACCENT, marginBottom:8 }}>📋 Hangi formla görüşeceksin?</div>
+                      {PDR_FORM_SABLONLARI.map(sb => (
+                        <div key={sb.id} style={{ display:"flex", gap:6, marginBottom:6 }}>
+                          <button data-testid="form-sec" data-deger={sb.id} onClick={() => {
+                            const sn = pdrFormSeansNo(records, sb.id, form.studentName, form.className, form.numara);
+                            setGorusmeFormu(pdrFormBos(sb.id, sn)); setFormSecAcik(false);
+                            setForm(f => ({ ...f, meetingType: sb.tur, topic: f.topic || sb.konu }));
+                          }} style={{ flex:1, textAlign:"left", padding:"8px 10px", borderRadius:9, border:`1px solid ${BORDER}`, background:"#fff", cursor:"pointer" }}>
+                            <div style={{ fontSize:12.5, fontWeight:800, color:TEXT }}>{sb.ikon} {sb.ad}</div>
+                            <div style={{ fontSize:10.5, color:MUTED }}>{sb.tur} görüşmesi · konu: {sb.konu}</div>
+                          </button>
+                          <button title="Boş formu yazdır" onClick={() => ootBelgeAc(pdrFormHtml(sb, null, { ad: form.studentName, sinif: form.className, tarih: form.tarih }), sb.ad)} style={{ padding:"0 10px", borderRadius:9, border:`1px solid ${BORDER}`, background:"#fff", cursor:"pointer", fontSize:15 }}>🖨</button>
+                        </div>
+                      ))}
+                      <button onClick={() => setFormSecAcik(false)} style={{ fontSize:11, color:MUTED, background:"none", border:"none", cursor:"pointer", padding:0 }}>Vazgeç</button>
+                    </div>
+                  ) : (
+                    <button data-testid="form-ile-gorusme" onClick={() => setFormSecAcik(true)} style={{ width:"100%", padding:"8px", background:"none", border:`1.5px dashed ${ACCENT}`, borderRadius:9, color:ACCENT, fontSize:12, fontWeight:800, cursor:"pointer" }}>📋 Form ile görüşme</button>
+                  )
+                ) : (() => { const sb = pdrFormSablon(gorusmeFormu.sablon); return sb ? (
+                  <div style={{ background:"#F2FAF6", border:`1px solid ${ACCENT}`, borderRadius:10, padding:10 }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:8, marginBottom:6, flexWrap:"wrap" }}>
+                      <div style={{ fontSize:12.5, fontWeight:800, color:ACCENT }}>{sb.ikon} {sb.ad}</div>
+                      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                        <label style={{ fontSize:11, color:MUTED }}>Seans</label>
+                        <input data-testid="form-seans" inputMode="numeric" value={gorusmeFormu.seans} onChange={e => { const v = e.target.value.replace(/[^0-9]/g, ""); setGorusmeFormu(g => ({ ...g, seans: v === "" ? "" : Number(v) })); }} style={{ width:44, padding:"4px 6px", border:`1px solid ${BORDER}`, borderRadius:6, fontSize:12, textAlign:"center" }} />
+                        <button onClick={() => ootBelgeAc(pdrFormHtml(sb, null, { ad: form.studentName, sinif: form.className, tarih: form.tarih }), sb.ad)} title="Boş formu yazdır" style={{ background:"none", border:"none", cursor:"pointer", fontSize:15, padding:0 }}>🖨</button>
+                        <button data-testid="form-kaldir" onClick={() => { if (!pdrFormDoluSayisi(sb, gorusmeFormu) || window.confirm("Formdaki işaretler silinsin mi?")) setGorusmeFormu(null); }} style={{ background:"none", border:`1px solid ${BORDER}`, borderRadius:6, color:MUTED, fontSize:11, cursor:"pointer", padding:"2px 8px" }}>✕ Formu kaldır</button>
+                      </div>
+                    </div>
+                    {sb.aciklama && <div style={{ fontSize:11, color:MUTED, lineHeight:1.45, marginBottom:8 }}>{sb.aciklama}</div>}
+                    <PdrFormDoldur sablon={sb} deger={gorusmeFormu} setDeger={setGorusmeFormu} />
+                    <div style={{ fontSize:10.5, color:MUTED, marginTop:4 }}>Kaydedince işaretlerinden görüşme özeti oluşur (yapay zekâ kullanılmaz); aşağıya ek not da yazabilirsin.</div>
+                  </div>
+                ) : null; })()}
+              </div>
               {/* Görüşme tarihi — bugün girmesen de geçmiş bir görüşmeyi bu
                   tarihle kaydedebilirsin; BDT/Bireyi Tanıma önerileri de bu
                   tarihle kaydolur, "O Gün Neler Girildi" bu tarihe göre eşleşir. */}
@@ -44842,7 +45237,7 @@ function pdrBaslangicSekmesi() {
                 </>
               )}
               {/* Ham not */}
-              <label style={{ fontSize:11, fontWeight:600, color:MUTED, display:"block", marginBottom:4 }}>GÖRÜŞME NOTU</label>
+              <label style={{ fontSize:11, fontWeight:600, color:MUTED, display:"block", marginBottom:4 }}>{gorusmeFormu ? "EK NOT (İSTEĞE BAĞLI)" : "GÖRÜŞME NOTU"}</label>
               <textarea data-asistan="gorusme-not" placeholder="Görüşme notlarını buraya yazın..." value={form.raw} onChange={e=>setForm(f=>({...f,raw:e.target.value}))} rows={5} style={{ width:"100%", padding:"9px 11px", border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius:9, fontSize:13, resize:"vertical", boxSizing:"border-box", marginBottom:10 }} />
               {/* Sesli giriş */}
               <div style={{ display:"flex", gap:8, marginBottom:10 }}>
@@ -44965,7 +45360,7 @@ function pdrBaslangicSekmesi() {
                 </div>
               )}
               {/* Kaydet */}
-              <button data-asistan="gorusme-kaydet" onClick={handleSave} disabled={!form.studentName.trim()||!(form.summary.trim()||form.raw.trim())} style={{ width:"100%", padding:"13px", background:form.studentName&&(form.summary||form.raw)?PURPLE:BORDER, color:form.studentName&&(form.summary||form.raw)?"#fff":MUTED, border:"none", borderRadius:12, fontSize:15, fontWeight:800, cursor:"pointer" }}>
+              <button data-asistan="gorusme-kaydet" onClick={handleSave} disabled={!form.studentName.trim()||!(form.summary.trim()||form.raw.trim()||(gorusmeFormu && pdrFormDoluSayisi(pdrFormSablon(gorusmeFormu.sablon), gorusmeFormu)))} style={{ width:"100%", padding:"13px", background:form.studentName&&(form.summary||form.raw||(gorusmeFormu && pdrFormDoluSayisi(pdrFormSablon(gorusmeFormu.sablon), gorusmeFormu)))?PURPLE:BORDER, color:form.studentName&&(form.summary||form.raw||(gorusmeFormu && pdrFormDoluSayisi(pdrFormSablon(gorusmeFormu.sablon), gorusmeFormu)))?"#fff":MUTED, border:"none", borderRadius:12, fontSize:15, fontWeight:800, cursor:"pointer" }}>
                 {saved?"✓ Kaydedildi!":digerKatilimcilar.length>0?`💾 ${1+digerKatilimcilar.length} Öğrenciye Kaydet`:"💾 Görüşmeyi Kaydet"}
               </button>
             </div>
@@ -46135,6 +46530,7 @@ function pdrBaslangicSekmesi() {
             setTab={setTab}
             setAktifOgrenci={setAktifOgrenci}
             testKayitlari={testKayitlari}
+            records={records}
           />
         )}
 

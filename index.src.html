@@ -11688,6 +11688,7 @@ function ksMpAra(g, ctx, o) {
     if (plan) baglam.push(plan.hedef, plan.adimlar);
     (ctx.records || []).filter(r => pdrAyniOgrenci(r.studentName, r.className, o.name, o.className, r.numara, o.numara))
       .sort((a, b) => pdrTarihMs(b.date) - pdrTarihMs(a.date)).slice(0, 6).forEach(r => baglam.push(r.topic, r.altKonu || ""));
+    try { pdrFormOgrKayitlari(ctx.records, o).slice(-3).forEach(r => { const sb = pdrFormSablon(r.form.sablon); pdrFormSorular(sb).filter(q => q.secenekler && q.bolum !== "Görüşme bilgileri").forEach(q => baglam.push(...pdrFormSeciliSade(q, r.form))); }); } catch (e) {}
   }
   const bk = [...new Set(ksMpKokler(baglam.join(" ")))];
   const ak = [...new Set(aranan)];
@@ -11744,6 +11745,7 @@ const KS_ASISTAN_ARACLAR = {
       const bek = G.sevkler.filter(x => x.sonucBekleniyor);
       if (G.sevkler.length) s.push(`Sevk: ${G.sevkler.length} kayıt${bek.length ? `, ${bek.length} sonuç bekliyor` : ""}.`);
       if (X.c.koruyucu.length) s.push(`Koruyucu etkenler: ${X.c.koruyucu.slice(0, 4).join(", ")}.`);
+      try { const fk = pdrFormOgrKayitlari(ctx.records, o); if (fk.length) s.push(`Formlu görüşme: ${fk.length}. ` + pdrFormTakipOzeti(fk).map(x => x.baslik.replace(x.sab.ad, x.sab.kisa || x.sab.ad) + " — " + x.satirlar.slice(0, 3).join(" | ")).join(" · ")); } catch (e) {}
       return s.join("\n");
     },
   },
@@ -11768,15 +11770,15 @@ const KS_ASISTAN_ARACLAR = {
   risk_analizi: { aciklama: "Kapalı sistemle risk analizi yapar (kaydetmez).", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
     calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); const r = pdrKapaliRiskAnalizi({ riskTuru: "", oncelik: "Orta", aciklama: "" }, G.gorusmeler, G.profil1, G.kademe, ksDenemeOzetHesapla(G.denemeGirilen, G.sinavTuru), G.ek); return (r.acil ? "⚠ KRİTİK — acil müdahale gerekiyor.\n" : "") + r.metin; } },
   seans_hazirlik: { aciklama: "Bir sonraki görüşme için kapalı sistemle hazırlık notu çıkarır.", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
-    calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); return pdrKapaliSeansHazirlik({ gorusmeler: G.gorusmeler, mudahaleler: G.mudahaleler, riskler: G.riskler, denemeAvg: G.denemeGirilen.length ? (G.denemeGirilen.reduce((t, d) => t + d.toplam, 0) / G.denemeGirilen.length).toFixed(1) : null, etkinlikHavuzu: typeof ogrenciEtkinlikHavuzu === "function" ? ogrenciEtkinlikHavuzu(o.className, G.kademe) : [], kademe: G.kademe, profil1: G.profil1 }); } },
+    calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); return pdrKapaliSeansHazirlik({ gorusmeler: G.gorusmeler, mudahaleler: G.mudahaleler, riskler: G.riskler, denemeAvg: G.denemeGirilen.length ? (G.denemeGirilen.reduce((t, d) => t + d.toplam, 0) / G.denemeGirilen.length).toFixed(1) : null, etkinlikHavuzu: typeof ogrenciEtkinlikHavuzu === "function" ? ogrenciEtkinlikHavuzu(o.className, G.kademe) : [], kademe: G.kademe, profil1: G.profil1 }) + pdrFormEkBlok(ctx, o, "hazirlik"); } },
   mudahale_plani: { aciklama: "Kapalı sistemle müdahale planı önerir (kaydetmez).", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
-    calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); return pdrKapaliMudahalePlani({ ek: G.ek, gorusmeler: G.gorusmeler, kademe: G.kademe, profil1: G.profil1, programlar: typeof MUDAHALE_PROGRAMLARI !== "undefined" ? MUDAHALE_PROGRAMLARI : null }); } },
+    calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); return pdrKapaliMudahalePlani({ ek: G.ek, gorusmeler: G.gorusmeler, kademe: G.kademe, profil1: G.profil1, programlar: typeof MUDAHALE_PROGRAMLARI !== "undefined" ? MUDAHALE_PROGRAMLARI : null }) + pdrFormEkBlok(ctx, o, "takip"); } },
   deneme_analizi: { aciklama: "Kapalı sistemle deneme sonuçlarını analiz eder.", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
     calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); return pdrKapaliDenemeAnalizi({ gorusmeler: G.gorusmeler, girilen: G.denemeGirilen, dersListesi: G.dersListesi, sinavTuru: G.sinavTuru, kademe: G.kademe }); } },
   profil_analizi: { aciklama: "Notlardan 8 boyutlu profil puanı çıkarır ve kapalı sistemle profil analizi yapar (kaydetmez).", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
     calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); const dOz = ksDenemeOzetHesapla(G.denemeGirilen, G.sinavTuru); const p = (G.profil1 && G.profil1.scores) ? G.profil1.scores : pdrKapaliProfilPuani(G.gorusmeler, "", dOz).puan; return `Puanlar (${G.profil1 && G.profil1.scores ? "kayıtlı profil" : "notlardan hesaplandı"}): ${KS_BOYUTLAR.map(b => `${KS_BOYUT_BILGI[b].ad} ${p[b]}`).join(", ")}\n` + pdrKapaliProfilAnalizi(p, G.gorusmeler, "", G.kademe, dOz); } },
   supervizyon: { aciklama: "Bütün verilerden kapalı sistemle süpervizyon raporu (5P vaka formülasyonu, hipotezler, süreç denetimi) çıkarır.", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
-    calistir: (g, ctx, o) => pdrKapaliSupervizyon(ksAsistanGirdi(ctx, o)) },
+    calistir: (g, ctx, o) => pdrKapaliSupervizyon(ksAsistanGirdi(ctx, o)) + pdrFormEkBlok(ctx, o, "hepsi") },
   veli_mektubu: { aciklama: "Veliye resmî yazı taslağı hazırlar. tip: bilgilendirme | davet | bildirim | tesekkur", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "tip": "davet"}', ogrenciIster: true,
     calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); const tip = ["bilgilendirme", "davet", "bildirim", "tesekkur"].includes(g.tip) ? g.tip : "bilgilendirme"; return pdrKapaliVeliMektubu({ ogrenciAd: o.name, sinif: o.className, tip, gorusmeler: G.gorusmeler, kademe: G.kademe }); } },
   liste: {
@@ -12323,6 +12325,31 @@ const KS_ASISTAN_ARACLAR = {
       return `Görüşme düzeltildi (${r.date}${yt ? " → " + yt : ""}).${tasimaNotu}${r.grupKatilimcilari && r.grupKatilimcilari.length ? ` Bu bir grup görüşmesi; diğer öğrencilerin (${r.grupKatilimcilari.join(", ")}) kayıtları ayrı, gerekirse onları da düzeltmeyi öner.` : ""} Bu nota dayanan risk/müdahale kaydı varsa yeniden değerlendirme gerekebilir.`;
     },
   },
+  form_sablonu: {
+    aciklama: "Görüşme formlarının listesini (form verilmezse) ya da bir formun soru id'lerini, türlerini ve seçeneklerini getirir. Danışmanın anlattığı görüşmeyi forma işlemeden (ekranda_form_doldur) ÖNCE çağır; seçenek metinlerini buradan BİREBİR al.",
+    girdi: '{"form": "davranis | veli | ogretmen | ilk | zorbalik_magdur | zorbalik_uygulayan | devamsizlik | kriz | sinav (boşsa liste)"}', yontem: "hepsi",
+    calistir: (g) => {
+      const sab = pdrFormSablon(String(g.form || "").trim());
+      if (!sab) return "Görüşme formları (form id — ad — tür — konu):\n" + PDR_FORM_SABLONLARI.map(x => `• ${x.id} — ${x.kisa || x.ad} — ${x.tur} görüşmesi — ${x.konu ? x.konu + (x.altkonu ? " › " + x.altkonu : "") : "risk işaretine göre"}`).join("\n");
+      return pdrFormSablonMetni(sab).replace(sab.ad, sab.kisa || sab.ad);
+    },
+  },
+  form_analizi: {
+    aciklama: "Öğrencinin FORM ile yapılmış görüşmelerini cihazda (kapalı sistem) analiz eder; risk ayrıntısı gönderilmez. tur: takip (seanslar arası puan değişimi; devam eden, yeni ve artık işaretlenmeyen maddeler) | hazirlik (sonraki görüşmede sorulacaklar: kararlaştırılan adımlar, yeniden ölçülecek takip maddeleri, boş kalan sorular) | karsilastir (öğrenci, veli ve öğretmen formlarındaki bulguların tema tema karşılaştırması, farklı görüşler) | hepsi. 'Formlara göre nasıl gidiyor', 'sonraki görüşmeye hazırlık', 'veli ve öğretmen ne diyor' sorularında kullan.",
+    girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "tur": "hepsi"}', ogrenciIster: true, yontem: "hepsi",
+    calistir: (g, ctx, o) => pdrFormAnalizMetni(ctx.records, o, g.tur),
+  },
+  ekranda_form_doldur: {
+    aciklama: "Danışmanın anlattığı görüşmeyi Görüşme Notu ekranında FORM ile doldurur: öğrenciyi seçer, formu açar ve yanıtları işaretler; asistanın işaretledikleri 🤖 ile gösterilir, danışman kontrol edip Kaydet'e basar. ÖNCE form_sablonu ile formu al; yanitlar'da soru id'lerini ve seçenek metinlerini BİREBİR kullan. Yalnız danışmanın açıkça söylediğini işaretle, tahmin etme; risk seçeneklerini yalnız açıkça söylendiyse seç. ek_not: forma sığmayan kısa not (isteğe bağlı).",
+    girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "form": "davranis", "yanitlar": {"dtur": ["Akranla fiziksel kavga"], "idare": 2, "neden": "kısa metin"}, "tarih": "GG.AA.YYYY", "ek_not": "isteğe bağlı"}', ogrenciIster: true, ekran: true, ekranYazma: true, yontem: "hepsi",
+    calistir: async (g, ctx, o) => {
+      const sab = pdrFormSablon(String(g.form || "").trim());
+      if (!sab) return "Form bulunamadı; form_sablonu ile listeye bak ve form id'sini ver.";
+      const on = pdrFormYanitUygula(sab, null, g.yanitlar);
+      if (!on.dolan.length) return "Hiçbir yanıt forma uymadı" + (on.atlanan.length ? ": " + on.atlanan.slice(0, 6).join("; ") : "") + ". form_sablonu ile soru id'lerini ve seçenekleri birebir al.";
+      return ksEkranFormDoldur(o, sab, g, on);
+    },
+  },
   // ── Ekranda göstererek çalışan araçlar: formu danışmanın gözü önünde doldurur, Kaydet'e danışman basar ──
   ekranda_ac: {
     aciklama: "Programda bir ekranı açar (öğrenci verilirse o öğrenciyle). 'Dosyasını aç' için ekran=dosya, 'görüşme notlarını göster' için ekran=gorusmeler (öğrencinin kayıtlı görüşmeleri), yeni not formu için gorusme. Program haritasındaki herhangi bir ekran anahtarı da olur. ekran: dosya | gorusmeler | profil | ogrenciler | gorusme | risk | mudahale | hatirlatici | takvim | deneme | testler | sinif | devamsizlik | belgeler | istatistik | uyum | prof",
@@ -12387,6 +12414,7 @@ function ksAsistanOgrenciDosyasi(ctx, o) {
     gor.slice(0, 6).forEach(r => b.push(`• ${r.date}${r.topic ? " · " + r.topic : ""}${r.meetingType && r.meetingType !== "Öğrenci" ? " · " + r.meetingType : ""}${r.grupKatilimcilari && r.grupKatilimcilari.length ? " · grup" : ""}: ${K(r.summary || r.raw, 280)}`));
     if (gor.length > 6) b.push(`  (daha eski ${gor.length - 6} görüşme var; gerekirse gorusme_notlari ile adet artır)`);
   } else b.push("\nGÖRÜŞMELER: kayıt yok.");
+  try { if (pdrFormOgrKayitlari(ctx.records, o).length) b.push("\nGÖRÜŞME FORMLARI:\n" + ksAsistanKisalt(pdrFormAnalizMetni(ctx.records, o, "takip").replace(/^📈 SEANSLAR ARASI TAKİP\n/, ""), 1200)); } catch (e) {}
   // Akademik
   const ogrDen = pdrSozlukOku(ctx.denemeler, ad, sinif, no) || pdrSozlukOku(ctx.denemeler, ad, sinif) || {};
   const dersler = aktifDersler(ctx.sinavTuru);
@@ -13352,6 +13380,8 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - Sınıf mevcudu, şube listesi ya da yeni gelen/nakil öğrenci sorulduğunda sinif_bilgisi kullan.
 - Danışman sayısal veri grafiği isterse grafik_ciz kullan (sayıları kendin hesaplama). Şema, akış şeması, döngü, zihin haritası, karşılaştırma, zaman çizelgesi ya da kademe/piramit görseli isterse diyagram_ciz kullan; maddeleri kısa ve öz yaz. Dönem/ay özeti, faaliyet raporu görseli, kurul ya da veli toplantısı sunumu isterse infografik_rapor kullan. Yanıtında grafikteki sayıları tekrar listeleme; 1-2 cümlelik yorum yeter.
 - Mesleki/kuramsal sorularda (gelişim, öğrenme, motivasyon, çalışma teknikleri, üstbiliş, pozitif psikoloji, danışma kuramları ve teknikleri, görüşme becerileri, grup, etik ve gizlilik, mevzuat ve RAM süreçleri, klinik belirtiler ve yönlendirme, ölçme-değerlendirme, test yorumu, bireyi tanıma teknikleri) önce alan_bilgisi'ni çağır, gerekirse ikinci bir bölüm aç; bilgiyi öğrencinin kendi verisiyle birleştir. Belirti konuşurken tanı koyma ("… belirtileri gözleniyor, … açısından değerlendirme önerilir"), ilaç önerme. Kendine zarar, intihar, istismar ya da psikoz belirtisi geçen her durumda alan_bilgisi'nden pdr.kriz veya pdr.ihmal_istismar bölümünü aç ve okulun yapması gerekenleri sırayla, açıkça yaz.
+- Danışman bir görüşmeyi anlatıp 'forma işle / formla kaydet' dediğinde ya da anlattığı görüşme açıkça bir forma uyuyorsa (davranış, veli, öğretmen, ilk görüşme, zorbalık, devamsızlık, sınav kaygısı, kriz): form_sablonu ile formu al, yalnız açıkça söylenenleri soru id'si ve BİREBİR seçenek metniyle ekranda_form_doldur'a ver. Tahminle işaretleme; söylenmeyeni boş bırak.
+- Form ile görüşülmüş öğrencide gidişat, seans hazırlığı ya da veli/öğretmen görüşü sorulduğunda form_analizi'ni kullan. Takipte değişimi sayılarla söyle; karşılaştırmada farklı görüşleri 'kim haklı' diye değil 'hangi ortamda/koşulda' diye yorumla; sonunda somut bir sonraki adım öner. Müdahale planı ya da süpervizyon yaparken formlu görüşme varsa form_analizi bulgularını da dayanak al.
 - Bir öğrenci için müdahale planı yaptığında ya da kaydettiğinde, ardından mudahale_programi_ara ile (aranan: planın anahtar kavramları, ogrenci: öğrenci) Müdahale Programları kütüphanesinden aday oturumları al; en uygun 1-3 oturumu seçip mudahale_programi_kaydet ile (plan kaydedildiyse plana_ekle: true) onaya sun. Danışman 'program/etkinlik/oturum öner' dediğinde de aynısını yap. Listede olmayan oturum adı uydurma.
 - Bir araç sonucunda "🎓 SÜPERVİZÖR … düzeltme istedi" yazarsa notları uygula ve aracı düzeltilmiş içerikle hemen yeniden çağır; danışmana soru sorma. Süpervizör notu "uygun" ise yanıtında tek cümleyle belirtebilirsin.
 - Lise taban puanı, yüzdelik dilim, "kaç netle hangi okul", tercih listesi sorulduğunda lise_taban_puanlari kullan (Beylikdüzü, Esenyurt, Başakşehir, Büyükçekmece, Avcılar ayrıntılı). Öğrenci adı geçiyorsa önce deneme_analizi ile ortalama netini al. Araçta olmayan okulun puanını uydurma; değerlerin 2026 tabanı olduğunu ve her yıl değiştiğini söyle.
@@ -16526,8 +16556,9 @@ ${dolu ? "" : `<div class="amac">${e(sab.aciklama || "")}</div>`}`;
 }
 
 // Formu doldurma / gösterme (salt: yalnız okunur, yanıtlanmış sorular)
-function PdrFormDoldur({ sablon, deger, setDeger, salt }) {
+function PdrFormDoldur({ sablon, deger, setDeger, salt, isaretli }) {
   const [acik, setAcik] = useState(() => salt ? Object.fromEntries(sablon.bolumler.map((_, i) => [i, true])) : { 0: true });
+  useEffect(() => { if (!isaretli || !isaretli.length) return; const ac = {}; sablon.bolumler.forEach((b, i) => { if (b.sorular.some(q => isaretli.includes(q.id))) ac[i] = true; }); setAcik(a => ({ ...a, ...ac })); }, [isaretli]);
   const f = deger || pdrFormBos(sablon.id);
   const guncelle = (fn) => { if (salt || !setDeger) return; const y = { ...f, c: { ...(f.c || {}) }, n: { ...(f.n || {}) }, p: { ...(f.p || {}) } }; fn(y); setDeger(y); };
   const sec = (q, o) => guncelle(y => {
@@ -16573,7 +16604,7 @@ function PdrFormDoldur({ sablon, deger, setDeger, salt }) {
                 {b.amac && !salt && <div style={{ fontSize: 11.5, color: MUTED, fontStyle: "italic", marginBottom: 8, lineHeight: 1.45 }}>{b.amac}</div>}
                 {sorular.map(q => (
                   <div key={q.id} style={{ marginBottom: 12 }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 700, color: TEXT, marginBottom: 6, lineHeight: 1.4 }}>{q.metin}{q.tip === "tek" && !salt ? <span style={{ fontWeight: 500, color: MUTED }}> (tek seçim)</span> : null}</div>
+                    <div style={{ fontSize: 12.5, fontWeight: 700, color: TEXT, marginBottom: 6, lineHeight: 1.4 }}>{isaretli && isaretli.includes(q.id) && <span data-testid="form-asistan-isaret" title="Nottan işaretlendi — kontrol et">🤖 </span>}{q.metin}{q.tip === "tek" && !salt ? <span style={{ fontWeight: 500, color: MUTED }}> (tek seçim)</span> : null}</div>
                     {(q.tip === "coklu" || q.tip === "tek") && (
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                         {(salt ? q.secenekler.filter(o => ((f.c || {})[q.id] || []).includes(o.m)) : q.secenekler).map(o => {
@@ -16655,6 +16686,7 @@ function PdrOgrenciFormlar({ kayitlar, ogrenci, sinif, onGuncelle }) {
   const sablonlar = [...new Set(formlu.map(r => r.form.sablon))].map(pdrFormSablon);
   return (
     <div data-testid="ogr-formlar">
+      <PdrFormAnaliz kayitlar={formlu} />
       {sablonlar.map(sab => {
         const seriler = pdrFormTakipSerisi(formlu, sab);
         if (!seriler.length) return null;
@@ -16727,6 +16759,311 @@ function pdrFormTakipTara(records, riskListesi) {
   });
   return bulgular;
 }
+// ── 🤖 FORM ASİSTANI BAŞLANGIÇ ──
+// Notu forma dökme, seanslar arası takip özeti, sonraki görüşmeye hazırlık ve
+// öğrenci–veli–öğretmen karşılaştırması. Analizler cihazda (kapalı sistem) yapılır;
+// yapay zekâya yalnızca danışmanın istediği not + form yapısı gider (kalkan açık).
+function pdrFormSoruMetni(q) { return String(q.metin || q.etiket || "").replace(/^\d+(\.\d+)*\s+/, ""); }
+// Şablonun yapay zekâya gidecek kısa metni (yalnız soru/seçenek; öğrenci verisi yok)
+function pdrFormSablonMetni(sab) {
+  const tipAd = { coklu: "çoklu seçim", tek: "tek seçim", puan: "puan 0-10", sayi: "sayı", metin: "kısa metin", uzun: "uzun metin", tarih: "tarih GG.AA.YYYY", sorular: "soru listesi; yanıtları tek metin olarak yaz" };
+  const b = [`FORM: ${sab.id} — ${sab.ad} (${sab.tur} görüşmesi)`];
+  sab.bolumler.forEach(bl => {
+    b.push(`# ${bl.baslik}`);
+    bl.sorular.forEach(q => {
+      let s = `${q.id} [${tipAd[q.tip] || q.tip}] ${q.metin}`;
+      if (q.secenekler && q.tip !== "sorular") s += "\n   seçenekler: " + q.secenekler.map(o => o.m + (o.r ? " (!risk)" : "") + (o.y ? " (yok)" : "") + (o.n ? " (+not)" : "")).join(" | ");
+      b.push(s);
+    });
+  });
+  return b.join("\n");
+}
+// Verilen metni sorunun seçeneğiyle eşleştirir ("Diğer: ..." → Diğer + not)
+function pdrFormSecenekBul(q, v) {
+  const t = String(v == null ? "" : v).trim(); if (!t) return null;
+  const st = ksSade(t), ops = q.secenekler || [];
+  let o = ops.find(x => ksSade(x.m) === st), not = "";
+  if (!o) {
+    o = ops.filter(x => ksSade(x.m) && st.startsWith(ksSade(x.m))).sort((a, b) => b.m.length - a.m.length)[0];
+    if (o) not = t.slice(o.m.length).replace(/^[\s:–—\-(]+/, "").replace(/\)\s*$/, "").trim();
+  }
+  if (!o && st.length >= 4) o = ops.find(x => ksSade(x.m).includes(st));
+  return o ? { o, not } : null;
+}
+// Yanıtları (soru id → değer) forma uygular; formda olmayanlar "atlanan" olarak döner
+function pdrFormYanitUygula(sab, f0, yanitlar) {
+  const b = f0 || pdrFormBos(sab.id);
+  const f = { ...b, c: { ...(b.c || {}) }, n: { ...(b.n || {}) }, p: { ...(b.p || {}) } };
+  const dolan = [], atlanan = [], sorular = pdrFormSorular(sab);
+  Object.entries(yanitlar && typeof yanitlar === "object" ? yanitlar : {}).forEach(([id, v]) => {
+    const q = sorular.find(x => x.id === String(id).trim()) || sorular.find(x => ksSade(x.etiket) === ksSade(id));
+    if (!q) { atlanan.push(`${id}: formda böyle soru yok`); return; }
+    if (v === null || v === undefined || v === "" || (Array.isArray(v) && !v.length)) return;
+    if (q.tip === "coklu" || q.tip === "tek") {
+      let secili = [...(f.c[q.id] || [])], ok = false;
+      (Array.isArray(v) ? v : [v]).forEach(x => {
+        const r = pdrFormSecenekBul(q, x);
+        if (!r) { atlanan.push(`${q.etiket}: "${x}" seçeneklerde yok`); return; }
+        if (q.tip === "tek" || r.o.y) secili = [r.o.m];
+        else { secili = secili.filter(m => !(q.secenekler.find(s => s.m === m) || {}).y); if (!secili.includes(r.o.m)) secili.push(r.o.m); }
+        if (r.o.n && r.not) f.n[q.id + "|" + r.o.m] = r.not;
+        ok = true;
+      });
+      if (ok) { f.c[q.id] = secili; dolan.push(q.id); }
+    } else if (q.tip === "puan" || q.tip === "sayi") {
+      const m = String(Array.isArray(v) ? v[0] : v).replace(",", ".").match(/\d+(\.\d+)?/);
+      const s = m ? Math.round(Number(m[0])) : NaN;
+      if (isNaN(s) || (q.tip === "puan" && s > 10)) { atlanan.push(`${q.etiket}: "${v}" geçerli bir sayı değil`); return; }
+      f.p[q.id] = s; dolan.push(q.id);
+    } else if (q.tip === "tarih") {
+      const t = ksAsistanTarihNormal(Array.isArray(v) ? v[0] : v);
+      if (!t) { atlanan.push(`${q.etiket}: "${v}" tarih değil (GG.AA.YYYY)`); return; }
+      f.n[q.id] = t; dolan.push(q.id);
+    } else {
+      const t = (Array.isArray(v) ? v.join("\n") : String(v)).trim();
+      if (t) { f.n[q.id] = t; dolan.push(q.id); }
+    }
+  });
+  return { form: f, dolan: [...new Set(dolan)], atlanan };
+}
+const PDR_FORM_DOLDUR_SISTEM = `Sen bir okul psikolojik danışmanının yardımcısısın. Danışmanın serbest yazdığı görüşme notunu verilen yapılandırılmış forma işleyeceksin.
+KURALLAR:
+- Yalnızca notta AÇIKÇA geçen bilgiyi işaretle; tahmin yürütme. Notta karşılığı olmayan soruyu çıktıya hiç yazma.
+- Seçenekli sorularda seçenek metnini BİREBİR yaz. Uygun seçenek yoksa ve "(+not)" işaretli bir seçenek (örn. Diğer) varsa "Diğer: kısa açıklama" biçiminde yaz.
+- "(!risk)" işaretli seçenekleri yalnızca notta o durum açıkça söylenmişse seç.
+- Tek seçimli soruda tek seçenek yaz. "(yok)" seçeneğini yalnızca notta açıkça "yok/olmadı" deniyorsa seç.
+- Puan (0-10) ve sayı sorularına yalnızca notta sayı ya da çok net bir derece geçiyorsa değer ver.
+- Metin sorularına nottaki ilgili bilgiyi kısa yaz. Öğrencinin, velinin ya da öğretmenin adını hiçbir alana yazma.
+ÇIKTI: Yalnızca JSON, başka hiçbir şey yazma:
+{"yanitlar": {"soruId": ["seçenek metni"] | sayı | "metin"}, "not": "notta olup forma sığmayan önemli bilgi (kısa; yoksa boş)"}`;
+async function pdrFormNottanDoldurAI(sab, not) {
+  const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 2000, system: PDR_FORM_DOLDUR_SISTEM,
+      messages: [{ role: "user", content: pdrFormSablonMetni(sab) + "\n\nGÖRÜŞME NOTU:\n" + String(not || "").trim() }] }),
+  });
+  let data = {}; try { data = await res.json(); } catch (e) {}
+  if (!res.ok || data.error) { const m = typeof data.error === "string" ? data.error : (data.error && data.error.message) || ("HTTP " + res.status); throw new Error(m); }
+  const t = (data.content && data.content[0] && data.content[0].text) || "";
+  const m = t.match(/\{[\s\S]*\}/);
+  if (!m) throw new Error("Yapay zekânın yanıtı okunamadı. Tekrar dene.");
+  let j; try { j = JSON.parse(m[0]); } catch (e) { throw new Error("Yapay zekânın yanıtı okunamadı. Tekrar dene."); }
+  return { yanitlar: j.yanitlar || {}, not: String(j.not || "").trim() };
+}
+
+// Bir öğrencinin formlu görüşmeleri (eskiden yeniye)
+function pdrFormOgrKayitlari(records, o) {
+  return (records || []).filter(r => r.form && pdrFormSablon(r.form.sablon) && pdrAyniOgrenci(r.studentName, r.className, o.name, o.className, r.numara, o.numara))
+    .sort((a, b) => (pdrTarihMs(a.date) - pdrTarihMs(b.date)) || ((Number(a.form.seans) || 0) - (Number(b.form.seans) || 0)));
+}
+function pdrFormSablonGrup(kayitlar) {
+  const g = {}; (kayitlar || []).forEach(r => { (g[r.form.sablon] = g[r.form.sablon] || []).push(r); });
+  return Object.entries(g).map(([id, l]) => ({ sab: pdrFormSablon(id), l })).filter(x => x.sab);
+}
+// Seçili, risk ve "yok" olmayan seçenekler
+function pdrFormSeciliSade(q, f) {
+  return (((f && f.c) || {})[q.id] || []).filter(m => { const o = (q.secenekler || []).find(s => s.m === m) || {}; return !o.r && !o.y; });
+}
+// 📈 Seanslar arası takip özeti (kural tabanlı)
+function pdrFormTakipOzeti(kayitlar) {
+  return pdrFormSablonGrup(kayitlar).map(({ sab, l }) => {
+    const ilk = l[0], son = l[l.length - 1];
+    const satirlar = [];
+    pdrFormTakipSerisi(l, sab).forEach(s => {
+      const n = s.noktalar, birim = s.q.tip === "puan" ? "/10" : "";
+      if (n.length < 2) { satirlar.push(`${s.q.etiket}: ${n[0].v}${birim} (tek ölçüm)`); return; }
+      const a = n[0].v, z = n[n.length - 1].v;
+      satirlar.push(`${s.q.etiket}: ${n.map(x => x.v).join(" → ")}${birim} (${z > a ? "arttı" : z < a ? "azaldı" : "değişmedi"})`);
+    });
+    if (l.length >= 2) {
+      const f1 = l[l.length - 2].form, f2 = son.form;
+      const devam = [], yeni = [], kalkti = [];
+      pdrFormSorular(sab).filter(q => (q.tip === "coklu" || q.tip === "tek") && q.bolum !== "Görüşme bilgileri").forEach(q => {
+        const s1 = pdrFormSeciliSade(q, f1), s2 = pdrFormSeciliSade(q, f2);
+        s2.forEach(m => (s1.includes(m) ? devam : yeni).push(m));
+        if (pdrFormSoruDolu(q, f2)) s1.filter(m => !s2.includes(m)).forEach(m => kalkti.push(m));
+      });
+      if (devam.length) satirlar.push(`Son iki seansta devam eden: ${devam.slice(0, 8).join("; ")}`);
+      if (yeni.length) satirlar.push(`Son seansta yeni işaretlenen: ${yeni.slice(0, 8).join("; ")}`);
+      if (kalkti.length) satirlar.push(`Artık işaretlenmeyen: ${kalkti.slice(0, 8).join("; ")}`);
+    }
+    const rs = l.map(r => pdrFormRiskler(sab, r.form).length);
+    if (rs.some(Boolean)) satirlar.push(`Risk bölümündeki işaret sayısı (seans sırasıyla): ${rs.join(" → ")} — ayrıntı formda; Risk Listesi'ni kontrol et.`);
+    if (!satirlar.length) satirlar.push("Karşılaştırılacak ölçüm henüz yok (tek seans, takip maddesi boş).");
+    return { sab, baslik: `${sab.ikon} ${sab.ad}: ${l.length} seans (${ilk.date}${l.length > 1 ? " → " + son.date : ""})`, satirlar };
+  });
+}
+// 🗓 Sonraki görüşmeye hazırlık (kural tabanlı): son formdan sorulacaklar
+function pdrFormHazirlik(kayitlar) {
+  return pdrFormSablonGrup(kayitlar).map(({ sab, l }) => {
+    const r = l[l.length - 1], f = r.form, sorular = pdrFormSorular(sab);
+    const m = [];
+    if (pdrFormRiskler(sab, f).length) m.push("Son formda risk işareti vardı: güvenlik değerlendirmesini yenile, okulun kriz prosedürüne göre ilerle.");
+    sorular.filter(q => (q.tip === "coklu") && /öneri|kararlaştır|strateji|adım|ödev|plan/i.test(q.etiket + " " + q.metin)).forEach(q => {
+      const s = pdrFormSeciliSade(q, f); if (s.length) m.push(`Kararlaştırılanlar uygulandı mı? (${s.slice(0, 3).join("; ")})`);
+    });
+    sorular.filter(q => q.takip).forEach(q => {
+      const v = (f.p || {})[q.id];
+      m.push(v !== undefined && v !== "" ? `Yeniden ölç: ${pdrFormSoruMetni(q)} (son: ${v}${q.tip === "puan" ? "/10" : ""})` : `Ölç (henüz ölçülmedi): ${pdrFormSoruMetni(q)}`);
+    });
+    if (l.length >= 2) {
+      const devam = [];
+      sorular.filter(q => (q.tip === "coklu" || q.tip === "tek") && q.bolum !== "Görüşme bilgileri").forEach(q => { const a = pdrFormSeciliSade(q, l[l.length - 2].form); pdrFormSeciliSade(q, f).forEach(x => { if (a.includes(x)) devam.push(x); }); });
+      if (devam.length) m.push(`Hâlâ sürüyor mu? ${devam.slice(0, 4).join("; ")}`);
+    }
+    // Süreç maddeleri (açılış, tanışma, danışman gözlemi) sorulacaklar listesine girmez
+    const surec = (q) => /danışman|gözlem/i.test(q.bolum) || /açılış|yapıldı mı|güven ilişkisi/i.test(q.etiket + " " + q.metin) || q.tip === "sorular" || ((Number(f.seans) || 1) > 1 && /tanışma|amacı/i.test(q.bolum));
+    const bos = sorular.filter(q => q.bolum !== "Görüşme bilgileri" && !q.takip && !/^(sonraki|dnot)$/.test(q.id) && q.tip !== "tarih" && !surec(q) && !pdrFormSoruDolu(q, f));
+    bos.slice(0, 5).forEach(q => m.push(`Henüz sorulmadı: ${pdrFormSoruMetni(q)}`));
+    if (bos.length > 5) m.push(`(boş kalan ${bos.length - 5} soru daha var)`);
+    const sonraki = String((f.n || {}).sonraki || "").trim();
+    return { sab, baslik: `${sab.ikon} ${sab.ad} — son form ${r.date} (${f.seans || 1}. seans)${sonraki ? ` · planlanan görüşme ${sonraki}` : ""}`, satirlar: m.length ? m : ["Bu formda sorulmadık soru ya da takip maddesi kalmadı."] };
+  });
+}
+// ⚖ Öğrenci–veli–öğretmen karşılaştırması (tema bazlı, kural tabanlı)
+const PDR_FORM_TEMALAR = [
+  ["Saldırganlık / öfke", /kavga|saldırgan|fiziksel|vurma|küfür|öfke|kızgın|zarar verme/],
+  ["Kurallar / saygı", /kural|saygısız|karşılık ver|sınıftan çık/],
+  ["Dikkat / hareketlilik", /dikkat|hareketli|yerinde dur|dersi böl|derste konuş|odaklan/],
+  ["Ders / ödev", /ödev|ders çalış|görev|derse katıl|akademik|başarı/],
+  ["Uyku", /uyku|uyuya/],
+  ["Ekran / telefon", /ekran|telefon|oyun|tablet|sosyal medya|internet/],
+  ["Akran / zorbalık", /akran|arkadaş|zorbal|dışla|yalnız|alay/],
+  ["Kaygı / üzüntü", /kaygı|endişe|üzgün|mutsuz|ağla|içine kapan|stres|korku|gergin/],
+  ["Devamsızlık", /devamsız|geç kal|okula gitmek iste|okuldan kaç/],
+  ["Aile içi değişiklik", /boşan|ayrıl|kayıp|vefat|taşın|kardeş|tartışma|aile içi/],
+];
+function pdrFormKarsilastir(kayitlar) {
+  const kaynaklar = ["Öğrenci", "Veli", "Öğretmen"].map(tur => {
+    const sonlar = pdrFormSablonGrup(kayitlar).filter(x => x.sab.tur === tur).map(x => ({ sab: x.sab, r: x.l[x.l.length - 1] }));
+    return { tur, sonlar };
+  }).filter(k => k.sonlar.length);
+  if (kaynaklar.length < 2) return { yeterli: false, kaynaklar, temalar: [], genel: [] };
+  // Ortam farkını doğrudan söyleyen genel ifadeler (örn. veli: "Evde sorun yok, okulda farklı davranıyor")
+  const genel = [];
+  kaynaklar.forEach(k => k.sonlar.forEach(({ sab, r }) => pdrFormSorular(sab).filter(q => q.secenekler).forEach(q => (((r.form.c || {})[q.id]) || []).forEach(m => {
+    if (/sorun yok|farklı davran|daha uyumlu|benzer davranışlar var|evde de/i.test(m)) genel.push(`${k.tur} formu → "${m}"`);
+  }))));
+  const temalar = PDR_FORM_TEMALAR.map(([ad, re]) => {
+    const durum = kaynaklar.map(k => {
+      const kanit = [], yok = [];
+      k.sonlar.forEach(({ sab, r }) => pdrFormSorular(sab).filter(q => q.secenekler && q.tip !== "sorular").forEach(q => {
+        pdrFormSeciliSade(q, r.form).forEach(m => { const not = ((r.form.n || {})[q.id + "|" + m] || ""); if (re.test((m + " " + not).toLocaleLowerCase("tr"))) kanit.push(m); });
+        const y = (((r.form.c || {})[q.id]) || []).find(m => ((q.secenekler.find(s => s.m === m)) || {}).y);
+        if (y && re.test((q.etiket + " " + q.metin).toLocaleLowerCase("tr"))) yok.push(`${q.etiket}: ${y}`);
+      }));
+      return { tur: k.tur, kanit: [...new Set(kanit)], yok: [...new Set(yok)] };
+    });
+    const var_ = durum.filter(d => d.kanit.length), yok = durum.filter(d => !d.kanit.length && d.yok.length), sessiz = durum.filter(d => !d.kanit.length && !d.yok.length);
+    if (!var_.length) return null;
+    const isaret = yok.length ? "⚠ farklı görüş" : sessiz.length ? "◐ yalnız bir kısmında" : "✓ hepsinde";
+    return { ad, isaret, var_, yok, sessiz };
+  }).filter(Boolean);
+  const sira = { "⚠ farklı görüş": 0, "◐ yalnız bir kısmında": 1, "✓ hepsinde": 2 };
+  temalar.sort((a, b) => sira[a.isaret] - sira[b.isaret]);
+  return { yeterli: true, kaynaklar, temalar, genel: [...new Set(genel)] };
+}
+function pdrFormKarsilastirMetni(k) {
+  if (!k.yeterli) return `Karşılaştırma için en az iki taraftan (öğrenci, veli, öğretmen) form gerekir. Şu an: ${k.kaynaklar.length ? k.kaynaklar.map(x => x.tur).join(", ") : "form yok"}.`;
+  const b = [`Karşılaştırılan son formlar: ${k.kaynaklar.map(x => `${x.tur} (${x.sonlar.map(s => s.sab.kisa + " " + s.r.date).join(", ")})`).join(" · ")}`];
+  if (k.genel.length) b.push(`Ortam karşılaştırması: ${k.genel.join(" · ")}`);
+  if (!k.temalar.length) b.push("Formlarda ortak temaya giren işaret yok.");
+  k.temalar.forEach(t => {
+    b.push(`\n${t.isaret} — ${t.ad}`);
+    t.var_.forEach(d => b.push(`  ${d.tur} formu → var (${d.kanit.slice(0, 3).join("; ")})`));
+    t.yok.forEach(d => b.push(`  ${d.tur} formu → yok (${d.yok.slice(0, 2).join("; ")})`));
+    t.sessiz.forEach(d => b.push(`  ${d.tur} formu → işaretlenmedi (sorulmamış olabilir)`));
+  });
+  b.push("\nNot: Farklı görüş çoğu zaman davranışın ortama göre değiştiğini gösterir (ev / okul / ders); kimin haklı olduğunu değil, hangi koşulda ortaya çıktığını araştır.");
+  return b.join("\n");
+}
+// Asistan ve öğrenci dosyası için tek metin
+function pdrFormAnalizMetni(records, o, tur) {
+  const kayitlar = pdrFormOgrKayitlari(records, o);
+  if (!kayitlar.length) return "Bu öğrencinin form ile yapılmış görüşmesi yok.";
+  const t = ["takip", "hazirlik", "karsilastir"].includes(tur) ? tur : "hepsi";
+  const b = [];
+  const blok = (l) => l.map(x => `${x.baslik}\n${x.satirlar.map(s => "• " + s).join("\n")}`).join("\n");
+  if (t === "takip" || t === "hepsi") b.push("📈 SEANSLAR ARASI TAKİP\n" + blok(pdrFormTakipOzeti(kayitlar)));
+  if (t === "hazirlik" || t === "hepsi") b.push("🗓 SONRAKİ GÖRÜŞMEYE HAZIRLIK\n" + blok(pdrFormHazirlik(kayitlar)));
+  if (t === "karsilastir" || t === "hepsi") b.push("⚖ ÜÇ TARAFIN KARŞILAŞTIRMASI (öğrenci, veli ve öğretmen formları)\n" + pdrFormKarsilastirMetni(pdrFormKarsilastir(kayitlar)));
+  let m = b.join("\n\n");
+  PDR_FORM_SABLONLARI.forEach(x => { if (x.kisa) m = m.split(x.ad).join(x.kisa); });
+  return m;
+}
+// Kapalı sistem araçlarının sonuna eklenen form bölümü
+function pdrFormEkBlok(ctx, o, tur) {
+  try {
+    if (!o || !pdrFormOgrKayitlari(ctx.records, o).length) return "";
+    return "\n\n📋 GÖRÜŞME FORMLARINA GÖRE\n" + pdrFormAnalizMetni(ctx.records, o, tur);
+  } catch (e) { return ""; }
+}
+
+// Öğrenci detayı › Formlar: kapalı sistem analiz kartları
+function PdrFormAnaliz({ kayitlar }) {
+  const [acik, setAcik] = useState("");
+  const sirali = (kayitlar || []).slice().sort((a, b) => (pdrTarihMs(a.date) - pdrTarihMs(b.date)) || ((Number(a.form.seans) || 0) - (Number(b.form.seans) || 0)));
+  const k = pdrFormKarsilastir(sirali);
+  const dugmeler = [["takip", "📈 Takip özeti"], ["hazirlik", "🗓 Sonraki görüşmeye hazırlık"], ...(k.yeterli ? [["karsilastir", "⚖ Öğrenci–veli–öğretmen"]] : [])];
+  const blok = (l) => l.map((x, i) => (
+    <div key={i} style={{ marginBottom: 8 }}>
+      <div style={{ fontSize: 12, fontWeight: 800, color: TEXT, marginBottom: 3 }}>{x.baslik}</div>
+      {x.satirlar.map((s, j) => <div key={j} style={{ fontSize: 12, color: TEXT, lineHeight: 1.5, paddingLeft: 8 }}>• {s}</div>)}
+    </div>
+  ));
+  return (
+    <div data-testid="form-analiz" style={{ background: "#F2FAF6", border: `1px solid ${ACCENT}`, borderRadius: 12, padding: "10px 12px", marginBottom: 12 }}>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {dugmeler.map(([id, ad]) => (
+          <button key={id} data-testid={"form-analiz-" + id} onClick={() => setAcik(a => a === id ? "" : id)} style={{ padding: "6px 10px", borderRadius: 16, border: `1.5px solid ${ACCENT}`, background: acik === id ? ACCENT : "#fff", color: acik === id ? "#fff" : ACCENT, fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>{ad}</button>
+        ))}
+      </div>
+      {acik && (
+        <div data-testid="form-analiz-metin" style={{ marginTop: 10 }}>
+          {acik === "takip" && blok(pdrFormTakipOzeti(sirali))}
+          {acik === "hazirlik" && blok(pdrFormHazirlik(sirali))}
+          {acik === "karsilastir" && <div style={{ fontSize: 12, color: TEXT, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{pdrFormKarsilastirMetni(k)}</div>}
+          <div style={{ fontSize: 10.5, color: MUTED, marginTop: 4 }}>🔒 Kapalı sistem: cihazda hesaplandı, yapay zekâ kullanılmadı. Asistana "formlara göre nasıl gidiyor" diye sorarsan yorumlayıp sonraki adımı önerir.</div>
+        </div>
+      )}
+    </div>
+  );
+}
+// Asistan: formu Görüşme Notu ekranında, danışmanın gözü önünde doldurur
+async function ksEkranFormDoldur(o, sab, g, on) {
+  return ksEkranCalistir("Form ile görüşme", async () => {
+    await ksEkranSekme("yeni", o);
+    const not0 = await ksEkranBul('[data-asistan="gorusme-not"]');
+    if (!not0) throw new Error("Görüşme notu ekranı açılamadı.");
+    if (not0.value.trim() || document.querySelector('[data-testid="form-doldur"]')) throw new Error("Görüşme Notu ekranında kaydedilmemiş bir taslak (not ya da açık form) var. Önce onu kaydet ya da temizle, sonra tekrar iste.");
+    await ksEkranOgrenciSec("gorusme", o);
+    const tb = await ksEkranBul(`[data-asistan="gorusme-tur"][data-deger="${sab.tur}"]`);
+    if (tb) { ksEkranBalon(`🤖 Görüşme türü: <b>${sab.tur}</b>`); await ksEkranTikla(tb); }
+    if (!document.querySelector(`[data-testid="form-sec"][data-deger="${sab.id}"]`)) {
+      const ac = await ksEkranBul('[data-testid="form-ile-gorusme"]');
+      if (!ac) throw new Error("“Form ile görüşme” düğmesi bulunamadı.");
+      ksEkranBalon("🤖 Form ile görüşme açılıyor…"); await ksEkranTikla(ac);
+    }
+    const sec = await ksEkranBul(`[data-testid="form-sec"][data-deger="${sab.id}"]`);
+    if (!sec) throw new Error(`${sab.ad} seçilemedi.`);
+    ksEkranBalon(`🤖 <b>${pdrHtmlKac(sab.ad)}</b> açılıyor…`); await ksEkranTikla(sec);
+    const tarih = ksAsistanTarihNormal(g.tarih);
+    const ti = await ksEkranBul('[data-asistan="gorusme-tarih"]');
+    if (ti && tarih && ti.value !== tarih) { ksEkranBalon(`🤖 Tarih yazılıyor: <b>${tarih}</b>`); await ksEkranYaz(ti, tarih); }
+    ksEkranBalon(`🤖 ${on.dolan.length} soru işaretleniyor…`);
+    window.dispatchEvent(new CustomEvent("pdr-form-asistan", { detail: { sablon: sab.id, yanitlar: g.yanitlar } }));
+    const bant = await ksEkranBul('[data-testid="form-asistan-bant"]', 4000);
+    if (!bant) throw new Error("Yanıtlar forma işlenemedi.");
+    if (String(g.ek_not || "").trim()) { const nt = await ksEkranBul('[data-asistan="gorusme-not"]'); ksEkranBalon("🤖 Ek not yazılıyor…"); await ksEkranYaz(nt, String(g.ek_not).trim()); }
+    const k = await ksEkranBul('[data-asistan="gorusme-kaydet"]');
+    if (!k) throw new Error("Kaydet düğmesi bulunamadı.");
+    try { bant.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) {}
+    await ksEkranGit(k);
+    const d = await ksEkranSonAdim(k, `📋 <b>${pdrHtmlKac(o.name)}</b> için ${pdrHtmlKac(sab.kisa || sab.ad)} formu dolduruldu: ${on.dolan.length} soru (🤖 ile işaretli). Kontrol et, gerekirse dokunarak düzelt.`);
+    return ksEkranKararMetni(d, `${sab.kisa || sab.ad} formu (${on.dolan.length} soru işaretlendi)`) + (on.atlanan.length ? ` İşlenemeyenler: ${on.atlanan.slice(0, 6).join("; ")}.` : "");
+  });
+}
+// ── 🤖 FORM ASİSTANI BİTİŞ ──
 // ── 📋 GÖRÜŞME FORMLARI BİTİŞ ──
 
 // ── İşçi Raporu ──────────────────────────────────────────────────────────────
@@ -32714,6 +33051,7 @@ const PDR_ASISTAN_ARAC_AD = {
   deneme_analizi: "Deneme analizi (kapalı sistem)", profil_analizi: "Profil analizi (kapalı sistem)", supervizyon: "Süpervizyon raporu (kapalı sistem)",
   veli_mektubu: "Veli yazısı taslağı", liste: "Liste çıkarıldı", meb_raporu: "MEB raporu taslağı",
   gorusme_kaydet: "Görüşme kaydı", hatirlatma_ekle: "Hatırlatma", risk_kaydet: "Risk kaydı", mudahale_kaydet: "Müdahale planı kaydı", mudahale_programi_ara: "📁 Program oturumları arandı", mudahale_programi_kaydet: "📁 Program oturumu önerisi kaydı",
+  form_sablonu: "📋 Form yapısı okundu", form_analizi: "📋 Form analizi (kapalı sistem)", ekranda_form_doldur: "👀 Form ekranda dolduruldu",
   ekranda_ac: "📍 Ekran açıldı", ekranda_gorusme: "👀 Görüşme formu ekranda dolduruldu", ekranda_hatirlatma: "👀 Hatırlatma ekranda dolduruldu",
   ekranda_risk: "👀 Risk formu ekranda hazırlandı", ekranda_mudahale: "👀 Müdahale planı ekranda dolduruldu",
   asistan_notu_kaydet: "📌 Öğrenciye not kaydı", not_kaydet: "📚 Yazılı / yıl sonu notu kaydı",
@@ -43490,6 +43828,29 @@ export default function App() {
   const [gorusmeFormu, setGorusmeFormu] = useState(null);
   const [formSecAcik, setFormSecAcik] = useState(false);
   const [formTumTurler, setFormTumTurler] = useState(false); // seçicide diğer görüşme türlerinin formları da görünsün mü
+  // 🤖 Asistanın / AI'ın işaretlediği sorular (danışman kontrol etsin diye gösterilir)
+  const [formAsistanQ, setFormAsistanQ] = useState(null);
+  const [formAiYukleniyor, setFormAiYukleniyor] = useState(false);
+  const gorusmeFormuRef = useRef(null); gorusmeFormuRef.current = gorusmeFormu;
+  useEffect(() => { setFormAsistanQ(null); }, [gorusmeFormu && gorusmeFormu.sablon]);
+  useEffect(() => {
+    const h = (e) => { const d = (e && e.detail) || {}; const g = gorusmeFormuRef.current; if (!g || g.sablon !== d.sablon) return;
+      const r = pdrFormYanitUygula(pdrFormSablon(g.sablon), g, d.yanitlar); setGorusmeFormu(r.form); setFormAsistanQ(r.dolan); };
+    window.addEventListener("pdr-form-asistan", h); return () => window.removeEventListener("pdr-form-asistan", h);
+  }, []);
+  async function formNottanDoldur() {
+    const sb = gorusmeFormu && pdrFormSablon(gorusmeFormu.sablon);
+    if (!sb || !form.raw.trim() || formAiYukleniyor) return;
+    setFormAiYukleniyor(true);
+    try {
+      const r = await pdrFormNottanDoldurAI(sb, form.raw);
+      const u = pdrFormYanitUygula(sb, gorusmeFormuRef.current, r.yanitlar);
+      if (!u.dolan.length) { alert("Notta bu forma işlenecek açık bir bilgi bulunamadı."); return; }
+      setGorusmeFormu(u.form); setFormAsistanQ(u.dolan);
+      if (window.confirm(`🤖 ${u.dolan.length} soru notuna göre işaretlendi (🤖 ile gösterildi; kontrol et).\n\nNotun tamamı forma işlendiği için "Ek not" kutusundaki uzun metin yerine yalnızca forma sığmayan kısmı bırakılsın mı?${r.not ? "\n\nKalacak not: " + r.not : "\n\n(Forma sığmayan bilgi yok; kutu boşalır.)"}`)) setForm(f => ({ ...f, raw: r.not || "" }));
+    } catch (e) { alert("⚠️ Forma işlenemedi: " + ((e && e.message) || e)); }
+    finally { setFormAiYukleniyor(false); }
+  }
   // Görüşme türü değişince açık form o türe ait değilse: boşsa kaldırılır, doluysa sorulur;
   // yeni türün tek formu varsa (Veli, Öğretmen) o form kendiliğinden açılır, birden çoksa seçici açılır.
   function gorusmeTuruDegistir(t) {
@@ -45282,8 +45643,12 @@ function pdrBaslangicSekmesi() {
                       </div>
                     </div>
                     {sb.aciklama && <div style={{ fontSize:11, color:MUTED, lineHeight:1.45, marginBottom:8 }}>{sb.aciklama}</div>}
-                    <PdrFormDoldur sablon={sb} deger={gorusmeFormu} setDeger={setGorusmeFormu} />
-                    <div style={{ fontSize:10.5, color:MUTED, marginTop:4 }}>Kaydedince işaretlerinden görüşme özeti oluşur (yapay zekâ kullanılmaz); aşağıya ek not da yazabilirsin.</div>
+                    {formAsistanQ && formAsistanQ.length > 0 && (
+                      <div data-testid="form-asistan-bant" style={{ background:"#FFF8E1", border:"1px solid #E9B949", borderRadius:9, padding:"7px 10px", fontSize:11.5, color:"#5C4400", fontWeight:700, marginBottom:8, lineHeight:1.45 }}>🤖 {formAsistanQ.length} soru nottan işaretlendi (soruların başında 🤖 var). Kaydetmeden önce kontrol et; yanlış olana dokunarak değiştir.</div>
+                    )}
+                    <PdrFormDoldur sablon={sb} deger={gorusmeFormu} setDeger={setGorusmeFormu} isaretli={formAsistanQ} />
+                    <button data-testid="form-nottan-doldur" onClick={formNottanDoldur} disabled={!form.raw.trim() || formAiYukleniyor} style={{ width:"100%", marginTop:4, padding:"8px", borderRadius:9, border:`1.5px solid ${form.raw.trim() && !formAiYukleniyor ? PURPLE : BORDER}`, background:"#fff", color: form.raw.trim() && !formAiYukleniyor ? PURPLE : MUTED, fontSize:12, fontWeight:800, cursor:"pointer" }}>{formAiYukleniyor ? "⏳ Not forma işleniyor…" : "✦ Ek nottaki görüşmeyi forma işle (AI)"}</button>
+                    <div style={{ fontSize:10.5, color:MUTED, marginTop:4 }}>Kaydedince işaretlerinden görüşme özeti oluşur (yapay zekâ kullanılmaz); aşağıya ek not da yazabilirsin. Görüşmeyi aşağıdaki kutuya yazıp ya da 🎤 ile anlatıp "forma işle"ye basarsan AI uygun yanıtları işaretler (adlar gizlilik kalkanıyla maskelenir).</div>
                   </div>
                 ) : null; })()}
               </div>

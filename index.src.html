@@ -11107,7 +11107,8 @@ function ksAsistanEtiket(o) { return `${o.name}${o.className ? " (" + o.classNam
 function ksAsistanGirdi(ctx, o) {
   const ad = o.name, sinif = o.className;
   const ayni = (x) => pdrAyniOgrenci(x.studentName, x.className, ad, sinif);
-  const gorusmeler = (ctx.records || []).filter(ayni);
+  // Grup görüşmesinde not tüm katılımcılara aynen kaydedilir; analizde yalnız bu öğrencinin kısmı (ve ortak cümleler) kullanılır
+  const gorusmeler = (ctx.records || []).filter(ayni).map(r => r.grupKatilimcilari && r.grupKatilimcilari.length && !r.form ? { ...r, summary: pdrOgrNotMetni(r, o, true), raw: pdrOgrNotMetni(r, o, true) } : r);
   const ogrDen = pdrSozlukOku(ctx.denemeler, ad, sinif) || {};
   const dersler = aktifDersler(ctx.sinavTuru);
   const denemeGirilen = Object.entries(ogrDen).filter(([k]) => k !== "7sinif").sort((a, b) => a[0] - b[0])
@@ -11745,6 +11746,8 @@ const KS_ASISTAN_ARACLAR = {
       const bek = G.sevkler.filter(x => x.sonucBekleniyor);
       if (G.sevkler.length) s.push(`Sevk: ${G.sevkler.length} kayıt${bek.length ? `, ${bek.length} sonuç bekliyor` : ""}.`);
       if (X.c.koruyucu.length) s.push(`Koruyucu etkenler: ${X.c.koruyucu.slice(0, 4).join(", ")}.`);
+      try { const ogr = pdrOgrKaydi(ctx, o); if (ogr && (ogr.hedefOkullar || []).length) { const a = pdrHedefOkulAnaliz(ogr.hedefOkullar, G.denemeGirilen, ogr.notNetleri); s.push(`Hedef okul: ${a.satirlar.map(x => x.s ? `${x.s.okul} (gereken ≈ ${x.gereken} net${x.fark !== null ? ", fark " + (x.fark > 0 ? x.fark : "yok") : ""})` : x.h.okul).join("; ")}.`); } } catch (e) {}
+      try { const yl = pdrYasamDuzeni((ctx.records || []).filter(r => pdrAyniOgrenci(r.studentName, r.className, o.name, o.className)), o); if (yl.length) s.push(`Yaşam düzeni uyarısı (notlardan): ${yl.map(x => x.baslik + " — " + x.tarih).join("; ")}.`); } catch (e) {}
       try { const fk = pdrFormOgrKayitlari(ctx.records, o); if (fk.length) s.push(`Formlu görüşme: ${fk.length}. ` + pdrFormTakipOzeti(fk).map(x => x.baslik.replace(x.sab.ad, x.sab.kisa || x.sab.ad) + " — " + x.satirlar.slice(0, 3).join(" | ")).join(" · ")); } catch (e) {}
       return s.join("\n");
     },
@@ -11764,17 +11767,17 @@ const KS_ASISTAN_ARACLAR = {
     calistir: (g, ctx, o) => {
       const n = Math.max(1, Math.min(10, parseInt(g.adet) || 5));
       const l = (ctx.records || []).filter(x => pdrAyniOgrenci(x.studentName, x.className, o.name, o.className)).sort((a, b) => ksTarihSirala(b, a)).slice(0, n);
-      return l.length ? l.map(x => `• ${x.date}${x.topic ? " · " + x.topic : ""}${x.meetingType && x.meetingType !== "Öğrenci" ? " · " + x.meetingType + " görüşmesi" : ""}: ${ksAsistanKisalt(x.summary || x.raw, 600)}`).join("\n") : "Bu öğrenci için görüşme notu yok.";
+      return l.length ? l.map(x => `• ${x.date}${x.topic ? " · " + x.topic : ""}${x.meetingType && x.meetingType !== "Öğrenci" ? " · " + x.meetingType + " görüşmesi" : ""}: ${ksAsistanKisalt(pdrOgrNotMetni(x, o), 600)}`).join("\n") : "Bu öğrenci için görüşme notu yok.";
     },
   },
   risk_analizi: { aciklama: "Kapalı sistemle risk analizi yapar (kaydetmez).", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
     calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); const r = pdrKapaliRiskAnalizi({ riskTuru: "", oncelik: "Orta", aciklama: "" }, G.gorusmeler, G.profil1, G.kademe, ksDenemeOzetHesapla(G.denemeGirilen, G.sinavTuru), G.ek); return (r.acil ? "⚠ KRİTİK — acil müdahale gerekiyor.\n" : "") + r.metin; } },
   seans_hazirlik: { aciklama: "Bir sonraki görüşme için kapalı sistemle hazırlık notu çıkarır.", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
-    calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); return pdrKapaliSeansHazirlik({ gorusmeler: G.gorusmeler, mudahaleler: G.mudahaleler, riskler: G.riskler, denemeAvg: G.denemeGirilen.length ? (G.denemeGirilen.reduce((t, d) => t + d.toplam, 0) / G.denemeGirilen.length).toFixed(1) : null, etkinlikHavuzu: typeof ogrenciEtkinlikHavuzu === "function" ? ogrenciEtkinlikHavuzu(o.className, G.kademe) : [], kademe: G.kademe, profil1: G.profil1 }) + pdrFormEkBlok(ctx, o, "hazirlik"); } },
+    calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); return pdrKapaliSeansHazirlik({ gorusmeler: G.gorusmeler, mudahaleler: G.mudahaleler, riskler: G.riskler, denemeAvg: G.denemeGirilen.length ? (G.denemeGirilen.reduce((t, d) => t + d.toplam, 0) / G.denemeGirilen.length).toFixed(1) : null, etkinlikHavuzu: typeof ogrenciEtkinlikHavuzu === "function" ? ogrenciEtkinlikHavuzu(o.className, G.kademe) : [], kademe: G.kademe, profil1: G.profil1 }) + pdrFormEkBlok(ctx, o, "hazirlik") + ((m) => m ? "\n\n" + m : "")(pdrOgrYasamMetni(ctx, o)) + ((m) => m ? "\n\n" + m : "")(pdrOgrHedefMetni(ctx, o)); } },
   mudahale_plani: { aciklama: "Kapalı sistemle müdahale planı önerir (kaydetmez).", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
     calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); return pdrKapaliMudahalePlani({ ek: G.ek, gorusmeler: G.gorusmeler, kademe: G.kademe, profil1: G.profil1, programlar: typeof MUDAHALE_PROGRAMLARI !== "undefined" ? MUDAHALE_PROGRAMLARI : null }) + pdrFormEkBlok(ctx, o, "takip"); } },
   deneme_analizi: { aciklama: "Kapalı sistemle deneme sonuçlarını analiz eder.", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
-    calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); return pdrKapaliDenemeAnalizi({ gorusmeler: G.gorusmeler, girilen: G.denemeGirilen, dersListesi: G.dersListesi, sinavTuru: G.sinavTuru, kademe: G.kademe }); } },
+    calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); return pdrKapaliDenemeAnalizi({ gorusmeler: G.gorusmeler, girilen: G.denemeGirilen, dersListesi: G.dersListesi, sinavTuru: G.sinavTuru, kademe: G.kademe }) + ((m) => m ? "\n\n" + m : "")(pdrOgrHedefMetni(ctx, o)); } },
   profil_analizi: { aciklama: "Notlardan 8 boyutlu profil puanı çıkarır ve kapalı sistemle profil analizi yapar (kaydetmez).", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
     calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); const dOz = ksDenemeOzetHesapla(G.denemeGirilen, G.sinavTuru); const p = (G.profil1 && G.profil1.scores) ? G.profil1.scores : pdrKapaliProfilPuani(G.gorusmeler, "", dOz).puan; return `Puanlar (${G.profil1 && G.profil1.scores ? "kayıtlı profil" : "notlardan hesaplandı"}): ${KS_BOYUTLAR.map(b => `${KS_BOYUT_BILGI[b].ad} ${p[b]}`).join(", ")}\n` + pdrKapaliProfilAnalizi(p, G.gorusmeler, "", G.kademe, dOz); } },
   supervizyon: { aciklama: "Bütün verilerden kapalı sistemle süpervizyon raporu (5P vaka formülasyonu, hipotezler, süreç denetimi) çıkarır.", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
@@ -12325,6 +12328,29 @@ const KS_ASISTAN_ARACLAR = {
       return `Görüşme düzeltildi (${r.date}${yt ? " → " + yt : ""}).${tasimaNotu}${r.grupKatilimcilari && r.grupKatilimcilari.length ? ` Bu bir grup görüşmesi; diğer öğrencilerin (${r.grupKatilimcilari.join(", ")}) kayıtları ayrı, gerekirse onları da düzeltmeyi öner.` : ""} Bu nota dayanan risk/müdahale kaydı varsa yeniden değerlendirme gerekebilir.`;
     },
   },
+  hedef_okul: {
+    aciklama: "Öğrencinin kayıtlı hedef okulları için LGS'de gereken YAKLAŞIK neti, öğrencinin şimdiki netini (son denemeler; yoksa görüşme notunda geçen net), farkı, LGS'ye kalan aya göre aylık gereken artışı ve en çok puan getirecek dersleri cihazda hesaplar. okul verirsen (kayıtlı olmasa da) o okul için hesaplar. Hedef okul, tercih ya da net farkı konuşulurken bunu kullan; gereken neti kendin tahmin etme.",
+    girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "okul": "isteğe bağlı, örn. Yaşar Acar"}', ogrenciIster: true, yontem: "hepsi",
+    calistir: (g, ctx, o) => pdrHedefOkulMetni(ctx, o, String(g.okul || "").trim()),
+  },
+  hedef_okul_kaydet: {
+    aciklama: "Öğrencinin hedef okullarına okul ekler ya da çıkarır (ONAY GEREKİR; en fazla 3 hedef). okul: programdaki taban listesindeki okul adı (kısmi olabilir), program: isteğe bağlı alan adı; cikar: true ise çıkarır.",
+    girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "okul": "Yaşar Acar", "program": "isteğe bağlı", "cikar": false}', ogrenciIster: true, yazma: true, yontem: "hepsi",
+    onayOzeti: (g, ctx, o) => { const b = pdrOkulBul(g.okul); const s = b.find(x => g.program && ksSade(x.alan).includes(ksSade(g.program))) || b.sort((a, c) => (c.taban || 0) - (a.taban || 0))[0]; return `🎯 Hedef okul ${g.cikar ? "çıkarma" : "ekleme"}\nÖğrenci: ${ksAsistanEtiket(o)}\n${s ? `${s.okul} — ${s.alan} (${s.ilce})` : "⚠ Okul taban listesinde bulunamadı."}`; },
+    calistir: async (g, ctx, o) => {
+      if (!ctx.kaydet.ogrenciler) return "Hedef okul bu ekrandan kaydedilemiyor; öğrencinin Özet kartını kullan.";
+      const liste = ctx.ogrenciler || [];
+      const idx = liste.findIndex(x => pdrAyniOgrenci(x.studentName, x.className, o.name, o.className, x.numara, o.numara));
+      if (idx < 0) return "Öğrenci listede bulunamadı.";
+      const b = pdrOkulBul(g.okul);
+      if (!b.length) return `"${g.okul}" programdaki taban listesinde yok; kaydedilmedi.`;
+      const s = b.find(x => g.program && ksSade(x.alan).includes(ksSade(g.program))) || b.slice().sort((a, c) => (c.taban || 0) - (a.taban || 0))[0];
+      const guncel = [...liste];
+      guncel[idx] = g.cikar ? { ...guncel[idx], hedefOkullar: (guncel[idx].hedefOkullar || []).filter(h => h.okul !== s.okul) } : pdrHedefEkle(guncel[idx], s.okul, s.alan, "asistan");
+      ctx.ogrenciler = guncel; await ctx.kaydet.ogrenciler(guncel);
+      return g.cikar ? `${s.okul} hedeflerden çıkarıldı.` : `${s.okul} (${s.alan}) hedef okullara eklendi.\n\n` + pdrHedefOkulMetni(ctx, o);
+    },
+  },
   form_sablonu: {
     aciklama: "Görüşme formlarının listesini (form verilmezse) ya da bir formun soru id'lerini, türlerini ve seçeneklerini getirir. Danışmanın anlattığı görüşmeyi forma işlemeden (ekranda_form_doldur) ÖNCE çağır; seçenek metinlerini buradan BİREBİR al.",
     girdi: '{"form": "davranis | veli | ogretmen | ilk | zorbalik_magdur | zorbalik_uygulayan | devamsizlik | kriz | sinav (boşsa liste)"}', yontem: "hepsi",
@@ -12411,9 +12437,10 @@ function ksAsistanOgrenciDosyasi(ctx, o) {
     const konu = {}; gor.forEach(r => { const k = r.topic || "Konusuz"; konu[k] = (konu[k] || 0) + 1; });
     const tur = {}; gor.forEach(r => { const k = r.meetingType || "Öğrenci"; tur[k] = (tur[k] || 0) + 1; });
     b.push(`\nGÖRÜŞMELER (${gor.length}; ilk ${gor[gor.length - 1].date}, son ${gor[0].date}) — konular: ${Object.entries(konu).sort((a, c) => c[1] - a[1]).map(([k, v]) => k + " " + v).join(", ")}; türler: ${Object.entries(tur).map(([k, v]) => k + " " + v).join(", ")}`);
-    gor.slice(0, 6).forEach(r => b.push(`• ${r.date}${r.topic ? " · " + r.topic : ""}${r.meetingType && r.meetingType !== "Öğrenci" ? " · " + r.meetingType : ""}${r.grupKatilimcilari && r.grupKatilimcilari.length ? " · grup" : ""}: ${K(r.summary || r.raw, 280)}`));
+    gor.slice(0, 6).forEach(r => b.push(`• ${r.date}${r.topic ? " · " + r.topic : ""}${r.meetingType && r.meetingType !== "Öğrenci" ? " · " + r.meetingType : ""}${r.grupKatilimcilari && r.grupKatilimcilari.length ? " · grup" : ""}: ${K(pdrOgrNotMetni(r, o), 280)}`));
     if (gor.length > 6) b.push(`  (daha eski ${gor.length - 6} görüşme var; gerekirse gorusme_notlari ile adet artır)`);
   } else b.push("\nGÖRÜŞMELER: kayıt yok.");
+  try { const hm = pdrOgrHedefMetni(ctx, o); if (hm) b.push("\n" + hm); const ym = pdrOgrYasamMetni(ctx, o); if (ym) b.push("\n" + ym); } catch (e) {}
   try { if (pdrFormOgrKayitlari(ctx.records, o).length) b.push("\nGÖRÜŞME FORMLARI:\n" + ksAsistanKisalt(pdrFormAnalizMetni(ctx.records, o, "takip").replace(/^📈 SEANSLAR ARASI TAKİP\n/, ""), 1200)); } catch (e) {}
   // Akademik
   const ogrDen = pdrSozlukOku(ctx.denemeler, ad, sinif, no) || pdrSozlukOku(ctx.denemeler, ad, sinif) || {};
@@ -13380,6 +13407,9 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - Sınıf mevcudu, şube listesi ya da yeni gelen/nakil öğrenci sorulduğunda sinif_bilgisi kullan.
 - Danışman sayısal veri grafiği isterse grafik_ciz kullan (sayıları kendin hesaplama). Şema, akış şeması, döngü, zihin haritası, karşılaştırma, zaman çizelgesi ya da kademe/piramit görseli isterse diyagram_ciz kullan; maddeleri kısa ve öz yaz. Dönem/ay özeti, faaliyet raporu görseli, kurul ya da veli toplantısı sunumu isterse infografik_rapor kullan. Yanıtında grafikteki sayıları tekrar listeleme; 1-2 cümlelik yorum yeter.
 - Mesleki/kuramsal sorularda (gelişim, öğrenme, motivasyon, çalışma teknikleri, üstbiliş, pozitif psikoloji, danışma kuramları ve teknikleri, görüşme becerileri, grup, etik ve gizlilik, mevzuat ve RAM süreçleri, klinik belirtiler ve yönlendirme, ölçme-değerlendirme, test yorumu, bireyi tanıma teknikleri) önce alan_bilgisi'ni çağır, gerekirse ikinci bir bölüm aç; bilgiyi öğrencinin kendi verisiyle birleştir. Belirti konuşurken tanı koyma ("… belirtileri gözleniyor, … açısından değerlendirme önerilir"), ilaç önerme. Kendine zarar, intihar, istismar ya da psikoz belirtisi geçen her durumda alan_bilgisi'nden pdr.kriz veya pdr.ihmal_istismar bölümünü aç ve okulun yapması gerekenleri sırayla, açıkça yaz.
+- Hedef okul, tercih ya da 'kaç net gerekir / fark ne' konuşulduğunda hedef_okul aracını kullan (okul verebilirsin); gereken neti ya da tabanı kendin tahmin etme. Danışman hedef okulu söylerse hedef_okul_kaydet ile öner. Farkı söylerken en çok puan getirecek dersleri ve aylık küçük hedefi de ver; öğrenciyi başkasıyla kıyaslama.
+- Öğrenci dosyasında ya da seans hazırlığında YAŞAM DÜZENİ uyarısı (geç yatma, kısa uyku, uzun ekran süresi, kahvaltı) varsa önerilerine kat: akademik sorunla ilişkisini (dikkat, deneme dalgalanması) düşün, veliyle ortak plan öner; tanı koyma.
+- Grup görüşmesi notlarında '[grup görüşmesi; bu öğrenciyle ilgili kısım]' yazan bölüm yalnız o öğrenciye aittir; diğer katılımcılarla ilgili cümleleri bu öğrenciye mal etme.
 - Danışman bir görüşmeyi anlatıp 'forma işle / formla kaydet' dediğinde ya da anlattığı görüşme açıkça bir forma uyuyorsa (davranış, veli, öğretmen, ilk görüşme, zorbalık, devamsızlık, sınav kaygısı, kriz): form_sablonu ile formu al, yalnız açıkça söylenenleri soru id'si ve BİREBİR seçenek metniyle ekranda_form_doldur'a ver. Tahminle işaretleme; söylenmeyeni boş bırak.
 - Form ile görüşülmüş öğrencide gidişat, seans hazırlığı ya da veli/öğretmen görüşü sorulduğunda form_analizi'ni kullan. Takipte değişimi sayılarla söyle; karşılaştırmada farklı görüşleri 'kim haklı' diye değil 'hangi ortamda/koşulda' diye yorumla; sonunda somut bir sonraki adım öner. Müdahale planı ya da süpervizyon yaparken formlu görüşme varsa form_analizi bulgularını da dayanak al.
 - Bir öğrenci için müdahale planı yaptığında ya da kaydettiğinde, ardından mudahale_programi_ara ile (aranan: planın anahtar kavramları, ogrenci: öğrenci) Müdahale Programları kütüphanesinden aday oturumları al; en uygun 1-3 oturumu seçip mudahale_programi_kaydet ile (plan kaydedildiyse plana_ekle: true) onaya sun. Danışman 'program/etkinlik/oturum öner' dediğinde de aynısını yap. Listede olmayan oturum adı uydurma.
@@ -17064,6 +17094,293 @@ async function ksEkranFormDoldur(o, sab, g, on) {
   });
 }
 // ── 🤖 FORM ASİSTANI BİTİŞ ──
+// ── 🎯 HEDEF OKUL VE YAŞAM DÜZENİ BAŞLANGIÇ ──
+// Grup notunu öğrenciye bölme, hedef okul (gereken net / fark), nottan okul ve net
+// yakalama, uyku-ekran-kahvaltı uyarıları. Hepsi cihazda, kural tabanlı.
+
+// ── Grup görüşmesi notunu öğrenciye bölme ──
+function pdrSadeKelimeler(t) { return ksSade(t).split(/[^\p{L}\p{N}]+/u).filter(Boolean); }
+function pdrAdKokleri(ad) { return String(ad || "").split(/\s+/).filter(w => w && !w.includes("*")).map(w => ksSade(w).replace(/[^\p{L}]/gu, "")).filter(w => w.length >= 3); }
+function pdrCumleler(t) { return String(t || "").replace(/([.!?…])\s+/g, "$1\n").split(/\n+/).map(s => s.trim()).filter(Boolean); }
+// Cümleler, adı geçen öğrenciye; adsız cümleler bir önceki adı geçen öğrenciye bağlanır.
+// "Öğrenciler / hepsi / birlikte" gibi cümleler ortak sayılır.
+function pdrGrupNotBol(metin, benAd, digerAdlar) {
+  const kat = [benAd, ...(digerAdlar || [])].map(pdrAdKokleri);
+  const kendi = [], ortak = []; let son = -1;
+  pdrCumleler(metin).forEach(c => {
+    const tk = pdrSadeKelimeler(c);
+    const puan = kat.map(kk => kk.filter(k => tk.some(t => t === k || (t.startsWith(k) && t.length - k.length <= 4))).length);
+    const mx = Math.max(0, ...puan);
+    if (mx > 0) {
+      const idx = puan.map((p, i) => p === mx ? i : -1).filter(i => i >= 0);
+      son = idx.length === 1 ? idx[0] : -2;
+      if (idx.includes(0)) kendi.push(c); else if (idx.length > 1) ortak.push(c);
+      return;
+    }
+    if (/öğrenciler|hepsi|hepsine|ikisi|üçü|birlikte|grup|herkes/i.test(c)) { ortak.push(c); son = -1; return; }
+    if (son === 0) kendi.push(c); else if (son < 0) ortak.push(c);
+  });
+  return { kendi: kendi.join(" "), ortak: ortak.join(" ") };
+}
+// Öğrencinin görüşme notundan KENDİ kısmı (grup görüşmesinde); etiketli: asistan için, sade: kapalı sistem için
+function pdrOgrNotMetni(r, o, sade) {
+  const tam = String(r.summary || r.raw || "");
+  if (!r.grupKatilimcilari || !r.grupKatilimcilari.length) return tam;
+  if (r.form) return tam;
+  const b = pdrGrupNotBol(tam, o.name || r.studentName, r.grupKatilimcilari);
+  if (!b.kendi) return sade ? b.ortak || tam : `[grup görüşmesi; bu öğrenciye özel cümle bulunamadı] ${tam}`;
+  if (sade) return [b.kendi, b.ortak].filter(Boolean).join(" ");
+  return `[grup görüşmesi; bu öğrenciyle ilgili kısım] ${b.kendi}${b.ortak ? ` [ortak: ${b.ortak}]` : ""}`;
+}
+
+// ── Hedef okul ──
+const PDR_OKUL_GENEL = new Set(["fen", "lisesi", "lise", "anadolu", "mtal", "mesleki", "ve", "teknik", "imam", "hatip", "sosyal", "bilimler", "proje", "okulu", "kiz", "erkek", "amp", "aihl", "sehit", "mesleki", "ticaret", "saglik", "spor", "guzel", "sanatlar", "cok", "programli"]);
+function pdrOkulAyirt(okul) { return pdrSadeKelimeler(okul).filter(w => w.length >= 3 && !PDR_OKUL_GENEL.has(w)); }
+function pdrDuzeltmeUzakligi(a, b) {
+  if (Math.abs(a.length - b.length) > 1) return 9;
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[a.length][b.length];
+}
+function pdrKelimeEslesir(a, t) {
+  if (a === t) return true;
+  if (a.length >= 4 && t.startsWith(a) && t.length - a.length <= 5) return true;          // ek almış: "acar'ı" → "acari"
+  return Math.min(a.length, t.length) >= 3 && Math.max(a.length, t.length) >= 4 && pdrDuzeltmeUzakligi(a, t) <= 1; // yazım hatası: "acr"
+}
+function pdrTabanListesi() { try { return typeof ksTabanSatirlar === "function" ? ksTabanSatirlar() : []; } catch (e) { return []; } }
+// Metinde adı geçen okullar (taban listesindeki okul adları; yazım hatasına toleranslı)
+function pdrNottakiOkullar(metin) {
+  const cumleler = pdrCumleler(metin).map(pdrSadeKelimeler);
+  const okullar = [...new Set(pdrTabanListesi().map(s => s.okul))];
+  return okullar.filter(ok => {
+    const ay = pdrOkulAyirt(ok);
+    if (!ay.length) return false;
+    const tur = pdrSadeKelimeler(ok).filter(w => PDR_OKUL_GENEL.has(w));
+    return cumleler.some(tk => {
+      if (ay.length === 1)                       // tek ayırt edici sözcük (örn. "Esenyurt Fen Lisesi"): okul türüyle birlikte geçmeli
+        return ay[0].length >= 5 && tk.some((t, i) => pdrKelimeEslesir(ay[0], t) && tur.includes(tk[i + 1]));
+      // Ayırt edici sözcükler aynı cümlede ve yan yana (araya en fazla 1 sözcük) geçmeli
+      const yer = ay.map(a => tk.findIndex(t => pdrKelimeEslesir(a, t))).filter(i => i >= 0);
+      return yer.length >= 2 && yer.length >= Math.ceil(ay.length * 0.6) && Math.max(...yer) - Math.min(...yer) <= yer.length;
+    });
+  });
+}
+// Okul adı (kısmi) → taban satırları
+function pdrOkulBul(q) {
+  const l = pdrTabanListesi(); const s = ksSade(String(q || "").trim());
+  if (!s) return [];
+  const dogrudan = l.filter(x => ksSade(x.okul + " " + x.alan).includes(s));
+  if (dogrudan.length) return dogrudan;
+  const ad = pdrNottakiOkullar(q);
+  return l.filter(x => ad.includes(x.okul));
+}
+// Puan → yaklaşık net (KS_LGS_NET_PUAN tablosunun tersi)
+function ksPuanNetTahmin(puan) {
+  const t = KS_LGS_NET_PUAN;
+  if (puan >= t[0][1]) return t[0][0];
+  for (let i = 0; i < t.length - 1; i++) {
+    const [n1, p1] = t[i], [n2, p2] = t[i + 1];
+    if (puan <= p1 && puan >= p2) return +(n2 + (puan - p2) / (p1 - p2) * (n1 - n2)).toFixed(1);
+  }
+  return t[t.length - 1][0];
+}
+// Metinde geçen deneme netleri (yalnız deneme/LGS/sınav bağlamında)
+function pdrNottakiNetler(metin) {
+  const l = [];
+  pdrCumleler(metin).forEach(c => {
+    if (!/deneme|lgs|sınav|sinav/i.test(c)) return;
+    const re = /(\d{1,2}(?:[.,]\d{1,2})?)\s*net/gi; let m;
+    while ((m = re.exec(c))) { const v = parseFloat(m[1].replace(",", ".")); if (v >= 5 && v <= 90) l.push(v); }
+  });
+  return l;
+}
+function pdrLgsAyKaldi() {
+  const s = new Date(); const y = s.getMonth() > 5 || (s.getMonth() === 5 && s.getDate() > 15) ? s.getFullYear() + 1 : s.getFullYear();
+  return Math.max(1, Math.round((new Date(y, 5, 14) - s) / (30.4 * 86400000)));
+}
+// Öğrencinin şimdiki neti: son denemeler; yoksa notta geçen net
+function pdrOgrGuncelNet(denemeGirilen, notNetleri) {
+  const d = (denemeGirilen || []).filter(x => x && x.toplam > 0);
+  if (d.length) { const son3 = d.slice(-3); return { kaynak: "deneme", son: +d[d.length - 1].toplam.toFixed(1), ort: +(son3.reduce((t, x) => t + x.toplam, 0) / son3.length).toFixed(1), n: son3.length, sonNets: d[d.length - 1].nets }; }
+  const nn = (notNetleri || []).slice().sort((a, b) => pdrTarihMs(a.tarih) - pdrTarihMs(b.tarih));
+  if (nn.length) { const s = nn[nn.length - 1]; return { kaynak: "not", son: s.net, ort: s.net, n: 1, tarih: s.tarih }; }
+  return null;
+}
+// En çok puan getirecek dersler (son deneme): eksik net × katsayı
+function pdrPotansiyelDersler(nets) {
+  if (!nets) return [];
+  return LGS_DERSLER.map(d => { const v = parseFloat(nets[d.key]); return isNaN(v) ? null : { ad: d.label, net: v, maks: d.maks, k: /turkce|mat|fen/.test(d.key) ? 4 : 1 }; })
+    .filter(Boolean).map(x => ({ ...x, pot: (x.maks - x.net) * x.k })).sort((a, b) => b.pot - a.pot).slice(0, 2);
+}
+function pdrHedefOkulAnaliz(hedefler, denemeGirilen, notNetleri) {
+  const l = pdrTabanListesi(), guncel = pdrOgrGuncelNet(denemeGirilen, notNetleri), ay = pdrLgsAyKaldi();
+  const satirlar = (hedefler || []).map(h => {
+    const s = l.find(x => x.okul === h.okul && x.alan === h.alan) || l.filter(x => x.okul === h.okul).sort((a, b) => (b.taban || 0) - (a.taban || 0))[0];
+    if (!s || s.taban == null) return { h, s: null };
+    const gereken = ksPuanNetTahmin(s.taban);
+    const simdi = guncel ? guncel.ort : null;
+    const fark = simdi !== null ? +(gereken - simdi).toFixed(1) : null;
+    const durum = fark === null ? "" : fark <= 0 ? "🛡 şu anki netiyle ulaşılıyor" : fark <= 8 ? "✅ gerçekçi" : fark <= 20 ? "🎯 zorlayıcı ama mümkün" : "⚠ çok zorlayıcı — B planı da konuşulmalı";
+    return { h, s, gereken, simdi, fark, aylik: fark !== null && fark > 0 ? +(fark / ay).toFixed(1) : null, durum };
+  });
+  return { satirlar, guncel, ay, dersler: guncel && guncel.sonNets ? pdrPotansiyelDersler(guncel.sonNets) : [] };
+}
+function pdrHedefOkulMetniYap(a, baslik) {
+  if (!a.satirlar.length) return "";
+  const v = (x) => String(x).replace(".", ",");
+  const b = [baslik || "🎯 HEDEF OKUL"];
+  b.push(a.guncel ? `Şu anki net: ${a.guncel.kaynak === "deneme" ? `son deneme ${v(a.guncel.son)}${a.guncel.n > 1 ? `, son ${a.guncel.n} deneme ort. ${v(a.guncel.ort)}` : ""}` : `notta geçen ${v(a.guncel.son)} net (${a.guncel.tarih || "?"}; Deneme sekmesine ders netleri girilmemiş)`}` : "Şu anki net: kayıt yok (deneme ya da notta net geçmiyor).");
+  a.satirlar.forEach(x => {
+    if (!x.s) { b.push(`• ${x.h.okul}: taban verisi bulunamadı`); return; }
+    b.push(`• ${x.s.okul} — ${x.s.alan} (${x.s.ilce}): 2026 taban ${v(x.s.taban.toFixed(3))}${x.s.yuzdelik != null ? ` (%${v(x.s.yuzdelik)})` : ""} → gereken ≈ ${v(x.gereken)} net` +
+      (x.fark !== null ? `; fark ${x.fark > 0 ? "≈ " + v(x.fark) + " net" : "yok"} — ${x.durum}${x.aylik ? `; LGS'ye ~${a.ay} ay: ayda ≈ ${v(x.aylik)} net artış` : ""}` : ""));
+  });
+  if (a.dersler.length) b.push(`En çok puan getirecek dersler (son deneme): ${a.dersler.map(d => `${d.ad} ${v(d.net)}/${d.maks}${d.k === 4 ? " (katsayı 4)" : ""}`).join(", ")}`);
+  b.push("Not: Net → puan dönüşümü yaklaşıktır (±15-20 puan); tabanlar 2026 yılınındır ve her yıl değişir.");
+  return b.join("\n");
+}
+function pdrOgrKaydi(ctx, o) { return (ctx.ogrenciler || []).find(x => pdrAyniOgrenci(x.studentName, x.className, o.name, o.className, x.numara, o.numara)) || null; }
+function pdrHedefOkulMetni(ctx, o, okulSorgu) {
+  const G = ksAsistanGirdi(ctx, o), ogr = pdrOgrKaydi(ctx, o);
+  let hedefler = (ogr && ogr.hedefOkullar) || [];
+  if (okulSorgu) {
+    const bul = pdrOkulBul(okulSorgu);
+    if (!bul.length) return `"${okulSorgu}" programdaki taban listesinde yok (İstanbul'un 5 ilçesi ve en yüksek puanlı liseler var). lise_taban_puanlari ile listeye bak.`;
+    hedefler = [...new Map(bul.map(s => [s.okul + "|" + s.alan, { okul: s.okul, alan: s.alan }])).values()].slice(0, 4);
+  }
+  if (!hedefler.length) return "Öğrencinin kayıtlı hedef okulu yok. Danışman söylerse hedef_okul_kaydet ile ekleyebilirsin ya da okul vererek hesaplat.";
+  return pdrHedefOkulMetniYap(pdrHedefOkulAnaliz(hedefler, G.denemeGirilen, ogr && ogr.notNetleri), okulSorgu ? "🎯 OKUL İÇİN HESAP" : "🎯 HEDEF OKUL");
+}
+
+// ── Yaşam düzeni (uyku, ekran, kahvaltı) ──
+const PDR_YASAM_ONERI = {
+  uyku: "Önerilen uyku: 6-12 yaş 9-12 saat, 13-18 yaş 8-10 saat. Öneri: 1 hafta uyku günlüğü (yatış-kalkış); her gün aynı saatte yatma; yatmadan 1 saat önce ekranı kapatma, telefonu odada şarj etmeme; akşam çay, kola, enerji içeceği yok; veliyle ortak plan. Dalamama, sık uyanma ya da gündüz uyuklama sürüyorsa aile hekimine yönlendirme düşünülebilir.",
+  ekran: "Öneri: 1 hafta ekran süresi kaydı (telefonun süre ölçeri); aileyle birlikte yazılı ekran kuralı (ders sonrası, yatmadan 1 saat önce kapalı); oyunun yerine konabilecek etkinlik listesi; yasak değil anlaşma dili.",
+  kahvalti: "Öneri: veliyle hızlı ve hafif kahvaltı seçeneklerini konuşmak; sabah dikkat ve enerji için düzenli öğün; okulda beslenme çantası planı.",
+};
+function pdrYasamTara(metin) {
+  const t = String(metin || "").toLocaleLowerCase("tr"), l = [];
+  // Kanıt: eşleşmenin geçtiği cümle (en fazla 140 karakter)
+  const kanit = (i, n) => { const m0 = String(metin); let a = i; while (a > 0 && !/[.!?\n]/.test(m0[a - 1])) a--; let z = i + n; while (z < m0.length && !/[.!?\n]/.test(m0[z])) z++; return ksAsistanKisalt(m0.slice(a, Math.min(m0.length, z + 1)).replace(/\s+/g, " ").trim(), 140); };
+  let m;
+  const saatRe = /(gece\s*)?(?:saat\s*)?(\d{1,2})(?:[:.](\d{2}))?\s*['’]?\s*(?:de|da|te|ta)?\s*(?:gibi\s*|civarı\s*|sularında\s*)?(yatıyor|yatar|yattı|yatmış|yatıp|uyuyor|uyur|uyudu|uyumuş|uyuyabil)/g;
+  while ((m = saatRe.exec(t))) { const h = +m[2]; if ((h >= 1 && h <= 4) || h === 23 || (h === 12 && m[1]) || h === 0) l.push({ tur: "uyku", baslik: `Geç yatış (gece ≈ ${m[2]}:${m[3] || "00"})`, kanit: kanit(m.index, m[0].length) }); }
+  const sureRe = /(\d{1,2})\s*saat\s*(?:kadar\s*|civarı\s*)?(?:uyuyor|uyuyabiliyor|uyudu|uyku)/g;
+  while ((m = sureRe.exec(t))) { const h = +m[1]; if (h >= 3 && h < 8) l.push({ tur: "uyku", baslik: `Kısa uyku (≈ ${h} saat)`, kanit: kanit(m.index, m[0].length) }); }
+  const uykuRe = /geç yat|uykusuz|uyuyamıyor|uyku sorunu|uykuya dal(a)?m|gece (sık )?uyan|sabah(ları)? (zor kalk|kalkam)|derste uyu|uyukluyor|geç saatlere kadar|uykusunu etkiliyor/;
+  if ((m = uykuRe.exec(t))) l.push({ tur: "uyku", baslik: "Uyku düzeni sorunu", kanit: kanit(m.index, m[0].length) });
+  const ekranRe = /(\d{1,2})\s*saat(?:ten fazla)?\s*(?:boyunca\s*|kadar\s*)?(?:telefon|oyun|ekran|tablet|bilgisayar|youtube|tiktok|instagram|internet)/g;
+  while ((m = ekranRe.exec(t))) if (+m[1] >= 3) l.push({ tur: "ekran", baslik: `Uzun ekran süresi (≈ ${m[1]} saat)`, kanit: kanit(m.index, m[0].length) });
+  const ekranRe2 = /(?:telefon|oyun|ekran|tablet|bilgisayar)[^.\n]{0,25}?(\d{1,2})\s*saat/g;
+  while ((m = ekranRe2.exec(t))) if (+m[1] >= 3) l.push({ tur: "ekran", baslik: `Uzun ekran süresi (≈ ${m[1]} saat)`, kanit: kanit(m.index, m[0].length) });
+  if ((m = /4 saatten fazla|sabaha kadar (oyun|telefon)|gece(leri)? (geç saate kadar )?(oyun|telefon)/.exec(t))) l.push({ tur: "ekran", baslik: "Uzun ekran süresi", kanit: kanit(m.index, m[0].length) });
+  if ((m = /kahvaltı (yapmıyor|yapmadan|etmiyor|etmeden)|kahvaltı yapmama/.exec(t))) l.push({ tur: "kahvalti", baslik: "Kahvaltı yapmıyor", kanit: kanit(m.index, m[0].length) });
+  return l;
+}
+// Son 120 günün notlarından (grup notunda yalnız öğrencinin kısmı) tür başına en yeni bulgu
+function pdrYasamDuzeni(kayitlar, o) {
+  const sinir = Date.now() - 120 * 86400000, gor = {};
+  (kayitlar || []).filter(r => pdrTarihMs(r.date) >= sinir).sort((a, b) => pdrTarihMs(b.date) - pdrTarihMs(a.date)).forEach(r => {
+    pdrYasamTara(pdrOgrNotMetni(r, o, true)).forEach(x => { if (!gor[x.tur]) gor[x.tur] = { ...x, tarih: r.date, kim: r.meetingType && r.meetingType !== "Öğrenci" ? r.meetingType : "" }; });
+  });
+  return ["uyku", "ekran", "kahvalti"].filter(k => gor[k]).map(k => ({ ...gor[k], oneri: PDR_YASAM_ONERI[k] }));
+}
+function pdrYasamMetni(l) {
+  if (!l.length) return "";
+  return "🌙 YAŞAM DÜZENİ (notlardan, son 4 ay)\n" + l.map(x => `• ${x.baslik} — ${x.tarih}${x.kim ? " (" + x.kim.toLocaleLowerCase("tr") + " görüşmesi)" : ""}: "${x.kanit}"\n  ${x.oneri}`).join("\n");
+}
+function pdrOgrYasamMetni(ctx, o) {
+  try { return pdrYasamMetni(pdrYasamDuzeni((ctx.records || []).filter(r => pdrAyniOgrenci(r.studentName, r.className, o.name, o.className, r.numara, o.numara)), o)); } catch (e) { return ""; }
+}
+function pdrOgrHedefMetni(ctx, o) {
+  try { const ogr = pdrOgrKaydi(ctx, o); if (!ogr || !(ogr.hedefOkullar || []).length) return ""; return pdrHedefOkulMetni(ctx, o); } catch (e) { return ""; }
+}
+// Görüşme kaydedilince: nottaki okul ve net (her katılımcıya kendi kısmından)
+function pdrNotTespitleri(metin, katilimcilar, ogrenciler) {
+  return (katilimcilar || []).map(k => {
+    const parca = katilimcilar.length > 1 ? pdrGrupNotBol(metin, k.name, katilimcilar.filter(x => x !== k).map(x => x.name)).kendi : metin;
+    const ogr = (ogrenciler || []).find(x => pdrAyniOgrenci(x.studentName, x.className, k.name, k.className, x.numara, k.numara));
+    if (!ogr || !parca) return null;
+    const var_ = new Set((ogr.hedefOkullar || []).map(h => h.okul));
+    const okullar = pdrNottakiOkullar(parca).filter(x => !var_.has(x));
+    const netler = pdrNottakiNetler(parca);
+    return okullar.length || netler.length ? { k, okullar, net: netler.length ? netler[0] : null } : null;
+  }).filter(Boolean);
+}
+function pdrHedefEkle(ogr, okul, alan, kaynak) {
+  const l = pdrTabanListesi();
+  const s = (alan && l.find(x => x.okul === okul && x.alan === alan)) || l.filter(x => x.okul === okul).sort((a, b) => (b.taban || 0) - (a.taban || 0))[0];
+  if (!s) return ogr;
+  const eski = (ogr.hedefOkullar || []).filter(h => h.okul !== s.okul);
+  return { ...ogr, hedefOkullar: [...eski, { okul: s.okul, alan: s.alan, ilce: s.ilce, tarih: today(), kaynak: kaynak || "elle" }].slice(-3) };
+}
+
+// Öğrenci özet kartı: 🎯 Hedef okul
+function PdrHedefOkulKarti({ hedefler, denemeGirilen, notNetleri, onKaydet }) {
+  const [acik, setAcik] = useState(false), [ara, setAra] = useState("");
+  const a = pdrHedefOkulAnaliz(hedefler, denemeGirilen, notNetleri);
+  const sonuc = ara.trim().length >= 2 ? pdrOkulBul(ara).slice(0, 12) : [];
+  const v = (x) => String(x).replace(".", ",");
+  return (
+    <div data-testid="hedef-okul-karti" style={{ background: "#FFF8E6", border: "1px solid #F1D9A0", borderRadius: 14, padding: "12px 14px", marginBottom: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+        <div style={{ fontSize: 10, color: MUTED, fontWeight: 700, letterSpacing: 0.3 }}>🎯 HEDEF OKUL{a.guncel ? ` · şu an ${v(a.guncel.ort)} net${a.guncel.kaynak === "not" ? " (nottan)" : ""}` : ""}</div>
+        <button data-testid="hedef-ekle" onClick={() => setAcik(x => !x)} style={{ background: "#B7791F", color: "#fff", border: "none", borderRadius: 12, padding: "5px 11px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>{acik ? "Kapat" : "+ Ekle"}</button>
+      </div>
+      {!hedefler.length && !acik && <div style={{ fontSize: 12, color: MUTED, marginTop: 6 }}>Hedef okul yok. Görüşme notunda okul adı geçerse kaydederken sorulur.</div>}
+      {a.satirlar.map((x, i) => (
+        <div key={i} data-testid="hedef-satir" style={{ borderTop: i ? "1px dashed #F1D9A0" : "none", paddingTop: i ? 6 : 0, marginTop: 6 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 800, color: TEXT }}>{x.h.okul}<span style={{ fontWeight: 500, color: MUTED }}> · {x.s ? x.s.alan : ""}</span></div>
+            <button data-testid="hedef-cikar" onClick={() => { if (window.confirm(`${x.h.okul} hedeflerden çıkarılsın mı?`)) onKaydet(hedefler.filter(h => h !== x.h)); }} style={{ background: "none", border: "none", color: MUTED, cursor: "pointer", fontSize: 13 }}>✕</button>
+          </div>
+          {x.s ? (
+            <div style={{ fontSize: 11.5, color: TEXT, lineHeight: 1.5 }}>
+              Taban {v(x.s.taban.toFixed(1))}{x.s.yuzdelik != null ? ` (%${v(x.s.yuzdelik)})` : ""} → gereken ≈ <b>{v(x.gereken)} net</b>
+              {x.fark !== null && <> · fark <b>{x.fark > 0 ? "≈ " + v(x.fark) : "yok"}</b> · {x.durum}{x.aylik ? ` · ayda ≈ ${v(x.aylik)} net` : ""}</>}
+            </div>
+          ) : <div style={{ fontSize: 11.5, color: MUTED }}>Taban verisi bulunamadı.</div>}
+        </div>
+      ))}
+      {a.dersler.length > 0 && hedefler.length > 0 && <div style={{ fontSize: 11, color: "#7A5A12", marginTop: 6 }}>En çok puan getirecek: {a.dersler.map(d => `${d.ad} ${v(d.net)}/${d.maks}`).join(", ")}</div>}
+      {acik && (
+        <div style={{ marginTop: 8 }}>
+          <input data-testid="hedef-ara" value={ara} onChange={e => setAra(e.target.value)} placeholder="Okul adı yaz (örn. Yaşar Acar)" style={{ width: "100%", padding: "8px 10px", border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 13, boxSizing: "border-box" }} />
+          {sonuc.map((s, i) => (
+            <button key={i} data-testid="hedef-sonuc" onClick={() => { const y = pdrHedefEkle({ hedefOkullar: hedefler }, s.okul, s.alan, "elle").hedefOkullar; onKaydet(y); setAra(""); setAcik(false); }} style={{ display: "block", width: "100%", textAlign: "left", marginTop: 4, padding: "6px 9px", borderRadius: 8, border: `1px solid ${BORDER}`, background: "#fff", cursor: "pointer", fontSize: 12 }}>
+              <b>{s.okul}</b> · {s.alan} <span style={{ color: MUTED }}>({s.ilce}, {s.taban != null ? v(s.taban.toFixed(1)) : "?"})</span>
+            </button>
+          ))}
+          {ara.trim().length >= 2 && !sonuc.length && <div style={{ fontSize: 11.5, color: MUTED, marginTop: 4 }}>Programdaki listede yok (İstanbul'un 5 ilçesi ve en yüksek puanlı liseler var).</div>}
+          {hedefler.length >= 3 && <div style={{ fontSize: 11, color: MUTED, marginTop: 4 }}>En fazla 3 hedef tutulur; yeni eklenen en eskinin yerine geçer.</div>}
+        </div>
+      )}
+      <div style={{ fontSize: 10, color: MUTED, marginTop: 6 }}>Yaklaşık hesap: net → puan ±15-20 puan; 2026 tabanları.</div>
+    </div>
+  );
+}
+// Öğrenci özet kartı: 🌙 Yaşam düzeni uyarısı
+function PdrYasamKarti({ kayitlar, ogrenci }) {
+  const [acik, setAcik] = useState(false);
+  const l = pdrYasamDuzeni(kayitlar, { name: ogrenci });
+  if (!l.length) return null;
+  return (
+    <div data-testid="yasam-karti" style={{ background: "#EEF2FB", border: "1px solid #C9D3EE", borderRadius: 14, padding: "12px 14px", marginBottom: 12 }}>
+      <div onClick={() => setAcik(x => !x)} style={{ cursor: "pointer" }}>
+        <div style={{ fontSize: 10, color: MUTED, fontWeight: 700, letterSpacing: 0.3 }}>🌙 YAŞAM DÜZENİ · notlardan {acik ? "▲" : "▼"}</div>
+        <div style={{ fontSize: 13, fontWeight: 800, color: "#34508F", marginTop: 2 }}>{l.map(x => x.baslik).join(" · ")}</div>
+      </div>
+      {acik && l.map((x, i) => (
+        <div key={i} style={{ marginTop: 8, fontSize: 11.5, color: TEXT, lineHeight: 1.5 }}>
+          <div style={{ color: MUTED }}>{x.tarih}{x.kim ? ` · ${x.kim.toLocaleLowerCase("tr")} görüşmesi` : ""}: "{x.kanit}"</div>
+          <div>{x.oneri}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+// ── 🎯 HEDEF OKUL VE YAŞAM DÜZENİ BİTİŞ ──
 // ── 📋 GÖRÜŞME FORMLARI BİTİŞ ──
 
 // ── İşçi Raporu ──────────────────────────────────────────────────────────────
@@ -32276,7 +32593,7 @@ function YilSecimEkrani({ yillar, setYillar, aktifYil, setAktifYil, ogrenciler, 
 }
 
 // ── Özet Kartı Bileşeni (Seans Öncesi Hazırlık) ─────────────────────────────
-function OzetKarti({ ogrenci, ogrenciSinif, ogrRec, ogrP1, ogrP2, ogrRisk, denemeGirilen, denemeAvg, mudahalePlan, hazirlikNotlari, setHazirlikNotlari, ilerlemeNotlari, setIlerlemeNotlari, setTab, devamsizlikGecmisi, onDevamsizlikGuncelle, kademe, olayKayitlari, onOlayEkle }) {
+function OzetKarti({ ogrenci, ogrenciSinif, ogrRec, ogrP1, ogrP2, ogrRisk, denemeGirilen, denemeAvg, mudahalePlan, hazirlikNotlari, setHazirlikNotlari, ilerlemeNotlari, setIlerlemeNotlari, setTab, devamsizlikGecmisi, onDevamsizlikGuncelle, kademe, olayKayitlari, onOlayEkle, hedefOkullar, notNetleri, onHedefKaydet }) {
   const [hazirlikAiLoading, setHazirlikAiLoading] = useState(false);
   const [ucretsizEtkinlikAlan, setUcretsizEtkinlikAlan] = useState(null);
   const [ucretsizEtkinlikArama, setUcretsizEtkinlikArama] = useState("");
@@ -32552,6 +32869,9 @@ Kısa ve pratik yaz, Markdown kullanma.`}]
             </div>
           )}
 
+          {/* 🎯 Hedef okul (LGS) ve 🌙 yaşam düzeni uyarısı */}
+          {kademe === "ortaokul" && onHedefKaydet && <PdrHedefOkulKarti hedefler={hedefOkullar || []} denemeGirilen={denemeGirilen} notNetleri={notNetleri || []} onKaydet={onHedefKaydet} />}
+          <PdrYasamKarti kayitlar={ogrRec} ogrenci={ogrenci} />
           {/* Son görüşme */}
           {sonGorusme && (
             <div style={{background:CARD,border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)",borderLeft:`4px solid ${ACCENT}`,borderRadius:10,padding:12,marginBottom:10}}>
@@ -33051,7 +33371,7 @@ const PDR_ASISTAN_ARAC_AD = {
   deneme_analizi: "Deneme analizi (kapalı sistem)", profil_analizi: "Profil analizi (kapalı sistem)", supervizyon: "Süpervizyon raporu (kapalı sistem)",
   veli_mektubu: "Veli yazısı taslağı", liste: "Liste çıkarıldı", meb_raporu: "MEB raporu taslağı",
   gorusme_kaydet: "Görüşme kaydı", hatirlatma_ekle: "Hatırlatma", risk_kaydet: "Risk kaydı", mudahale_kaydet: "Müdahale planı kaydı", mudahale_programi_ara: "📁 Program oturumları arandı", mudahale_programi_kaydet: "📁 Program oturumu önerisi kaydı",
-  form_sablonu: "📋 Form yapısı okundu", form_analizi: "📋 Form analizi (kapalı sistem)", ekranda_form_doldur: "👀 Form ekranda dolduruldu",
+  hedef_okul: "🎯 Hedef okul hesabı", hedef_okul_kaydet: "🎯 Hedef okul kaydı", form_sablonu: "📋 Form yapısı okundu", form_analizi: "📋 Form analizi (kapalı sistem)", ekranda_form_doldur: "👀 Form ekranda dolduruldu",
   ekranda_ac: "📍 Ekran açıldı", ekranda_gorusme: "👀 Görüşme formu ekranda dolduruldu", ekranda_hatirlatma: "👀 Hatırlatma ekranda dolduruldu",
   ekranda_risk: "👀 Risk formu ekranda hazırlandı", ekranda_mudahale: "👀 Müdahale planı ekranda dolduruldu",
   asistan_notu_kaydet: "📌 Öğrenciye not kaydı", not_kaydet: "📚 Yazılı / yıl sonu notu kaydı",
@@ -36023,6 +36343,13 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
               }}
               kademe={kademe}
               olayKayitlari={pdrSeciliOgr(tumOgrenciler, seciliOgrenci, aktifOgrenci, "studentName")?.olayKayitlari || []}
+              hedefOkullar={pdrSeciliOgr(tumOgrenciler, seciliOgrenci, aktifOgrenci, "studentName")?.hedefOkullar || []}
+              notNetleri={pdrSeciliOgr(tumOgrenciler, seciliOgrenci, aktifOgrenci, "studentName")?.notNetleri || []}
+              onHedefKaydet={async (liste) => {
+                const updated = ogrenciler.map(o => pdrAyniOgrenci(o.studentName, o.className, seciliOgrenci, seciliOgrenciSinif, o.numara, seciliOgrenciNumara) ? { ...o, hedefOkullar: liste } : o);
+                setOgrenciler(updated);
+                await saveOgrenciler(updated);
+              }}
               onOlayEkle={async (yeniOlay) => {
                 const hedefOgr = pdrSeciliOgr(tumOgrenciler, seciliOgrenci, aktifOgrenci, "studentName");
                 const eskiOlaylar = hedefOgr?.olayKayitlari || [];
@@ -44461,6 +44788,21 @@ export default function App() {
     }));
     const updated = [...yeniKayitlar, ...records];
     setRecords(updated); await saveRecords(updated);
+    // 🎯 Notta hedef okul ya da deneme neti geçiyorsa öğrencinin kaydına eklemeyi öner (grup notunda her öğrenciye kendi kısmından)
+    try {
+      const tespit = pdrNotTespitleri(ortakOzet, tumKatilimcilar, ogrenciler);
+      const ad = (k) => k.name.replace(/\s*\S*\*+\S*/g, "").trim() || k.name;
+      let yeniOgr = ogrenciler, degisti = false;
+      const okullu = tespit.filter(t => t.okullar.length);
+      if (okullu.length && window.confirm(`🎯 Notta hedef okul geçiyor:\n${okullu.map(t => `• ${ad(t.k)} → ${t.okullar.join(", ")}`).join("\n")}\n\nÖğrencinin hedef okullarına eklensin mi? (Özet kartında gereken net ve fark hesaplanır.)`)) {
+        yeniOgr = yeniOgr.map(x => { const t = okullu.find(t => pdrAyniOgrenci(x.studentName, x.className, t.k.name, t.k.className, x.numara, t.k.numara)); return t ? t.okullar.reduce((y, ok) => pdrHedefEkle(y, ok, null, "not"), x) : x; }); degisti = true;
+      }
+      const netli = tespit.filter(t => t.net !== null);
+      if (netli.length && window.confirm(`📊 Notta deneme neti geçiyor:\n${netli.map(t => `• ${ad(t.k)} → ${t.net} net`).join("\n")}\n\nHedef okul hesabında kullanılmak üzere kaydedilsin mi? (Deneme sekmesine ders netleri girilince o kullanılır.)`)) {
+        yeniOgr = yeniOgr.map(x => { const t = netli.find(t => pdrAyniOgrenci(x.studentName, x.className, t.k.name, t.k.className, x.numara, t.k.numara)); return t ? { ...x, notNetleri: [...(x.notNetleri || []), { tarih: formTarihi || today(), net: t.net, kaynak: "not" }].slice(-10) } : x; }); degisti = true;
+      }
+      if (degisti) { setOgrenciler(yeniOgr); await saveOgrenciler(yeniOgr); }
+    } catch (e) {}
     // Formun risk bölümünde işaret varsa Risk Listesi'ne kayıt ÖNERİLİR; onay danışmanda
     if (formSab) {
       const item = pdrFormRiskKaydiOner(formSab, gorusmeFormu, { name: form.studentName, className: form.className, numara: form.numara }, formTarihi || today());

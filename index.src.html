@@ -11007,6 +11007,7 @@ const PDR_ASISTAN_VARSAYILAN_AYAR = {
   kurallar: "",
   kayitYontemi: "ekran",
   yuzenDugme: true,                          // her ekranda sol altta bas-konuş düğmesi
+  acilisKarti: true,                         // program açılınca günde bir kez "Bugün dikkat isteyenler" kartı
   hizliKomut: true,
   supervizyon: true,                         // 🎓 Prof. Hakan süpervizyonu (müdahale planı ve risk değerlendirmesi)
   onbellek: true,                            // Claude istem önbelleği (sabit talimat + önceki konuşma)                          // net ekran açma/liste isteklerini modele gitmeden yap
@@ -17442,6 +17443,102 @@ function pdrDevamSatiri(x) {
   return `${x.name}${x.className ? " (" + x.className + ")" : ""} — son görüşme ${x.tarih}${x.tur !== "Öğrenci" ? " · " + x.tur.toLocaleLowerCase("tr") + " görüşmesi" : ""}; ${zaman}${x.hatirlatma ? `; hatırlatma ${x.hatirlatma}` : ""} — "${x.ifade}"`;
 }
 // ── 🔁 DEVAM EDEN GÖRÜŞMELER BİTİŞ ──
+// ── 🌅 AÇILIŞ KARTI BAŞLANGIÇ ──
+// Program açılınca günde bir kez "Bugün dikkat isteyenler" kartı. Tarama cihazda,
+// kural tabanlı; yapay zekâya bir şey gitmez. En fazla 5 madde, en acil olan önce.
+function pdrAcilisMaddeleri(ctx) {
+  const l = [], gor = new Set();
+  const kOk = (c) => { try { return ksAnzKademeOk(ctx, c); } catch (e) { return true; } };
+  const o_ = (name, className, numara) => ({ name, className: className || "", numara: numara || "" });
+  const anahtar = (o) => pdrOgrAnahtar(o.name, o.className, o.numara);
+  const ekle = (m) => { if (m.ogr) { const k = anahtar(m.ogr); if (gor.has(k)) return; gor.add(k); } l.push(m); };
+  // 1) Kritik ifade (son 30 gün)
+  try {
+    const son30 = new Map();
+    (ctx.records || []).forEach(r => { const gf = ksAnzGunFarki(r.date); if (gf !== null && gf <= 30 && kOk(r.className)) { const k = pdrOgrAnahtar(r.studentName, r.className, r.numara); if (!son30.has(k)) son30.set(k, o_(r.studentName, r.className, r.numara)); } });
+    [...son30.values()].slice(0, 40).forEach(o => { try { const X = ksSupBaglam(ksAsistanGirdi(ctx, o)); if (X.c.kritikTurler.length) ekle({ seviye: 0, ikon: "⚠", metin: `${ksAsistanEtiket(o)} — notlarda ${X.c.kritikTurler.join(", ")} ile ilgili ifade; önce güvenlik değerlendirmesi`, ogr: o, eylem: "dosya" }); } catch (e) {} });
+  } catch (e) {}
+  // 2) Formda risk işareti var, risk kaydı yok
+  try { pdrFormTakipTara(ctx.records, ctx.riskListesi).filter(b => b.tur === "form_risk" && kOk(b.sinif)).forEach(b => ekle({ seviye: 1, ikon: "📋", metin: b.mesaj.replace(/^📋\s*/, ""), ogr: o_(b.ad, b.sinif, b.numara), eylem: "risk" })); } catch (e) {}
+  // 3) Devam eden görüşmeler: planlanan tarihi geçen / bugün / 14+ gün
+  try { pdrDevamEdenler(ctx).filter(x => (x.gecikti || x.kalan === 0) && kOk(x.className)).forEach(x => ekle({ seviye: 2, ikon: "🔁", metin: `${x.name}${x.className ? " (" + x.className + ")" : ""} — devam eden görüşme; ${x.kalan !== null ? (x.kalan < 0 ? `planlanan tarih ${-x.kalan} gün geçti` : "bugün") : `${x.gun} gündür bekliyor`} ("${ksAsistanKisalt(x.ifade, 60)}")`, ogr: o_(x.name, x.className, x.numara), eylem: "gorusme" })); } catch (e) {}
+  // 4) Yüksek öncelikli riskli, 21+ gündür görüşülmemiş
+  try {
+    (ctx.riskListesi || []).filter(r => !r.kapandi && r.oncelik === "Yüksek" && kOk(r.className)).forEach(r => {
+      const s = ksAnzSonGorusme(ctx, r.studentName, r.className); const gf = s ? ksAnzGunFarki(s.date) : null;
+      if (gf === null || gf >= 21) ekle({ seviye: 3, ikon: "🔴", metin: `${r.studentName}${r.className ? " (" + r.className + ")" : ""} — yüksek öncelikli risk (${r.riskTuru || "?"}); ${gf === null ? "hiç görüşme yok" : gf + " gündür görüşülmedi"}`, ogr: o_(r.studentName, r.className, r.numara), eylem: "gorusme" });
+    });
+  } catch (e) {}
+  // 5) Hatırlatmalar: gecikmiş ve bugünkü (tek maddede)
+  try {
+    const h = (ctx.hatirlatmalar || []).filter(x => !x.tamamlandi).map(x => ({ x, gf: ksAnzGunFarki(x.tarih) })).filter(y => y.gf !== null && y.gf >= 0);
+    const gec = h.filter(y => y.gf > 0), bug = h.filter(y => y.gf === 0);
+    if (h.length) l.push({ seviye: 4, ikon: "🔔", metin: `${gec.length ? gec.length + " gecikmiş" : ""}${gec.length && bug.length ? ", " : ""}${bug.length ? bug.length + " bugünkü" : ""} hatırlatma${h.length === 1 && h[0].x.studentName ? ` (${h[0].x.studentName}: ${ksAsistanKisalt(h[0].x.metin, 50)})` : ""}`, eylem: "hatirlatici" });
+  } catch (e) {}
+  return l.sort((a, b) => a.seviye - b.seviye);
+}
+function pdrAcilisBugunGosterildi() { try { return localStorage.getItem("pdr_acilis_karti_gun") === today(); } catch (e) { return false; } }
+function pdrAcilisBugunIsaretle() { try { localStorage.setItem("pdr_acilis_karti_gun", today()); } catch (e) {} }
+function PdrAcilisKarti(props) {
+  const [maddeler, setMaddeler] = useState(null);
+  const propsRef = useRef(props); propsRef.current = props;
+  useEffect(() => {
+    const ayar = pdrAsistanAyarOku();
+    if (ayar.acilisKarti === false || pdrAcilisBugunGosterildi()) return;
+    // Otomatik testlerde (webdriver) kendiliğinden açılmaz; test isterse "pdr_acilis_karti_zorla" ile açılır
+    let zorla = false; try { zorla = localStorage.getItem("pdr_acilis_karti_zorla") === "1"; } catch (e) {}
+    if (typeof navigator !== "undefined" && navigator.webdriver && !zorla) return;
+    const z = setTimeout(() => {   // veriler yüklensin diye kısa bekleme
+      try {
+        const l = pdrAcilisMaddeleri(pdrAsistanCtx(propsRef.current));
+        pdrAcilisBugunIsaretle();
+        if (l.length) setMaddeler(l);
+      } catch (e) {}
+    }, 2500);
+    return () => clearTimeout(z);
+  }, []);
+  if (!maddeler) return null;
+  const kapat = () => setMaddeler(null);
+  const git = (m) => {
+    kapat();
+    const ekran = m.eylem === "dosya" ? "dosya" : m.eylem === "risk" ? "risk" : m.eylem === "hatirlatici" ? "hatirlatici" : "gorusme";
+    try { ksEkranAc(m.ogr || null, ekran); } catch (e) {}
+  };
+  const dugmeAd = { dosya: "Dosyayı aç", risk: "Risk ekranı", gorusme: "Görüşme notu", hatirlatici: "Hatırlatıcı" };
+  const brifing = async () => {
+    kapat();
+    const p = propsRef.current;
+    if (p.setTab) p.setTab("asistan");
+    try { await pdrAsistanIstek("Bugün ne yapmalıyım?", pdrAsistanAyarOku(), pdrAsistanCtx(p)); } catch (e) {}
+  };
+  const goster = maddeler.slice(0, 5);
+  return (
+    <div data-testid="acilis-karti" style={{ position: "fixed", left: 10, right: 10, top: 70, maxWidth: 520, margin: "0 auto", zIndex: 2147482002, background: CARD, border: `2px solid ${ACCENT}`, borderRadius: 16, boxShadow: "0 12px 32px rgba(0,0,0,0.28)", overflow: "hidden" }}>
+      <div style={{ background: "linear-gradient(135deg, #0F4D38 0%, #127C56 100%)", color: "#fff", padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <div style={{ fontSize: 14.5, fontWeight: 900 }}>🌅 Bugün dikkat isteyenler</div>
+          <div style={{ fontSize: 11, opacity: 0.85 }}>{today()} · cihazda tarandı, yapay zekâ kullanılmadı</div>
+        </div>
+        <button data-testid="acilis-kapat" onClick={kapat} style={{ background: "none", border: "none", color: "#fff", fontSize: 20, cursor: "pointer" }}>✕</button>
+      </div>
+      <div style={{ padding: "8px 12px", maxHeight: "55vh", overflowY: "auto" }}>
+        {goster.map((m, i) => (
+          <div key={i} data-testid="acilis-madde" style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "8px 0", borderBottom: i < goster.length - 1 ? `1px solid ${BORDER}` : "none" }}>
+            <div style={{ fontSize: 16, lineHeight: 1.3 }}>{m.ikon}</div>
+            <div style={{ flex: 1, fontSize: 12.5, color: m.seviye === 0 ? "#B42318" : TEXT, fontWeight: m.seviye === 0 ? 800 : 600, lineHeight: 1.45 }}>{m.metin}</div>
+            <button data-testid="acilis-git" onClick={() => git(m)} style={{ flexShrink: 0, padding: "5px 9px", borderRadius: 8, border: `1px solid ${ACCENT}`, background: "#fff", color: ACCENT, fontSize: 11, fontWeight: 800, cursor: "pointer" }}>{dugmeAd[m.eylem] || "Aç"}</button>
+          </div>
+        ))}
+        {maddeler.length > 5 && <div style={{ fontSize: 11.5, color: MUTED, paddingTop: 6 }}>+{maddeler.length - 5} madde daha — ayrıntılı brifingde.</div>}
+      </div>
+      <div style={{ display: "flex", gap: 8, padding: "8px 12px 12px" }}>
+        <button data-testid="acilis-brifing" onClick={brifing} style={{ flex: 1, padding: 9, borderRadius: 10, border: "none", background: ACCENT, color: "#fff", fontWeight: 800, fontSize: 12.5, cursor: "pointer" }}>🤖 Asistanla planla</button>
+        <button onClick={kapat} style={{ flex: 1, padding: 9, borderRadius: 10, border: `1px solid ${BORDER}`, background: "#fff", color: TEXT, fontWeight: 800, fontSize: 12.5, cursor: "pointer" }}>Tamam</button>
+      </div>
+    </div>
+  );
+}
+// ── 🌅 AÇILIŞ KARTI BİTİŞ ──
 // ── 📋 GÖRÜŞME FORMLARI BİTİŞ ──
 
 // ── İşçi Raporu ──────────────────────────────────────────────────────────────
@@ -34137,6 +34234,10 @@ function AsistanEkrani({
             <input type="checkbox" checked={ayar.yuzenDugme !== false} onChange={e => ayarDegis({ yuzenDugme: e.target.checked })} />
             Her ekranda asistan düğmesi (sol altta 🎤 — dokun, konuş)
           </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: TEXT, marginBottom: 6, cursor: "pointer" }}>
+            <input data-testid="ayar-acilis-karti" type="checkbox" checked={ayar.acilisKarti !== false} onChange={e => ayarDegis({ acilisKarti: e.target.checked })} />
+            Program açılınca "Bugün dikkat isteyenler" kartı (günde bir kez; cihazda taranır)
+          </label>
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: TEXT, marginBottom: 10, cursor: "pointer" }}>
             <input type="checkbox" checked={!!ayar.acilistaAsistan} onChange={e => ayarDegis({ acilistaAsistan: e.target.checked })} />
             Program açılınca asistan ekranıyla başla
@@ -34460,7 +34561,7 @@ function AsistanYuzen(props) {
   useEffect(() => { if (acik && altRef.current && altRef.current.scrollIntoView) altRef.current.scrollIntoView({ block: "end" }); }, [acik, S.gorunen.length, S.adimlar.length, !!S.onay]);
 
   const ayar = pdrAsistanAyarOku();
-  if (ayar.yuzenDugme === false) return null;
+  if (ayar.yuzenDugme === false) return <PdrAcilisKarti {...props} />;
 
   async function gonder(metin) {
     const m = String(metin ?? girdi).trim();
@@ -34487,6 +34588,7 @@ function AsistanYuzen(props) {
 
   return (
     <>
+      <PdrAcilisKarti {...props} />
       {/* Panel */}
       {acik && (
         <div data-asistan="yuzen-panel" style={{ position: "fixed", left: 8, right: 8, bottom: 86, maxWidth: 520, margin: "0 auto", maxHeight: "58vh", display: "flex", flexDirection: "column", background: CARD, border: `1px solid ${BORDER}`, borderRadius: 16, boxShadow: "0 12px 32px rgba(0,0,0,0.28)", zIndex: 2147482000, overflow: "hidden" }}>

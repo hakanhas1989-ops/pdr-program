@@ -11343,6 +11343,9 @@ function ksAsistanBugunBrifing(g, ctx) {
   // 3) Hatırlatmalar: gecikmiş + bugün + 3 gün içinde
   const hat = (ctx.hatirlatmalar || []).filter(h => !h.tamamlandi).map(h => ({ h, gf: ksAnzGunFarki(h.tarih) })).filter(x => x.gf !== null && x.gf >= -3).sort((a, b) => b.gf - a.gf);
   bolum("Hatırlatmalar", hat.slice(0, 12).map(x => `${x.gf > 0 ? `GECİKMİŞ (${x.gf} gün)` : x.gf === 0 ? "BUGÜN" : `${-x.gf} gün sonra`} — ${x.h.studentName ? x.h.studentName + ": " : ""}${ksAsistanKisalt(x.h.metin, 80)} (${x.h.tarih})`));
+  // 3b) Devam eden görüşmeler: planlanan tarihi geçen ya da 14+ gündür bekleyenler
+  try { const de = pdrDevamEdenler(ctx).filter(x => kOk(x.className)); const gec = de.filter(x => x.gecikti || x.kalan === 0);
+    bolum(`Devam eden görüşmeler — zamanı gelen/geçen (toplam ${de.length} süren görüşme)`, gec.slice(0, 10).map(pdrDevamSatiri)); } catch (e) {}
   // 4) Uzun süredir görüşülmeyen riskliler
   const gun = Math.max(7, parseInt(g.gun) || 21);
   const uzak = riskler.filter(r => r.oncelik !== "Yüksek").map(r => { const s = ksAnzSonGorusme(ctx, r.studentName, r.className); return { r, gf: s ? ksAnzGunFarki(s.date) : null }; }).filter(x => x.gf === null || x.gf >= gun).sort((a, b) => (b.gf ?? 9999) - (a.gf ?? 9999));
@@ -11785,7 +11788,7 @@ const KS_ASISTAN_ARACLAR = {
   veli_mektubu: { aciklama: "Veliye resmî yazı taslağı hazırlar. tip: bilgilendirme | davet | bildirim | tesekkur", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "tip": "davet"}', ogrenciIster: true,
     calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); const tip = ["bilgilendirme", "davet", "bildirim", "tesekkur"].includes(g.tip) ? g.tip : "bilgilendirme"; return pdrKapaliVeliMektubu({ ogrenciAd: o.name, sinif: o.className, tip, gorusmeler: G.gorusmeler, kademe: G.kademe }); } },
   liste: {
-    aciklama: "Okul geneli listeler. tur: riskli (aktif risk kayıtları) | gorusulmeyen (aktif riskli olup 'gun' gündür görüşülmeyenler; hepsi:true ise tüm öğrenciler) | sinif (bir sınıfın öğrencileri) | hatirlatmalar (açık hatırlatmalar) | son_gorusmeler (son yapılan görüşmeler)",
+    aciklama: "Okul geneli listeler. tur: riskli (aktif risk kayıtları) | gorusulmeyen (aktif riskli olup 'gun' gündür görüşülmeyenler; hepsi:true ise tüm öğrenciler) | sinif (bir sınıfın öğrencileri) | hatirlatmalar (açık hatırlatmalar) | son_gorusmeler (son yapılan görüşmeler) | devam_eden (son görüşme notunda 'devam edilecek / tekrar görüşülecek / haftaya' gibi ifade olan, süreci süren öğrenciler; gecikenler önce)",
     girdi: '{"tur": "riskli", "sinif": "isteğe bağlı", "gun": 21, "hepsi": false, "adet": 15}',
     calistir: (g, ctx) => {
       const tur = g.tur || "riskli", sinifQ = ksSade(String(g.sinif || "")), adet = Math.max(1, Math.min(40, parseInt(g.adet) || 15));
@@ -11818,7 +11821,13 @@ const KS_ASISTAN_ARACLAR = {
         const l = (ctx.records || []).filter(x => sinifOk(x.className)).slice().sort((a, b) => ksTarihSirala(b, a)).slice(0, adet);
         return l.length ? "Son görüşmeler:\n" + l.map(x => `• ${x.date} — ${x.studentName}${x.className ? " (" + x.className + ")" : ""}${x.topic ? ": " + x.topic : ""}`).join("\n") : "Görüşme kaydı yok.";
       }
-      return "Bilinmeyen liste türü. Kullanılabilir: riskli, gorusulmeyen, sinif, hatirlatmalar, son_gorusmeler.";
+      if (tur === "devam_eden") {
+        const l = pdrDevamEdenler(ctx).filter(x => sinifOk(x.className));
+        if (!l.length) return "Son görüşme notunda devam / tekrar görüşme ifadesi olan öğrenci yok.";
+        const gec = l.filter(x => x.gecikti), bek = l.filter(x => !x.gecikti);
+        return `Devam eden görüşmeler (${l.length}; son notta devam/tekrar görüşme ifadesi olanlar):` + (gec.length ? `\n\nGECİKEN (${gec.length}):\n` + gec.slice(0, adet).map(x => "• " + pdrDevamSatiri(x)).join("\n") : "") + (bek.length ? `\n\nSÜREN (${bek.length}):\n` + bek.slice(0, adet).map(x => "• " + pdrDevamSatiri(x)).join("\n") : "");
+      }
+      return "Bilinmeyen liste türü. Kullanılabilir: riskli, gorusulmeyen, sinif, hatirlatmalar, son_gorusmeler, devam_eden.";
     },
   },
   gorusme_analizi: {
@@ -13407,6 +13416,7 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - Sınıf mevcudu, şube listesi ya da yeni gelen/nakil öğrenci sorulduğunda sinif_bilgisi kullan.
 - Danışman sayısal veri grafiği isterse grafik_ciz kullan (sayıları kendin hesaplama). Şema, akış şeması, döngü, zihin haritası, karşılaştırma, zaman çizelgesi ya da kademe/piramit görseli isterse diyagram_ciz kullan; maddeleri kısa ve öz yaz. Dönem/ay özeti, faaliyet raporu görseli, kurul ya da veli toplantısı sunumu isterse infografik_rapor kullan. Yanıtında grafikteki sayıları tekrar listeleme; 1-2 cümlelik yorum yeter.
 - Mesleki/kuramsal sorularda (gelişim, öğrenme, motivasyon, çalışma teknikleri, üstbiliş, pozitif psikoloji, danışma kuramları ve teknikleri, görüşme becerileri, grup, etik ve gizlilik, mevzuat ve RAM süreçleri, klinik belirtiler ve yönlendirme, ölçme-değerlendirme, test yorumu, bireyi tanıma teknikleri) önce alan_bilgisi'ni çağır, gerekirse ikinci bir bölüm aç; bilgiyi öğrencinin kendi verisiyle birleştir. Belirti konuşurken tanı koyma ("… belirtileri gözleniyor, … açısından değerlendirme önerilir"), ilaç önerme. Kendine zarar, intihar, istismar ya da psikoz belirtisi geçen her durumda alan_bilgisi'nden pdr.kriz veya pdr.ihmal_istismar bölümünü aç ve okulun yapması gerekenleri sırayla, açıkça yaz.
+- 'Devam eden görüşmeler', 'kimlerle görüşmeye devam edecektim', 'takipteki öğrenciler' sorulduğunda liste aracını tur: devam_eden ile kullan; gecikenleri önce söyle, gerekirse hatırlatma ya da görüşme önermeyi teklif et.
 - Hedef okul, tercih ya da 'kaç net gerekir / fark ne' konuşulduğunda hedef_okul aracını kullan (okul verebilirsin); gereken neti ya da tabanı kendin tahmin etme. Danışman hedef okulu söylerse hedef_okul_kaydet ile öner. Farkı söylerken en çok puan getirecek dersleri ve aylık küçük hedefi de ver; öğrenciyi başkasıyla kıyaslama.
 - Öğrenci dosyasında ya da seans hazırlığında YAŞAM DÜZENİ uyarısı (geç yatma, kısa uyku, uzun ekran süresi, kahvaltı) varsa önerilerine kat: akademik sorunla ilişkisini (dikkat, deneme dalgalanması) düşün, veliyle ortak plan öner; tanı koyma.
 - Grup görüşmesi notlarında '[grup görüşmesi; bu öğrenciyle ilgili kısım]' yazan bölüm yalnız o öğrenciye aittir; diğer katılımcılarla ilgili cümleleri bu öğrenciye mal etme.
@@ -17381,6 +17391,57 @@ function PdrYasamKarti({ kayitlar, ogrenci }) {
   );
 }
 // ── 🎯 HEDEF OKUL VE YAŞAM DÜZENİ BİTİŞ ──
+// ── 🔁 DEVAM EDEN GÖRÜŞMELER BAŞLANGIÇ ──
+// Öğrencinin SON görüşme notunda "devam edilecek / tekrar görüşülecek / haftaya…" gibi
+// bir ifade varsa öğrenci "devam eden görüşme" sayılır; sonraki bir görüşmede bu ifade
+// yoksa ya da "sonlandırıldı / takip gerekmiyor" yazıyorsa listeden düşer. Cihazda, kural tabanlı.
+const PDR_DEVAM_RE = /tekrar görüş|yeniden görüş|görüşmeye devam|görüşmelere devam|devam edilecek|devam edeceğ|devam edecek|takibe alındı|takibe alınd|takip edilecek|takip edeceğ|izlenecek|izlemeye alındı|haftaya|gelecek hafta|önümüzdeki hafta|bir sonraki görüşme|sonraki görüşmede|sonraki seans|tekrar çağır|tekrar gelecek|tekrar gelmesi|tekrar konuş|yeniden konuş|bir daha görüş|seanslara devam|süreç devam|(\d+|bir|iki|üç)\s*(gün|hafta)\s*sonra/i;
+const PDR_KAPANIS_RE = /görüşme(ler)?\s*(sonlandırıldı|tamamlandı|bitirildi|sona erdi)|takip(e|i)?\s*gerek(miyor|ok|me)|süreç\s*(sonlandırıldı|tamamlandı)|takip(i)?\s*(bırakıldı|sonlandırıldı)|dosya kapatıldı|ek görüşmeye gerek/i;
+const PDR_SAYI_SOZ = { bir: 1, iki: 2, "üç": 3 };
+function pdrDevamTespit(metin, kayitTarihi) {
+  const cumleler = pdrCumleler(metin);
+  if (cumleler.some(c => PDR_KAPANIS_RE.test(c))) return { devam: false, kapanis: true };
+  const c = cumleler.find(x => PDR_DEVAM_RE.test(x));
+  if (!c) return { devam: false };
+  // Hedef tarih: açık tarih > "N gün/hafta sonra" > "haftaya"
+  let hedef = null; const t0 = pdrTarihMs(kayitTarihi) || Date.now();
+  const tm = /(\d{1,2})[./](\d{1,2})[./](\d{4})/.exec(c);
+  const gm = /(\d+|bir|iki|üç)\s*(gün|hafta)\s*sonra/i.exec(c);
+  if (tm) hedef = new Date(+tm[3], +tm[2] - 1, +tm[1]).getTime();
+  else if (gm) { const n = PDR_SAYI_SOZ[gm[1].toLocaleLowerCase("tr")] || +gm[1]; hedef = t0 + n * (/hafta/i.test(gm[2]) ? 7 : 1) * 86400000; }
+  else if (/haftaya|gelecek hafta|önümüzdeki hafta/i.test(c)) hedef = t0 + 7 * 86400000;
+  return { devam: true, ifade: ksAsistanKisalt(c, 140), hedef };
+}
+// Okul geneli: son notu devam ifadesi içeren öğrenciler
+function pdrDevamEdenler(ctx) {
+  const son = new Map();
+  (ctx.records || []).forEach(r => {
+    if (!r.studentName) return;
+    const k = pdrOgrAnahtar(r.studentName, r.className, r.numara);
+    const o = son.get(k);
+    if (!o || pdrTarihMs(r.date) > pdrTarihMs(o.date) || (pdrTarihMs(r.date) === pdrTarihMs(o.date) && String(r.saat || "") > String(o.saat || ""))) son.set(k, r);
+  });
+  const bugun = new Date(); bugun.setHours(0, 0, 0, 0);
+  const l = [];
+  son.forEach(r => {
+    const metin = pdrOgrNotMetni(r, { name: r.studentName }, true);
+    let t = pdrDevamTespit(metin, r.date);
+    const sonraki = r.form && String((r.form.n || {}).sonraki || "").trim();
+    if (!t.kapanis && sonraki && pdrTarihMs(sonraki)) t = { devam: true, ifade: t.ifade || `Formda sonraki görüşme: ${sonraki}`, hedef: pdrTarihMs(sonraki) };
+    if (!t.devam) return;
+    const gun = Math.round((bugun.getTime() - pdrTarihMs(r.date)) / 86400000);
+    const kalan = t.hedef ? Math.round((t.hedef - bugun.getTime()) / 86400000) : null;
+    const hat = (ctx.hatirlatmalar || []).filter(h => !h.tamamlandi && pdrAyniOgrenci(h.studentName, h.className, r.studentName, r.className, h.numara, r.numara)).sort((a, b) => pdrTarihMs(a.tarih) - pdrTarihMs(b.tarih))[0];
+    l.push({ name: r.studentName, className: r.className || "", numara: r.numara || "", tarih: r.date, tur: r.meetingType || "Öğrenci", gun, kalan, ifade: t.ifade, hatirlatma: hat ? hat.tarih : null,
+      gecikti: kalan !== null ? kalan < 0 : gun >= 14 });
+  });
+  return l.sort((a, b) => (b.gecikti - a.gecikti) || ((a.kalan ?? 999) - (b.kalan ?? 999)) || (b.gun - a.gun));
+}
+function pdrDevamSatiri(x) {
+  const zaman = x.kalan !== null ? (x.kalan < 0 ? `planlanan tarih ${-x.kalan} gün geçti` : x.kalan === 0 ? "bugün" : `${x.kalan} gün sonra`) : `${x.gun} gün oldu${x.gun >= 14 ? " (14+ gün)" : ""}`;
+  return `${x.name}${x.className ? " (" + x.className + ")" : ""} — son görüşme ${x.tarih}${x.tur !== "Öğrenci" ? " · " + x.tur.toLocaleLowerCase("tr") + " görüşmesi" : ""}; ${zaman}${x.hatirlatma ? `; hatırlatma ${x.hatirlatma}` : ""} — "${x.ifade}"`;
+}
+// ── 🔁 DEVAM EDEN GÖRÜŞMELER BİTİŞ ──
 // ── 📋 GÖRÜŞME FORMLARI BİTİŞ ──
 
 // ── İşçi Raporu ──────────────────────────────────────────────────────────────

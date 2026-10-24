@@ -12358,7 +12358,7 @@ const KS_ASISTAN_ARACLAR = {
     calistir: (g) => ksAsistanProgramRehberi(g.sorgu),
   },
   ogrenci_dosyasi: {
-    aciklama: "Öğrencinin BÜTÜN dosyasını getirir: görüşmeler (tümünün konu dağılımı ve son notlar), bu yılın ve geçmiş dönemin denemeleri, yıl sonu not ortalamaları, BDT bilişsel çarpıtmaları, bireyi tanıma bilgileri, uygulanan testler, BİLPRO/ÖÖG/otizm/CAS tarama sonuçları (alan puanları, dikkat göstergeleri, klinik örüntüler), profil puanları, devamsızlık, olay kayıtları, risk/müdahale/sevk geçmişi. Risk değerlendirmesi, müdahale planı, seans hazırlığı ya da veli yazısından ÖNCE çağır.",
+    aciklama: "Öğrencinin BÜTÜN dosyasını getirir: görüşmeler (tümünün konu dağılımı ve son notlar), bu yılın ve geçmiş dönemin denemeleri, yıl sonu not ortalamaları, BDT bilişsel çarpıtmaları, bireyi tanıma bilgileri, uygulanan testler, sınav kaygısı ölçümleri, seans hazırlık ve ilerleme notları, risk haritası, sosyometri durumu, net haritası (kazanım bazlı), BİLPRO/ÖÖG/otizm/CAS tarama sonuçları (alan puanları, dikkat göstergeleri, klinik örüntüler), profil puanları, devamsızlık, olay kayıtları, risk/müdahale/sevk geçmişi. Risk değerlendirmesi, müdahale planı, seans hazırlığı ya da veli yazısından ÖNCE çağır.",
     girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
     calistir: (g, ctx, o) => ksAsistanOgrenciDosyasi(ctx, o),
   },
@@ -12502,6 +12502,11 @@ const KS_ASISTAN_ARACLAR = {
     aciklama: "İstanbul liselerinin 2026 LGS taban puanlarını ve yüzdelik dilimlerini getirir (2025 karşılaştırmalı). Ayrıntılı ilçeler: Beylikdüzü, Esenyurt, Başakşehir, Büyükçekmece, Avcılar; ayrıca İstanbul'un en yüksek puanlı liseleri. ilce ve okul_turu (fen | anadolu | sosyal | aihl | mtal) ile süzülür. puan, net (90 üzerinden toplam net) ya da yuzdelik verilirse okulları hedef / gerçekçi / güvenli diye ayırır; net → puan → yüzdelik dönüşümü yaklaşıktır. Bir öğrencinin netiyle tercih konuşulacaksa önce deneme_analizi ile ortalama netini al, sonra bu araca net olarak ver.",
     girdi: '{"ilce": "Beylikdüzü", "okul_turu": "isteğe bağlı", "net": 72, "puan": "isteğe bağlı", "yuzdelik": "isteğe bağlı"}', yontem: "hepsi",
     calistir: (g) => ksLiseTaban(g || {}),
+  },
+  okul_kayitlari: {
+    aciklama: "Okul geneli kayıtları getirir: kriz müdahale kayıtları (tür, etki düzeyi, durum, izlem tarihi, özet), grup/sınıf rehberlik çalışmaları (tür, hedef kitle, katılımcı, konu) ve sınıf sınıf sosyometri özeti (katılım, hiç seçilmeyen ve en çok seçilen öğrenciler). Kriz, grup çalışması, sınıf rehberliği, MEB raporu ya da sosyometri sorulduğunda kullan.",
+    girdi: '{"tur": "kriz | grup | sosyometri | hepsi", "sinif": "isteğe bağlı"}', yontem: "hepsi",
+    calistir: (g, ctx) => ksAsistanOkulKayitlari(g, ctx),
   },
   sinif_bilgisi: {
     aciklama: "Bir sınıfın (şubenin) öğrenci sayısını ve listesini getirir; öğrencilerin sınıfa eklenme tarihleri ve SONRADAN eklenenler (nakil/yeni kayıt olabilir) işaretlenir. sinif boşsa bütün şubelerin öğrenci sayıları ve son 60 günde sonradan eklenenler.",
@@ -13119,6 +13124,99 @@ function ksAsistanTaramaSonuclari(ctx, o, sec) {
   } catch (e) {}
   return b.length ? b.join("\n") : "";
 }
+// Diğer sekmelerdeki öğrenci verileri: sınav kaygısı, seans hazırlık/ilerleme notları,
+// risk haritası, sosyometri, karne/deneme net haritası — asistanın okuyacağı metin.
+function ksAsistanEkKayitlar(ctx, o) {
+  const ad = o.name, sinif = o.className, no = o.numara;
+  const K = (t, n) => ksAsistanKisalt(String(t || "").replace(/\s+/g, " ").trim(), n);
+  const b = [];
+  // Sınav kaygısı (3 ölçüm)
+  try {
+    const sk = pdrSozlukOku(ctx.sinavKaygisi, ad, sinif, no);
+    if (sk) {
+      const h = Object.entries(sk.haftalar || {}).sort((a, c) => a[0] - c[0]).filter(([, v]) => v && typeof v.toplam === "number");
+      const bel = sk.belirtiler || {};
+      const haftali = Object.keys(bel).filter(k => bel[k] && typeof bel[k] === "object" && !Array.isArray(bel[k])).sort((a, c) => a - c);
+      const sonBel = haftali.length ? Object.values(bel[haftali[haftali.length - 1]]).flat().filter(Boolean) : Object.values(bel).flat().filter(x => typeof x === "string");
+      if (h.length || sonBel.length) b.push(`SINAV KAYGISI: ${h.map(([n, v]) => `${n}. ölçüm ${v.toplam}/40 (${sinavKaygiDuzeyHesapla(v.toplam).ad}${(sk.haftaTarihleri || {})[n] ? ", " + sk.haftaTarihleri[n] : ""})${v.aciklama ? " — " + K(v.aciklama, 80) : ""}`).join("; ") || "ölçüm yok"}${sonBel.length ? `. Belirtiler: ${K(sonBel.join(", "), 220)}` : ""}`);
+    }
+  } catch (e) {}
+  // Seans hazırlık notu ve ilerleme yazısı
+  try { const hz = pdrSozlukOku(ctx.hazirlikNotlari, ad, sinif, no); if (hz && String(hz).trim()) b.push(`SEANS HAZIRLIK NOTU: ${K(hz, 500)}`); } catch (e) {}
+  try { const il = pdrSozlukOku(ctx.ilerlemeNotlari, ad, sinif, no); if (il && String(il).trim()) b.push(`İLERLEME YAZISI: ${K(il, 500)}`); } catch (e) {}
+  // Risk haritası (bu yıl, işaretli maddeler)
+  try {
+    const rh = (ctx.riskHaritasi || []).filter(r => (!r.yil || !ctx.aktifYil || r.yil === ctx.aktifYil) && pdrAyniOgrenci(r.studentName, r.className, ad, sinif, r.numara, no))[0];
+    if (rh) {
+      const isaret = RISK_HARITASI_GRUPLARI.map(g => ({ g: g.baslik, m: g.maddeler.filter(m => rh.maddeler && rh.maddeler[m.key]).map(m => m.label) })).filter(x => x.m.length);
+      if (isaret.length || (rh.digerMetin || "").trim()) b.push(`RİSK HARİTASI (${isaret.reduce((t, x) => t + x.m.length, 0)} madde): ${isaret.map(x => `${x.g}: ${x.m.join(", ")}`).join(" | ")}${(rh.digerMetin || "").trim() ? ` | Diğer: ${K(rh.digerMetin, 120)}` : ""}`);
+    }
+  } catch (e) {}
+  // Sosyometri (sınıfın son kaydı, bütün kriterler birleşik)
+  try {
+    const kayit = (ctx.sosyometri || []).filter(x => (!x.yil || !ctx.aktifYil || x.yil === ctx.aktifYil) && pdrAyniOgrenci(ad, x.sinif, ad, sinif)).sort((a, c) => pdrTarihMs(c.tarih) - pdrTarihMs(a.tarih))[0];
+    if (kayit) {
+      const sec = pdrSosyometriBirlesikSecimler(kayit);
+      const anahtar = Object.keys(sec).find(k => pdrAyniOgrenci(k, sinif, ad, sinif)) || ad;
+      const katilan = Object.keys(sec).filter(k => k !== anahtar && (sec[k] || []).length).length;
+      const secenler = Object.keys(sec).filter(k => k !== anahtar && (sec[k] || []).includes(anahtar));
+      const kendi = sec[anahtar] || [];
+      const karsilikli = kendi.filter(x => (sec[x] || []).includes(anahtar));
+      b.push(`SOSYOMETRİ (${kayit.tarih || "?"}, ${katilan} öğrenci katıldı; tüm kriterler birleşik): ${secenler.length} arkadaşı tarafından seçildi${secenler.length === 0 && katilan >= 5 ? " (HİÇ SEÇİLMEDİ — yalnızlık/dışlanma açısından izlenmeli)" : ""}; kendisi ${kendi.length} kişiyi seçti; karşılıklı seçim ${karsilikli.length}${karsilikli.length ? " (" + karsilikli.join(", ") + ")" : ""}.`);
+    }
+  } catch (e) {}
+  // Net haritası (karneden/PDF'ten okunan deneme ve kazanım sonuçları)
+  try {
+    const nh = (ctx.netHaritasiKayitlari || []).filter(x => pdrAyniOgrenci(x.studentName, x.className, ad, sinif, x.numara, no)).sort((a, c) => pdrTarihMs(c.tarih) - pdrTarihMs(a.tarih));
+    if (nh.length) {
+      b.push(`NET HARİTASI (${nh.length} belge): ${nh.slice(0, 3).map(k => `${k.tarih || "?"}${k.denemeAdi ? " " + K(k.denemeAdi, 30) : ""}: ${(k.dersler || []).map(d => `${d.ders} ${d.net}/${d.soru}`).join(", ")}`).join(" | ")}`);
+      const zayif = (nh[0].dersler || []).flatMap(d => (d.konular || []).filter(kz => typeof kz.basari === "number" && kz.basari < 50).map(kz => `${d.ders}: ${K(kz.kazanim, 70)} (%${kz.basari})`));
+      if (zayif.length) b.push(`Son belgede zayıf kazanımlar: ${zayif.slice(0, 6).join("; ")}${zayif.length > 6 ? ` (+${zayif.length - 6})` : ""}`);
+    }
+  } catch (e) {}
+  return b.join("\n");
+}
+// Okul geneli kayıtlar: kriz müdahaleleri, grup/sınıf çalışmaları, sosyometri sınıf özeti.
+function ksAsistanOkulKayitlari(g, ctx) {
+  const K = (t, n) => ksAsistanKisalt(String(t || "").replace(/\s+/g, " ").trim(), n);
+  const tur = ksSade(String(g.tur || "hepsi"));
+  const qs = ksSade(ksSinifNormal(g.sinif || "")).replace(/[^a-z0-9]/g, "");
+  const sinifUy = (c) => !qs || ksSade(String(c || "")).replace(/[^a-z0-9]/g, "").includes(qs);
+  const yilda = (x) => !x.yil || !ctx.aktifYil || x.yil === ctx.aktifYil;
+  const b = [];
+  const hepsi = !tur || tur.includes("hepsi");
+  if (hepsi || tur.includes("kriz")) {
+    const l = (ctx.krizKayitlari || []).filter(yilda).filter(k => !qs || sinifUy(k.etkilenen)).sort((a, c) => pdrTarihMs(c.tarih) - pdrTarihMs(a.tarih));
+    b.push(`KRİZ MÜDAHALE KAYITLARI (bu yıl ${l.length}, açık ${l.filter(k => k.durum === "Açık").length}):`);
+    l.slice(0, 10).forEach(k => b.push(`• ${k.tarih || "?"} · ${k.tur || ""} · ${k.etkiDuzeyi || ""} · ${k.durum || ""}${k.etkilenen ? " · etkilenen: " + K(k.etkilenen, 60) : ""}${k.izlemTarihi ? " · izlem " + k.izlemTarihi : ""}: ${K(k.ozet, 160)}${(k.adimlar || []).length ? ` [adımlar: ${K(k.adimlar.join(", "), 100)}]` : ""}`));
+    if (!l.length) b.push("kayıt yok");
+  }
+  if (hepsi || tur.includes("grup") || tur.includes("calisma") || tur.includes("sinif")) {
+    const l = (ctx.grupCalismalari || []).filter(yilda).filter(x => !qs || sinifUy(x.hedefKitle)).sort((a, c) => pdrTarihMs(c.tarih) - pdrTarihMs(a.tarih));
+    const tk = l.reduce((t, x) => t + (parseInt(x.katilimci, 10) || 0), 0);
+    b.push(`\nGRUP / SINIF ÇALIŞMALARI (bu yıl ${l.length}, toplam ${tk} katılımcı):`);
+    l.slice(0, 15).forEach(x => b.push(`• ${x.tarih || "?"} · ${x.tur || ""} · ${x.hedefKitle || ""}${x.katilimci ? " · " + x.katilimci + " kişi" : ""}${x.alan ? " · " + x.alan : ""}: ${K(x.konu, 100)}${x.not ? " — " + K(x.not, 80) : ""}`));
+    if (!l.length) b.push("kayıt yok");
+  }
+  if (hepsi || tur.includes("sosyo")) {
+    const son = {};
+    (ctx.sosyometri || []).filter(yilda).filter(x => sinifUy(x.sinif)).forEach(x => { if (!son[x.sinif] || pdrTarihMs(x.tarih) > pdrTarihMs(son[x.sinif].tarih)) son[x.sinif] = x; });
+    const ogr = ctx.ogrenciler || ctx.ogrenciListesi || [];
+    b.push(`\nSOSYOMETRİ (${Object.keys(son).length} sınıf):`);
+    Object.values(son).sort((a, c) => String(a.sinif).localeCompare(String(c.sinif), "tr", { numeric: true })).forEach(x => {
+      const sec = pdrSosyometriBirlesikSecimler(x);
+      const katilan = Object.keys(sec).filter(k => (sec[k] || []).length);
+      const sinifOgr = ogr.filter(o => pdrAyniOgrenci(o.studentName, o.className, o.studentName, x.sinif)).map(o => o.studentName);
+      const evren = [...new Set([...sinifOgr, ...Object.keys(sec)])];
+      const say = (a) => Object.keys(sec).filter(k => k !== a && (sec[k] || []).includes(a)).length;
+      const hic = katilan.length >= 5 ? evren.filter(a => say(a) === 0) : [];
+      const yildiz = evren.map(a => [a, say(a)]).filter(([, n]) => n >= 4).sort((a, c) => c[1] - a[1]).slice(0, 3);
+      b.push(`• ${x.sinif} (${x.tarih || "?"}, ${katilan.length}${sinifOgr.length ? "/" + sinifOgr.length : ""} katılım): hiç seçilmeyen ${hic.length}${hic.length ? " — " + hic.join(", ") : ""}${yildiz.length ? `; en çok seçilen: ${yildiz.map(([a, n]) => `${a} (${n})`).join(", ")}` : ""}${katilan.length < 5 ? " (katılım az; yorum için yetersiz)" : ""}`);
+    });
+    if (!Object.keys(son).length) b.push("kayıt yok");
+  }
+  return b.join("\n");
+}
 function ksAsistanOgrenciDosyasi(ctx, o) {
   const ad = o.name, sinif = o.className, no = o.numara;
   const ayni = (x) => pdrAyniOgrenci(x.studentName, x.className, ad, sinif);
@@ -13193,6 +13291,7 @@ function ksAsistanOgrenciDosyasi(ctx, o) {
     if (dl && dl.cevaplar && Object.keys(dl.cevaplar).length) { const an = duzeyTaramaAnaliz(kd, dl.cevaplar, sinif, dl.date); b.push(`DÜZEY TARAMASI (${dl.date || "?"}): ${an.uygulanan.map(d => `${d.kisa} ${d.duzey !== null ? d.duzey : d.belirsiz ? "≤" + (d.ilkSet - 1) : an.alt + " altı"}${d.fark !== null && d.fark > 0 ? ` (${d.fark} yıl geride)` : ""}`).join(", ")}${an.beklenen !== null ? ` · beklenen ${an.beklenen}` : ""} — ayrıntı için duzey_taramasi`); }
   } catch (e) {}
   try { const tm = ksAsistanTaramaSonuclari(ctx, o); if (tm) b.push("\nBİLİŞSEL / GELİŞİMSEL TARAMALAR:\n" + tm); } catch (e) {}
+  try { const ek = ksAsistanEkKayitlar(ctx, o); if (ek) b.push("\n" + ek); } catch (e) {}
   // Devamsızlık ve olaylar
   const ogr = (ctx.ogrenciler || []).find(x => pdrAyniOgrenci(x.studentName, x.className, ad, sinif));
   const dv = ogr && ogr.devamsizlikGecmisi || [];
@@ -34841,6 +34940,9 @@ function pdrAsistanCtx(p) {
     sinavTuru: p.sinavTuru, aktifYil: p.aktifYil, ogrenciListesi: p.kayitliListesi,
     bdtAnaliz: p.bdtAnaliz, bireyiTanima: p.bireyiTanima, ogrenciler: p.ogrenciler, uyumIzleme: p.uyumIzleme, kademe: p.kademe || "", konuHaritasiVerisi: p.konuHaritasiVerisi || {}, ilkokulTaramalar: p.ilkokulTaramalar || [],
     bilproDegerlendirmeler: p.bilproDegerlendirmeler || [], oogDegerlendirmeler: p.oogDegerlendirmeler || [], castDegerlendirmeler: p.castDegerlendirmeler || [], pasDegerlendirmeler: p.pasDegerlendirmeler || [], pasPerformanslar: p.pasPerformanslar || [],
+    sinavKaygisi: (p.ekVeri && p.ekVeri.sinavKaygisi) || {}, hazirlikNotlari: (p.ekVeri && p.ekVeri.hazirlikNotlari) || {}, ilerlemeNotlari: (p.ekVeri && p.ekVeri.ilerlemeNotlari) || {},
+    riskHaritasi: (p.ekVeri && p.ekVeri.riskHaritasi) || [], sosyometri: (p.ekVeri && p.ekVeri.sosyometri) || [], netHaritasiKayitlari: (p.ekVeri && p.ekVeri.netHaritasiKayitlari) || [],
+    krizKayitlari: (p.ekVeri && p.ekVeri.krizKayitlari) || [], grupCalismalari: (p.ekVeri && p.ekVeri.grupCalismalari) || [],
     asistanNotlari: p.asistanNotlari || [], mudahaleOnerileri: p.mudahaleOnerileri || {}, profNotlari: p.profNotlari || {},
     kaydet: {
       profNotlari: p.setProfNotlari ? async (v) => { p.setProfNotlari(v); await saveProfNotlari(v); } : null,
@@ -34982,7 +35084,7 @@ function AsistanEkrani({
   akademikTaramalar, liseTaramalar, benlikOlcekleri, sinavTuru, aktifYil, setTab,
   bdtAnaliz, bireyiTanima, ogrenciler, uyumIzleme, setBdtAnaliz, setBireyiTanima, setUyumIzleme, kademe, setSevkler, konuHaritasiVerisi, ilkokulTaramalar,
   asistanNotlari, setAsistanNotlari, setProfiles2, setProfiles, setDenemeler, setOgrenciler, setKonuHaritasiVerisi, mudahaleOnerileri, setMudahaleOnerileri, profNotlari, setProfNotlari,
-  bilproDegerlendirmeler, oogDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, pasPerformanslar
+  bilproDegerlendirmeler, oogDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, pasPerformanslar, ekVeri
 }) {
   const S = PDR_ASISTAN_SOHBET;
   const [notSec, setNotSec] = useState(null);       // hangi yanıt için öğrenci seçiliyor
@@ -35092,7 +35194,7 @@ function AsistanEkrani({
       mudahalePlan, setMudahalePlan, profiles, profiles2, denemeler, sevkler, testKayitlari,
       akademikTaramalar, liseTaramalar, benlikOlcekleri, sinavTuru, aktifYil, bdtAnaliz, bireyiTanima, ogrenciler, uyumIzleme,
       setBdtAnaliz, setBireyiTanima, setUyumIzleme, kademe, setSevkler, konuHaritasiVerisi, ilkokulTaramalar, asistanNotlari, setAsistanNotlari, setProfiles2, setProfiles, setDenemeler, setOgrenciler, setKonuHaritasiVerisi, mudahaleOnerileri, setMudahaleOnerileri, profNotlari, setProfNotlari,
-      bilproDegerlendirmeler, oogDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, pasPerformanslar });
+      bilproDegerlendirmeler, oogDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, pasPerformanslar, ekVeri });
   }
   // 📌 Yanıtı öğrencinin dosyasına kaydet
   async function notaKaydet(i, ogr) {
@@ -47519,6 +47621,7 @@ function pdrBaslangicSekmesi() {
             profNotlari={profNotlari} setProfNotlari={setProfNotlari}
             bilproDegerlendirmeler={bilproDegerlendirmeler} oogDegerlendirmeler={oogDegerlendirmeler} castDegerlendirmeler={castDegerlendirmeler}
             pasDegerlendirmeler={pasDegerlendirmeler} pasPerformanslar={pasPerformanslar}
+            ekVeri={{ sinavKaygisi, hazirlikNotlari, ilerlemeNotlari, riskHaritasi, sosyometri, netHaritasiKayitlari, krizKayitlari, grupCalismalari }}
           />
         )}
         {/* ── PDR ASİSTANI: her ekranda bas-konuş düğmesi ── */}
@@ -47542,6 +47645,7 @@ function pdrBaslangicSekmesi() {
             profNotlari={profNotlari} setProfNotlari={setProfNotlari}
             bilproDegerlendirmeler={bilproDegerlendirmeler} oogDegerlendirmeler={oogDegerlendirmeler} castDegerlendirmeler={castDegerlendirmeler}
             pasDegerlendirmeler={pasDegerlendirmeler} pasPerformanslar={pasPerformanslar}
+            ekVeri={{ sinavKaygisi, hazirlikNotlari, ilerlemeNotlari, riskHaritasi, sosyometri, netHaritasiKayitlari, krizKayitlari, grupCalismalari }}
           />
         )}
 

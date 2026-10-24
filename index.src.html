@@ -7027,10 +7027,88 @@ function bilproSonucHesapla(cevaplar) {
     sozelYuzde, sozelOlmayanYuzde, eksenFarki,
     akilYurutme, bilisselVerimlilik, aykBvFarki, aykBvYorumu,
     genelYorum, alanYorumlari, eksenYorumu, sevkOnerileri,
+    dikkat: bilproDikkatAnalizi(cevaplar),
     uygulananToplam, uygulananGorev,
     toplamMadde: BILPRO_ALANLAR.reduce((t, a) => t + a.altTestler.reduce((x, at) => x + (at.maddeler ? at.maddeler.length : 0), 0), 0),
     toplamGorev: BILPRO_ALANLAR.reduce((t, a) => t + a.altTestler.filter(at => at.gorev).length, 0),
   };
+}
+
+// ── Dikkat Göstergeleri ─────────────────────────────────────────────────
+// Alt testlerdeki ham davranıştan (dizi açıklığı, hız-doğruluk dengesi,
+// 60 sn içindeki düşüş, tepki tutarlılığı, hata türü) dikkate dair
+// BETİMLEYİCİ göstergeler çıkarır. Norm değildir, DEHB tanısı koymaz;
+// "dikkat açısından izlenmeli mi?" sorusuna dayanak üretir.
+function bilproDikkatAnalizi(cevaplar) {
+  const dizi = cevaplar.sayiDizisi_sonuc, kod = cevaplar.kodlama_sonuc, tar = cevaplar.tarama_sonuc;
+  const g = [];
+  const ekle = (key, baslik, durum, metin) => g.push({ key, baslik, durum, metin });
+  // 1) Dikkat kapsamı — düz dizi
+  if (dizi && typeof dizi.ileriSpan === "number") {
+    const d = dizi.ileriSpan;
+    if (d >= 6) ekle("kapsam", "Dikkat kapsamı", "iyi", `Düz sırada ${d} öğeyi akılda tutabildi; dinlediği bilgiyi kaçırmadan alabiliyor.`);
+    else if (d === 5) ekle("kapsam", "Dikkat kapsamı", "iyi", `Düz sırada ${d} öğe — beklenen aralıkta.`);
+    else if (d === 4) ekle("kapsam", "Dikkat kapsamı", "izle", `Düz sırada ${d} öğe — sınırda. Uzun ya da hızlı verilen sözel yönergelerin bir kısmını kaçırabilir.`);
+    else ekle("kapsam", "Dikkat kapsamı", "zorlanma", `Düz sırada yalnızca ${d} öğe — dikkat kapsamı dar görünüyor. Tipik görünüm: yönergenin yalnızca ilk kısmını yapma, "dinlemiyor" diye yorumlanma.`);
+    if (typeof dizi.geriSpan === "number" && d - dizi.geriSpan >= 3) ekle("kontrol", "Zihinsel kontrol", "izle", `Düz (${d}) ile ters (${dizi.geriSpan}) dizi arasında ${d - dizi.geriSpan} öğe fark var: bilgiyi alabiliyor ama zihinde üzerinde işlem yaparken (sıra değiştirme, zihinden hesap) zorlanıyor. Bu, dikkatin yönetici (kontrol) boyutuna işaret eder.`);
+  }
+  // 2) Seçici dikkat / doğruluk ve 3) hız-doğruluk stili
+  const hiz = [kod, tar].filter(x => x && x.toplamDeneme > 0);
+  if (hiz.length) {
+    const top = hiz.reduce((a, x) => a + x.toplamDeneme, 0), dog = hiz.reduce((a, x) => a + x.dogru, 0);
+    const dogruluk = Math.round((dog / top) * 100);
+    const hizYuzde = Math.round(hiz.reduce((a, x) => a + (x.yuzde || 0), 0) / hiz.length);
+    if (dogruluk >= 90) ekle("secici", "Seçici dikkat (doğruluk)", "iyi", `Hızlı görevlerde doğruluk %${dogruluk}: birbirine benzeyen sembollere rağmen doğru seçim yapabiliyor.`);
+    else if (dogruluk >= 80) ekle("secici", "Seçici dikkat (doğruluk)", "izle", `Hızlı görevlerde doğruluk %${dogruluk}: arada dikkatsizlik hataları var.`);
+    else ekle("secici", "Seçici dikkat (doğruluk)", "zorlanma", `Hızlı görevlerde doğruluk %${dogruluk}: her beş tepkiden biri ya da daha fazlası hatalı. Benzer uyaranları ayırt etmede ya da dikkatini görevde tutmada zorlanıyor olabilir.`);
+    if (hizYuzde >= 60 && dogruluk < 85) ekle("stil", "Çalışma stili", "zorlanma", `Hızlı ama hatalı (hız %${hizYuzde}, doğruluk %${dogruluk}): dürtüsel/aceleci bir yanıt stili. Sınavda soruyu bitirmeden işaretleme, "bildiği yerden hata yapma" biçiminde görülebilir.`);
+    else if (hizYuzde < 40 && dogruluk >= 90) ekle("stil", "Çalışma stili", "izle", `Yavaş ama dikkatli (hız %${hizYuzde}, doğruluk %${dogruluk}): temkinli çalışıyor; sorun dikkatten çok işlem hızında olabilir. Süreli sınavlarda yetiştirememe beklenir.`);
+    else if (hizYuzde < 40 && dogruluk < 85) ekle("stil", "Çalışma stili", "zorlanma", `Hem yavaş hem hatalı (hız %${hizYuzde}, doğruluk %${dogruluk}): görev başında dikkati toplamakta genel bir zorlanma var. Yorgunluk, isteksizlik ya da görevi anlamama da dışlanmalı.`);
+    else ekle("stil", "Çalışma stili", "iyi", `Hız ve doğruluk dengeli (hız %${hizYuzde}, doğruluk %${dogruluk}).`);
+  }
+  // 4) Sürdürülebilir dikkat — ilk 30 sn ↔ son 30 sn
+  const yarili = hiz.filter(x => x.yari1 && x.yari2 && (x.yari1.d + x.yari1.y) >= 6);
+  if (yarili.length) {
+    const d1 = yarili.reduce((a, x) => a + x.yari1.d, 0), d2 = yarili.reduce((a, x) => a + x.yari2.d, 0);
+    const y1 = yarili.reduce((a, x) => a + x.yari1.y, 0), y2 = yarili.reduce((a, x) => a + x.yari2.y, 0);
+    const dusus = d1 > 0 ? Math.round(((d1 - d2) / d1) * 100) : 0;
+    const hataArtis = y2 - y1;
+    if (dusus >= 25 || (hataArtis >= 3 && y2 >= 2 * Math.max(1, y1))) ekle("surdurme", "Sürdürülebilir dikkat", "zorlanma", `İkinci 30 saniyede performans belirgin düştü (doğru: ${d1} → ${d2}${hataArtis > 0 ? `, hata: ${y1} → ${y2}` : ""}). Dikkatini kısa sürede tüketiyor olabilir; uzun derslerde ve sınavın sonlarına doğru verim kaybı beklenir.`);
+    else if (dusus >= 15) ekle("surdurme", "Sürdürülebilir dikkat", "izle", `İkinci yarıda hafif düşüş var (doğru: ${d1} → ${d2}).`);
+    else ekle("surdurme", "Sürdürülebilir dikkat", "iyi", `60 saniye boyunca performansını korudu (doğru: ${d1} → ${d2}).`);
+  }
+  // 5) Tepki tutarlılığı (tepki sürelerinin değişkenlik katsayısı)
+  const cvler = hiz.filter(x => typeof x.tepkiDegiskenlik === "number").map(x => x.tepkiDegiskenlik);
+  if (cvler.length) {
+    const cv = Math.max(...cvler);
+    if (cv >= 0.45) ekle("tutarlilik", "Tepki tutarlılığı", "zorlanma", `Tepki süreleri çok dalgalı (değişkenlik ${cv.toFixed(2)}): bazı sembollerde hızlı, bazılarında belirgin geç. Bu, dikkatin gidip gelmesiyle (anlık kopmalar) uyumlu bir örüntüdür ve dikkat güçlüğünün en tutarlı göstergelerinden biridir.`);
+    else if (cv >= 0.35) ekle("tutarlilik", "Tepki tutarlılığı", "izle", `Tepki sürelerinde orta düzey dalgalanma var (değişkenlik ${cv.toFixed(2)}).`);
+    else ekle("tutarlilik", "Tepki tutarlılığı", "iyi", `Tepki süreleri tutarlı (değişkenlik ${cv.toFixed(2)}); dikkatte belirgin kopma yok.`);
+  }
+  // 6) Hata türü — taramada yanlış alarm ↔ atlama
+  if (tar && typeof tar.yanlisAlarm === "number" && (tar.yanlisAlarm + tar.atlama) >= 3) {
+    if (tar.yanlisAlarm >= 2 * Math.max(1, tar.atlama)) ekle("hata", "Hata türü", "izle", `Hataların çoğu hedef yokken "var" demek (${tar.yanlisAlarm} yanlış alarm, ${tar.atlama} atlama): kontrol etmeden yanıtlama — dürtüsellik yönünde.`);
+    else if (tar.atlama >= 2 * Math.max(1, tar.yanlisAlarm)) ekle("hata", "Hata türü", "izle", `Hataların çoğu hedef varken "yok" demek (${tar.atlama} atlama, ${tar.yanlisAlarm} yanlış alarm): hedefi gözden kaçırma — dikkatsizlik yönünde.`);
+    else ekle("hata", "Hata türü", "izle", `Yanlış alarm (${tar.yanlisAlarm}) ve atlama (${tar.atlama}) karışık: belirgin bir hata yönü yok.`);
+  }
+  if (!g.length) return null;
+  const zorlanma = g.filter(x => x.durum === "zorlanma"), izle = g.filter(x => x.durum === "izle");
+  const eskiKayit = hiz.length > 0 && !hiz.some(x => x.yari1);
+  let ozet;
+  if (zorlanma.length >= 2) ozet = `${zorlanma.length} göstergede zorlanma var (${zorlanma.map(x => x.baslik.toLocaleLowerCase("tr")).join(", ")}). Tablo, dikkat açısından izlenmesi gereken bir öğrenciyi düşündürür.`;
+  else if (zorlanma.length === 1) ozet = `Yalnızca ${zorlanma[0].baslik.toLocaleLowerCase("tr")} göstergesinde zorlanma var; tek göstergeye dayanarak dikkat sorunu sonucuna varılmamalı, sınıf içi gözlemle doğrulanmalı.`;
+  else if (izle.length >= 2) ozet = "Belirgin zorlanma yok, ancak birkaç göstergede sınırda bulgular var; sınıf içi gözlemle izlenebilir.";
+  else ozet = "Ölçülen dikkat göstergelerinde belirgin bir sorun görünmüyor.";
+  const sonrakiAdim = [];
+  if (zorlanma.length >= 2) {
+    sonrakiAdim.push("Bulguyu D2 Dikkat Testi ve CAS Performans Testi'ndeki Dikkat alanıyla karşılaştır; aynı yöne işaret ediyorsa hipotez güçlenir.");
+    sonrakiAdim.push("Öğretmen ve veliden davranış gözlemi al; dikkat güçlüğü tek bir ortamda değil, en az iki ortamda (okul ve ev) görülmelidir.");
+    sonrakiAdim.push("Uyku düzeni, kaygı, görme-işitme sorunları ve ekran süresi gibi dikkati etkileyen etkenleri dışla. Bulgular sürüyorsa aileyle görüşerek çocuk ve ergen psikiyatrisi değerlendirmesi gündeme alınabilir; tanı yetkisi hekimdedir.");
+  } else if (zorlanma.length === 1 || izle.length >= 2) {
+    sonrakiAdim.push("4-6 hafta sınıf içi gözlemle izle; gerekirse görevleri başka bir gün, dinlenmiş haldeyken yeniden uygula.");
+  }
+  return { gostergeler: g, ozet, sonrakiAdim, zorlanmaSayisi: zorlanma.length,
+    not: eskiKayit ? "Sürdürülebilir dikkat ve tepki tutarlılığı için Sembol Kodlama ve Sembol Tarama görevlerini bu sürümle yeniden uygula (eski kayıtta bu veri yok)." : null };
 }
 
 // ── BİLPRO süreli/performans görevleri ────────────────────────────────────
@@ -7199,20 +7277,41 @@ function BILPRODiziTemelGorevi({ havuz, palet, baslangicSpan, maksSpan, bolumler
 }
 
 // ── Sembol Kodlama (60 sn) ────────────────────────────────────────────────
+// Süreli görevlerde dikkat verisi: ilk/ikinci 30 sn, tepki süreleri ve
+// (taramada) hata türü. Puanı DEĞİŞTİRMEZ; yalnızca Dikkat Göstergeleri'ne veri sağlar.
+function bilproDikkatKayitBaslat() { return { dogru: 0, yanlis: 0, yari1: { d: 0, y: 0 }, yari2: { d: 0, y: 0 }, tepkiler: [], yanlisAlarm: 0, atlama: 0, sunum: 0 }; }
+function bilproDikkatKayitIsle(k, dogruMu, kalanSn) {
+  const simdi = (typeof performance !== "undefined" ? performance.now() : Date.now());
+  if (k.sunum) k.tepkiler.push(Math.round(simdi - k.sunum));
+  k.sunum = simdi;
+  const yari = kalanSn > BILPRO_GOREV_SURESI_SN / 2 ? k.yari1 : k.yari2;
+  if (dogruMu) { k.dogru++; yari.d++; } else { k.yanlis++; yari.y++; }
+}
+function bilproDikkatKayitBitir(k) {
+  const t = k.tepkiler.filter(x => x > 150 && x < 15000);
+  let ortTepkiMs = null, tepkiDegiskenlik = null;
+  if (t.length >= 8) {
+    const ort = t.reduce((a, b) => a + b, 0) / t.length;
+    const sd = Math.sqrt(t.reduce((a, b) => a + (b - ort) * (b - ort), 0) / t.length);
+    ortTepkiMs = Math.round(ort); tepkiDegiskenlik = Math.round((sd / ort) * 100) / 100;
+  }
+  return { dogru: k.dogru, yanlis: k.yanlis, toplamDeneme: k.dogru + k.yanlis, sureSn: BILPRO_GOREV_SURESI_SN,
+    yari1: k.yari1, yari2: k.yari2, ortTepkiMs, tepkiDegiskenlik, yanlisAlarm: k.yanlisAlarm, atlama: k.atlama };
+}
+
 function BILPROKodlamaGorevi({ onBitir }) {
   const [asama, setAsama] = useState("hazir");
   const [aktif, setAktif] = useState(null);
   const [dogru, setDogru] = useState(0);
   const [yanlis, setYanlis] = useState(0);
   const [kalan, setKalan] = useState(BILPRO_GOREV_SURESI_SN);
-  const sonucRef = useRef({ dogru: 0, yanlis: 0 });
+  const sonucRef = useRef(bilproDikkatKayitBaslat());
 
   useEffect(() => {
     if (asama !== "calisiyor") return;
     if (kalan <= 0) {
-      const { dogru: d, yanlis: y } = sonucRef.current;
       setAsama("bitti");
-      onBitir({ dogru: d, yanlis: y, toplamDeneme: d + y, sureSn: BILPRO_GOREV_SURESI_SN });
+      onBitir(bilproDikkatKayitBitir(sonucRef.current));
       return;
     }
     const t = setTimeout(() => setKalan(k => k - 1), 1000);
@@ -7220,7 +7319,8 @@ function BILPROKodlamaGorevi({ onBitir }) {
   }, [asama, kalan]);
 
   function basla() {
-    sonucRef.current = { dogru: 0, yanlis: 0 };
+    sonucRef.current = bilproDikkatKayitBaslat();
+    sonucRef.current.sunum = (typeof performance !== "undefined" ? performance.now() : Date.now());
     setDogru(0); setYanlis(0); setKalan(BILPRO_GOREV_SURESI_SN);
     setAktif(BILPRO_KODLAMA_ANAHTAR[bilproRastgele(BILPRO_KODLAMA_ANAHTAR.length)]);
     setAsama("calisiyor");
@@ -7228,8 +7328,9 @@ function BILPROKodlamaGorevi({ onBitir }) {
 
   function bas(rakam) {
     if (asama !== "calisiyor" || !aktif) return;
-    if (rakam === aktif.rakam) { sonucRef.current.dogru++; setDogru(d => d + 1); }
-    else { sonucRef.current.yanlis++; setYanlis(y => y + 1); }
+    const dogruMu = rakam === aktif.rakam;
+    bilproDikkatKayitIsle(sonucRef.current, dogruMu, kalan);
+    if (dogruMu) setDogru(d => d + 1); else setYanlis(y => y + 1);
     let yeni;
     do { yeni = BILPRO_KODLAMA_ANAHTAR[bilproRastgele(BILPRO_KODLAMA_ANAHTAR.length)]; } while (yeni.sembol === aktif.sembol);
     setAktif(yeni);
@@ -7293,14 +7394,13 @@ function BILPROTaramaGorevi({ onBitir }) {
   const [dogru, setDogru] = useState(0);
   const [yanlis, setYanlis] = useState(0);
   const [kalan, setKalan] = useState(BILPRO_GOREV_SURESI_SN);
-  const sonucRef = useRef({ dogru: 0, yanlis: 0 });
+  const sonucRef = useRef(bilproDikkatKayitBaslat());
 
   useEffect(() => {
     if (asama !== "calisiyor") return;
     if (kalan <= 0) {
-      const { dogru: d, yanlis: y } = sonucRef.current;
       setAsama("bitti");
-      onBitir({ dogru: d, yanlis: y, toplamDeneme: d + y, sureSn: BILPRO_GOREV_SURESI_SN });
+      onBitir(bilproDikkatKayitBitir(sonucRef.current));
       return;
     }
     const t = setTimeout(() => setKalan(k => k - 1), 1000);
@@ -7308,7 +7408,8 @@ function BILPROTaramaGorevi({ onBitir }) {
   }, [asama, kalan]);
 
   function basla() {
-    sonucRef.current = { dogru: 0, yanlis: 0 };
+    sonucRef.current = bilproDikkatKayitBaslat();
+    sonucRef.current.sunum = (typeof performance !== "undefined" ? performance.now() : Date.now());
     setDogru(0); setYanlis(0); setKalan(BILPRO_GOREV_SURESI_SN);
     setDeneme(bilproTaramaDenemeUret());
     setAsama("calisiyor");
@@ -7316,8 +7417,11 @@ function BILPROTaramaGorevi({ onBitir }) {
 
   function cevapla(cevapVar) {
     if (asama !== "calisiyor" || !deneme) return;
-    if (cevapVar === deneme.varMi) { sonucRef.current.dogru++; setDogru(d => d + 1); }
-    else { sonucRef.current.yanlis++; setYanlis(y => y + 1); }
+    const dogruMu = cevapVar === deneme.varMi;
+    bilproDikkatKayitIsle(sonucRef.current, dogruMu, kalan);
+    // Hata türü: hedef yokken "VAR" = yanlış alarm (dürtüsellik), hedef varken "YOK" = atlama (gözden kaçırma)
+    if (!dogruMu) { if (cevapVar) sonucRef.current.yanlisAlarm++; else sonucRef.current.atlama++; }
+    if (dogruMu) setDogru(d => d + 1); else setYanlis(y => y + 1);
     setDeneme(bilproTaramaDenemeUret());
   }
 
@@ -7437,7 +7541,9 @@ function BILPROGorevKarti({ altTest, mevcutSonuc, onSonuc }) {
             {altTest.gorev === "sayiDizisi" && `Düz dizi: ${mevcutSonuc.ileriSpan} · Ters dizi: ${mevcutSonuc.geriSpan} · Toplam açıklık: ${mevcutSonuc.toplamSpan}`}
             {altTest.gorev === "gorselDizi" && `Ulaşılan dizi uzunluğu: ${mevcutSonuc.span}`}
             {(altTest.gorev === "kodlama" || altTest.gorev === "tarama") &&
-              `60 saniyede ${mevcutSonuc.dogru} doğru, ${mevcutSonuc.yanlis} yanlış${mevcutSonuc.dogruluk !== null ? ` · doğruluk %${mevcutSonuc.dogruluk}` : ""}`}
+              `60 saniyede ${mevcutSonuc.dogru} doğru, ${mevcutSonuc.yanlis} yanlış${mevcutSonuc.dogruluk !== null ? ` · doğruluk %${mevcutSonuc.dogruluk}` : ""}`
+              + (mevcutSonuc.yari1 ? ` · ilk/son 30 sn doğru: ${mevcutSonuc.yari1.d}/${mevcutSonuc.yari2.d}` : "")
+              + (mevcutSonuc.ortTepkiMs ? ` · ort. tepki ${(mevcutSonuc.ortTepkiMs / 1000).toFixed(1)} sn` : "")}
           </div>
           {(altTest.gorev === "kodlama" || altTest.gorev === "tarama") && mevcutSonuc.dogruluk !== null && mevcutSonuc.dogruluk < 80 && (
             <div style={{ fontSize: 10, color: "#8B5A00", background: "#FDF6E3", border: "1px solid #e0c08a", borderRadius: 8, padding: "6px 9px", marginTop: 6, lineHeight: 1.5 }}>
@@ -7602,6 +7708,22 @@ function BILPROPaneli({ seciliAd, seciliSinif, seciliNumara, bilproDegerlendirme
                 {y.oneri && <div style={{marginTop:4, color:MUTED}}><b>Sınıf içi öneri:</b> {y.oneri}</div>}
               </div>
             ))}
+            {sonuc.dikkat && (
+              <div data-testid="bilpro-dikkat" style={{marginTop:8, paddingTop:8, borderTop:`1px dashed ${BORDER}`}}>
+                <div style={{fontWeight:800, marginBottom:4, color:"#0E7490"}}>🎯 Dikkat Göstergeleri <span style={{fontWeight:500, color:MUTED, fontSize:9.5}}>(betimleyicidir, tanı koymaz)</span></div>
+                <div style={{marginBottom:6}}>{sonuc.dikkat.ozet}</div>
+                {sonuc.dikkat.gostergeler.map((x, i) => {
+                  const rk = x.durum === "zorlanma" ? "#C0392B" : x.durum === "izle" ? "#B07D1A" : "#1A8C5B";
+                  return (
+                    <div key={i} style={{marginBottom:5, paddingLeft:8, borderLeft:`3px solid ${rk}`}}>
+                      <b style={{color:rk}}>{x.durum === "zorlanma" ? "▼" : x.durum === "izle" ? "◆" : "✓"} {x.baslik}:</b> {x.metin}
+                    </div>
+                  );
+                })}
+                {sonuc.dikkat.sonrakiAdim.map((x, i) => <div key={"s" + i} style={{marginTop:3, color:MUTED}}>• {x}</div>)}
+                {sonuc.dikkat.not && <div style={{marginTop:5, fontSize:10, color:"#8B5A00"}}>ℹ️ {sonuc.dikkat.not}</div>}
+              </div>
+            )}
             {sonuc.sevkOnerileri.length > 0 && (
               <div style={{marginTop:8, paddingTop:8, borderTop:`1px dashed ${BORDER}`}}>
                 <div style={{fontWeight:800, marginBottom:4, color:PURPLE}}>➡️ Sonraki Adım</div>

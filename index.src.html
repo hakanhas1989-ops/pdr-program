@@ -11986,6 +11986,8 @@ function ksAsistanTestSonucu(g, ctx, o) {
   const q = ksSade(String(g.test || "").trim());
   const l = tum.filter(t => !q || ksSade(`${t.testAdi || ""} ${t.tip || ""}`).includes(q) || (q.includes("olgun") && t.tip === "okul_olgunlugu") || (q.includes("okuma") && /^okuma_/.test(t.tip)) || (q.includes("kaynas") && t.tip === "kaynastirma_ed"))
     .sort((a, c) => ksTarihAnahtar(c.tarih).localeCompare(ksTarihAnahtar(a.tarih))).slice(0, 5);
+  let tr = ""; try { tr = ksAsistanTaramaSonuclari(ctx, o, { ayrintili: true, q }); } catch (e) {}
+  if (!l.length && tr) return `TEST SONUÇLARI: ${ksAsistanEtiket(o)} (programın kendi puanlamasıyla)\n\n${tr}`;
   if (!l.length) return `${ksAsistanEtiket(o)} için ${q ? `"${g.test}" ile eşleşen ` : ""}test kaydı yok.${tum.length ? ` Kayıtlı testler: ${[...new Set(tum.map(t => t.testAdi || t.tip))].join(", ")}` : ""}`;
   const K = ksAsistanKisalt;
   const b = [`TEST SONUÇLARI: ${ksAsistanEtiket(o)} (programın kendi puanlamasıyla)`];
@@ -12032,6 +12034,7 @@ function ksAsistanTestSonucu(g, ctx, o) {
     } catch (e) { b.push("Bu kaydın özeti çıkarılamadı."); }
   });
   if (tum.length > l.length) b.push(`\n(Toplam ${tum.length} test kaydı var; "test" alanıyla belirli bir testi isteyebilirsin.)`);
+  if (tr) b.push("\n" + tr);
   return b.join("\n");
 }
 
@@ -12355,7 +12358,7 @@ const KS_ASISTAN_ARACLAR = {
     calistir: (g) => ksAsistanProgramRehberi(g.sorgu),
   },
   ogrenci_dosyasi: {
-    aciklama: "Öğrencinin BÜTÜN dosyasını getirir: görüşmeler (tümünün konu dağılımı ve son notlar), bu yılın ve geçmiş dönemin denemeleri, yıl sonu not ortalamaları, BDT bilişsel çarpıtmaları, bireyi tanıma bilgileri, uygulanan testler, profil puanları, devamsızlık, olay kayıtları, risk/müdahale/sevk geçmişi. Risk değerlendirmesi, müdahale planı, seans hazırlığı ya da veli yazısından ÖNCE çağır.",
+    aciklama: "Öğrencinin BÜTÜN dosyasını getirir: görüşmeler (tümünün konu dağılımı ve son notlar), bu yılın ve geçmiş dönemin denemeleri, yıl sonu not ortalamaları, BDT bilişsel çarpıtmaları, bireyi tanıma bilgileri, uygulanan testler, BİLPRO/ÖÖG/otizm/CAS tarama sonuçları (alan puanları, dikkat göstergeleri, klinik örüntüler), profil puanları, devamsızlık, olay kayıtları, risk/müdahale/sevk geçmişi. Risk değerlendirmesi, müdahale planı, seans hazırlığı ya da veli yazısından ÖNCE çağır.",
     girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
     calistir: (g, ctx, o) => ksAsistanOgrenciDosyasi(ctx, o),
   },
@@ -12714,7 +12717,7 @@ const KS_ASISTAN_ARACLAR = {
     calistir: (g, ctx, o) => ksAsistanLgsOncelik(g, ctx, o),
   },
   test_sonucu: {
-    aciklama: "Öğrencinin uygulanan testlerinin sonuçlarını programın kendi puanlamasıyla getirir: okul olgunluğu (karar, alan yüzdeleri, risk göstergeleri ve gerekçeleri, güçlü yanlar, okul/ev eylem planı, yönlendirme, izleme tarihi), okuma-yazma değerlendirmesi ve programı (destek modülleri, izleme kararı), kaynaştırma (bağımsız beceriler, desteklenecek alanlar, RAM rapor süresi) ve diğer testlerin özeti. Test sonucu sorulduğunda, veliye anlatım ya da plan hazırlanırken kullan. test: isteğe bağlı test adı (örn. okul olgunluğu).",
+    aciklama: "Öğrencinin uygulanan testlerinin sonuçlarını programın kendi puanlamasıyla getirir: okul olgunluğu (karar, alan yüzdeleri, risk göstergeleri ve gerekçeleri, güçlü yanlar, okul/ev eylem planı, yönlendirme, izleme tarihi), okuma-yazma değerlendirmesi ve programı (destek modülleri, izleme kararı), kaynaştırma (bağımsız beceriler, desteklenecek alanlar, RAM rapor süresi), BİLPRO bilişsel profil (alan puanları, kapasite-verimlilik farkı, dikkat göstergeleri, klinik örüntüler ve ayırıcı değerlendirme, öğretmen/veli önerileri, okul içi yüzdelik), ÖÖG ön-tarama, otizm taraması, CAS tarzı tarama ve performans testi ve diğer testlerin özeti. Test sonucu sorulduğunda, veliye anlatım ya da plan hazırlanırken kullan. test: isteğe bağlı test adı (örn. okul olgunluğu).",
     girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "test": "isteğe bağlı"}', ogrenciIster: true, yontem: "hepsi",
     calistir: (g, ctx, o) => ksAsistanTestSonucu(g, ctx, o),
   },
@@ -13039,6 +13042,83 @@ function ksAsistanHassasMi(metin) {
   return /intihar|kendine zarar|kendini kes|kesik|jilet|ölmek iste|istismar|taciz|tecavüz|cinsel|şiddet|dayak|darp|uyuşturucu|madde kullan|alkol|bağımlı|depresyon|psikiyatri|ilaç|gebe|hamile|boşan|cezaevi|hapis|polis|savcı|mahkeme|koruma kararı|ihmal/.test(t);
 }
 // Öğrencinin tüm verilerinden kısa ama eksiksiz bir dosya çıkarır (veri azaltma: ham notların tamamı değil, özet)
+// Bilişsel/gelişimsel taramalar (BİLPRO, ÖÖG, otizm, CAS) — asistanın okuyacağı metin.
+// Sonuçlar her seferinde programın kendi puanlamasıyla yeniden hesaplanır.
+function ksAsistanTaramaSonuclari(ctx, o, sec) {
+  sec = sec || {};
+  const ayrintili = !!sec.ayrintili, q = ksSade(String(sec.q || ""));
+  const ad = o.name, sinif = o.className, no = o.numara;
+  const bul = (l) => (l || []).filter(x => pdrAyniOgrenci(x.studentName, x.className, ad, sinif, x.numara, no)).sort((a, c) => ksTarihAnahtar(c.date).localeCompare(ksTarihAnahtar(a.date)))[0];
+  const K = (t, n) => ksAsistanKisalt(String(t || "").replace(/\s+/g, " ").trim(), n);
+  const ister = (...k) => !q || k.some(x => q.includes(x) || x.includes(q));
+  const b = [];
+  // BİLPRO
+  try {
+    const bp = ister("bilpro", "bilissel profil", "bilis", "zeka", "dikkat", "ogrenme guclugu", "wisc") && bul(ctx.bilproDegerlendirmeler);
+    const s = bp && bp.cevaplar && Object.keys(bp.cevaplar).length ? bilproSonucHesapla(bp.cevaplar) : null;
+    if (s && s.genelOrtalama !== null) {
+      const alanAd = (k) => { const a = BILPRO_ALANLAR.find(x => x.key === k); return a ? a.ad : k; };
+      b.push(`BİLPRO bilişsel profil taraması (${bp.date || "?"}; zekâ testi değildir, IQ üretmez, tanı koymaz; yüzdeler öğrencinin kendi performansıdır):`);
+      b.push(`Genel ortalama %${s.genelOrtalama}${s.seviye ? " (" + s.seviye.label + ")" : ""}. Alanlar: ${BILPRO_ALANLAR.filter(a => s.alanSonuclari[a.key] && s.alanSonuclari[a.key].yuzde !== null).map(a => `${a.ad} (${a.kod}) %${s.alanSonuclari[a.key].yuzde}`).join(", ")}.`);
+      if ((s.guclu || []).length || (s.zayif || []).length) b.push(`Kişi içi güçlü: ${(s.guclu || []).map(alanAd).join(", ") || "—"}; desteğe ihtiyaç: ${(s.zayif || []).map(alanAd).join(", ") || "—"}.`);
+      if (s.aykBvFarki !== null && s.akilYurutme && s.bilisselVerimlilik) b.push(`Akıl yürütme kapasitesi %${s.akilYurutme.yuzde}, bilişsel verimlilik (bellek+hız) %${s.bilisselVerimlilik.yuzde}.${s.aykBvYorumu ? " " + K(s.aykBvYorumu, ayrintili ? 400 : 220) : ""}`);
+      if (s.dikkat) {
+        const zg = (s.dikkat.gostergeler || []).filter(x => x.durum === "zorlanma" || x.durum === "izle");
+        b.push(`Dikkat göstergeleri: ${K(s.dikkat.ozet, ayrintili ? 400 : 220)}${zg.length ? " İzlenecek: " + zg.map(x => `${x.baslik} (${x.durum})${ayrintili && x.metin ? ": " + K(x.metin, 160) : ""}`).join("; ") + "." : ""}`);
+      }
+      const kl = s.klinik;
+      if (kl && (kl.oruntuler || []).length) {
+        b.push(`Klinik örüntüler (hipotez, tanı değil): ${kl.oruntuler.map(x => `${x.ad} [${x.guc === "belirgin" ? "belirgin" : "olası"}] — dayanak: ${K((x.kanit || []).join("; "), ayrintili ? 300 : 160)}${ayrintili && x.oneri ? " → " + K(x.oneri, 200) : ""}`).join(" | ")}`);
+        if (kl.ayirici) b.push(`Ayırıcı değerlendirme: ${K(kl.ayirici, ayrintili ? 400 : 200)}`);
+      } else if (kl) b.push("Klinik örüntü: belirgin bir öğrenme güçlüğü/dikkat örüntüsü çıkmadı.");
+      if (ayrintili && kl) {
+        if (kl.kanal) b.push(K(kl.kanal, 250));
+        if ((kl.gecerlilik || []).length) b.push(`Geçerlilik notları: ${K(kl.gecerlilik.join(" "), 400)}`);
+        if ((kl.ogretmen || []).length) b.push(`Öğretmene öneriler: ${K(kl.ogretmen.join(" | "), 600)}`);
+        if ((kl.veli || []).length) b.push(`Veliye anlatım: ${K(kl.veli.join(" "), 500)}`);
+      }
+      if (ayrintili && (s.sevkOnerileri || []).length) b.push(`Sonraki adım: ${K(s.sevkOnerileri.join(" | "), 400)}`);
+      try {
+        const nz = bilproNormOzet(bilproYerelNorm(ctx.bilproDegerlendirmeler, sinif, bp.id), s);
+        if (nz && nz.hazir) b.push(`Okul içi karşılaştırma (${nz.duzey}. sınıflar, n=${nz.n}): ${nz.satirlar.filter(x => x.yuzdelik !== null).map(x => `${x.ad} ${x.yuzdelik}. yüzdelik`).join(", ")}${nz.dogrulayan && nz.dogrulayan.length ? `; akranlara göre de düşük: ${nz.dogrulayan.join(", ")}` : ""}. (Yerel karşılaştırmadır, ulusal norm değildir.)`);
+        else if (nz) b.push(`Okul içi karşılaştırma henüz yok (karşılaştırma grubunda ${nz.n} öğrenci; en az ${nz.esik} gerekir) — yorum öğrencinin kendi içindeki farklara dayanır.`);
+      } catch (e) {}
+    }
+  } catch (e) {}
+  // ÖÖG ön-tarama
+  try {
+    const og = ister("oog", "ozel ogrenme", "ogrenme guclugu", "on tarama", "on-tarama", "disleksi") && bul(ctx.oogDegerlendirmeler);
+    if (og && og.cevaplar && Object.keys(og.cevaplar).length) {
+      const r = oogSonucHesapla(og.cevaplar);
+      b.push(`ÖÖG ön-tarama (${og.date || "?"}; tanı değil, yalnızca tarama): %${r.yuzde} — ${r.seviye.label}. Alanlar: ${OOG_KATEGORILER.filter(k => r.kategoriPuan[k.key] !== null && r.kategoriPuan[k.key] !== undefined).map(k => `${k.label} %${r.kategoriPuan[k.key]}`).join(", ")}.${r.gozlenemeyenSayisi ? ` (${r.gozlenemeyenSayisi} madde gözlenemedi)` : ""}`);
+    }
+  } catch (e) {}
+  // Otizm spektrumu taraması
+  try {
+    const ca = ister("otizm", "spektrum", "cast", "oss") && bul(ctx.castDegerlendirmeler);
+    if (ca && ca.cevaplar && Object.keys(ca.cevaplar).length) {
+      const r = castSonucHesapla(ca.cevaplar);
+      b.push(`Otizm spektrumu taraması (${ca.date || "?"}; tanı değil, yalnızca tarama): %${r.yuzde} — ${r.seviye.label}. Alanlar: ${CAST_KATEGORILER.filter(k => r.kategoriPuan[k.key] !== null && r.kategoriPuan[k.key] !== undefined).map(k => `${k.label} %${r.kategoriPuan[k.key]}`).join(", ")}.${r.gozlenemeyenSayisi ? ` (${r.gozlenemeyenSayisi} madde gözlenemedi)` : ""}`);
+    }
+  } catch (e) {}
+  // CAS tarzı bilişsel süreçler taraması (gözlem formu)
+  try {
+    const pa = ister("cas", "pass", "bilissel surec", "planlama") && bul(ctx.pasDegerlendirmeler);
+    if (pa && pa.cevaplar && Object.keys(pa.cevaplar).length) {
+      const r = pasSonucHesapla(pa.cevaplar);
+      b.push(`CAS tarzı bilişsel süreçler taraması (${pa.date || "?"}; tanı değil): %${r.yuzde} — ${r.seviye.label}. Alanlar: ${PAS_KATEGORILER.filter(k => r.kategoriPuan[k.key] !== null && r.kategoriPuan[k.key] !== undefined).map(k => `${k.label} %${r.kategoriPuan[k.key]}`).join(", ")}.${r.genelYorum ? " " + K(r.genelYorum, ayrintili ? 500 : 220) : ""}`);
+    }
+  } catch (e) {}
+  // CAS tarzı performans testi (öğrenciye uygulanan)
+  try {
+    const pf = ister("cas", "pass", "performans", "bilissel surec") && bul(ctx.pasPerformanslar);
+    if (pf && pf.sonuc) {
+      const r = pf.sonuc;
+      b.push(`CAS tarzı bilişsel süreçler performans testi (${pf.date || "?"}; tanı değil): %${r.genelSkor}${r.seviye ? " — " + r.seviye.label : ""}. Alanlar: ${(r.alanlar || []).map(a => `${a.ad} %${a.skor}`).join(", ")}.${r.genelYorum ? " " + K(r.genelYorum, ayrintili ? 500 : 220) : ""}${ayrintili && pf.aiYorum ? " Kayıtlı yorum: " + K(pf.aiYorum, 500) : ""}`);
+    }
+  } catch (e) {}
+  return b.length ? b.join("\n") : "";
+}
 function ksAsistanOgrenciDosyasi(ctx, o) {
   const ad = o.name, sinif = o.className, no = o.numara;
   const ayni = (x) => pdrAyniOgrenci(x.studentName, x.className, ad, sinif);
@@ -13112,6 +13192,7 @@ function ksAsistanOgrenciDosyasi(ctx, o) {
     const dl = kd && ({ ilkokul: ctx.ilkokulTaramalar, ortaokul: ctx.akademikTaramalar, lise: ctx.liseTaramalar }[kd] || []).find(x => pdrAyniOgrenci(x.studentName, x.className, ad, sinif, x.numara, no));
     if (dl && dl.cevaplar && Object.keys(dl.cevaplar).length) { const an = duzeyTaramaAnaliz(kd, dl.cevaplar, sinif, dl.date); b.push(`DÜZEY TARAMASI (${dl.date || "?"}): ${an.uygulanan.map(d => `${d.kisa} ${d.duzey !== null ? d.duzey : d.belirsiz ? "≤" + (d.ilkSet - 1) : an.alt + " altı"}${d.fark !== null && d.fark > 0 ? ` (${d.fark} yıl geride)` : ""}`).join(", ")}${an.beklenen !== null ? ` · beklenen ${an.beklenen}` : ""} — ayrıntı için duzey_taramasi`); }
   } catch (e) {}
+  try { const tm = ksAsistanTaramaSonuclari(ctx, o); if (tm) b.push("\nBİLİŞSEL / GELİŞİMSEL TARAMALAR:\n" + tm); } catch (e) {}
   // Devamsızlık ve olaylar
   const ogr = (ctx.ogrenciler || []).find(x => pdrAyniOgrenci(x.studentName, x.className, ad, sinif));
   const dv = ogr && ogr.devamsizlikGecmisi || [];
@@ -34759,6 +34840,7 @@ function pdrAsistanCtx(p) {
     akademikTaramalar: p.akademikTaramalar, liseTaramalar: p.liseTaramalar, benlikOlcekleri: p.benlikOlcekleri,
     sinavTuru: p.sinavTuru, aktifYil: p.aktifYil, ogrenciListesi: p.kayitliListesi,
     bdtAnaliz: p.bdtAnaliz, bireyiTanima: p.bireyiTanima, ogrenciler: p.ogrenciler, uyumIzleme: p.uyumIzleme, kademe: p.kademe || "", konuHaritasiVerisi: p.konuHaritasiVerisi || {}, ilkokulTaramalar: p.ilkokulTaramalar || [],
+    bilproDegerlendirmeler: p.bilproDegerlendirmeler || [], oogDegerlendirmeler: p.oogDegerlendirmeler || [], castDegerlendirmeler: p.castDegerlendirmeler || [], pasDegerlendirmeler: p.pasDegerlendirmeler || [], pasPerformanslar: p.pasPerformanslar || [],
     asistanNotlari: p.asistanNotlari || [], mudahaleOnerileri: p.mudahaleOnerileri || {}, profNotlari: p.profNotlari || {},
     kaydet: {
       profNotlari: p.setProfNotlari ? async (v) => { p.setProfNotlari(v); await saveProfNotlari(v); } : null,
@@ -34899,7 +34981,8 @@ function AsistanEkrani({
   mudahalePlan, setMudahalePlan, profiles, profiles2, denemeler, sevkler, testKayitlari,
   akademikTaramalar, liseTaramalar, benlikOlcekleri, sinavTuru, aktifYil, setTab,
   bdtAnaliz, bireyiTanima, ogrenciler, uyumIzleme, setBdtAnaliz, setBireyiTanima, setUyumIzleme, kademe, setSevkler, konuHaritasiVerisi, ilkokulTaramalar,
-  asistanNotlari, setAsistanNotlari, setProfiles2, setProfiles, setDenemeler, setOgrenciler, setKonuHaritasiVerisi, mudahaleOnerileri, setMudahaleOnerileri, profNotlari, setProfNotlari
+  asistanNotlari, setAsistanNotlari, setProfiles2, setProfiles, setDenemeler, setOgrenciler, setKonuHaritasiVerisi, mudahaleOnerileri, setMudahaleOnerileri, profNotlari, setProfNotlari,
+  bilproDegerlendirmeler, oogDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, pasPerformanslar
 }) {
   const S = PDR_ASISTAN_SOHBET;
   const [notSec, setNotSec] = useState(null);       // hangi yanıt için öğrenci seçiliyor
@@ -35008,7 +35091,8 @@ function AsistanEkrani({
     return pdrAsistanCtx({ kayitliListesi, records, setRecords, riskListesi, setRiskListesi, hatirlatmalar, setHatirlatmalar,
       mudahalePlan, setMudahalePlan, profiles, profiles2, denemeler, sevkler, testKayitlari,
       akademikTaramalar, liseTaramalar, benlikOlcekleri, sinavTuru, aktifYil, bdtAnaliz, bireyiTanima, ogrenciler, uyumIzleme,
-      setBdtAnaliz, setBireyiTanima, setUyumIzleme, kademe, setSevkler, konuHaritasiVerisi, ilkokulTaramalar, asistanNotlari, setAsistanNotlari, setProfiles2, setProfiles, setDenemeler, setOgrenciler, setKonuHaritasiVerisi, mudahaleOnerileri, setMudahaleOnerileri, profNotlari, setProfNotlari });
+      setBdtAnaliz, setBireyiTanima, setUyumIzleme, kademe, setSevkler, konuHaritasiVerisi, ilkokulTaramalar, asistanNotlari, setAsistanNotlari, setProfiles2, setProfiles, setDenemeler, setOgrenciler, setKonuHaritasiVerisi, mudahaleOnerileri, setMudahaleOnerileri, profNotlari, setProfNotlari,
+      bilproDegerlendirmeler, oogDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, pasPerformanslar });
   }
   // 📌 Yanıtı öğrencinin dosyasına kaydet
   async function notaKaydet(i, ogr) {
@@ -47433,6 +47517,8 @@ function pdrBaslangicSekmesi() {
             setProfiles={setProfiles} setDenemeler={setDenemeler} setOgrenciler={setOgrenciler} setKonuHaritasiVerisi={setKonuHaritasiVerisi}
             mudahaleOnerileri={mudahaleOnerileri} setMudahaleOnerileri={setMudahaleOnerileri}
             profNotlari={profNotlari} setProfNotlari={setProfNotlari}
+            bilproDegerlendirmeler={bilproDegerlendirmeler} oogDegerlendirmeler={oogDegerlendirmeler} castDegerlendirmeler={castDegerlendirmeler}
+            pasDegerlendirmeler={pasDegerlendirmeler} pasPerformanslar={pasPerformanslar}
           />
         )}
         {/* ── PDR ASİSTANI: her ekranda bas-konuş düğmesi ── */}
@@ -47454,6 +47540,8 @@ function pdrBaslangicSekmesi() {
             setProfiles={setProfiles} setDenemeler={setDenemeler} setOgrenciler={setOgrenciler} setKonuHaritasiVerisi={setKonuHaritasiVerisi}
             mudahaleOnerileri={mudahaleOnerileri} setMudahaleOnerileri={setMudahaleOnerileri}
             profNotlari={profNotlari} setProfNotlari={setProfNotlari}
+            bilproDegerlendirmeler={bilproDegerlendirmeler} oogDegerlendirmeler={oogDegerlendirmeler} castDegerlendirmeler={castDegerlendirmeler}
+            pasDegerlendirmeler={pasDegerlendirmeler} pasPerformanslar={pasPerformanslar}
           />
         )}
 

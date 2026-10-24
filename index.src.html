@@ -7401,7 +7401,7 @@ function bilproAkisSvg(s) {
   });
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${kh + 20}" width="100%" role="img" aria-label="Karar akışı">${g}</svg>`;
 }
-function bilproRaporHtml(kayit, bilgi) {
+function bilproRaporHtml(kayit, bilgi, normOzet) {
   const E = ootEsc, c = (kayit && kayit.cevaplar) || {}, s = bilproSonucHesapla(c);
   const k = s.klinik || { oruntuler: [], altTestKarsilastirmalari: [], alanKarsilastirmalari: [], gecerlilik: [], ogretmen: [], veli: [] };
   const dk = s.dikkat, renkD = { zorlanma: "#C0392B", izle: "#B07D1A", iyi: "#1A8C5B" }, ikonD = { zorlanma: "▼", izle: "◆", iyi: "✓" };
@@ -7431,6 +7431,7 @@ function bilproRaporHtml(kayit, bilgi) {
   <div class="kucuk">Renkli bantlar düzeyleri, kesikli mor çizgi öğrencinin kendi ortalamasını gösterir. ▲/▼: kendi ortalamasına göre belirgin güçlü/zayıf alan (±${BILPRO_IPSATIF_ESIK} puan).</div>
   <div class="iki"><div>${bilproRadarSvg(s)}<div class="kucuk" style="text-align:center">Profil şekli: dengeli profil düzgün altıgene yakındır; içe çöken köşeler zayıf alanlardır.</div></div><div>${ikili.join("")}</div></div>
   ${s.aykBvYorumu ? `<div class="kutu"><b>Kapasite ↔ Verimlilik:</b> ${E(s.aykBvYorumu)}</div>` : ""}${s.eksenYorumu ? `<div class="kutu"><b>Sunum ekseni:</b> ${E(s.eksenYorumu)}</div>` : ""}
+  ${normOzet ? (normOzet.hazir ? `<h3>Okul içi karşılaştırma (yerel norm — ${normOzet.duzey}. sınıflar)</h3><table><tr><th>Alan</th><th>Puan</th><th>Okul içi yüzdelik sıra</th><th>Yorum</th></tr>${normOzet.satirlar.map(x => `<tr><td>${E(x.ad)}</td><td style="text-align:center">%${x.yuzde}</td><td style="text-align:center;font-weight:700">${x.yuzdelik === null ? "— (n=" + x.n + ")" : x.yuzdelik + ". (n=" + x.n + ")"}</td><td style="color:${x.bant ? x.bant.color : "#777"}">${x.bant ? E(x.bant.label) : "yetersiz veri"}</td></tr>`).join("")}</table><div class="kucuk">Yüzdelik sıra, okulda karşılaştırma grubu olarak uygulanan aynı sınıf düzeyindeki öğrencilere göredir; ulusal norm değildir.${normOzet.dogrulayan.length ? ` Kişi-içi zayıf alan olan ${E(normOzet.dogrulayan.join(", "))} akran karşılaştırmasında da düşük — bulgu güçleniyor.` : ""}</div>` : `<div class="kucuk">Okul içi karşılaştırma: ${normOzet.duzey}. sınıf karşılaştırma grubunda ${normOzet.n}/${normOzet.esik} öğrenci var; yeterli veri olunca yüzdelik sıralar rapora eklenecek. Değerlendirme şu an öğrencinin kendi içindeki profiline dayanıyor.</div>`) : ""}
   <h2>2. Alt test tablosu</h2><table><tr><th>Alan</th><th>Alt test</th><th>Ham sonuç</th><th style="width:22%">Grafik</th><th>%</th><th>Düzey</th></tr>${altSatirlar}</table>
   ${(k.altTestKarsilastirmalari.length || k.alanKarsilastirmalari.length) ? `<h3>Alt test ve alan karşılaştırmaları</h3>${ul([...k.altTestKarsilastirmalari, ...k.alanKarsilastirmalari].map(x => x.metin))}` : ""}
   ${(s.alanYorumlari || []).length ? `<h3>Güçlü ve zayıf alanlar</h3>${(s.alanYorumlari || []).map(y => `<div class="kutu" style="border-color:${y.tip === "guclu" ? "#1A8C5B" : "#C0392B"}"><b>${E(y.alan.ad)}</b> — ${E(y.metin)}${y.oneri ? `<div class="kucuk" style="margin-top:3px"><b>Sınıf içi öneri:</b> ${E(y.oneri)}</div>` : ""}</div>`).join("")}` : ""}
@@ -7448,6 +7449,55 @@ function bilproRaporHtml(kayit, bilgi) {
   <h3>Geçerlilik notları</h3>${ul(k.gecerlilik)}
   <div class="kucuk" style="margin-top:14px;border-top:1px solid #ddd;padding-top:6px">BİLPRO; WISC ve Stanford-Binet'in dayandığı Cattell-Horn-Carroll (CHC) kuramından yola çıkılarak hazırlanmış özgün bir tarama aracıdır. Norm örneklemi yoktur; yüzdeler öğrencinin kendi içindeki profilini betimler. Örüntüler hipotez düzeyindedir; resmî eğitsel tanılama RAM'a, tıbbi tanı hekime aittir.</div>
   </body></html>`;
+}
+
+// ── Okul içi (yerel) norm ────────────────────────────────────────────────
+// Yalnızca "karşılaştırma grubu" olarak işaretlenmiş uygulamalardan (sınıfça /
+// rastgele uygulama) aynı sınıf düzeyindeki öğrencilere göre yüzdelik sıra
+// hesaplar. Sevk edilen öğrencilerin bireysel uygulamaları gruba KATILMAZ —
+// yoksa karşılaştırma grubu ortalamanın altına kayar. Kişi-içi değerlendirme
+// bundan bağımsızdır ve her durumda çalışır.
+const BILPRO_NORM_ESIK = 30;
+function bilproSinifDuzeyi(c) { const m = String(c || "").match(/\d{1,2}/); return m ? parseInt(m[0], 10) : null; }
+function bilproYuzdelikBandi(y) {
+  if (y < 10) return { label: "akranlarının belirgin altında", color: "#C0392B" };
+  if (y < 25) return { label: "akranlarının altında", color: "#B07D1A" };
+  if (y <= 75) return { label: "akranlarıyla benzer", color: "#457B9D" };
+  if (y <= 90) return { label: "akranlarının üstünde", color: "#1A8C5B" };
+  return { label: "akranlarının belirgin üstünde", color: "#1A8C5B" };
+}
+function bilproYerelNorm(kayitlar, className, haricId) {
+  const duzey = bilproSinifDuzeyi(className);
+  if (duzey === null) return null;
+  const grup = (kayitlar || []).filter(k => k && k.normGrubu && k.id !== haricId && bilproSinifDuzeyi(k.className) === duzey && k.cevaplar);
+  const sonuclar = grup.map(k => bilproSonucHesapla(k.cevaplar));
+  const dagilim = (al) => sonuclar.map(al).filter(v => typeof v === "number");
+  const alan = {}, alt = {};
+  BILPRO_ALANLAR.forEach(a => {
+    alan[a.key] = dagilim(x => x.alanSonuclari[a.key] && x.alanSonuclari[a.key].yuzde);
+    a.altTestler.forEach(at => { alt[at.key] = dagilim(x => x.altTestSonuclari[at.key] && x.altTestSonuclari[at.key].yuzde); });
+  });
+  const genel = dagilim(x => x.genelOrtalama);
+  return { duzey, n: grup.length, esik: BILPRO_NORM_ESIK, alan, alt, genel };
+}
+// Bir puanın gruptaki yüzdelik sırası (altında kalanlar + eşitlerin yarısı). Grup eşiğin altındaysa null.
+function bilproYuzdelik(dagilim, deger) {
+  if (!dagilim || dagilim.length < BILPRO_NORM_ESIK || typeof deger !== "number") return null;
+  const alti = dagilim.filter(v => v < deger).length, esit = dagilim.filter(v => v === deger).length;
+  return Math.round(((alti + esit / 2) / dagilim.length) * 100);
+}
+function bilproNormOzet(norm, sonuc) {
+  if (!norm) return null;
+  const satirlar = BILPRO_ALANLAR.map(a => {
+    const d = norm.alan[a.key], v = sonuc.alanSonuclari[a.key] && sonuc.alanSonuclari[a.key].yuzde;
+    const y = bilproYuzdelik(d, v);
+    return { key: a.key, ad: a.ad, kod: a.kod, yuzde: v, yuzdelik: y, n: d ? d.length : 0, bant: y === null ? null : bilproYuzdelikBandi(y) };
+  }).filter(x => typeof x.yuzde === "number");
+  const genelY = bilproYuzdelik(norm.genel, sonuc.genelOrtalama);
+  const hazir = satirlar.some(x => x.yuzdelik !== null);
+  // Kişi-içi zayıf alan akran karşılaştırmasında da düşükse bulgu güçlenir
+  const dogrulayan = satirlar.filter(x => x.yuzdelik !== null && x.yuzdelik < 16 && (sonuc.zayif || []).includes(x.key)).map(x => x.ad);
+  return { duzey: norm.duzey, n: norm.n, esik: norm.esik, hazir, satirlar, genelYuzdelik: genelY, dogrulayan };
 }
 
 // ── BİLPRO süreli/performans görevleri ────────────────────────────────────
@@ -7910,10 +7960,12 @@ function BILPROPaneli({ seciliAd, seciliSinif, seciliNumara, bilproDegerlendirme
   const [cevaplar, setCevaplar] = useState(mevcut?.cevaplar || {});
   const [aktifAlan, setAktifAlan] = useState(BILPRO_ALANLAR[0].key);
   const [kaydedildi, setKaydedildi] = useState(false);
+  const [normGrubu, setNormGrubu] = useState(!!mevcut?.normGrubu);
 
   useEffect(() => {
     const m = bilproDegerlendirmeler.find(o => pdrAyniOgrenci(o.studentName, o.className, seciliAd, seciliSinif, o.numara, seciliNumara));
     setCevaplar(m?.cevaplar || {});
+    setNormGrubu(!!m?.normGrubu);
     setKaydedildi(false);
   }, [seciliAd, seciliSinif, seciliNumara]);
 
@@ -7922,6 +7974,7 @@ function BILPROPaneli({ seciliAd, seciliSinif, seciliNumara, bilproDegerlendirme
   }
 
   const sonuc = bilproSonucHesapla(cevaplar);
+  const normOzet = useMemo(() => bilproNormOzet(bilproYerelNorm(bilproDegerlendirmeler, seciliSinif, mevcut?.id), sonuc), [bilproDegerlendirmeler, seciliSinif, mevcut?.id, cevaplar]);
   const alan = BILPRO_ALANLAR.find(a => a.key === aktifAlan) || BILPRO_ALANLAR[0];
 
   async function handleKaydet() {
@@ -7930,7 +7983,7 @@ function BILPROPaneli({ seciliAd, seciliSinif, seciliNumara, bilproDegerlendirme
       id: mevcut?.id || uid(),
       date: today(),
       studentName: seciliAd, className: seciliSinif, numara: seciliNumara,
-      cevaplar, sonuc,
+      cevaplar, sonuc, normGrubu,
     };
     const updated = mevcut
       ? bilproDegerlendirmeler.map(o => o.id === mevcut.id ? kayit : o)
@@ -7999,6 +8052,30 @@ function BILPROPaneli({ seciliAd, seciliSinif, seciliNumara, bilproDegerlendirme
               );
             })}
           </div>
+
+          {normOzet && (
+            <div data-testid="bilpro-norm" style={{background:"#F7F5F0", border:`1px solid ${BORDER}`, borderRadius:8, padding:"8px 10px", marginBottom:10, fontSize:10.5, lineHeight:1.55}}>
+              <div style={{fontWeight:800, color:TEXT, marginBottom:3}}>📊 Okul içi karşılaştırma ({normOzet.duzey}. sınıflar)</div>
+              {!normOzet.hazir ? (
+                <div style={{color:MUTED}}>
+                  Karşılaştırma grubu: <b>{normOzet.n}/{normOzet.esik}</b> öğrenci. Yeterli veri olunca her alanın akranlara göre yüzdelik sırası burada görünecek.
+                  <div style={{height:6, background:"#E5E5E5", borderRadius:4, marginTop:4, overflow:"hidden"}}><div style={{width:`${Math.min(100, normOzet.n / normOzet.esik * 100)}%`, height:"100%", background:"#457B9D"}} /></div>
+                  <div style={{marginTop:4}}>Değerlendirme şu an öğrencinin <b>kendi içindeki</b> profiline göre yapılıyor; bu bölüm ek bilgidir.</div>
+                </div>
+              ) : (
+                <div>
+                  {normOzet.satirlar.map(x => (
+                    <div key={x.key} style={{display:"flex", justifyContent:"space-between", gap:6}}>
+                      <span>{x.ad}</span>
+                      <span style={{fontWeight:700, color: x.bant ? x.bant.color : MUTED}}>{x.yuzdelik === null ? `yetersiz veri (n=${x.n})` : `${x.yuzdelik}. yüzdelik · ${x.bant.label}`}</span>
+                    </div>
+                  ))}
+                  {normOzet.dogrulayan.length > 0 && <div style={{marginTop:4, color:"#C0392B"}}>Kişi-içi zayıf alan olan <b>{normOzet.dogrulayan.join(", ")}</b> akranlarına göre de düşük — bulgu güçleniyor.</div>}
+                  <div style={{marginTop:4, color:MUTED, fontSize:9.5}}>Okulunuzdaki karşılaştırma grubuna göredir (n={normOzet.n}); ulusal norm değildir.</div>
+                </div>
+              )}
+            </div>
+          )}
 
           {sonuc.aykBvFarki !== null && (
             <div style={{display:"flex", gap:8, marginBottom:10}}>
@@ -8235,8 +8312,12 @@ function BILPROPaneli({ seciliAd, seciliSinif, seciliNumara, bilproDegerlendirme
         );
       })}
 
+      <label data-testid="bilpro-norm-grubu" style={{display:"flex", gap:8, alignItems:"flex-start", background:"#F7F5F0", border:`1px solid ${BORDER}`, borderRadius:10, padding:"9px 11px", marginBottom:8, fontSize:11, lineHeight:1.5, cursor:"pointer"}}>
+        <input type="checkbox" checked={normGrubu} onChange={e => setNormGrubu(e.target.checked)} style={{marginTop:2}} />
+        <span><b>Karşılaştırma grubuna dahil et</b> — yalnızca sınıfça ya da rastgele seçilerek yapılan uygulamalarda işaretle. Sevk edilen öğrencinin bireysel uygulamasını işaretleme (karşılaştırma grubunu aşağı çeker). İşaretlemesen de öğrencinin değerlendirmesi aynen yapılır.</span>
+      </label>
       {(sonuc.uygulananToplam + sonuc.uygulananGorev) > 0 && (
-        <button data-testid="bilpro-rapor" onClick={() => ootBelgeAc(bilproRaporHtml({ date: mevcut?.date || today(), cevaplar }, { ogrenci: seciliAd, sinif: seciliSinif }), `BİLPRO Raporu - ${seciliAd}`)} style={{
+        <button data-testid="bilpro-rapor" onClick={() => ootBelgeAc(bilproRaporHtml({ date: mevcut?.date || today(), cevaplar }, { ogrenci: seciliAd, sinif: seciliSinif }, normOzet), `BİLPRO Raporu - ${seciliAd}`)} style={{
           width:"100%", padding:11, background:"#fff", color:"#6A4C93", border:"1.5px solid #6A4C93", borderRadius:12,
           fontSize:13, fontWeight:800, cursor:"pointer", marginBottom:8
         }}>📄 Grafikli Raporu Aç (Yazdır / PDF)</button>
@@ -20607,6 +20688,9 @@ function RaporModalIc({ rapor, onKapat }) {
                         <b>{y.alan.ad}:</b> {y.metin}{y.oneri ? ` Sınıf içi öneri: ${y.oneri}` : ""}
                       </div>
                     ))}
+                    {(() => { const no = bilproNormOzet(bilproYerelNorm(rapor.bilproDegerlendirmeler, ogrenciSinif, bpKayit.id), s); return no && no.hazir ? (
+                      <div style={{ fontSize:9.5, color:"#555", lineHeight:1.5, marginTop:6 }}><b>Okul içi karşılaştırma ({no.duzey}. sınıflar, n={no.n}):</b> {no.satirlar.filter(x => x.yuzdelik !== null).map(x => `${x.ad} ${x.yuzdelik}. yüzdelik`).join(" · ")}</div>
+                    ) : null; })()}
                     {s.klinik && s.klinik.oruntuler.length > 0 && (
                       <div style={{ marginTop:8, paddingTop:6, borderTop:"1px dashed #ddd" }}>
                         <div style={{ fontSize:9.5, fontWeight:800, color:"#6A4C93", marginBottom:3 }}>Klinik Yorum (hipotez, tanı değildir)</div>

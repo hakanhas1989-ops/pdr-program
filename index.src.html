@@ -14519,6 +14519,7 @@ Bu öğrencinin risk durumunu değerlendir:
 RİSK TÜRÜ: (Şu türlerden EN UYGUN birini seç — sadece türün adını yaz: Davranış / Akademik / Aile / Akran-Zorbalık / Duygusal / Devamsızlık / Öz Zarar / Sağlık / Madde Kullanımı / Teknoloji-Ekran Bağımlılığı / Ekonomik Güçlük / Yas-Kayıp / Travma / Özel Öğrenme Güçlüğü / Göç-Uyum Süreci / Adli Süreç-Danışmanlık Tedbiri / Toplumsal Cinsiyet Temelli Şiddet / İhmal-İstismar / Diğer)
 RİSK DÜZEYİ: (HAFİF / ORTA / YÜKSEK — net belirt. Deneme/akademik veri varsa bunu da hesaba kat, sadece görüşme notlarına dayanma.)
 RİSK DEĞERLENDİRMESİ: (Bu risk neden önemli, nasıl yorumlanmalı — 2-3 cümle. Deneme sonucu ile görüşme notlarının işaret ettiği tablo BİRBİRİNDEN BELİRGİN ŞEKİLDE FARKLIYSA — örn. deneme riski yüksek ama görüşme notu yoksa/hafifse, ya da tam tersi — bunu açıkça "Not: Deneme sonuçları ile görüşme notları farklı bir tablo çiziyor" diyerek belirt.)
+İKİNCİL ETKİLENEN ALAN: (Ana risk türü dışında, bu durumdan belirgin şekilde etkilenen BAŞKA bir alan varsa — örn. Duygusal seçildiyse ve akademik performans da ciddi etkilenmişse "Akademik" yaz. Aynı listeden seç. Belirgin bir ikincil etki yoksa "Yok" yaz.)
 KORUYUCU FAKTÖRLER: (Öğrencinin güçlü yönleri ve koruyucu faktörler)
 ACİL MÜDAHALE GEREKTİRİR Mİ: (Evet/Hayır — gerekçesiyle)
 ÖNERİLEN ADIMLAR:
@@ -30463,15 +30464,17 @@ function HatirlaticiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, hati
   // "gecikmiş" görünür — bu durumda hatırlatmayı doğrudan BUGÜN'e ayarlıyoruz,
   // böylece hemen ve net şekilde öne çıkıyor.
   function handleRamTarihiDegis(v) {
-    const ms = pdrTarihMs(v);
+    const ms = pdrTarihMs(v) || pdrTarihMs(pdrMetindenTarihCikar(v));
     let hatirlatmaTarihi = form.tarih;
+    let cozulenRamTarihi = v;
     if (ms) {
+      cozulenRamTarihi = pdrTarihFormatla(new Date(ms));
       const d = new Date(ms);
       d.setDate(d.getDate() - 7);
       const bugun = new Date(); bugun.setHours(0,0,0,0);
       hatirlatmaTarihi = d.getTime() < bugun.getTime() ? pdrTarihFormatla(bugun) : pdrTarihFormatla(d);
     }
-    setForm(f => ({ ...f, ramTarihi: v, tarih: hatirlatmaTarihi }));
+    setForm(f => ({ ...f, ramTarihi: cozulenRamTarihi, tarih: hatirlatmaTarihi }));
   }
 
   async function handleKaydet() {
@@ -30580,7 +30583,7 @@ function HatirlaticiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, hati
           {form.tur === "ram" && (
             <>
               <label style={{ fontSize:11, fontWeight:600, color:MUTED, display:"block", marginBottom:4 }}>RAM RANDEVU TARİHİ</label>
-              <input type="text" placeholder="GG.AA.YYYY" value={form.ramTarihi} onChange={e=>handleRamTarihiDegis(e.target.value)} style={{...inp, marginBottom:4}} />
+              <input type="text" placeholder="GG.AA.YYYY ya da '5 gün sonra', 'gelecek hafta salı'" value={form.ramTarihi} onChange={e=>handleRamTarihiDegis(e.target.value)} style={{...inp, marginBottom:4}} />
               <div style={{ fontSize:10, color:MOR, marginBottom:10, fontWeight:600 }}>💡 Form hazırlığı için, randevudan 1 hafta önce otomatik hatırlatılacaksın.</div>
             </>
           )}
@@ -45306,7 +45309,7 @@ export default function App() {
       const ks = pdrKapaliRiskAnalizi(riskForm, ogrGorusmeler, ogrP1, kademe, denemeOzet, ksEkVeriTopla(riskForm.studentName, riskForm.className, riskForm.numara));
       // Kapalı sistem türleri "Akran-Zorbalık" biçiminde; listedeki "Akran / Zorbalık" adına çevrilir
       const ksTurAd = (t) => { const s = t.replace(/-/g, " / "); return ["Akran / Zorbalık","Teknoloji / Ekran Bağımlılığı","Yas / Kayıp","Göç / Uyum Süreci","Adli Süreç / Danışmanlık Tedbiri","İhmal / İstismar"].includes(s) ? s : t; };
-      const item = { id: uid(), tarih: today(), ...riskForm, riskTuru: ksTurAd(ks.tur), oncelik: ks.oncelik, aiAnaliz: ks.metin, analizYontem: "kapali", analizDuzey: ks.duzey, kapandi: false, teknolojiBagimliligi: ks.teknolojiBagimliligi, teknolojiGerekce: ks.teknolojiGerekce, kaynak: "Kapalı" };
+      const item = { id: uid(), tarih: today(), ...riskForm, riskTuru: ksTurAd(ks.tur), ikincilTur: ks.ikincil && ks.ikincil !== "Yok" ? ksTurAd(ks.ikincil) : "", oncelik: ks.oncelik, aiAnaliz: ks.metin, analizYontem: "kapali", analizDuzey: ks.duzey, kapandi: false, teknolojiBagimliligi: ks.teknolojiBagimliligi, teknolojiGerekce: ks.teknolojiGerekce, kaynak: "Kapalı" };
       const updated = [item, ...riskListesi];
       setRiskListesi(updated); await saveRiskListesi(updated);
       setRiskForm({ studentName: "", className: "", numara: "", riskTuru: "", aciklama: "", oncelik: "Orta", tarih: today() });
@@ -45341,6 +45344,17 @@ export default function App() {
       else aiRiskTuru = bulunan.split("\n")[0].trim();
     }
 
+    // İkincil etkilenen alan — ana türün yanında kartta ek rozet olarak gösterilir
+    let ikincilTur = "";
+    const ikincilMatch = aiAnaliz.match(/İKİNCİL ETKİLENEN ALAN:\s*(.+)/);
+    if (ikincilMatch) {
+      const bulunanIkincil = ikincilMatch[1].trim().replace(/-/g, " / ");
+      if (!/^yok/i.test(bulunanIkincil)) {
+        const eslesenIkincil = riskTurleriListesi.find(t => t.toLocaleLowerCase("tr").replace(/-/g," / ") === bulunanIkincil.toLocaleLowerCase("tr") || bulunanIkincil.toLocaleLowerCase("tr").includes(t.toLocaleLowerCase("tr").split("/")[0].trim().toLocaleLowerCase("tr")));
+        if (eslesenIkincil && eslesenIkincil !== aiRiskTuru) ikincilTur = eslesenIkincil;
+      }
+    }
+
     // Teknoloji/Ekran Bağımlılığı taraması — ana risk türünden bağımsız, AI'ın
     // her analizde görüşme notlarına dayanarak yaptığı ayrı bir tarama. Sadece
     // "Var" ise Sınıf görünümünde rozet olarak gösterilir.
@@ -45355,7 +45369,7 @@ export default function App() {
 
     // kaynak: "AI" — ilerde bu risk tespitinin isabetli olup olmadığını geriye
     // dönük değerlendirebilmek için (bkz. sonucDegerlendirmesi altyapısı).
-    const item = { id: uid(), tarih: today(), ...riskForm, riskTuru: aiRiskTuru, oncelik: aiOncelik, aiAnaliz, analizYontem: "ai", kapandi: false, teknolojiBagimliligi, teknolojiGerekce, kaynak: "AI" };
+    const item = { id: uid(), tarih: today(), ...riskForm, riskTuru: aiRiskTuru, ikincilTur, oncelik: aiOncelik, aiAnaliz, analizYontem: "ai", kapandi: false, teknolojiBagimliligi, teknolojiGerekce, kaynak: "AI" };
     const updated = [item, ...riskListesi];
     setRiskListesi(updated); await saveRiskListesi(updated);
     setRiskForm({ studentName: "", className: "", numara: "", riskTuru: "", aciklama: "", oncelik: "Orta", tarih: today() });
@@ -45474,6 +45488,32 @@ export default function App() {
     const updProfNotlari2 = pdrSozlukSinifTemizle(profNotlari);
     setProfNotlari(updProfNotlari2); await saveProfNotlari(updProfNotlari2);
 
+    // Önceden sınıf silmede geride kalan kayıtlar — öğrenci silmeyle aynı kapsam
+    const updHatSinif = (hatirlatmalar||[]).filter(h => !silinecekMi(h.studentName, h.className, h.numara));
+    setHatirlatmalar(updHatSinif); await saveHatirlatmalar(updHatSinif);
+    const updNetSinif = (netHaritasiKayitlari||[]).filter(k => !silinecekMi(k.studentName, k.className, k.numara));
+    setNetHaritasiKayitlari(updNetSinif); await saveNetHaritasi(updNetSinif);
+    const updTestSinif = pdrSozlukSinifTemizle(testKayitlari||{});
+    setTestKayitlari(updTestSinif); await saveTestKayitlari(updTestSinif);
+    const updKonuSinif = pdrSozlukSinifTemizle(konuHaritasiVerisi||{});
+    setKonuHaritasiVerisi(updKonuSinif); await saveKonuHaritasi(updKonuSinif);
+    // Bu sınıfın (aktif yıl) sosyometri kayıtları da kaldırılır
+    const updSosyoSinif = (sosyometri||[]).filter(k => !((k.sinif||"").trim() === hedefSinif && (!k.yil || k.yil === aktifYil)));
+    setSosyometri(updSosyoSinif); await saveSosyometri(updSosyoSinif);
+    const updBireyiSinif = (bireyiTanima||[]).filter(b => !silinecekMi(b.studentName, b.className, b.numara));
+    setBireyiTanima(updBireyiSinif); await saveBireyiTanima(updBireyiSinif);
+    const updBdtSinif = (bdtAnaliz||[]).filter(b => !silinecekMi(b.studentName, b.className, b.numara));
+    setBdtAnaliz(updBdtSinif); await saveBdtAnaliz(updBdtSinif);
+    const updAsistanSinif = (asistanNotlari||[]).filter(b => !silinecekMi(b.studentName, b.className, b.numara));
+    setAsistanNotlari(updAsistanSinif); await saveAsistanNotlari(updAsistanSinif);
+    const updUyumSinif = (uyumIzleme||[]).filter(u => !silinecekMi(u.studentName, u.className, u.numara));
+    setUyumIzleme(updUyumSinif); await saveUyumIzleme(updUyumSinif);
+    const updRiskHarSinif = (riskHaritasi||[]).filter(k => !silinecekMi(k.studentName, k.className, k.numara));
+    setRiskHaritasi(updRiskHarSinif); await saveRiskHaritasi(updRiskHarSinif);
+    const updMudOneriSinif = pdrSozlukSinifTemizle(mudahaleOnerileri||{});
+    setMudahaleOnerileri(updMudOneriSinif); await saveMudahaleOnerileri(updMudOneriSinif);
+    const updKaygiSinif = pdrSozlukSinifTemizle(sinavKaygisi||{});
+    setSinavKaygisi(updKaygiSinif); await saveSinavKaygisi(updKaygiSinif);
     // Elle eklenen sınıf listesinden de kaldır — aksi halde öğrencisiz olsa da kart tekrar görünür/eklenebilir kalır.
     const updSinifListesi = (sinifListesi||[]).filter(s => s !== hedefSinif);
     setSinifListesi(updSinifListesi); await saveSinifListesi(updSinifListesi);
@@ -45992,6 +46032,9 @@ function pdrBaslangicSekmesi() {
 
     const kalanUyum = (uyumIzleme||[]).filter(u => u.yil !== yil);
     setUyumIzleme(kalanUyum); await saveUyumIzleme(kalanUyum);
+    // Risk haritası da yıl silmede geride kalıyordu
+    const kalanRiskHaritasi = (riskHaritasi||[]).filter(k => k.yil ? k.yil !== yil : !silinecekMi(k.studentName, k.className, k.numara));
+    setRiskHaritasi(kalanRiskHaritasi); await saveRiskHaritasi(kalanRiskHaritasi);
 
     // Öğrenci silmede zaten temizlenen ama yıl silmede unutulmuş
     // diziler: hatırlatmalar, net haritası, bireyi tanıma, BDT analiz.
@@ -47543,6 +47586,7 @@ function pdrBaslangicSekmesi() {
                           <div style={{ display:"flex", gap:6, flexShrink:0 }}>
                             <span style={{ background:"rgba(255,255,255,0.22)", color:"#fff", borderRadius:20, padding:"3px 12px", fontSize:11, fontWeight:800, border:`1px solid ${rc}` }}>{r.oncelik}</span>
                             {r.riskTuru && <span style={{ background:"rgba(255,255,255,0.15)", color:"#fff", borderRadius:20, padding:"3px 12px", fontSize:11, fontWeight:700 }}>{r.riskTuru}</span>}
+                            {r.ikincilTur && <span title="İkincil etkilenen alan" style={{ background:"rgba(255,255,255,0.10)", color:"#fff", borderRadius:20, padding:"3px 10px", fontSize:10, fontWeight:600, border:"1px dashed rgba(255,255,255,0.4)" }}>+ {r.ikincilTur}</span>}
                           </div>
                         </div>
                         {(rAniDegisim.sinyalSayisi >= 2 || rTakipGunu >= 21 || rVeliDengesiz) && (

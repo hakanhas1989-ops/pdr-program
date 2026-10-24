@@ -7020,7 +7020,7 @@ function bilproSonucHesapla(cevaplar) {
     sevkOnerileri.push("Bu profili, varsa CAS Performans Testi ve Akademik Düzey Taraması sonuçlarıyla birlikte oku; üç aracın aynı yöne işaret etmesi hipotezini güçlendirir, çelişmesi ise tek bir ölçümle karar vermemen gerektiğini gösterir.");
   }
 
-  return {
+  const _sonuc = {
     altTestSonuclari, alanSonuclari, genelOrtalama,
     seviye: genelOrtalama === null ? null : bilproSeviyeBandi(genelOrtalama),
     guclu: guclu.map(a => a.key), zayif: zayif.map(a => a.key),
@@ -7032,6 +7032,8 @@ function bilproSonucHesapla(cevaplar) {
     toplamMadde: BILPRO_ALANLAR.reduce((t, a) => t + a.altTestler.reduce((x, at) => x + (at.maddeler ? at.maddeler.length : 0), 0), 0),
     toplamGorev: BILPRO_ALANLAR.reduce((t, a) => t + a.altTestler.filter(at => at.gorev).length, 0),
   };
+  _sonuc.klinik = genelOrtalama === null ? null : bilproKlinikAnaliz(_sonuc);
+  return _sonuc;
 }
 
 // ── Dikkat Göstergeleri ─────────────────────────────────────────────────
@@ -7109,6 +7111,196 @@ function bilproDikkatAnalizi(cevaplar) {
   }
   return { gostergeler: g, ozet, sonrakiAdim, zorlanmaSayisi: zorlanma.length,
     not: eskiKayit ? "Sürdürülebilir dikkat ve tepki tutarlılığı için Sembol Kodlama ve Sembol Tarama görevlerini bu sürümle yeniden uygula (eski kayıtta bu veri yok)." : null };
+}
+
+// ── Klinik Yorum (WISC raporlarındaki yorum katmanlarının karşılığı) ──────
+// 1) Alan içi tutarlılık  2) alt test / alan karşılaştırmaları
+// 3) öğrenme güçlüğü ve diğer klinik örüntüler  4) güçlü öğrenme kanalı
+// 5) geçerlilik notları  6) öğretmen/veli önerileri.
+// Tümü kişi-içi farklara dayanır; norm ve tanı içermez — örüntüler "hipotez"dir.
+const BILPRO_ALT_FARK_ESIK = 25;   // alt testler arası (madde sayısı az → daha geniş eşik)
+const BILPRO_ALAN_FARK_ESIK = 20;  // alanlar arası
+function bilproKlinikAnaliz(sonuc) {
+  const at = sonuc.altTestSonuclari || {}, al = sonuc.alanSonuclari || {};
+  const yeterli = (k) => { const x = at[k]; return x && x.yuzde !== null && (x.gorev ? true : x.uygulanan >= 3); };
+  const y = (k) => (yeterli(k) ? at[k].yuzde : null);
+  const A = (k) => (al[k] && al[k].yuzde !== null ? al[k].yuzde : null);
+  const ort = sonuc.genelOrtalama;
+
+  // 1-2) Alan içi alt test farkları (WISC: "indeks birleşik değil" uyarısı + alt test çiftleri)
+  const ciftler = [
+    { alan: "gc", a: "benzerlikler", b: "sozcuk",
+      aYuksek: "Benzerlikler, Sözcük Dağarcığı'ndan belirgin yüksek: kavramlar arasında ilişki kurabiliyor, soyutlama iyi; ama birikmiş kelime bilgisi sınırlı. Bu genellikle yetenek eksikliğinden çok okuma alışkanlığı, ev dili/iki dillilik ya da kültürel yaşantı farkıyla ilgilidir — sözcük öğretimiyle hızlı gelişebilir.",
+      bYuksek: "Sözcük Dağarcığı, Benzerlikler'den belirgin yüksek: kelime bilgisi var ama kavramları üst kategoride birleştirmekte (soyutlamada) zorlanıyor. Ezberlediği bilgiyi kullanabilir, 'neden/nasıl ilişkili' sorularında düşebilir." },
+    { alan: "gf", a: "analoji", b: "matris",
+      aYuksek: "Sözel Analoji, Matris'ten belirgin yüksek: akıl yürütmesi dil aracılığıyla daha iyi işliyor; görsel/şekilsel problemlerde (geometri, grafik, tablo) zorlanabilir.",
+      bYuksek: "Matris, Sözel Analoji'den belirgin yüksek: akıl yürütme kapasitesi iyi ama dil üzerinden kurulan problemlerde düşüyor. Asıl sınırlılık akıl yürütmede değil dilde olabilir; Türkçe ve sözel ağırlıklı derslerde potansiyelinin altında görünebilir." },
+    { alan: "gq", a: "sayiOruntu", b: "nicelikselProblem",
+      aYuksek: "Sayı Örüntüleri, Niceliksel Problemler'den belirgin yüksek: sayısal kural bulmada iyi, ama sözel olarak verilen problemi sayıya çevirmede zorlanıyor. Okuduğunu anlama veya çalışma belleği yükü (bilgileri aynı anda tutma) matematikteki asıl engel olabilir — 'işlemi biliyor ama problemi çözemiyor' tablosu.",
+      bYuksek: "Niceliksel Problemler, Sayı Örüntüleri'nden belirgin yüksek: günlük durumlarda sayısal muhakeme iyi ama soyut sayı ilişkilerinde (örüntü, kural) zorlanıyor. Sayı hissi ve sayı dizilerine aşinalık desteklenmeli." },
+    { alan: "gv", a: "uzamsal", b: "parcaButun",
+      aYuksek: "Uzamsal İlişkiler, Parça-Bütün'den belirgin yüksek: zihinde döndürme iyi, ancak ayrıntıyı ayırt etme ve parçaları bütüne yerleştirmede zorlanıyor (görsel ayrıntıya dikkat).",
+      bYuksek: "Parça-Bütün, Uzamsal İlişkiler'den belirgin yüksek: görsel ayrıntıyı iyi seçiyor ama şekilleri zihinde döndürme/üç boyutlu düşünmede zorlanıyor; geometri ve harita okumada destek gerekebilir." },
+    { alan: "gsm", a: "sayiDizisi", b: "gorselDizi",
+      aYuksek: "Sayı dizisi belleği, görsel dizi belleğinden belirgin yüksek: sözel-işitsel bilgiyi daha iyi tutuyor. Görsel materyali (şema, tahta düzeni) sözle de açıklamak yararlı olur.",
+      bYuksek: "Görsel dizi belleği, sayı dizisi belleğinden belirgin yüksek: sözel-işitsel bilgiyi akılda tutmakta zorlanıyor. Sözlü yönergeler mutlaka yazılı/görsel olarak da verilmeli; bu örüntü okuma güçlüğü riskinde sık görülür." },
+    { alan: "gs", a: "kodlama", b: "tarama",
+      aYuksek: "Sembol Kodlama, Sembol Tarama'dan belirgin yüksek: eşleştirme ve yeni ilişki öğrenme hızlı; görsel tarama ve hızlı karar vermede yavaşlıyor (görsel dikkat).",
+      bYuksek: "Sembol Tarama, Sembol Kodlama'dan belirgin yüksek: görsel tarama iyi ama sembol-rakam eşleştirmede (yeni ilişkiyi kısa sürede öğrenip uygulama, görsel-motor koordinasyon) yavaş. Yazma hızı ve tahtadan deftere geçirmede zorlanabilir." },
+  ];
+  const altTestKarsilastirmalari = [], birlesikDegil = [];
+  ciftler.forEach(c => {
+    const va = y(c.a), vb = y(c.b);
+    if (va === null || vb === null) return;
+    const fark = va - vb;
+    if (Math.abs(fark) >= BILPRO_ALT_FARK_ESIK) {
+      altTestKarsilastirmalari.push({ alan: c.alan, fark, metin: (fark > 0 ? c.aYuksek : c.bYuksek) + ` (%${va} ↔ %${vb})` });
+      if (al[c.alan]) birlesikDegil.push(al[c.alan].ad);
+    }
+  });
+
+  // Alanlar arası çiftler (WISC'teki indeks karşılaştırmaları)
+  const alanKarsilastirmalari = [];
+  const alanCift = (a, b, aYuksek, bYuksek) => {
+    const va = A(a), vb = A(b);
+    if (va === null || vb === null || Math.abs(va - vb) < BILPRO_ALAN_FARK_ESIK) return;
+    alanKarsilastirmalari.push({ a, b, fark: va - vb, metin: (va > vb ? aYuksek : bYuksek) + ` (%${va} ↔ %${vb})` });
+  };
+  alanCift("gc", "gf",
+    "Sözel Kavrama, Akıcı Akıl Yürütme'den belirgin yüksek: öğrenilmiş bilgiye dayanarak başarılı; yeni ve alışılmadık problemlerde zorlanıyor. Ezber ve tekrarla iyi not alıp yeni nesil (muhakeme) sorularda düşebilir.",
+    "Akıcı Akıl Yürütme, Sözel Kavrama'dan belirgin yüksek: akıl yürütme potansiyeli yüksek ama birikmiş bilgisi/kelime dağarcığı bunun gerisinde. Öğrenme fırsatı, okuma alışkanlığı veya dil kaynaklı bir 'potansiyelin altında başarı' tablosu olabilir.");
+  alanCift("gsm", "gs",
+    "Çalışma Belleği, İşlem Hızı'ndan belirgin yüksek: bilgiyi akılda tutabiliyor ama hızlı işleyemiyor; süre baskısı olmayan ortamda çok daha iyi performans gösterir.",
+    "İşlem Hızı, Çalışma Belleği'nden belirgin yüksek: basit işleri hızlı yapıyor ama çok adımlı bilgiyi akılda tutmada zorlanıyor; uzun yönergeler ve zihinden işlemlerde hata beklenir.");
+  alanCift("gv", "gc",
+    "Görsel-Uzamsal, Sözel Kavrama'dan belirgin yüksek: görsel düşünür. Şema, kavram haritası, renk kodu ve somut materyalle çok daha iyi öğrenir.",
+    "Sözel Kavrama, Görsel-Uzamsal'dan belirgin yüksek: dil üzerinden öğrenir. Görsel/uzamsal görevlerde (geometri, harita, çizim) sözel açıklama ve adım listesi destek olur.");
+
+  // 3) Klinik örüntüler
+  const oruntuler = [];
+  const ekle = (key, ad, guc, metin, kanit, oneri) => oruntuler.push({ key, ad, guc, metin, kanit, oneri });
+  const gc = A("gc"), gf = A("gf"), gq = A("gq"), gv = A("gv"), gsm = A("gsm"), gs = A("gs");
+  const matris = y("matris"), sozcuk = y("sozcuk"), sDizi = y("sayiDizisi"), kodlama = y("kodlama");
+  const akil = sonuc.akilYurutme ? sonuc.akilYurutme.yuzde : null;
+  const verim = sonuc.bilisselVerimlilik ? sonuc.bilisselVerimlilik.yuzde : null;
+  const dk = sonuc.dikkat;
+
+  // a) Okuma güçlüğü (disleksi) yönünde — WISC'teki ACID/SCAD mantığı:
+  //    çalışma belleği + işlem hızı düşük, akıl yürütme korunmuş; sözcük dağarcığı görece düşük olabilir.
+  if (gsm !== null && gs !== null && akil !== null) {
+    const kanit = [];
+    if (gsm <= akil - 15) kanit.push(`çalışma belleği akıl yürütmenin ${akil - gsm} puan altında`);
+    if (gs <= akil - 15) kanit.push(`işlem hızı akıl yürütmenin ${akil - gs} puan altında`);
+    if (sDizi !== null && sDizi < 50) kanit.push("sayı dizisi (sözel-işitsel bellek) düşük");
+    if (sozcuk !== null && matris !== null && matris - sozcuk >= 20) kanit.push("sözcük dağarcığı, matris akıl yürütmenin gerisinde");
+    if (kanit.length >= 3) ekle("okuma", "Okuma güçlüğü (disleksi) yönünde örüntü", kanit.length >= 4 ? "belirgin" : "olasi",
+      "Akıl yürütme korunmuşken çalışma belleği ve işlem hızının düşük olması, WISC çalışmalarında okuma güçlüğü yaşayan öğrencilerde sık görülen örüntüdür (ACID/SCAD profilinin karşılığı). Tek başına tanı koydurmaz; bu profile sahip öğrencilerin bir kısmında okuma güçlüğü yoktur.",
+      kanit, "Okuma akıcılığı (dakikada doğru sözcük), harf-ses eşleme ve okuduğunu anlamayı ayrıca değerlendir; programdaki ÖÖG Ön-Tarama aracını uygula. Ailede okuma güçlüğü öyküsünü sor. Bulgular sürüyorsa RAM'a ÖÖG değerlendirmesi için sevk düşünülmeli.");
+  }
+  // b) Matematik güçlüğü (diskalkuli) yönünde
+  if (gq !== null && (gc !== null || matris !== null)) {
+    const kanit = [];
+    const ref = Math.max(gc ?? 0, matris ?? 0);
+    if (gq <= ref - 20) kanit.push(`niceliksel akıl yürütme (%${gq}) sözel/görsel akıl yürütmenin belirgin gerisinde`);
+    if (gq < 45) kanit.push(`niceliksel akıl yürütme mutlak olarak düşük (%${gq})`);
+    if (y("sayiOruntu") !== null && y("sayiOruntu") < 45) kanit.push("sayı örüntülerinde (sayı hissi) zorlanma");
+    if (sonuc.altTestSonuclari.sayiDizisi && sonuc.altTestSonuclari.sayiDizisi.performans && sonuc.altTestSonuclari.sayiDizisi.performans.geriSpan <= 2) kanit.push("ters sayı dizisi çok kısa (zihinden işlem belleği)");
+    if (gv !== null && gv < 45) kanit.push("görsel-uzamsal işlemleme de düşük");
+    if (kanit.length >= 2 && gq <= ref - 15) ekle("matematik", "Matematik güçlüğü (diskalkuli) yönünde örüntü", kanit.length >= 3 ? "belirgin" : "olasi",
+      "Diğer akıl yürütme alanları korunmuşken sayısal alanın belirgin geride kalması, matematiğe özgü bir öğrenme güçlüğünü düşündürür. Kaygı (matematik kaygısı) ve eksik temel öğrenmeler de aynı tabloyu verebilir.",
+      kanit, "Temel sayı bilgisi (sayı doğrusu, basamak değeri, dört işlem akıcılığı) ve matematik kaygısını ayrıca değerlendir; ÖÖG Ön-Tarama'daki matematik bölümünü uygula. Somut materyal, sayı doğrusu ve adım adım işlem listesiyle destekle.");
+  }
+  // c) Sözel olmayan öğrenme güçlüğü (NVLD) yönünde
+  if (gc !== null && (gv !== null || matris !== null)) {
+    const gorsel = Math.min(gv ?? 100, matris ?? 100);
+    const kanit = [];
+    if (gc - gorsel >= 25) kanit.push(`sözel kavrama (%${gc}) görsel-uzamsal/matris alanının (%${gorsel}) ${gc - gorsel} puan üzerinde`);
+    if (gs !== null && gs < gc - 20) kanit.push("işlem hızı da sözel alanın belirgin gerisinde");
+    if (y("gorselDizi") !== null && sDizi !== null && sDizi - y("gorselDizi") >= 25) kanit.push("görsel bellek sözel belleğin gerisinde");
+    if (kanit.length >= 2 || (gc - gorsel >= 35)) ekle("nvld", "Sözel olmayan öğrenme güçlüğü yönünde örüntü", kanit.length >= 2 && gc - gorsel >= 30 ? "belirgin" : "olasi",
+      "Güçlü sözel beceriler ile zayıf görsel-uzamsal/akıl yürütme becerileri arasındaki büyük fark, sözel olmayan öğrenme güçlüğünde tipiktir. Bu öğrenciler konuşkan ve 'zeki' görünür ama geometri, grafik, el yazısı düzeni, yeni ortamlara uyum ve sosyal ipuçlarını (yüz ifadesi, beden dili) okumada zorlanabilir.",
+      kanit, "Sosyal beceri gözlemi (akran ilişkileri, sosyal ipuçlarını okuma) ve motor koordinasyon/el yazısı bilgisini ekle. Görsel bilgiyi mutlaka sözle açıkla; yeni ortam ve rutin değişikliklerine önceden hazırla.");
+  }
+  // d) Dil temelli güçlük
+  if (gc !== null && matris !== null && gv !== null) {
+    const nonv = Math.round((matris + gv) / 2);
+    const kanit = [];
+    if (nonv - gc >= 25) kanit.push(`sözel kavrama (%${gc}) sözel olmayan akıl yürütmenin (%${nonv}) belirgin gerisinde`);
+    if (y("analoji") !== null && matris - y("analoji") >= 25) kanit.push("sözel analoji, matris akıl yürütmenin gerisinde");
+    if (y("benzerlikler") !== null && y("sozcuk") !== null && y("benzerlikler") < 50 && y("sozcuk") < 50) kanit.push("her iki sözel alt test de düşük");
+    if (kanit.length >= 2) ekle("dil", "Dil temelli güçlük yönünde örüntü", kanit.length >= 3 ? "belirgin" : "olasi",
+      "Akıl yürütme dil dışı görevlerde korunmuşken dil üzerinden yapılan tüm görevlerde düşüş, kapasite sorunundan çok dil gelişimi/dil bozukluğu, iki dillilik ya da işitme kaynaklı bir tabloyu düşündürür. Bu öğrenci sözel ağırlıklı ölçmelerde gerçek kapasitesinin altında görünür.",
+      kanit, "Ev dili, göç/iki dillilik öyküsü ve işitme taramasını kontrol et. Gerekirse dil ve konuşma terapisti değerlendirmesi önerilebilir. Sınıfta görsel destekli anlatım ve anahtar kelime listesi kullan.");
+  }
+  // e) Dikkat / yürütücü işlev (DEHB yönünde) örüntüsü
+  if (akil !== null && verim !== null && akil - verim >= 15) {
+    const kanit = [`bilişsel verimlilik (%${verim}) akıl yürütme kapasitesinin (%${akil}) ${akil - verim} puan altında`];
+    if (dk && dk.zorlanmaSayisi >= 1) kanit.push(`dikkat göstergelerinden ${dk.zorlanmaSayisi} tanesinde zorlanma`);
+    if (dk && dk.gostergeler.some(x => x.key === "tutarlilik" && x.durum === "zorlanma")) kanit.push("tepki sürelerinde belirgin dalgalanma");
+    if (kanit.length >= 2) ekle("dikkat", "Dikkat / yürütücü işlev güçlüğü yönünde örüntü", kanit.length >= 3 ? "belirgin" : "olasi",
+      "Akıl yürütme korunmuşken bellek ve hız gerektiren görevlerde düşüş ve buna eşlik eden dikkat bulguları, WISC'te DEHB'li öğrencilerde sık görülen 'GAI > CPI' örüntüsünün karşılığıdır. DEHB tanısı test puanıyla değil, birden fazla ortamdan gelen davranış bilgisi ve hekim değerlendirmesiyle konur.",
+      kanit, "Öğretmen ve veliden yapılandırılmış davranış gözlemi al (en az iki ortam), D2 ve CAS dikkat sonuçlarıyla karşılaştır. Uyku, kaygı ve ekran süresini sorgula. Tablo sürüyorsa aileyle çocuk ve ergen psikiyatrisi değerlendirmesini konuş.");
+  }
+  // f) Genel düşük işlevsellik
+  const olculen = ["gc", "gf", "gq", "gv", "gsm", "gs"].map(A).filter(v => v !== null);
+  if (olculen.length >= 4 && olculen.every(v => v < 45) && ort !== null && ort < 40) {
+    ekle("genel", "Genel bilişsel işlevsellikte belirgin düşüklük", "belirgin",
+      "Ölçülen alanların tamamında belirgin zorlanma var ve öne çıkan güçlü bir alan yok. Bu tablo özgül bir öğrenme güçlüğünden çok genel öğrenme kapasitesiyle ilgili bir sınırlılığı düşündürebilir; ancak düşük motivasyon, kaygı, dil engeli veya uygulama koşulları da aynı sonucu verir.",
+      [`genel ortalama %${ort}`, `ölçülen ${olculen.length} alanın tümü %45'in altında`],
+      "Sonucu başka bir gün, dinlenmiş haldeyken bir alanda yeniden uygulayarak doğrula. Gelişim öyküsü ve günlük yaşam becerilerini aileyle görüş. Aileyle görüşerek RAM'a kapsamlı eğitsel değerlendirme sevki yapılmalı; zihinsel yetersizlik değerlendirmesi yalnızca standart testlerle ve RAM/hastane tarafından yapılır.");
+  }
+  // g) Üstün yetenek ve çift istisnalılık (2e)
+  if (akil !== null && akil >= 80) {
+    if (verim !== null && akil - verim >= 25) ekle("2e", "Çift istisnalılık (üstün yetenek + güçlük) olasılığı", "olasi",
+      "Akıl yürütme kapasitesi çok yüksek, ama bellek/hız tarafı belirgin geride. Bu öğrenciler hem üstün yetenekli hem de bir öğrenme ya da dikkat güçlüğü yaşayan (çift istisnalı) çocuklar olabilir: yeteneği güçlüğü, güçlüğü de yeteneği maskeler; sıklıkla 'ortalama bir öğrenci' gibi görünürler.",
+      [`akıl yürütme %${akil}`, `bilişsel verimlilik %${verim}`],
+      "BİLSEM yönlendirmesi ile birlikte güçlük alanını da değerlendir; yalnızca zayıf alana odaklanıp yeteneği, yalnızca yeteneğe odaklanıp desteği atlama.");
+    else if (olculen.length >= 4 && olculen.every(v => v >= 75)) ekle("ustun", "Üstün yetenek yönünde örüntü", "olasi",
+      "Ölçülen alanların tümünde yüksek performans ve dengeli bir profil var.",
+      [`ölçülen ${olculen.length} alanın tümü %75 ve üzerinde`],
+      "BİLSEM tanılama sürecini aileyle konuş; sınıf içi zenginleştirme ve hızlandırılmış materyal öner.");
+  }
+
+  // 4) Güçlü öğrenme kanalı
+  const kanallar = [
+    { ad: "sözel (dinleyerek, konuşarak)", v: gc },
+    { ad: "görsel (şema, resim, harita)", v: gv },
+    { ad: "akıl yürütme / problem çözme", v: gf },
+    { ad: "sayısal", v: gq },
+  ].filter(k => k.v !== null).sort((a, b) => b.v - a.v);
+  let kanal = null;
+  if (kanallar.length >= 2 && kanallar[0].v - kanallar[kanallar.length - 1].v >= 15) {
+    kanal = `En güçlü öğrenme kanalı: ${kanallar[0].ad} (%${kanallar[0].v}). En çok destek gereken: ${kanallar[kanallar.length - 1].ad} (%${kanallar[kanallar.length - 1].v}). Yeni konuyu önce güçlü kanaldan sun, zayıf kanalı onunla eşleştirerek çalış (ör. görsel güçlüyse okuma metnini şemayla destekle).`;
+  }
+
+  // 5) Geçerlilik / güvenirlik notları
+  const gecerlilik = [];
+  const azMadde = Object.values(at).filter(x => !x.gorev && x.uygulanan > 0 && x.uygulanan < 3).map(x => x.ad);
+  if (azMadde.length) gecerlilik.push(`${azMadde.join(", ")} alt testinde 3'ten az madde uygulandı; bu alt testlerin puanı yorumlara katılmadı.`);
+  const eksikAlan = ["gc", "gf", "gq", "gv", "gsm", "gs"].filter(k => A(k) === null).map(k => al[k] && al[k].ad).filter(Boolean);
+  if (eksikAlan.length) gecerlilik.push(`Ölçülmeyen alan(lar): ${eksikAlan.join(", ")}. Bu alanlara dayanan örüntüler değerlendirilemedi.`);
+  const tekAltTest = ["gc", "gf", "gq", "gv", "gsm", "gs"].filter(k => al[k] && al[k].altTestler && al[k].altTestler.length === 1).map(k => al[k].ad);
+  if (tekAltTest.length) gecerlilik.push(`${tekAltTest.join(", ")} alanında yalnızca bir alt test uygulandı; alan puanı daha az güvenilir.`);
+  if (birlesikDegil.length) gecerlilik.push(`${birlesikDegil.join(", ")} alanında alt testler birbirinden çok farklı; bu alanın tek puanı yerine alt testleri ayrı ayrı yorumla (WISC'teki "indeks birleşik değil" kuralı).`);
+  gecerlilik.push("Sonuç tek oturumluk bir ölçümdür; öğrencinin yorgunluk, kaygı, motivasyon ve cihaz aşinalığı puanları etkileyebilir. Beklenmedik bir sonucu başka bir gün tekrar ederek doğrula.");
+
+  // 6) Öğretmen ve veliye
+  const ogretmen = [], veli = [];
+  (sonuc.zayif || []).forEach(k => { const a = BILPRO_ALANLAR.find(x => x.key === k); if (a && a.egitselOneri) ogretmen.push(`${a.ad}: ${a.egitselOneri}`); });
+  if (oruntuler.some(o => o.key === "dikkat") || (dk && dk.zorlanmaSayisi >= 2)) ogretmen.push("Dikkat: öğrenciyi öğretmen masasına yakın, pencere/kapıdan uzak oturt; uzun görevleri 10-15 dakikalık parçalara böl; göz teması ve kısa sözlü kontrol ('ne yapacağını bana söyler misin?') kullan.");
+  if (kanal) ogretmen.push(kanal);
+  (sonuc.guclu || []).forEach(k => { const a = BILPRO_ALANLAR.find(x => x.key === k); if (a) veli.push(`Çocuğunuz ${a.ad.toLocaleLowerCase("tr")} alanında kendi diğer becerilerine göre güçlü. Bu alandaki başarısını fark edip övmeniz özgüvenini destekler.`); });
+  (sonuc.zayif || []).forEach(k => { const a = BILPRO_ALANLAR.find(x => x.key === k); if (a) veli.push(`${a.ad} alanında desteğe ihtiyacı var. Bu bir 'tembellik' ya da 'isteksizlik' göstergesi değildir; doğru yöntemle desteklendiğinde gelişebilir.`); });
+  if (oruntuler.length) veli.push("Bu değerlendirme bir tarama çalışmasıdır, tanı değildir. Gerekirse sizinle birlikte bir uzmana (RAM, hastane) yönlendirme planlanacaktır.");
+
+  if (oruntuler.some(o => o.key === "genel")) ogretmen.push("Genel düşüklük: kazanımları küçük adımlara böl, her adımda somut materyal ve sık tekrar kullan; başarıyı akranlarla değil öğrencinin kendi önceki durumuyla karşılaştır.");
+  // Ayırıcı değerlendirme notu: aynı veriden tetiklenen örüntüler
+  let ayirici = null;
+  const var_ = (k) => oruntuler.some(o => o.key === k);
+  if (var_("okuma") && var_("dikkat")) ayirici = "Okuma güçlüğü ve dikkat örüntüleri aynı bulgulardan (çalışma belleği ve işlem hızı düşüklüğü) beslenir ve sık birlikte görülür. Ayırt etmek için: okuma akıcılığı ve harf-ses becerisi düşükse okuma güçlüğü, birden fazla ortamda dikkat/dürtüsellik davranışları varsa dikkat güçlüğü öne çıkar; ikisi birlikte de olabilir.";
+  else if (var_("nvld") && var_("matematik")) ayirici = "Sözel olmayan öğrenme güçlüğünde matematik güçlüğü sık eşlik eder (özellikle geometri ve sayısal-uzamsal işlemler). Matematikteki zorlanmanın uzamsal kaynaklı mı yoksa sayı hissi kaynaklı mı olduğunu ayırt etmek için sayı doğrusu ve basamak değeri becerilerine bak.";
+  else if (var_("dil") && var_("okuma")) ayirici = "Dil temelli güçlük ile okuma güçlüğü iç içe geçebilir: dil sorunu okuduğunu anlamayı, okuma güçlüğü ise kelime çözmeyi etkiler. Sesli okuma akıcılığı ile dinlediğini anlama karşılaştırması ayırt etmeye yardım eder.";
+  return { altTestKarsilastirmalari, alanKarsilastirmalari, oruntuler, ayirici, kanal, gecerlilik, ogretmen, veli };
 }
 
 // ── BİLPRO süreli/performans görevleri ────────────────────────────────────
@@ -7708,6 +7900,44 @@ function BILPROPaneli({ seciliAd, seciliSinif, seciliNumara, bilproDegerlendirme
                 {y.oneri && <div style={{marginTop:4, color:MUTED}}><b>Sınıf içi öneri:</b> {y.oneri}</div>}
               </div>
             ))}
+            {sonuc.klinik && (
+              <div data-testid="bilpro-klinik" style={{marginTop:8, paddingTop:8, borderTop:`1px dashed ${BORDER}`}}>
+                <div style={{fontWeight:800, marginBottom:4, color:"#6A4C93"}}>🧩 Klinik Yorum <span style={{fontWeight:500, color:MUTED, fontSize:9.5}}>(alt ölçek örüntüleri — hipotezdir, tanı koymaz)</span></div>
+                {sonuc.klinik.oruntuler.length === 0 && <div style={{marginBottom:6}}>Alt ölçeklerde herhangi bir öğrenme güçlüğü ya da klinik örüntüyü düşündüren belirgin bir dağılım görünmüyor.</div>}
+                {sonuc.klinik.oruntuler.map((o, i) => (
+                  <div key={i} data-testid="bilpro-oruntu" style={{marginBottom:8, background:"#fff", border:`1px solid ${o.guc === "belirgin" ? "#F5B7B1" : "#e0c08a"}`, borderRadius:8, padding:"8px 10px"}}>
+                    <div style={{fontWeight:800, color: o.guc === "belirgin" ? "#C0392B" : "#8B5A00"}}>{o.guc === "belirgin" ? "🔴" : "🟠"} {o.ad} <span style={{fontWeight:600, fontSize:9.5}}>({o.guc === "belirgin" ? "belirgin" : "olası"})</span></div>
+                    <div style={{marginTop:3}}>{o.metin}</div>
+                    <div style={{marginTop:4, color:MUTED}}><b>Dayanak:</b> {o.kanit.join("; ")}.</div>
+                    <div style={{marginTop:4}}><b>Ne yapılmalı:</b> {o.oneri}</div>
+                  </div>
+                ))}
+                {sonuc.klinik.ayirici && <div style={{marginBottom:8, fontSize:10.5, background:"#F3EEFB", borderRadius:8, padding:"6px 9px"}}><b>⚖️ Ayırıcı değerlendirme:</b> {sonuc.klinik.ayirici}</div>}
+                {(sonuc.klinik.altTestKarsilastirmalari.length > 0 || sonuc.klinik.alanKarsilastirmalari.length > 0) && (
+                  <div style={{marginBottom:6}}>
+                    <div style={{fontWeight:700, marginBottom:3}}>🔍 Alt test ve alan karşılaştırmaları</div>
+                    {[...sonuc.klinik.altTestKarsilastirmalari, ...sonuc.klinik.alanKarsilastirmalari].map((x, i) => <div key={i} style={{marginBottom:4, paddingLeft:8, borderLeft:"3px solid #c9b8ea"}}>{x.metin}</div>)}
+                  </div>
+                )}
+                {sonuc.klinik.kanal && <div style={{marginBottom:6}}><b>🎓 Öğrenme kanalı:</b> {sonuc.klinik.kanal}</div>}
+                {sonuc.klinik.ogretmen.length > 0 && (
+                  <div style={{marginBottom:6}}>
+                    <div style={{fontWeight:700, marginBottom:3}}>👩‍🏫 Öğretmene öneriler</div>
+                    {sonuc.klinik.ogretmen.map((x, i) => <div key={i} style={{marginBottom:3}}>• {x}</div>)}
+                  </div>
+                )}
+                {sonuc.klinik.veli.length > 0 && (
+                  <div style={{marginBottom:6}}>
+                    <div style={{fontWeight:700, marginBottom:3}}>👪 Veliye aktarılabilecekler</div>
+                    {sonuc.klinik.veli.map((x, i) => <div key={i} style={{marginBottom:3}}>• {x}</div>)}
+                  </div>
+                )}
+                <div style={{fontSize:10, color:MUTED, marginTop:4}}>
+                  <b>Geçerlilik notları:</b>
+                  {sonuc.klinik.gecerlilik.map((x, i) => <div key={i}>• {x}</div>)}
+                </div>
+              </div>
+            )}
             {sonuc.dikkat && (
               <div data-testid="bilpro-dikkat" style={{marginTop:8, paddingTop:8, borderTop:`1px dashed ${BORDER}`}}>
                 <div style={{fontWeight:800, marginBottom:4, color:"#0E7490"}}>🎯 Dikkat Göstergeleri <span style={{fontWeight:500, color:MUTED, fontSize:9.5}}>(betimleyicidir, tanı koymaz)</span></div>

@@ -6873,11 +6873,24 @@ function bilproSonucHesapla(cevaplar) {
         if (yuzde !== null) { uygulananGorev++; olculenAltTestler.push(s); }
         return;
       }
-      let dogru = 0, uygulanan = 0;
+      let dogru = 0, uygulanan = 0, durdurmaSonrasi = 0;
       const zDogru = { 1: 0, 2: 0, 3: 0 }, zToplam = { 1: 0, 2: 0, 3: 0 };
+      // Durdurma kuralı: üst üste BILPRO_DURDURMA_KURALI yanlıştan sonra sorulmayan
+      // maddeler (bireysel testlerdeki gibi) YANLIŞ sayılır; aksi hâlde erken duran
+      // öğrencinin yüzdesi olduğundan yüksek çıkar.
+      let ardisik = 0, durduIdx = -1;
+      at.maddeler.forEach((m, i) => {
+        if (durduIdx >= 0) return;
+        const v = cevaplar[`${at.key}_${i}`];
+        if (v === false) { ardisik++; if (ardisik >= BILPRO_DURDURMA_KURALI) durduIdx = i; }
+        else if (v === true) ardisik = 0;
+      });
       at.maddeler.forEach((m, i) => {
         const v = cevaplar[`${at.key}_${i}`];
-        if (v === undefined || v === BILPRO_UYGULANMADI) return;
+        if (v === undefined || v === BILPRO_UYGULANMADI) {
+          if (durduIdx >= 0 && i > durduIdx) { uygulanan++; zToplam[m.zorluk]++; durdurmaSonrasi++; }
+          return;
+        }
         uygulanan++; zToplam[m.zorluk]++;
         if (v === true) { dogru++; zDogru[m.zorluk]++; }
       });
@@ -6890,7 +6903,7 @@ function bilproSonucHesapla(cevaplar) {
       const yuzde = uygulanan > 0 ? Math.round((dogru / uygulanan) * 100) : null;
       const s = {
         key: at.key, ad: at.ad, sunum: at.sunum, alanKey: alan.key,
-        dogru, uygulanan, toplam: at.maddeler.length, yuzde, tavan,
+        dogru, uygulanan, toplam: at.maddeler.length, yuzde, tavan, durdurmaSonrasi,
       };
       altTestSonuclari[at.key] = s;
       uygulananToplam += uygulanan;
@@ -7409,7 +7422,7 @@ function bilproRaporHtml(kayit, bilgi, normOzet) {
   const altSatirlar = BILPRO_ALANLAR.flatMap(a => a.altTestler.map(at => {
     const x = s.altTestSonuclari[at.key]; if (!x || x.yuzde === null) return "";
     const b = bilproSeviyeBandi(x.yuzde);
-    const ayr = at.gorev ? (at.gorev === "sayiDizisi" && x.performans ? `düz ${x.performans.ileriSpan} · ters ${x.performans.geriSpan}` : at.gorev === "gorselDizi" && x.performans ? `dizi ${x.performans.span}` : x.performans ? `${x.performans.dogru} doğru / ${x.performans.yanlis} yanlış` : "") : `${x.dogru}/${x.uygulanan}${x.tavan ? ` · tavan ${x.tavan}. düzey` : ""}`;
+    const ayr = at.gorev ? (at.gorev === "sayiDizisi" && x.performans ? `düz ${x.performans.ileriSpan} · ters ${x.performans.geriSpan}` : at.gorev === "gorselDizi" && x.performans ? `dizi ${x.performans.span}` : x.performans ? `${x.performans.dogru} doğru / ${x.performans.yanlis} yanlış` : "") : `${x.dogru}/${x.uygulanan}${x.durdurmaSonrasi ? ` (${x.durdurmaSonrasi} durdurma sonrası)` : ""}${x.tavan ? ` · tavan ${x.tavan}. düzey` : ""}`;
     return `<tr><td>${E(a.ad)}</td><td>${E(at.ad)}</td><td style="text-align:center">${E(ayr)}</td><td><div class="cubuk"><span style="width:${x.yuzde}%;background:${a.renk}"></span></div></td><td style="text-align:center;font-weight:700">%${x.yuzde}</td><td style="color:${b.color};font-weight:700">${E(b.label)}</td></tr>`;
   })).join("");
   const ikili = [];
@@ -8015,7 +8028,7 @@ function BILPROPaneli({ seciliAd, seciliSinif, seciliNumara, bilproDegerlendirme
           <b>⚠️ Bu bir zekâ testi değildir.</b> IQ ya da standart puan üretmez, norm örneklemi yoktur, tanı koymaz ve WISC/Binet'in yerine geçmez. Ürettiği şey <b>kişi-içi profildir</b>: öğrencinin <i>kendi ortalamasına göre</i> hangi alanda güçlü, hangi alanda zorlandığı. Resmî eğitsel tanılama yetkisi <b>RAM</b>'dadır.
         </div>
         <div style={{marginTop:6}}>
-          <b>İki uygulama biçimi var.</b> İlk dört alanda (Gc, Gf, Gq, Gv) maddeleri <b>sen okursun</b>, öğrencinin cevabına göre işaretlersin; <b>durdurma kuralı:</b> üst üste {BILPRO_DURDURMA_KURALI} yanlışta o alt testi bitir (madde havuzu kolaydan zora sıralıdır). Son iki alanda (Gsm, Gs) ise <b>süreli görevleri öğrenci ekranda bizzat uygular</b> — cihazı ona ver, sessiz bir ortam sağla.
+          <b>İki uygulama biçimi var.</b> İlk dört alanda (Gc, Gf, Gq, Gv) maddeleri <b>sen okursun</b>, öğrencinin cevabına göre işaretlersin; <b>durdurma kuralı:</b> üst üste {BILPRO_DURDURMA_KURALI} yanlışta o alt testi bitir (madde havuzu kolaydan zora sıralıdır); sorulmayan kalan maddeler yanlış sayılır. Son iki alanda (Gsm, Gs) ise <b>süreli görevleri öğrenci ekranda bizzat uygular</b> — cihazı ona ver, sessiz bir ortam sağla.
         </div>
       </div>
 
@@ -8215,7 +8228,7 @@ function BILPROPaneli({ seciliAd, seciliSinif, seciliNumara, bilproDegerlendirme
               </span>
               {ats && ats.uygulanan > 0 && (
                 <span style={{fontSize:9.5, fontWeight:800, padding:"2px 8px", borderRadius:10, background:bilproSeviyeBandi(ats.yuzde).bg, color:bilproSeviyeBandi(ats.yuzde).color}}>
-                  {ats.dogru}/{ats.uygulanan} · %{ats.yuzde}{ats.tavan > 0 ? ` · tavan: ${ats.tavan}. düzey` : " · tavan yok"}
+                  {ats.dogru}/{ats.uygulanan}{ats.durdurmaSonrasi ? ` (${ats.durdurmaSonrasi} durdurma sonrası)` : ""} · %{ats.yuzde}{ats.tavan > 0 ? ` · tavan: ${ats.tavan}. düzey` : " · tavan yok"}
                 </span>
               )}
             </div>
@@ -8236,7 +8249,7 @@ function BILPROPaneli({ seciliAd, seciliSinif, seciliNumara, bilproDegerlendirme
 
             {!at.gorev && ardisikYanlis >= BILPRO_DURDURMA_KURALI && (
               <div style={{fontSize:10.5, fontWeight:700, color:"#8B5A00", background:"#FDF6E3", border:"1px solid #e0c08a", borderRadius:8, padding:"6px 9px", marginBottom:8}}>
-                ⏹️ Durdurma kuralı: üst üste {ardisikYanlis} yanlış. Bu alt testi burada bitirebilirsin; kalan maddeleri "Uygulanmadı" bırak.
+                ⏹️ Durdurma kuralı: üst üste {ardisikYanlis} yanlış. Bu alt testi burada bitir; kalan maddeleri işaretleme — program onları yanlış sayar (bireysel testlerdeki gibi).
               </div>
             )}
 

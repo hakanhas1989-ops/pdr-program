@@ -38602,14 +38602,8 @@ const LGS_PLAN_DERS_IPUCU = {
   din: "Ünite kavramlarını ve ayet/hadis yorumlu soruları çalış; metni okuyup ana fikri bulma Türkçe paragraf becerisine benzer.",
   ingilizce: "Her gün ünitenin 10 kelimesini çalış ve önceki günlerinkini tekrar et. Diyalog tamamlama ve okuduğunu anlama sorularına ağırlık ver.",
 };
-function lgsPlanHtml(p, ogr) {
-  const E = ootEsc;
-  const ust = p.puanAraligi;
-  const gunTablo = `<table class="hafta"><tr>${p.gunler.map(g => `<th${g.haftaSonu ? ' class="hs"' : ""}>${g.ad}</th>`).join("")}</tr><tr>${p.gunler.map(g => `<td>${g.bloklar.map((b, i) => b.tip === "ders"
-    ? `<div class="blok" style="border-left:4px solid ${b.renk}"><b>${i + 1}. ${E(b.ad)}</b><span>${E(b.is)}</span></div>`
-    : `<div class="blok ozel"><b>${i + 1}. ${E(b.ad)}</b><span>${E(b.sure)}</span></div>`).join("")}</td>`).join("")}</tr></table>`;
-  return `<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LGS Çalışma Programı</title><style>
-@page{size:A4 landscape;margin:10mm}body{font-family:Arial,"DejaVu Sans",sans-serif;color:#1d2a24;font-size:10.5pt;line-height:1.45;margin:14px}
+// Yazdırma parçaları (tekil program ve sınıf toplu çıktısı aynı parçaları kullanır)
+const LGS_PLAN_CSS = `@page{size:A4 landscape;margin:10mm}body{font-family:Arial,"DejaVu Sans",sans-serif;color:#1d2a24;font-size:10.5pt;line-height:1.45;margin:14px}
 h1{font-size:18pt;color:#127C56;margin:0 0 2px}h2{font-size:12.5pt;color:#127C56;border-bottom:2px solid #127C56;padding-bottom:2px;margin:14px 0 6px;page-break-after:avoid}
 .alt{color:#5c6b64;font-size:9.5pt}.kart{display:inline-block;border:1px solid #b8d3c6;background:#f1f8f4;border-radius:8px;padding:6px 12px;margin:4px 6px 4px 0;vertical-align:top}
 .kart b{display:block;font-size:15pt;color:#127C56}.kart span{font-size:8.5pt;color:#5c6b64}
@@ -38619,8 +38613,14 @@ table.hafta th.hs{background:#6A4C93}table.hafta td{width:14.28%}.blok{backgroun
 .kutu{border:1px solid #b8d3c6;background:#f1f8f4;border-radius:6px;padding:7px 10px;margin:6px 0}.iki{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 ul{margin:4px 0 4px 18px;padding:0}li{margin:2px 0}.kucuk{font-size:8.5pt;color:#5c6b64}.sayfa{page-break-before:always}.s2{font-size:9pt;line-height:1.35}.s2 h2{font-size:11.5pt;margin:8px 0 4px}.s2 li{margin:1px 0}table.takip td{height:34px}
 @media print{.noprint{display:none}}
-</style></head><body>
-<h1>LGS Çalışma Programı</h1><div class="alt">${E(ogr.ad || "")}${ogr.sinif ? " · " + E(ogr.sinif) : ""} · ${E(today())} · LGS'ye yaklaşık ${p.ayKaldi} ay · ${E(p.donem.ad)}</div>
+.ozet td{font-size:8.6pt;padding:3px 5px}.k1 h1{font-size:15pt}.k1 .kart{padding:4px 10px;margin:2px 5px 2px 0}.k1 .kart b{font-size:13pt}.k1 .kutu{padding:5px 9px;margin:4px 0;font-size:9.5pt}.k1 h2{margin:8px 0 4px}.k1 .blok{padding:2px 4px;margin:0 0 3px}.k1 .blok b{font-size:8.3pt}.k1 .blok span{font-size:7.6pt}.ortak{font-size:9.3pt;line-height:1.4}.ortak h2{font-size:10.5pt;margin:6px 0 3px}.ortak li{margin:0}.ortak .uc{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}.duzeyRozet{display:inline-block;border-radius:10px;padding:1px 8px;font-size:8.5pt;font-weight:700;background:#e8f3ee;color:#127C56}`;
+function lgsPlanSayfa1(p, ogr, kisa) {
+  const E = ootEsc;
+  const ust = p.puanAraligi;
+  const gunTablo = `<table class="hafta"><tr>${p.gunler.map(g => `<th${g.haftaSonu ? ' class="hs"' : ""}>${g.ad}</th>`).join("")}</tr><tr>${p.gunler.map(g => `<td>${g.bloklar.map((b, i) => b.tip === "ders"
+    ? `<div class="blok" style="border-left:4px solid ${b.renk}"><b>${i + 1}. ${E(b.ad)}</b><span>${E(b.is)}</span></div>`
+    : `<div class="blok ozel"><b>${i + 1}. ${E(b.ad)}</b><span>${E(b.sure)}</span></div>`).join("")}</td>`).join("")}</tr></table>`;
+  return `<h1>LGS Çalışma Programı</h1><div class="alt">${E(ogr.ad || "")}${ogr.sinif ? " · " + E(ogr.sinif) : ""} · ${E(today())} · LGS'ye yaklaşık ${p.ayKaldi} ay · ${E(p.donem.ad)}</div>
 <div style="margin-top:8px">
 <div class="kart"><b>${p.toplam}</b><span>Toplam net (${E(ogr.kaynak || "")})</span></div>
 <div class="kart"><b>≈ ${p.puan}</b><span>Tahmini puan · yüzdelik ≈ %${p.yuzdelik}</span></div>
@@ -38632,7 +38632,11 @@ ul{margin:4px 0 4px 18px;padding:0}li{margin:2px 0}.kucuk{font-size:8.5pt;color:
 <h2>Haftalık program</h2>
 <div class="kucuk">Hafta içi okul sonrası ${p.duzey.ici} blok, hafta sonu ${p.duzey.sonu} blok. Bir blok = 40 dk çalışma + 10 dk mola. Konu/soru oranı ≈ %${p.konuOran} konu, %${100 - p.konuOran} soru.</div>
 ${gunTablo}
-<div class="sayfa s2"><div class="iki"><div>
+${kisa ? `<div class="kucuk" style="margin-top:6px"><b>Öncelikli konular:</b> ${p.konular.slice(0, 5).map(k => E(k.ders + " – " + k.konu)).join(" · ") || "—"} &nbsp;|&nbsp; <b>Blok/hafta:</b> ${p.dersler.map(d => E(d.ad) + " " + d.blok).join(", ")}</div>` : ""}`;
+}
+function lgsPlanSayfa2(p) {
+  const E = ootEsc;
+  return `<div class="sayfa s2"><div class="iki"><div>
 <h2>Dersler: durum ve haftalık blok</h2>
 <table><tr><th>Ders</th><th>Net</th><th style="width:34%">Başarı</th><th>Kaybedilen</th><th>Blok/hafta</th></tr>
 ${p.dersler.map(d => `<tr><td><b style="color:${d.renk}">${E(d.ad)}</b></td><td>${d.net}/${d.maks}</td><td><div class="cubuk"><i style="width:${d.oran}%;background:${d.renk}"></i></div><span class="kucuk">%${d.oran}</span></td><td>${d.eksik}${d.kat > 1 ? " ×4" : ""}</td><td><b>${d.blok}</b></td></tr>`).join("")}
@@ -38646,9 +38650,37 @@ ${p.konular.length ? `<table><tr><th>Ders</th><th>Konu</th><th>${p.konuKaynak ==
 <h2>Nasıl çalışacaksın?</h2><ul>${LGS_PLAN_YONTEM.map(([b, m]) => `<li><b>${E(b)}:</b> ${E(m)}</li>`).join("")}</ul>
 <h2>Ders ders ipuçları</h2><ul>${p.dersler.map(d => `<li><b style="color:${d.renk}">${E(d.ad)}:</b> ${E(LGS_PLAN_DERS_IPUCU[d.key])}</li>`).join("")}</ul>
 </div></div>
-</div><div class="sayfa"><h2>Haftalık takip çizelgesi</h2><div class="kucuk">Her hafta sonunda doldur ve rehber öğretmenine göster. 4 haftada bir program yeni deneme netlerinle güncellenir.</div>
+</div>`;
+}
+function lgsPlanTakip() { return `<div class="sayfa"><h2>Haftalık takip çizelgesi</h2><div class="kucuk">Her hafta sonunda doldur ve rehber öğretmenine göster. 4 haftada bir program yeni deneme netlerinle güncellenir.</div>
 <table class="takip"><tr><th>Hafta</th><th>Çözülen soru</th><th>Deneme neti</th><th>Hata defterine eklenen</th><th>Bitirilen konular</th><th>Programa uydum mu? (gün/7)</th><th>Kendime not</th></tr>${[1, 2, 3, 4, 5, 6, 7, 8].map(i => `<tr><td>${i}. hafta</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`).join("")}</table>
-</div><div class="kucuk" style="margin-top:6px">Puan ve yüzdelik, geçen yılların sonuçlarından derlenmiş yaklaşık değerlerdir; o yılın sınav zorluğuna göre değişir. Program 4 haftada bir yeni deneme sonuçlarıyla güncellenmelidir. Hazırlayan: Rehberlik Servisi</div>
+</div>`; }
+const LGS_PLAN_DIP = `<div class="kucuk" style="margin-top:6px">Puan ve yüzdelik, geçen yılların sonuçlarından derlenmiş yaklaşık değerlerdir; o yılın sınav zorluğuna göre değişir. Program 4 haftada bir yeni deneme sonuçlarıyla güncellenmelidir. Hazırlayan: Rehberlik Servisi</div>
+`;
+function lgsPlanHtml(p, ogr) {
+  return `<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LGS Çalışma Programı</title><style>${LGS_PLAN_CSS}</style></head><body>
+${lgsPlanSayfa1(p, ogr, false)}${lgsPlanSayfa2(p)}${lgsPlanTakip()}${LGS_PLAN_DIP}
+</body></html>`;
+}
+// Sınıf / 8. sınıflar toplu çıktısı. kisa: öğrenci başına 1 sayfa + ortak rehber sayfaları sonda
+function lgsPlanTopluHtml(liste, eksikler, baslik, kisa) {
+  const E = ootEsc;
+  const sayi = LGS_PLAN_DUZEYLER.map(d => [d, liste.filter(x => x.p.duzey.key === d.key).length]);
+  const ort = liste.length ? (liste.reduce((t, x) => t + x.p.toplam, 0) / liste.length).toFixed(1) : "—";
+  const sirali = [...liste].sort((a, b) => String(a.sinif).localeCompare(String(b.sinif), "tr", { numeric: true }) || String(a.ad).localeCompare(String(b.ad), "tr"));
+  const zayif = (p) => [...p.dersler].sort((a, b) => b.eksik * b.kat - a.eksik * a.kat)[0];
+  const ozet = `<h1>LGS Çalışma Programları — ${E(baslik)}</h1><div class="alt">${E(today())} · ${liste.length} öğrenci · LGS'ye yaklaşık ${pdrLgsAyKaldi()} ay · ${E(lgsPlanDonem(new Date()).ad)}</div>
+<div style="margin-top:8px"><div class="kart"><b>${ort}</b><span>Ortalama net</span></div>${sayi.map(([d, n]) => `<div class="kart"><b>${n}</b><span>${E(d.ad)} (${d.alt}–${Math.min(90, d.ust)} net)</span></div>`).join("")}</div>
+<h2>Sınıf özeti</h2><table class="ozet"><tr><th>#</th><th>Öğrenci</th><th>Sınıf</th><th>Net</th><th>Tahmini puan</th><th>Düzey</th><th>En çok puan kaybettiren ders</th><th>Kaynak</th></tr>
+${sirali.map((x, i) => { const z = zayif(x.p); return `<tr><td>${i + 1}</td><td>${E(x.ad)}</td><td>${E(x.sinif)}</td><td>${x.p.toplam}</td><td>≈ ${x.p.puan}</td><td><span class="duzeyRozet">${E(x.p.duzey.ad)}</span></td><td>${E(z.ad)} (${z.net}/${z.maks})</td><td class="kucuk">${E(x.kaynak)}</td></tr>`; }).join("")}</table>
+${eksikler.length ? `<div class="kutu"><b>Deneme sonucu olmadığı için program çıkarılmayanlar (${eksikler.length}):</b> ${eksikler.map(o => E(o.ad + (o.sinif ? " (" + o.sinif + ")" : ""))).join(", ")}. Bu öğrencilerin programı Deneme sekmesinde netler elle girilerek tek tek çıkarılabilir.</div>` : ""}`;
+  const ogrSayfalari = sirali.map(x => `<div class="sayfa${kisa ? " k1" : ""}">${lgsPlanSayfa1(x.p, { ad: x.ad, sinif: x.sinif, kaynak: x.kaynak }, kisa)}</div>${kisa ? "" : lgsPlanSayfa2(x.p) + lgsPlanTakip()}`).join("");
+  const ortak = kisa ? `<div class="sayfa ortak"><h1 style="font-size:15pt">Nasıl çalışacaksın? — herkes için</h1><div class="iki"><div>
+<h2>Çalışma yöntemi</h2><ul>${LGS_PLAN_YONTEM.map(([b, m]) => `<li><b>${E(b)}:</b> ${E(m)}</li>`).join("")}</ul>
+</div><div><h2>Ders ders ipuçları</h2><ul>${LGS_PLAN_DERSLER.map(d => `<li><b style="color:${d.renk}">${E(d.ad)}:</b> ${E(LGS_PLAN_DERS_IPUCU[d.key])}</li>`).join("")}</ul></div></div></div>
+<div class="sayfa ortak"><h1 style="font-size:15pt">Düzeyine göre stratejin</h1><div class="kucuk">Kendi sayfandaki düzeyi bul ve o kutudaki stratejiyi uygula.</div><div class="uc">${LGS_PLAN_DUZEYLER.map(d => `<div class="kutu"><b>${E(d.ad)} (${d.alt}–${Math.min(90, d.ust)} net · ≈ ${lgsPlanPuanAraligi(d).alt}–${lgsPlanPuanAraligi(d).ust} puan)</b><div style="margin:3px 0">${E(d.ozet)}</div><ul>${d.strateji.map(x => `<li>${E(x)}</li>`).join("")}</ul></div>`).join("")}</div></div>${lgsPlanTakip()}` : "";
+  return `<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LGS Çalışma Programları</title><style>${LGS_PLAN_CSS}</style></head><body>
+${ozet}${ogrSayfalari}${ortak}${LGS_PLAN_DIP}
 </body></html>`;
 }
 function LgsCalismaProgramiKarti({ ogrenciDenemeler, konuVerisi, ogrAd, ogrSinif }) {
@@ -38718,6 +38750,62 @@ function LgsCalismaProgramiKarti({ ogrenciDenemeler, konuVerisi, ogrAd, ogrSinif
             </>
           )}
           {!p && <div style={{ fontSize: 11, color: MUTED }}>Deneme sonucu yok; programı oluşturmak için netleri gir.</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+function LgsTopluProgramKarti({ ogrenciler, denemeler, konuHaritasiVerisi, aktifYil }) {
+  const [acik, setAcik] = useState(false);
+  const [sube, setSube] = useState("hepsi");
+  const [kisa, setKisa] = useState(true);
+  const sekizler = (ogrenciler || []).filter(o => (!o.yil || !aktifYil || o.yil === aktifYil) && /^\s*8\b|^\s*8\s*[-/ ]?[A-Za-zÇĞİÖŞÜçğıöşü]/.test(String(o.className || "")));
+  const subeler = [...new Set(sekizler.map(o => o.className))].sort((a, b) => a.localeCompare(b, "tr", { numeric: true }));
+  const secilen = sube === "hepsi" ? sekizler : sekizler.filter(o => o.className === sube);
+  const hazirla = () => {
+    const liste = [], eksik = [];
+    secilen.forEach(o => {
+      const ogrDen = pdrSozlukOku(denemeler, o.studentName, o.className, o.numara) || {};
+      const n = lgsPlanNetleri(ogrDen);
+      if (!n || !Object.values(n.netler).some(v => v !== null)) { eksik.push({ ad: o.studentName, sinif: o.className }); return; }
+      const kv = pdrSozlukOku(konuHaritasiVerisi || {}, o.studentName, o.className, o.numara) || {};
+      liste.push({ ad: o.studentName, sinif: o.className, kaynak: `son ${n.adet} deneme ortalaması`, p: lgsCalismaPlani({ netler: n.netler, konuVerisi: kv, tarih: new Date() }) });
+    });
+    return { liste, eksik };
+  };
+  const ac = () => {
+    const { liste, eksik } = hazirla();
+    if (!liste.length) { alert("Seçilen grupta deneme sonucu girilmiş öğrenci yok."); return; }
+    const baslik = sube === "hepsi" ? "Tüm 8. sınıflar" : sube;
+    ootBelgeAc(lgsPlanTopluHtml(liste, eksik, baslik, kisa), "LGS Calisma Programlari - " + baslik);
+  };
+  const on = acik ? hazirla() : null;
+  return (
+    <div data-testid="lgs-toplu" style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 12, marginBottom: 10 }}>
+      <button onClick={() => setAcik(a => !a)} style={{ width: "100%", background: "none", border: "none", padding: 0, textAlign: "left", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ fontSize: 13, fontWeight: 800, color: ACCENT }}>📅 Sınıfın Çalışma Programları</span>
+        <span style={{ fontSize: 11, color: MUTED }}>{acik ? "▲ Kapat" : "▼ Aç"}</span>
+      </button>
+      {acik && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ fontSize: 10.5, color: MUTED, lineHeight: 1.5, marginBottom: 8 }}>Deneme sonucu girilmiş her 8. sınıf öğrencisi için kendi netlerine göre LGS çalışma programı; tek belge, her öğrenci ayrı sayfada. İlk sayfada sınıf özeti.</div>
+          {!subeler.length ? <div style={{ fontSize: 11, color: MUTED }}>Bu yıl kayıtlı 8. sınıf öğrencisi yok.</div> : (
+            <>
+              <label style={{ fontSize: 11, color: TEXT, display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>Grup:
+                <select data-testid="lgs-toplu-sube" value={sube} onChange={e => setSube(e.target.value)} style={{ fontSize: 12, padding: "4px 6px", borderRadius: 6, border: `1px solid ${BORDER}` }}>
+                  <option value="hepsi">Tüm 8. sınıflar ({sekizler.length})</option>
+                  {subeler.map(c => <option key={c} value={c}>{c} ({sekizler.filter(o => o.className === c).length})</option>)}
+                </select>
+              </label>
+              <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+                {[[true, "Kısa — öğrenci başına 1 sayfa"], [false, "Tam — öğrenci başına 3 sayfa"]].map(([v, t]) => (
+                  <button key={t} data-testid={v ? "lgs-toplu-kisa" : "lgs-toplu-tam"} onClick={() => setKisa(v)} style={{ flex: 1, padding: "7px 6px", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer", border: `1.5px solid ${kisa === v ? ACCENT : BORDER}`, background: kisa === v ? ACCENT_LIGHT : CARD, color: kisa === v ? ACCENT : MUTED }}>{t}</button>
+                ))}
+              </div>
+              <div style={{ fontSize: 10.5, color: MUTED, marginBottom: 8 }}>{on.liste.length} öğrenciye program çıkacak{on.eksik.length ? ` · deneme sonucu olmayan ${on.eksik.length} öğrenci listelenecek` : ""}{kisa ? " · 'Nasıl çalışacaksın' ve takip çizelgesi en sonda bir kez" : ""}.</div>
+              <button data-testid="lgs-toplu-ac" onClick={ac} disabled={!on.liste.length} style={{ width: "100%", padding: 11, background: on.liste.length ? ACCENT : BORDER, color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 800, cursor: on.liste.length ? "pointer" : "default" }}>📄 Programları Aç (Yazdır / PDF)</button>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -38999,6 +39087,9 @@ function DenemeTabip({ denemeler, setDenemeler, kayitliListesi, aktifOgrenci, se
           setDenemeler={setDenemeler}
           onKapat={() => setGuncelYilExcelAcik(false)}
         />
+      )}
+      {(!sinavTuru || sinavTuru === "lgs") && (
+        <LgsTopluProgramKarti ogrenciler={ogrenciler} denemeler={denemeler} konuHaritasiVerisi={konuHaritasiVerisi} aktifYil={aktifYil} />
       )}
 
       {/* Bu yılın deneme verilerini (D1, D2, ...) toplu silme — GDO'ya (7. sınıf

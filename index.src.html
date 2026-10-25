@@ -38438,7 +38438,293 @@ function DenemeGuncelYilTopluYukle({ ogrenciler, denemeler, setDenemeler, onKapa
   );
 }
 
-function DenemeTabip({ denemeler, setDenemeler, kayitliListesi, aktifOgrenci, setAktifOgrenci, handleDenemeAnaliz, denemeAiLoading, denemeAnaliz, ogrenciler, setOgrenciler, aktifYil, sinavTuru, setSinavTuru }) {
+// ===== LGS ÇALIŞMA PROGRAMI BAŞLANGIÇ =====
+// 8. sınıf LGS hazırlığı için net/puan düzeyine göre kişisel haftalık çalışma programı.
+// Tamamen yerel (AI yok). Girdi: son 3 denemenin ders netleri (yoksa elle girilen netler)
+// ve varsa Konu Haritası. Ders ağırlığı = eksik soru × LGS katsayısı (Türkçe/Mat/Fen 4, diğerleri 1).
+const LGS_PLAN_DERSLER = [
+  { key: "turkce", ad: "Türkçe", konuAd: "Türkçe", maks: 20, kat: 4, blokSoru: 25, renk: "#E63946" },
+  { key: "mat", ad: "Matematik", konuAd: "Matematik", maks: 20, kat: 4, blokSoru: 15, renk: "#457B9D" },
+  { key: "fen", ad: "Fen Bilimleri", konuAd: "Fen Bilimleri", maks: 20, kat: 4, blokSoru: 20, renk: "#1FA971" },
+  { key: "sosyal", ad: "İnkılap Tarihi", konuAd: "İnkılap Tarihi", maks: 10, kat: 1, blokSoru: 20, renk: "#E76F51" },
+  { key: "din", ad: "Din Kültürü", konuAd: "Din Kültürü", maks: 10, kat: 1, blokSoru: 20, renk: "#C9A227" },
+  { key: "ingilizce", ad: "İngilizce", konuAd: "İngilizce", maks: 10, kat: 1, blokSoru: 20, renk: "#9B87F0" },
+];
+// Düzeyler (toplam net / 90). Puan aralığı KS_LGS_NET_PUAN tablosundan hesaplanır (yaklaşık).
+const LGS_PLAN_DUZEYLER = [
+  { key: "temel", ad: "Temel Kurma", alt: 0, ust: 35, ici: 2, sonu: 4, soru: 40, konuOran: 60, aylikHedef: 5,
+    ozet: "Önce temeli sağlamlaştır: eksik konuları baştan öğren, kolay sorularla özgüven kazan. Bu düzeyde en hızlı net artışı konu öğrenerek gelir.",
+    strateji: ["Matematikte 7. sınıf temel konularından (rasyonel sayılar, cebirsel ifadeler, oran-orantı) eksik varsa önce onları kapat; 8. sınıf konuları bunların üzerine kurulur.",
+      "Her konuda sıra: konu anlatımı → çözümlü örnek → kolay test → orta test. Zor/yeni nesil soruya konu oturmadan geçme.",
+      "Genel deneme 2 haftada bir yeter; arada her hafta bir ders için kısa branş denemesi çöz.",
+      "Türkçede her gün kısa paragraf çalışması yap: okuma hızın ve anlaman bütün dersleri etkiler."] },
+  { key: "gelisim", ad: "Gelişim", alt: 35, ust: 50, ici: 3, sonu: 5, soru: 60, konuOran: 50, aylikHedef: 4,
+    ozet: "Konu ve soru yarı yarıya: öğrendiğini hemen soruyla pekiştir, yanlış yaptığın konuya geri dön.",
+    strateji: ["Konu eksiklerini haftalık listeye yaz ve her hafta en az ikisini kapat.",
+      "Her konuyu bitirince aynı gün 20-30 soru, 3 gün sonra 10 soru, 1 hafta sonra 10 soru çöz (aralıklı tekrar).",
+      "Haftada 1 genel deneme çöz ve 24 saat içinde analizini yap.",
+      "Yanlış ve boş bıraktığın soruları hata defterine yaz; hafta sonu hata defterini tekrar çöz."] },
+  { key: "ivme", ad: "İvme", alt: 50, ust: 65, ici: 3, sonu: 6, soru: 80, konuOran: 35, aylikHedef: 3,
+    ozet: "Ağırlık soru çözümüne geçiyor: yeni nesil sorularda hız ve doğruluk kazan, kalan konu eksiklerini hedefli kapat.",
+    strateji: ["Yeni nesil (uzun, grafikli, tablolu) sorulara ağırlık ver; her gün en az bir ders için yeni nesil set çöz.",
+      "Haftada 1 genel deneme + 1 branş denemesi çöz; denemeleri gerçek sınav süresiyle çöz.",
+      "Hatalarını üç türe ayır: bilmiyordum (konu çalış) / dikkatsizlik (yavaşla, kontrol et) / süre yetmedi (süreli test çöz).",
+      "Netin en düşük olduğu iki derste her gün en az bir blok çalış."] },
+  { key: "yuksek", ad: "Yüksek Hedef", alt: 65, ust: 78, ici: 4, sonu: 6, soru: 100, konuOran: 20, aylikHedef: 2,
+    ozet: "Fark yaratan sorulara odaklan: ayırt edici zor sorular, dikkat hataları ve süre yönetimi.",
+    strateji: ["Konu çalışması yalnızca hata defterinde tekrar eden konulara; zamanının çoğu soru ve deneme.",
+      "Haftada 1-2 genel deneme; her denemeden sonra yanlış/boş her soruyu çözümünü bakmadan yeniden dene.",
+      "Dikkat hatalarını (soru kökünü yanlış okuma, olumsuz ifade, işlem hatası) ayrı listede say; her hafta sayının düştüğünü gör.",
+      "Zor soru setleri (ayırt edici, çok adımlı) çöz; takıldığında 3 dakika kuralı: 3 dakikada ilerleyemiyorsan işaretle, geç, sonra dön."] },
+  { key: "zirve", ad: "Zirve", alt: 78, ust: 91, ici: 4, sonu: 6, soru: 120, konuOran: 10, aylikHedef: 1,
+    ozet: "Düzeyini koru ve küçük kayıpları sıfırla: deneme pratiği, süre stratejisi ve sınav psikolojisi.",
+    strateji: ["Haftada 2 genel deneme; sınav saatine uygun (sabah) çözmeye alış.",
+      "Her yanlışın tek tek sebebini bul; aynı tür hata ikinci kez çıkmasın.",
+      "Puan kaybettiren küçük konuları (az soru çıkan ama yanlış yaptığın) listele ve kapat.",
+      "Yorgunluk ve kaygıyı yönet: uyku düzeni, mola, sınav öncesi rutin. Bu düzeyde fark çoğu zaman sakinlikte."] },
+];
+function lgsPlanDuzeyBul(toplam) { return LGS_PLAN_DUZEYLER.find(d => toplam >= d.alt && toplam < d.ust) || LGS_PLAN_DUZEYLER[LGS_PLAN_DUZEYLER.length - 1]; }
+function lgsPlanPuanAraligi(d) {
+  const a = ksNetPuanTahmin(d.alt).puan, b = ksNetPuanTahmin(Math.min(90, d.ust)).puan;
+  return { alt: a, ust: b };
+}
+// Dönem: konu tamamlama (Eylül–Ocak), tekrar + deneme (Şubat–Nisan), son düzlük (Mayıs–Haziran)
+function lgsPlanDonem(tarih) {
+  const ay = (tarih || new Date()).getMonth() + 1;
+  if (ay >= 9 || ay === 1) return { key: "konu", ad: "Konu tamamlama dönemi (Eylül–Ocak)", konuDuzelt: 10, denemeEk: 0, not: "Okulda işlenen konuları aynı hafta içinde tekrar et; geride kalan konu bırakma." };
+  if (ay >= 2 && ay <= 4) return { key: "tekrar", ad: "Tekrar ve deneme dönemi (Şubat–Nisan)", konuDuzelt: 0, denemeEk: 0, not: "Bütün konuları en az bir kez tekrar et; deneme sayısını artır ve her denemeyi analiz et." };
+  return { key: "son", ad: "Son düzlük (Mayıs–Haziran)", konuDuzelt: -15, denemeEk: 1, not: "Yeni konu açma; deneme, hata defteri ve kısa tekrarlarla devam et. Uyku düzenini sınav saatine göre ayarla." };
+}
+// Öğrencinin ders netleri: son 3 denemenin ortalaması
+function lgsPlanNetleri(ogrenciDenemeler) {
+  const l = Object.entries(ogrenciDenemeler || {}).filter(([k, v]) => k !== "7sinif" && v && typeof v === "object").sort((a, b) => parseInt(a[0]) - parseInt(b[0])).slice(-3);
+  if (!l.length) return null;
+  const n = {};
+  LGS_PLAN_DERSLER.forEach(d => { const v = l.map(([, x]) => parseFloat(x[d.key])).filter(x => !isNaN(x)); n[d.key] = v.length ? +(v.reduce((t, x) => t + x, 0) / v.length).toFixed(1) : null; });
+  return { netler: n, adet: l.length, nolar: l.map(([k]) => k) };
+}
+function lgsCalismaPlani({ netler, konuVerisi, duzeyKey, tarih }) {
+  const N = {}; LGS_PLAN_DERSLER.forEach(d => { const v = parseFloat((netler || {})[d.key]); N[d.key] = isNaN(v) ? 0 : Math.max(-d.maks / 3, Math.min(d.maks, v)); });
+  const toplam = +LGS_PLAN_DERSLER.reduce((t, d) => t + N[d.key], 0).toFixed(1);
+  const pt = ksNetPuanTahmin(Math.max(0, toplam));
+  const duzey = (duzeyKey && LGS_PLAN_DUZEYLER.find(d => d.key === duzeyKey)) || lgsPlanDuzeyBul(toplam);
+  const di = LGS_PLAN_DUZEYLER.indexOf(duzey), sonraki = LGS_PLAN_DUZEYLER[di + 1] || null;
+  const donem = lgsPlanDonem(tarih);
+  const konuOran = Math.max(5, Math.min(70, duzey.konuOran + donem.konuDuzelt));
+  // Ders ağırlıkları: kaybedilen soru × katsayı (her derse taban ağırlık ki hiçbiri unutulmasın)
+  const dersler = LGS_PLAN_DERSLER.map(d => {
+    const eksik = Math.max(0, d.maks - N[d.key]);
+    return { ...d, net: N[d.key], eksik: +eksik.toFixed(1), oran: Math.round(100 * Math.max(0, N[d.key]) / d.maks), agirlik: eksik * d.kat + d.kat * 1.5 };
+  });
+  // Haftalık blok sayısı: hafta içi 5 gün × ici, hafta sonu 2 gün × sonu; hafta sonunun 2 bloğu deneme + analiz
+  const denemeBlok = 2 + (donem.denemeEk || 0) * 2 + (duzey.key === "zirve" || duzey.key === "yuksek" ? 2 : 0);
+  const toplamBlok = 5 * duzey.ici + 2 * duzey.sonu;
+  const dersBlok = Math.max(10, toplamBlok - denemeBlok);
+  const toplamAg = dersler.reduce((t, d) => t + d.agirlik, 0);
+  // Sınırlar: tek ders haftanın %35'inden fazlasını almasın; Türkçe/Mat/Fen en az 3 blok (her gün az da olsa temas)
+  const ust = Math.ceil(dersBlok * 0.35), alt = (d) => d.kat > 1 ? Math.min(3, Math.floor(dersBlok / 6)) : 1;
+  dersler.forEach(d => { d.blok = Math.min(ust, Math.max(alt(d), Math.round(dersBlok * d.agirlik / toplamAg))); });
+  let fark = dersBlok - dersler.reduce((t, d) => t + d.blok, 0);
+  const sira = [...dersler].sort((a, b) => b.agirlik - a.agirlik);
+  for (let i = 0; fark !== 0 && i < 200; i++) { const d = sira[i % sira.length]; if (fark > 0 && d.blok < ust) { d.blok++; fark--; } else if (fark < 0 && d.blok > alt(d)) { d.blok--; fark++; } }
+  // Günlere dağıt: aynı gün aynı dersi iki kez koyma (mümkünse), en ağır dersleri günlere yay
+  const gunler = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"].map((ad, i) => ({ ad, haftaSonu: i >= 5, bloklar: [] }));
+  const kalan = Object.fromEntries(dersler.map(d => [d.key, d.blok]));
+  let denemeKalan = denemeBlok;
+  // Hafta sonu: Cumartesi sabah genel deneme + analiz; ek deneme blokları Pazar'a
+  const ekle = (g, b) => gunler[g].bloklar.push(b);
+  ekle(5, duzey.key === "temel" && donem.key !== "son" ? { tip: "deneme", ad: "Deneme: 1. ve 3. hafta genel, 2. ve 4. hafta branş", sure: "155 / 40 dk" } : { tip: "deneme", ad: "Genel deneme (sınav süresiyle)", sure: "155 dk" }); ekle(5, { tip: "analiz", ad: "Deneme analizi + hata defteri", sure: "40 dk" }); denemeKalan -= 2;
+  while (denemeKalan >= 2) { ekle(6, { tip: "deneme", ad: duzey.key === "zirve" || donem.key === "son" ? "Genel deneme (sınav süresiyle)" : "Branş denemesi (en zayıf ders)", sure: duzey.key === "zirve" || donem.key === "son" ? "155 dk" : "40 dk" }); ekle(6, { tip: "analiz", ad: "Deneme analizi + hata defteri", sure: "40 dk" }); denemeKalan -= 2; }
+  const kapasite = gunler.map((g, i) => Math.max(0, (i < 5 ? duzey.ici : duzey.sonu) - g.bloklar.length));
+  // 1) Dersleri ağırlık oranında sıraya diz (art arda aynı ders gelmesin)
+  const jetonlar = []; let son = null;
+  for (let t = 0; t < 200 && Object.values(kalan).some(v => v > 0); t++) {
+    const aday = dersler.filter(d => kalan[d.key] > 0).sort((x, y) => ((x.key === son) - (y.key === son)) || (kalan[y.key] / y.blok) - (kalan[x.key] / x.blok) || y.agirlik - x.agirlik)[0];
+    jetonlar.push(aday); kalan[aday.key]--; son = aday.key;
+  }
+  // 2) Sütun sütun dağıt: her günün 1. bloğu, sonra 2. bloğu… — böylece bir ders haftaya yayılır
+  const yuva = []; const maksK = Math.max(...kapasite);
+  for (let k = 0; k < maksK; k++) for (let gi = 0; gi < 7; gi++) if (kapasite[gi] > k) yuva.push(gi);
+  const gunDers = gunler.map(() => []);
+  jetonlar.slice(0, yuva.length).forEach((d, i) => gunDers[yuva[i]].push(d));
+  // 3) Aynı gün aynı ders iki kez geldiyse başka bir günle takas et
+  for (let tur = 0; tur < 3; tur++) for (let gi = 0; gi < 7; gi++) {
+    const l = gunDers[gi];
+    for (let i = 0; i < l.length; i++) {
+      if (l.findIndex(x => x.key === l[i].key) === i) continue;
+      for (let gj = 0; gj < 7; gj++) {
+        if (gj === gi) continue;
+        const m = gunDers[gj], j = m.findIndex(x => !l.some(y => y.key === x.key) && !m.some((z, zi) => z.key === l[i].key && zi !== -1));
+        if (j >= 0) { const t = m[j]; m[j] = l[i]; l[i] = t; break; }
+      }
+    }
+  }
+  // Kaçınılmaz tekrarlarda (blok sayısı gün sayısını aşınca) aynı ders art arda gelmesin
+  gunDers.forEach(l => { for (let i = 1; i < l.length; i++) if (l[i].key === l[i - 1].key) { const j = l.findIndex((x, k) => k > i && x.key !== l[i].key); if (j > 0) { const t = l[i]; l[i] = l[j]; l[j] = t; } } });
+  // 4) Konu/soru: her dersin ilk blokları konu çalışması, sonrakiler soru çözümü (önce öğren, sonra pekiştir)
+  const sayac = {};
+  gunDers.forEach((l, gi) => l.forEach(d => {
+    sayac[d.key] = (sayac[d.key] || 0) + 1;
+    const konuMu = sayac[d.key] <= Math.round(d.blok * konuOran / 100);
+    ekle(gi, { tip: "ders", key: d.key, ad: d.ad, renk: d.renk, is: konuMu ? "Konu çalışması + 10-15 kolay soru" : `${Math.round(d.blokSoru * (0.7 + 0.3 * di / 4))} soru + yanlışların çözümü` });
+  }));
+  // Konu öncelikleri: Konu Haritası doluysa kişisel, değilse en zayıf iki dersin en çok soru çıkan konuları
+  let konular = [], konuKaynak = "harita";
+  try { if (konuVerisi && Object.keys(konuVerisi).length) konular = lgsKonuOnceligi(konuVerisi, 10); } catch (e) { konular = []; }
+  if (!konular.length) {
+    konuKaynak = "genel";
+    const zayif = [...dersler].sort((a, b) => b.eksik * b.kat - a.eksik * a.kat).slice(0, 2);
+    zayif.forEach(d => (LGS_KONU_HARITASI[d.konuAd] || []).map(k => ({ ders: d.konuAd, konu: k.konu, beklenen: lgsBeklenenSoru(k) })).sort((a, b) => b.beklenen - a.beklenen).slice(0, 4).forEach(k => konular.push(k)));
+  }
+  // Gerçekçi hedef: düzeyin aylık artış hızıyla 2 ay (ör. İvme düzeyinde ayda ≈3 net)
+  const hedefNet = Math.min(90, Math.max(0, toplam) + duzey.aylikHedef * 2);
+  return { N, toplam, puan: pt.puan, yuzdelik: pt.yuzdelik, duzey, puanAraligi: lgsPlanPuanAraligi(duzey), sonraki, donem, konuOran, dersler, gunler, konular, konuKaynak,
+    hedefNet: +hedefNet.toFixed(0), hedefPuan: ksNetPuanTahmin(hedefNet).puan, ayKaldi: pdrLgsAyKaldi(), gunlukSoru: duzey.soru };
+}
+// "Nasıl çalışacaksın?" — her düzeyde ortak yöntem ve ders bazında ipuçları
+const LGS_PLAN_YONTEM = [
+  ["Blok yöntemi", "40 dakika çalış, 10 dakika mola ver. Molada telefona değil, kalk-su iç-hareket et. Çalışırken telefon başka odada olsun."],
+  ["Önce zor olan", "Günün ilk bloğunu en zorlandığın derse ayır; zihin en taze olduğunda zor iş yapılır."],
+  ["Aralıklı tekrar", "Bir konuyu öğrendiğin gün çalış, 1 gün sonra, 3 gün sonra ve 1 hafta sonra kısa tekrar yap. Unutmanın en etkili ilacı budur."],
+  ["Kendini test et", "Okuyup geçmek yerine kitabı kapatıp hatırlamaya çalış: konuyu kendine anlat, boş kâğıda özet çıkar, soru çöz. Hatırlamaya çalışmak öğrenmeyi kalıcı yapar."],
+  ["Karma çalışma", "Aynı oturumda tek tip soru yerine farklı konulardan karışık sorular da çöz; sınavda konular karışık gelir."],
+  ["Hata defteri", "Yanlış ve boş bıraktığın her soruyu deftere yaz: neden yanlış? (bilmiyordum / dikkatsizlik / süre). Haftada bir bu soruları çözümüne bakmadan yeniden çöz."],
+  ["Deneme analizi", "Denemeden sonra 24 saat içinde analiz yap: hangi konudan kaç yanlış, hangi tür hata? Analizi yapılmayan deneme yarım denemedir."],
+  ["Sınav koşulları", "Denemeleri gerçek süreyle çöz: Sözel oturum (Türkçe, İnkılap, Din, İngilizce — 50 soru) 75 dakika; Sayısal oturum (Matematik, Fen — 40 soru) 80 dakika. 3 yanlış 1 doğruyu götürür."],
+  ["Uyku ve beslenme", "Her gece 8-9 saat uyu, aynı saatte yat. Kahvaltıyı atlama. Uykusuz çalışılan saatler öğrenmeye dönüşmez."],
+  ["Kaygı olursa", "Sınav düşünceleri seni çok geriyorsa yavaş nefes al (4 say al, 6 say ver) ve rehber öğretmeninle konuş; kaygıyla baş etmek de çalışılan bir beceridir."],
+];
+const LGS_PLAN_DERS_IPUCU = {
+  turkce: "Her gün 15-20 paragraf sorusu çöz; önce soru kökünü oku. Sözel mantık ve tablo/grafik yorumlu sorulara her hafta ayrı set ayır. Günde 20 dakika kitap okumak paragraf hızını artırır.",
+  mat: "Sıra: konu → çözümlü örnek → kolaydan zora test → yeni nesil. İşlem hatalarını ayrı listede topla. Soru başına ortalama 2 dakikayı hedefle; takılırsan işaretle, geç, sonra dön.",
+  fen: "Konu özetini kendi cümlelerinle çıkar, kavram haritası yap. Deney, grafik ve tablo okuma soruları LGS'de çok çıkar; bunlara ayrı set ayır.",
+  sosyal: "Olayları zaman çizelgesine yerleştir (neden → olay → sonuç). Kavramları (ör. ulusal egemenlik, misak-ı millî) kendi cümlenle açıkla; metin yorumlu sorular çöz.",
+  din: "Ünite kavramlarını ve ayet/hadis yorumlu soruları çalış; metni okuyup ana fikri bulma Türkçe paragraf becerisine benzer.",
+  ingilizce: "Her gün ünitenin 10 kelimesini çalış ve önceki günlerinkini tekrar et. Diyalog tamamlama ve okuduğunu anlama sorularına ağırlık ver.",
+};
+function lgsPlanHtml(p, ogr) {
+  const E = ootEsc;
+  const ust = p.puanAraligi;
+  const gunTablo = `<table class="hafta"><tr>${p.gunler.map(g => `<th${g.haftaSonu ? ' class="hs"' : ""}>${g.ad}</th>`).join("")}</tr><tr>${p.gunler.map(g => `<td>${g.bloklar.map((b, i) => b.tip === "ders"
+    ? `<div class="blok" style="border-left:4px solid ${b.renk}"><b>${i + 1}. ${E(b.ad)}</b><span>${E(b.is)}</span></div>`
+    : `<div class="blok ozel"><b>${i + 1}. ${E(b.ad)}</b><span>${E(b.sure)}</span></div>`).join("")}</td>`).join("")}</tr></table>`;
+  return `<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LGS Çalışma Programı</title><style>
+@page{size:A4 landscape;margin:10mm}body{font-family:Arial,"DejaVu Sans",sans-serif;color:#1d2a24;font-size:10.5pt;line-height:1.45;margin:14px}
+h1{font-size:18pt;color:#127C56;margin:0 0 2px}h2{font-size:12.5pt;color:#127C56;border-bottom:2px solid #127C56;padding-bottom:2px;margin:14px 0 6px;page-break-after:avoid}
+.alt{color:#5c6b64;font-size:9.5pt}.kart{display:inline-block;border:1px solid #b8d3c6;background:#f1f8f4;border-radius:8px;padding:6px 12px;margin:4px 6px 4px 0;vertical-align:top}
+.kart b{display:block;font-size:15pt;color:#127C56}.kart span{font-size:8.5pt;color:#5c6b64}
+table{border-collapse:collapse;width:100%}th,td{border:1px solid #c9dcd2;padding:4px 5px;vertical-align:top;font-size:9pt;text-align:left}th{background:#127C56;color:#fff}
+table.hafta th.hs{background:#6A4C93}table.hafta td{width:14.28%}.blok{background:#fff;border:1px solid #e3ece7;border-radius:5px;padding:3px 5px;margin:0 0 4px}.blok b{display:block;font-size:8.8pt}.blok span{font-size:8pt;color:#5c6b64}
+.blok.ozel{background:#f3eefb;border-left:4px solid #6A4C93}.cubuk{height:8px;background:#e5ece8;border-radius:4px;overflow:hidden}.cubuk i{display:block;height:8px}
+.kutu{border:1px solid #b8d3c6;background:#f1f8f4;border-radius:6px;padding:7px 10px;margin:6px 0}.iki{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+ul{margin:4px 0 4px 18px;padding:0}li{margin:2px 0}.kucuk{font-size:8.5pt;color:#5c6b64}.sayfa{page-break-before:always}.s2{font-size:9pt;line-height:1.35}.s2 h2{font-size:11.5pt;margin:8px 0 4px}.s2 li{margin:1px 0}table.takip td{height:34px}
+@media print{.noprint{display:none}}
+</style></head><body>
+<h1>LGS Çalışma Programı</h1><div class="alt">${E(ogr.ad || "")}${ogr.sinif ? " · " + E(ogr.sinif) : ""} · ${E(today())} · LGS'ye yaklaşık ${p.ayKaldi} ay · ${E(p.donem.ad)}</div>
+<div style="margin-top:8px">
+<div class="kart"><b>${p.toplam}</b><span>Toplam net (${E(ogr.kaynak || "")})</span></div>
+<div class="kart"><b>≈ ${p.puan}</b><span>Tahmini puan · yüzdelik ≈ %${p.yuzdelik}</span></div>
+<div class="kart"><b>${E(p.duzey.ad)}</b><span>${p.duzey.alt}–${Math.min(90, p.duzey.ust)} net · ≈ ${ust.alt}–${ust.ust} puan</span></div>
+<div class="kart"><b>${p.hedefNet} net</b><span>2 ay sonraki hedef (ayda ≈ +${p.duzey.aylikHedef} net) · ≈ ${p.hedefPuan} puan</span></div>
+<div class="kart"><b>${p.gunlukSoru}</b><span>Günlük soru hedefi</span></div>
+</div>
+<div class="kutu"><b>Bu düzeyde ana fikir:</b> ${E(p.duzey.ozet)} <b>Dönem notu:</b> ${E(p.donem.not)}</div>
+<h2>Haftalık program</h2>
+<div class="kucuk">Hafta içi okul sonrası ${p.duzey.ici} blok, hafta sonu ${p.duzey.sonu} blok. Bir blok = 40 dk çalışma + 10 dk mola. Konu/soru oranı ≈ %${p.konuOran} konu, %${100 - p.konuOran} soru.</div>
+${gunTablo}
+<div class="sayfa s2"><div class="iki"><div>
+<h2>Dersler: durum ve haftalık blok</h2>
+<table><tr><th>Ders</th><th>Net</th><th style="width:34%">Başarı</th><th>Kaybedilen</th><th>Blok/hafta</th></tr>
+${p.dersler.map(d => `<tr><td><b style="color:${d.renk}">${E(d.ad)}</b></td><td>${d.net}/${d.maks}</td><td><div class="cubuk"><i style="width:${d.oran}%;background:${d.renk}"></i></div><span class="kucuk">%${d.oran}</span></td><td>${d.eksik}${d.kat > 1 ? " ×4" : ""}</td><td><b>${d.blok}</b></td></tr>`).join("")}
+</table>
+<div class="kucuk">Kaybedilen soru × katsayı (Türkçe, Matematik, Fen 4; diğerleri 1) büyüdükçe o derse daha çok blok verildi.</div>
+<h2>Bu düzeyde stratejin</h2><ul>${p.duzey.strateji.map(x => `<li>${E(x)}</li>`).join("")}</ul>
+<h2>Öncelikli konular</h2>
+${p.konular.length ? `<table><tr><th>Ders</th><th>Konu</th><th>${p.konuKaynak === "harita" ? "Kazanılabilecek soru" : "LGS'de ort. soru"}</th></tr>${p.konular.slice(0, 6).map(k => `<tr><td>${E(k.ders)}</td><td>${E(k.konu)}</td><td>${lgsSayiYaz(p.konuKaynak === "harita" ? k.kazanc : k.beklenen)}</td></tr>`).join("")}</table>` : "<div class='kucuk'>—</div>"}
+<div class="kucuk">${p.konuKaynak === "harita" ? "Konu Haritası'ndaki eksiklerine ve konunun LGS'de çıkma sıklığına göre sıralandı." : "Konu Haritası doldurulmadığı için en zayıf iki dersin LGS'de en çok soru çıkan konuları gösterildi; Konu Haritası doldurulursa liste kişiselleşir."}</div>
+</div><div>
+<h2>Nasıl çalışacaksın?</h2><ul>${LGS_PLAN_YONTEM.map(([b, m]) => `<li><b>${E(b)}:</b> ${E(m)}</li>`).join("")}</ul>
+<h2>Ders ders ipuçları</h2><ul>${p.dersler.map(d => `<li><b style="color:${d.renk}">${E(d.ad)}:</b> ${E(LGS_PLAN_DERS_IPUCU[d.key])}</li>`).join("")}</ul>
+</div></div>
+</div><div class="sayfa"><h2>Haftalık takip çizelgesi</h2><div class="kucuk">Her hafta sonunda doldur ve rehber öğretmenine göster. 4 haftada bir program yeni deneme netlerinle güncellenir.</div>
+<table class="takip"><tr><th>Hafta</th><th>Çözülen soru</th><th>Deneme neti</th><th>Hata defterine eklenen</th><th>Bitirilen konular</th><th>Programa uydum mu? (gün/7)</th><th>Kendime not</th></tr>${[1, 2, 3, 4, 5, 6, 7, 8].map(i => `<tr><td>${i}. hafta</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`).join("")}</table>
+</div><div class="kucuk" style="margin-top:6px">Puan ve yüzdelik, geçen yılların sonuçlarından derlenmiş yaklaşık değerlerdir; o yılın sınav zorluğuna göre değişir. Program 4 haftada bir yeni deneme sonuçlarıyla güncellenmelidir. Hazırlayan: Rehberlik Servisi</div>
+</body></html>`;
+}
+function LgsCalismaProgramiKarti({ ogrenciDenemeler, konuVerisi, ogrAd, ogrSinif }) {
+  const otomatik = lgsPlanNetleri(ogrenciDenemeler);
+  const [acik, setAcik] = useState(false);
+  const [elle, setElle] = useState(() => Object.fromEntries(LGS_PLAN_DERSLER.map(d => [d.key, ""])));
+  const [elleMod, setElleMod] = useState(false);
+  const [duzeyKey, setDuzeyKey] = useState("");
+  const kaynakElle = elleMod || !otomatik;
+  const netler = kaynakElle ? elle : otomatik.netler;
+  const doluMu = kaynakElle ? LGS_PLAN_DERSLER.some(d => elle[d.key] !== "") : true;
+  const p = doluMu ? lgsCalismaPlani({ netler, konuVerisi, duzeyKey, tarih: new Date() }) : null;
+  const kaynakMetni = kaynakElle ? "elle girilen netler" : `son ${otomatik.adet} deneme ortalaması`;
+  return (
+    <div data-testid="lgs-plan" style={{ background: CARD, border: `1px solid ${BORDER}`, boxShadow: "0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius: 12, padding: 14, marginTop: 14 }}>
+      <button onClick={() => setAcik(a => !a)} style={{ width: "100%", background: "none", border: "none", padding: 0, textAlign: "left", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ fontSize: 13, fontWeight: 800, color: ACCENT }}>📅 LGS Çalışma Programı</span>
+        <span style={{ fontSize: 11, color: MUTED }}>{acik ? "▲ Kapat" : "▼ Aç"}</span>
+      </button>
+      {acik && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ fontSize: 10.5, color: MUTED, lineHeight: 1.5, marginBottom: 8 }}>
+            Net ve puan düzeyine göre kişisel haftalık program ve "nasıl çalışacaksın" rehberi. Ders ağırlıkları kaybedilen soru × LGS katsayısına göre; Konu Haritası doluysa öncelikli konular ondan gelir. Yapay zekâ kullanılmaz.
+          </div>
+          {otomatik && (
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: TEXT, marginBottom: 8 }}>
+              <input type="checkbox" checked={elleMod} onChange={e => setElleMod(e.target.checked)} /> Netleri elle gireceğim (deneme sonuçları yerine)
+            </label>
+          )}
+          {kaynakElle && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 8 }}>
+              {LGS_PLAN_DERSLER.map(d => (
+                <div key={d.key}>
+                  <label style={{ fontSize: 9.5, fontWeight: 700, color: d.renk, display: "block", marginBottom: 2 }}>{d.ad} (/{d.maks})</label>
+                  <input type="number" step="0.33" value={elle[d.key]} onChange={e => setElle(x => ({ ...x, [d.key]: e.target.value }))} placeholder="net"
+                    style={{ width: "100%", padding: "6px 7px", border: `1px solid ${BORDER}`, borderRadius: 7, fontSize: 12, boxSizing: "border-box", textAlign: "center" }} />
+                </div>
+              ))}
+            </div>
+          )}
+          {p && (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 8 }}>
+                {[{ l: "Toplam net", v: p.toplam }, { l: "Tahmini puan", v: "≈ " + p.puan }, { l: "Düzey", v: p.duzey.ad }].map(x => (
+                  <div key={x.l} style={{ background: BG, borderRadius: 8, padding: "7px 4px", textAlign: "center" }}>
+                    <div style={{ fontSize: 14, fontWeight: 900, color: ACCENT }}>{x.v}</div><div style={{ fontSize: 9.5, color: MUTED }}>{x.l}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ fontSize: 10.5, color: TEXT, lineHeight: 1.55, marginBottom: 6 }}>
+                <b>{p.duzey.ad}</b> ({p.duzey.alt}–{Math.min(90, p.duzey.ust)} net · ≈ {p.puanAraligi.alt}–{p.puanAraligi.ust} puan): {p.duzey.ozet}
+              </div>
+              <div style={{ fontSize: 10, color: MUTED, marginBottom: 6 }}>Kaynak: {kaynakMetni} · {p.donem.ad} · 2 ay hedefi ≈ {p.hedefNet} net (≈ {p.hedefPuan} puan){p.sonraki ? ` · sonraki düzey ${p.sonraki.ad}: ${p.sonraki.alt}+ net` : ""}</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 8 }}>
+                {p.dersler.map(d => <span key={d.key} style={{ fontSize: 10, background: "#F4F7F5", borderLeft: `3px solid ${d.renk}`, borderRadius: 5, padding: "3px 7px" }}>{d.ad}: {d.net}/{d.maks} · {d.blok} blok/hafta</span>)}
+              </div>
+              <label style={{ fontSize: 10.5, color: MUTED, display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>Düzey:
+                <select value={duzeyKey} onChange={e => setDuzeyKey(e.target.value)} style={{ fontSize: 11, padding: "3px 6px", borderRadius: 6, border: `1px solid ${BORDER}` }}>
+                  <option value="">Otomatik (nete göre)</option>
+                  {LGS_PLAN_DUZEYLER.map(d => <option key={d.key} value={d.key}>{d.ad} ({d.alt}–{Math.min(90, d.ust)} net)</option>)}
+                </select>
+              </label>
+              <button data-testid="lgs-plan-ac" onClick={() => ootBelgeAc(lgsPlanHtml(p, { ad: ogrAd, sinif: ogrSinif, kaynak: kaynakMetni }), "LGS Calisma Programi - " + ogrAd)}
+                style={{ width: "100%", padding: 11, background: ACCENT, color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 800, cursor: "pointer" }}>
+                📄 Programı Aç (Yazdır / PDF)
+              </button>
+            </>
+          )}
+          {!p && <div style={{ fontSize: 11, color: MUTED }}>Deneme sonucu yok; programı oluşturmak için netleri gir.</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+// ===== LGS ÇALIŞMA PROGRAMI BİTİŞ =====
+function DenemeTabip({ denemeler, setDenemeler, kayitliListesi, aktifOgrenci, setAktifOgrenci, handleDenemeAnaliz, denemeAiLoading, denemeAnaliz, ogrenciler, setOgrenciler, aktifYil, sinavTuru, setSinavTuru, konuHaritasiVerisi }) {
   const dersler = aktifDersler(sinavTuru);
   const [excelPanelAcik, setExcelPanelAcik] = useState(false);
   const [guncelYilExcelAcik, setGuncelYilExcelAcik] = useState(false);
@@ -39057,6 +39343,12 @@ function DenemeTabip({ denemeler, setDenemeler, kayitliListesi, aktifOgrenci, se
                     🖨 Rapor İndir (PDF)
                   </button>
                 </div>
+              )}
+
+              {/* LGS çalışma programı (yalnız LGS; deneme yoksa netler elle girilir) */}
+              {(!sinavTuru || sinavTuru === "lgs") && (
+                <LgsCalismaProgramiKarti ogrenciDenemeler={ogrenciDenemeler} ogrAd={seciliOgrenci} ogrSinif={seciliOgrenciSinif}
+                  konuVerisi={pdrSozlukOku(konuHaritasiVerisi || {}, seciliOgrenci, seciliOgrenciSinif, seciliOgrenciNumara) || {}} />
               )}
             </>
           )}
@@ -48175,6 +48467,7 @@ function pdrBaslangicSekmesi() {
             aktifYil={aktifYil}
             sinavTuru={sinavTuru}
             setSinavTuru={setSinavTuru}
+            konuHaritasiVerisi={konuHaritasiVerisi}
           />
         )}
 

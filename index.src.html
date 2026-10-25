@@ -11244,7 +11244,7 @@ function pdrKapaliSupervizyon(girdi) {
   const { r, c, notlar } = X;
   const s = [];
   if (!notlar.length && !(X.denemeGirilen || []).length && !(X.profil1 && X.profil1.scores)) {
-    return "KLİNİK İZLENİM: Bu öğrenci için henüz görüşme notu, profil ya da deneme verisi yok. Süpervizyon için önce en az bir görüşme kaydı gerekli; ilk görüşmede güven ilişkisi kurma, güçlü yönleri ve ihtiyaçları keşfetme önerilir." + KS_ALT;
+    return "KLİNİK İZLENİM: Bu öğrenci için henüz görüşme notu, profil ya da deneme verisi yok. Süpervizyon için önce en az bir görüşme kaydı gerekli; ilk görüşmede güven ilişkisi kurma, güçlü yönleri ve ihtiyaçları keşfetme önerilir." + (girdi && girdi.tarama ? "\n\nTEST VE TARAMA BULGULARI (programın kendi puanlaması; tanı değildir — ilk görüşmeyi planlarken yararlan):\n" + girdi.tarama : "") + KS_ALT;
   }
 
   // KLİNİK İZLENİM
@@ -11343,6 +11343,7 @@ function pdrKapaliSupervizyon(girdi) {
   if (X.direnc) kg.push("Notlarda görüşmeye isteksizlik/direnç ipuçları var; zorlamak yerine ilişkiyi güçlendirmeye öncelik ver.");
   if (c.ekNot && c.ekNot.length) c.ekNot.forEach(x => kg.push("Dosya verisi: " + x));
   s.push("KRİTİK GÖZLEMLER:\n" + (kg.length ? kg.map(x => "- " + x).join("\n") : "- Gözden kaçmış olabilecek belirgin bir risk saptanmadı."));
+  if (girdi && girdi.tarama) s.push("TEST VE TARAMA BULGULARI (programın kendi puanlaması; tanı değildir — formülasyonda görüşme bulgularıyla birlikte değerlendir):\n" + girdi.tarama);
 
   // ÖNERİLEN YAKLAŞIM
   const plan = KS_PLAN[X.alt] || KS_PLAN[r.tur] || KS_PLAN["Diğer"];
@@ -11728,6 +11729,7 @@ function ksAsistanGirdi(ctx, o) {
     }
   } catch (e) { butunlesik = null; }
   return {
+    tarama: ksTaramaOzetMetni(ctx, o),
     ek: ksEkVeriTopla(ad, sinif, o.numara, ctx),
     gorusmeler,
     profil1: (ctx.profiles || []).find(ayni) || null,
@@ -13229,6 +13231,18 @@ function ksAsistanOkulKayitlari(g, ctx) {
     if (!Object.keys(son).length) b.push("kayıt yok");
   }
   return b.join("\n");
+}
+// Tarama sonuçları (BİLPRO, ÖÖG, otizm, CAS) + öğrencinin kademesindeki düzey taraması analizi.
+// Prof. Hakan ve kapalı süpervizyon da aynı metni kullanır; her biri ayrı ayrı yazılmasın diye tek yerde.
+function ksTaramaOzetMetni(ctx, o) {
+  const p = [];
+  try { const t = ksAsistanTaramaSonuclari(ctx, o); if (t) p.push(t); } catch (e) {}
+  try {
+    const no2 = ((/(\d+)/.exec(String(o.className || "")) || [])[1] | 0), kd = no2 >= 9 ? "lise" : no2 >= 5 ? "ortaokul" : no2 >= 1 ? "ilkokul" : null;
+    const dl = kd && ({ ilkokul: ctx.ilkokulTaramalar, ortaokul: ctx.akademikTaramalar, lise: ctx.liseTaramalar }[kd] || []).find(x => pdrAyniOgrenci(x.studentName, x.className, o.name, o.className, x.numara, o.numara));
+    if (dl && dl.cevaplar && Object.keys(dl.cevaplar).length) p.push(duzeyAnalizMetni(duzeyTaramaAnaliz(kd, dl.cevaplar, o.className, dl.date)));
+  } catch (e) {}
+  return p.join("\n\n");
 }
 function ksAsistanOgrenciDosyasi(ctx, o) {
   const ad = o.name, sinif = o.className, no = o.numara;
@@ -35757,7 +35771,8 @@ function ProfDanismaEkrani({
   kayitliListesi, aktifOgrenci, records, profiles, profiles2,
   denemeler, riskListesi, mudahalePlan, sevkler,
   hazirlikNotlari, ilerlemeNotlari, profNotlari, setProfNotlari, sinavTuru,
-  akademikTaramalar, liseTaramalar, benlikOlcekleri, testKayitlari, setAktifOgrenci
+  akademikTaramalar, liseTaramalar, benlikOlcekleri, testKayitlari, setAktifOgrenci,
+  ilkokulTaramalar, bilproDegerlendirmeler, oogDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, pasPerformanslar
 }) {
   const [seciliAd, setSeciliAd] = useState(aktifOgrenci?.name || "");
   const [aramaMetni, setAramaMetni] = useState("");
@@ -35777,6 +35792,13 @@ function ProfDanismaEkrani({
   const seciliSinif = seciliOgrKayit?.className || aktifOgrenci?.className || "";
   const ogrKonusma = pdrSozlukOku(profNotlari, seciliAd, seciliSinif) || [];
 
+  // Tarama ve düzey sonuçları — asistanla aynı metin (ksTaramaOzetMetni)
+  function taramaMetni(ad, sinif) {
+    const numara = (kayitliListesi.find(o => o.name === ad && (o.className || "") === (sinif || "")) || {}).numara;
+    return ksTaramaOzetMetni({ bilproDegerlendirmeler: bilproDegerlendirmeler || [], oogDegerlendirmeler: oogDegerlendirmeler || [], castDegerlendirmeler: castDegerlendirmeler || [],
+      pasDegerlendirmeler: pasDegerlendirmeler || [], pasPerformanslar: pasPerformanslar || [], ilkokulTaramalar: ilkokulTaramalar || [],
+      akademikTaramalar: akademikTaramalar || [], liseTaramalar: liseTaramalar || [] }, { name: ad, className: sinif, numara });
+  }
   function tumVeriHazirla(ad, sinif) {
     const adLower = ad.toLocaleLowerCase("tr").trim();
     const ogrRec = records.filter(r => pdrAyniOgrenci(r.studentName, r.className, ad, sinif));
@@ -35831,9 +35853,11 @@ NOT: Yukarıdaki sayılar tarama sonuçlarıdır; yetenek ölçümü ya da tanı
       const liste = kayitlar.filter(k => k.tip !== "mesleki_egilim_160");
       if (liste.length === 0) return "";
       return "\nUYGULANMIŞ DİĞER TESTLER:\n" + liste
-        .map(k => `${k.tarih} — ${k.testAdi || k.tip}${k.not ? " (" + k.not + ")" : ""}`)
+        .map(k => { let oz = ""; try { oz = typeof testSonucOzeti === "function" ? testSonucOzeti(k) : ""; } catch (e) { oz = ""; }
+          return `${k.tarih} — ${k.testAdi || k.tip}${oz && oz !== "—" ? ": " + ksAsistanKisalt(String(oz), 300) : ""}${k.not ? " (" + k.not + ")" : ""}`; })
         .join("\n");
     })();
+    const taramaBolum = (() => { const t = taramaMetni(ad, sinif); return t ? "\nBİLİŞSEL / GELİŞİMSEL TARAMALAR VE DÜZEY TARAMASI (programın kendi puanlaması; tanı değildir):\n" + t : ""; })();
 
     const denemeGirilen = Object.entries(ogrDen).sort((a,b)=>a[0]-b[0]).map(([no,nets])=>({
       no:parseInt(no), nets,
@@ -35877,6 +35901,7 @@ ${ogrSevk.map(s=>`${s.tarih} - ${s.sevkYeri}: ${s.sevkNedeni} [${s.sonucBekleniy
 
 ${olcumBolum}
 ${digerTestler}
+${taramaBolum}
 
 DR. AYŞE KARA'NIN DEĞERLENDİRMELERİ:
 Seans Hazırlık Notu: ${ogrHazirlik || "Henüz oluşturulmamış"}
@@ -35896,6 +35921,7 @@ Seans Hazırlık Notu: ${ogrHazirlik || "Henüz oluşturulmamış"}
     const bt = (ogrKademe === "ortaokul" || ogrKademe === "lise")
       ? butunlesikHesapla({ kademe: ogrKademe, ad, sinif, numara: null, akademikTaramalar, liseTaramalar, benlikOlcekleri, testKayitlari, profiles2 }) : null;
     return {
+      tarama: taramaMetni(ad, sinif),
       ek: ksEkVeriTopla(ad, sinif, (kayitliListesi.find(o => o.name === ad && (o.className || "") === (sinif || "")) || {}).numara),
       gorusmeler: ogrRec,
       profil1: profiles.find(p => pdrAyniOgrenci(p.studentName, p.className, ad, sinif)) || null,
@@ -47610,6 +47636,9 @@ function pdrBaslangicSekmesi() {
             benlikOlcekleri={benlikOlcekleri}
             testKayitlari={testKayitlari}
             setAktifOgrenci={setAktifOgrenci}
+            ilkokulTaramalar={ilkokulTaramalar} bilproDegerlendirmeler={bilproDegerlendirmeler}
+            oogDegerlendirmeler={oogDegerlendirmeler} castDegerlendirmeler={castDegerlendirmeler}
+            pasDegerlendirmeler={pasDegerlendirmeler} pasPerformanslar={pasPerformanslar}
           />
         )}
 

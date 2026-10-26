@@ -34233,7 +34233,7 @@ Kısa ve pratik yaz, Markdown kullanma.`}]
           {sonGorusme && (
             <div style={{background:CARD,border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)",borderLeft:`4px solid ${ACCENT}`,borderRadius:10,padding:12,marginBottom:10}}>
               <div style={{fontSize:10,fontWeight:700,color:MUTED,textTransform:"uppercase",marginBottom:4}}>Son Görüşme · {sonGorusme.date}</div>
-              <div style={{fontSize:13,color:TEXT,lineHeight:1.7}}>{sonGorusme.summary}</div>
+              <div style={{fontSize:13,color:TEXT,lineHeight:1.7}}>{pdrKayitMetni(sonGorusme)}</div>
             </div>
           )}
 
@@ -44524,7 +44524,7 @@ function RecordCard({ rec, records, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz,
 
       {open && !duzenle && (
         <div style={{ padding: "14px 16px" }}>
-          <div style={{ fontSize: 13, color: TEXT, lineHeight: 1.7, whiteSpace: "pre-wrap", marginBottom: 12 }}>{rec.summary}</div>
+          <div style={{ fontSize: 13, color: TEXT, lineHeight: 1.7, whiteSpace: "pre-wrap", marginBottom: 12 }}>{pdrKayitMetni(rec)}</div>
           {rec.raw && (
             <details style={{ marginBottom: 8 }}>
               <summary style={{ fontSize: 12, color: MUTED, cursor: "pointer" }}>Ham not →</summary>

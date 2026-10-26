@@ -4256,7 +4256,7 @@ function pdrGorusmeGecmisiMetni(records, ad, sinif, numara, haricId) {
 
   const satirlar = son.map((r, i) => {
     const sira = toplam - son.length + i + 1;
-    const ozet = (r.summary || r.raw || "").trim();
+    const ozet = pdrKayitMetni(r);
     const kisa = ozet.length > 600 ? ozet.slice(0, 600) + "…" : ozet;
     return `${sira}. görüşme (${r.date}${r.meetingType ? ", " + r.meetingType : ""}${r.topic ? " — " + r.topic : ""}): ${kisa || "(not boş)"}`;
   });
@@ -4299,7 +4299,7 @@ function pdrSeansKronolojisi(ogrRec) {
       if (!isNaN(fark)) ara = ` [önceki seanstan ${fark} gün sonra]`;
     }
     const bas = `SEANS ${i + 1} (${r.date}${pdrGunAdi(r.date) ? " " + pdrGunAdi(r.date) : ""}${r.meetingType ? ", " + r.meetingType : ""}${r.topic ? ", konu: " + r.topic : ""})${ara}`;
-    return `${bas}: ${(r.summary || r.raw || "").trim() || "(not boş)"}`;
+    return `${bas}: ${pdrKayitMetni(r) || "(not boş)"}`;
   }).join("\n\n");
 }
 
@@ -4324,7 +4324,7 @@ function pdrGorusmeListesiMetni(liste, secenek) {
     const bilgi = [r.date];
     if (o.tur) bilgi.push(r.meetingType || "Öğrenci");
     if (o.konu && r.topic) bilgi.push(r.topic);
-    return `${etiket} ${baslangic + i + 1} (${bilgi.join(", ")}): ${(r.summary || "").trim()}`;
+    return `${etiket} ${baslangic + i + 1} (${bilgi.join(", ")}): ${pdrKayitMetni(r)}`;
   }).join(o.ayrac || "\n\n");
 }
 // ===== GORUSME GECMIS BITIS =====
@@ -12382,7 +12382,7 @@ const KS_ASISTAN_ARACLAR = {
     calistir: (g, ctx, o) => {
       const n = Math.max(1, Math.min(10, parseInt(g.adet) || 5));
       const l = (ctx.records || []).filter(x => pdrAyniOgrenci(x.studentName, x.className, o.name, o.className)).sort((a, b) => ksTarihSirala(b, a)).slice(0, n);
-      return l.length ? l.map(x => `• ${x.date}${x.topic ? " · " + x.topic : ""}${x.meetingType && x.meetingType !== "Öğrenci" ? " · " + x.meetingType + " görüşmesi" : ""}: ${ksAsistanKisalt(pdrOgrNotMetni(x, o), 600)}`).join("\n") : "Bu öğrenci için görüşme notu yok.";
+      return l.length ? l.map(x => `• ${x.date}${x.topic ? " · " + x.topic : ""}${x.meetingType && x.meetingType !== "Öğrenci" ? " · " + x.meetingType + " görüşmesi" : ""}: ${ksAsistanKisalt(pdrOgrNotMetni(x, o), 1500)}`).join("\n") : "Bu öğrenci için görüşme notu yok.";
     },
   },
   risk_analizi: { aciklama: "Kapalı sistemle risk analizi yapar (kaydetmez).", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
@@ -13255,7 +13255,7 @@ function ksAsistanOgrenciDosyasi(ctx, o) {
     const konu = {}; gor.forEach(r => { const k = r.topic || "Konusuz"; konu[k] = (konu[k] || 0) + 1; });
     const tur = {}; gor.forEach(r => { const k = r.meetingType || "Öğrenci"; tur[k] = (tur[k] || 0) + 1; });
     b.push(`\nGÖRÜŞMELER (${gor.length}; ilk ${gor[gor.length - 1].date}, son ${gor[0].date}) — konular: ${Object.entries(konu).sort((a, c) => c[1] - a[1]).map(([k, v]) => k + " " + v).join(", ")}; türler: ${Object.entries(tur).map(([k, v]) => k + " " + v).join(", ")}`);
-    gor.slice(0, 6).forEach(r => b.push(`• ${r.date}${r.topic ? " · " + r.topic : ""}${r.meetingType && r.meetingType !== "Öğrenci" ? " · " + r.meetingType : ""}${r.grupKatilimcilari && r.grupKatilimcilari.length ? " · grup" : ""}: ${K(pdrOgrNotMetni(r, o), 280)}`));
+    gor.slice(0, 6).forEach(r => b.push(`• ${r.date}${r.topic ? " · " + r.topic : ""}${r.meetingType && r.meetingType !== "Öğrenci" ? " · " + r.meetingType : ""}${r.grupKatilimcilari && r.grupKatilimcilari.length ? " · grup" : ""}: ${((m, n) => m.length > n ? K(m, n) + " [kısaltıldı — tamamı için gorusme_notlari]" : m)(String(pdrOgrNotMetni(r, o)).replace(/\s+/g, " ").trim(), r === gor[0] ? 1500 : 280)}`));
     if (gor.length > 6) b.push(`  (daha eski ${gor.length - 6} görüşme var; gerekirse gorusme_notlari ile adet artır)`);
   } else b.push("\nGÖRÜŞMELER: kayıt yok.");
   try { const om = pdrOgrOlcumMetni(ctx, o); if (om) b.push("\n" + om); } catch (e) {}
@@ -14002,6 +14002,7 @@ function ksAlanBilgisi(g) {
 }
 // ── ALAN BİLGİSİ BİTİŞ ──
 // İstanbul LGS taban puanları (lise_taban_puanlari aracı). Kaynak: MEB tercih kılavuzu verisini derleyen tabanpuanlari.net ilçe sayfaları (Ekim 2026'da derlendi).
+// Yalnız LGS puanıyla (merkezî yerleştirme) alan programlar; OBP ile alan (yerel yerleştirme) okullar listede yok.
 // Satır: okul | tür | alan/program | 2026 taban | 2026 yüzdelik | 2025 taban | 2025 yüzdelik (boşsa bilinmiyor)
 const KS_LISE_TABAN_2026 = {
   "Beylikdüzü": `Yaşar Acar Fen Lisesi|fen|Fen Bilimleri|468.063|1.42|470.751|1.58
@@ -14072,17 +14073,82 @@ Beyoğlu Anadolu Lisesi|anadolu|İngilizce|406.580|8.97|406.538|9.67
 Galata MTAL|mtal|Elektrik-Elektronik Teknolojisi|227.480|67.95|210.289|69.30
 İstanbul Ticaret Odası MTAL|mtal|Moda Tasarım Teknolojileri|174.116|97.76|139.368|92.89
 Kabataş Ticaret MTAL|mtal|Pazarlama ve Perakende|171.563|98.26|162.233|88.76`,
-  "İstanbul geneli (en yüksekler)": `İstanbul Erkek Lisesi|anadolu|Almanca|500.000||
-Kabataş Erkek Lisesi|anadolu|İngilizce|497.758||
+  "Küçükçekmece": `Doğan Cüceloğlu Fen Lisesi|fen|Fen Bilimleri|459.776|2.11|462.359|2.37
+Fahreddin Kerim Gökay Anadolu Lisesi|anadolu|İngilizce|429.497|5.52|430.375|6.15
+Gazi Anadolu Lisesi|anadolu|İngilizce|413.404|7.86|413.166|8.64
+Prof. Dr. Sabahattin Zaim Anadolu Lisesi|anadolu|İngilizce|404.223|9.35|400.335|10.69
+Hacı Bektaş Veli Anadolu Lisesi|anadolu|İngilizce|398.418|10.36|396.386|11.34
+Şehit Mehmet Güder Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (İngilizce, 5 yıl)|388.178|12.23|383.365|13.57
+Toki Güneşparkevleri Kız Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (5 yıl)|387.001|12.46|382.453|13.73
+Şehit Mehmet Güder Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (Çince, 5 yıl)|380.209|13.74|369.670|16.06
+Toki Güneşparkevleri Kız Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (4 yıl)|364.969|17.07|351.632|19.58
+Şehit Binbaşı Bedir Karabıyık MTAL|mtal|Bilişim Teknolojileri|269.803|46.33|241.031|51.89
+Dr. Oktay Duran MTAL|mtal|Grafik ve Fotoğraf|237.733|61.73|234.746|54.15
+Küçükçekmece Kuyumculuk Teknolojisi MTAL|mtal|Kuyumculuk Teknolojisi|231.638|65.34|223.062|60.94
+İsmet Aktar MTAL|mtal|Makine ve Tasarım Teknolojisi|225.640|69.15|209.708|69.68
+Şehit Binbaşı Bedir Karabıyık MTAL|mtal|Kimya Teknolojisi|217.026|75.01|184.246|84.79
+Nahit Menteşe MTAL|mtal|Metal Teknolojisi|193.575|90.53|152.088|90.60
+Zehra Mustafa Dalgıç Ticaret MTAL|mtal|Muhasebe ve Finansman|181.699|95.25|191.132|81.83
+Pagev Plastik Teknolojisi MTAL|mtal|Kimya Teknolojisi|173.989|97.78|185.192|84.62
+Küçükçekmece Tasev Ayakkabı ve Saraciye Teknolojisi MTAL|mtal|Ayakkabı ve Saraciye Teknolojisi|173.013|97.98|169.283|87.49
+Dr. Oktay Duran MTAL|mtal|Matbaa Teknolojisi|166.269|99.04|119.352|96.51
+Pagev Plastik Teknolojisi MTAL|mtal|Plastik Teknolojisi|165.929|99.09|175.435|86.38
+Pagev Plastik Teknolojisi MTAL|mtal|Makine ve Tasarım Teknolojisi|158.586|100.00|166.885|87.92`,
+  "Çatalca": `Çatalca Fen Lisesi|fen|Fen Bilimleri|434.883|4.82|437.721|5.17
+Çatalca Anadolu Lisesi|anadolu|İngilizce|398.451|10.36|393.385|11.84
+Çatalca Arif Nihat Asya MTAL|mtal|Motorlu Araçlar Teknolojisi|231.521|65.41|222.426|61.35
+Çatalca Şehit Halil İbrahim Gürel Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (4 yıl)|192.729|90.98|183.712|84.89`,
+  "Silivri": `Prof. Dr. Fuat Sezgin Fen Lisesi|fen|Fen Bilimleri|448.928|3.18|446.953|4.04
+Hasan-Sabriye Gümüş Anadolu Lisesi|anadolu|İngilizce|408.559|8.68|405.512|9.84
+Selimpaşa Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (4 yıl)|289.333|39.09|238.548|52.78
+Silivri Yusuf Sarıbekir MTAL|mtal|Elektrik-Elektronik Teknolojisi|239.803|60.55|230.726|56.02
+Selimpaşa Borsa İstanbul Turizm MTAL|mtal|Konaklama ve Seyahat Hizmetleri|221.691|71.78|191.703|81.46
+Selimpaşa Borsa İstanbul Turizm MTAL|mtal|Yiyecek İçecek Hizmetleri|215.074|75.53|199.087|76.63
+Silivri Kız Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (4 yıl)|167.933|98.80|186.849|84.32`,
+  "Fatih": `İstanbul Erkek Lisesi|anadolu|Almanca|500.000|0.01|500.000|0.01
+Cağaloğlu Anadolu Lisesi|anadolu|Almanca|493.359|0.13|493.964|0.14
+Çapa Fen Lisesi|fen|Fen Bilimleri|482.802|0.50|487.928|0.40
+Vefa Lisesi|anadolu|İngilizce|480.102|0.65|481.227|0.83
+Pertevniyal Lisesi|anadolu|İngilizce|474.499|0.98|475.658|1.21
+Şehremini Anadolu Lisesi|anadolu|İngilizce|460.692|2.03|465.260|2.09
+Çemberlitaş Anadolu Lisesi|anadolu|İngilizce|457.953|2.27|459.962|2.59
+İstanbul Recep Tayyip Erdoğan Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (İngilizce, 5 yıl)|452.212|2.84|443.358|4.46
+İstanbul Recep Tayyip Erdoğan Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (Arapça, 5 yıl)|440.654|4.12|428.273|6.45
+Uluslararası Fatih Sultan Mehmet Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (5 yıl)|432.037|5.30|425.635|6.81
+Uluslararası Fatih Sultan Mehmet Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (4 yıl)|424.401|6.25|418.383|7.85
+İstanbul Recep Tayyip Erdoğan Anadolu İmam Hatip Lisesi|aihl|Hafızlık Projesi (4 yıl)|403.951|9.40|388.235|12.71
+Fatih Kız Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (4 yıl)|315.430|30.29|296.492|32.51
+Sultanahmet MTAL|mtal|Elektrik-Elektronik Teknolojisi|226.575|68.54|214.914|66.27
+Cağaloğlu Kız MTAL|mtal|Grafik ve Fotoğraf|180.029|95.25|170.634|87.25
+Cağaloğlu Hüsamettin Yivlik MTAL|mtal|Moda Tasarım Teknolojileri|173.548|97.87|168.921|96.35
+Kadırga MTAL|mtal|Kimya Teknolojisi|166.557|99.00|164.633|88.33
+Cağaloğlu Hüsamettin Yivlik MTAL|mtal|Geleneksel Türk Sanatları|163.853|99.39|168.873|96.35`,
+  "Zeytinburnu": `Samiha Ayverdi Anadolu Lisesi|anadolu|İngilizce|449.972|3.07|450.063|3.68
+Samiha Ayverdi Anadolu Lisesi|anadolu|Almanca|448.909|3.19|449.764|3.72
+Adile Mermerci Anadolu Lisesi|anadolu|İngilizce|432.131|5.17|432.889|5.81
+Borsa İstanbul Zeytinburnu Anadolu Lisesi|anadolu|İngilizce|414.927|7.62|412.920|8.68
+Büyükyalı MTAL|mtal|Bilişim Teknolojileri|395.328|10.89|397.189|11.21
+Büyükyalı MTAL|mtal|Makine ve Tasarım Teknolojisi|384.552|12.93|380.536|14.07
+İstanbul Kız Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (5 yıl)|373.154|15.29|380.765|14.03
+İstanbul Kız Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (4 yıl)|355.831|19.21|346.200|20.69
+Zeytinburnu Kız Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (5 yıl)|343.442|22.34|338.538|22.31
+Zeytinburnu Kız Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (4 yıl)|332.783|25.21|312.324|28.54
+Zeytinburnu MTAL|mtal|Bilişim Teknolojileri|291.986|37.96|299.492|31.72
+Zeytinburnu Kız Anadolu İmam Hatip Lisesi|aihl|Çocuk Gelişimi ve Eğitimi (4 yıl)|286.852|39.77|263.551|43.13
+Zeytinburnu MTAL|mtal|Endüstriyel Otomasyon Teknolojileri|267.954|47.08|244.905|50.50
+Zeytinburnu M. İhsan Mermerci Turizm MTAL|mtal|Yiyecek İçecek Hizmetleri|232.620|64.74|202.441|74.43
+Zeytinburnu M. İhsan Mermerci Turizm MTAL|mtal|Konaklama ve Seyahat Hizmetleri|226.505|68.58|197.374|77.75
+İstanbul Tekstil MTAL|mtal|Moda Tasarım Teknolojileri|220.141|72.84||
+İstanbul Ticaret Odası MTAL|mtal|Grafik ve Fotoğraf|210.511|79.61|191.763|81.42
+Zeytinburnu Merkezefendi Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (4 yıl)|205.758|82.89|160.001|89.17
+İstanbul Tekstil MTAL|mtal|Tekstil Teknolojisi|186.183|94.11||
+İstanbul Ticaret Odası MTAL|mtal|Matbaa Teknolojisi|162.095|99.64|150.806|90.83`,
+  "İstanbul geneli (en yüksekler)": `Kabataş Erkek Lisesi|anadolu|İngilizce|497.758||
 Galatasaray Lisesi|anadolu|Fransızca|497.432||
 İstanbul Atatürk Fen Lisesi|fen|İngilizce (5 yıl)|493.359||
-Cağaloğlu Anadolu Lisesi|anadolu|Almanca|493.359||
 Haydarpaşa Lisesi|anadolu|İngilizce|487.783||
 Kadıköy Anadolu Lisesi|anadolu|İngilizce|483.867||
-Çapa Fen Lisesi|fen|İngilizce (4 yıl)|482.802||
-Vefa Lisesi|anadolu|İngilizce|480.102||
 Validebağ Fen Lisesi|fen|İngilizce (5 yıl)|477.820||
-Pertevniyal Lisesi|anadolu|İngilizce|474.499||
 Teknopark İstanbul MTAL|mtal|Siber Güvenlik|469.518||`,
 };
 // Yaklaşık net → puan → yüzdelik (2025-2026 sonuçlarından derlenmiş, ±; o yılın soru zorluğuna ve ortalamalara göre değişir)
@@ -17956,8 +18022,16 @@ function pdrGrupNotBol(metin, benAd, digerAdlar) {
   return { kendi: kendi.join(" "), ortak: ortak.join(" ") };
 }
 // Öğrencinin görüşme notundan KENDİ kısmı (grup görüşmesinde); etiketli: asistan için, sade: kapalı sistem için
+// Görüşmenin okunacak metni: özet; ama AI'sız kayıtta özet ham notun kopyasıysa ve ham not sonradan
+// uzatıldıysa (düzenlemede eklenen bilgi özete geçmemişse) ham notun tamamı.
+function pdrKayitMetni(r) {
+  const oz = String(r.summary || "").trim(), ham = String(r.raw || "").trim();
+  if (!oz) return ham;
+  if (!r.form && ham.length > oz.length && ham.startsWith(oz)) return ham;
+  return oz;
+}
 function pdrOgrNotMetni(r, o, sade) {
-  const tam = String(r.summary || r.raw || "");
+  const tam = pdrKayitMetni(r);
   if (!r.grupKatilimcilari || !r.grupKatilimcilari.length) return tam;
   if (r.form) return tam;
   const b = pdrGrupNotBol(tam, o.name || r.studentName, r.grupKatilimcilari);
@@ -17996,24 +18070,33 @@ function pdrNottakiOkullar(metin) {
     const kes = new Set(pencere.filter(w => tur.includes(w))), bir = new Set([...pencere, ...tur]);
     return Math.max(0.01, kes.size / bir.size);
   };
-  const bulunan = okullar.map(ok => {
+  const bulunan = [];
+  okullar.forEach(ok => {
     const ay = pdrOkulAyirt(ok);
-    if (!ay.length) return null;
+    if (!ay.length) return;
     const tur = pdrSadeKelimeler(ok).filter(w => PDR_OKUL_GENEL.has(w));
-    let en = 0;
-    cumleler.forEach(tk => {
+    let en = null;
+    cumleler.forEach((tk, ci) => {
+      const aday = (puan, yer) => { if (!en || puan > en.puan) en = { puan, yer: yer.map(i => ci + ":" + i) }; };
       if (ay.length === 1) {                     // tek ayırt edici sözcük (örn. "Esenyurt Fen Lisesi"): okul türüyle birlikte geçmeli
-        if (ay[0].length < 5) return;
-        tk.forEach((t, i) => { if (pdrKelimeEslesir(ay[0], t) && tur.includes(tk[i + 1])) en = Math.max(en, turOrt(tur, tk, i + 1)); });
+        tk.forEach((t, i) => {
+          if (!pdrKelimeEslesir(ay[0], t) || !tur.includes(tk[i + 1])) return;
+          const o = turOrt(tur, tk, i + 1);
+          // 4 harfli ad (Vefa, Çapa, Gazi) yalnız okul türü tam yazılınca: "Vefa Lisesi", "Gazi Anadolu Lisesi"
+          if (ay[0].length >= 5 || (ay[0].length === 4 && o >= 1)) aday(1 + o, [i]);
+        });
         return;
       }
       // Ayırt edici sözcükler aynı cümlede ve yan yana (araya en fazla 1 sözcük) geçmeli
       const yer = ay.map(a => tk.findIndex(t => pdrKelimeEslesir(a, t))).filter(i => i >= 0);
-      if (yer.length >= 2 && yer.length >= Math.ceil(ay.length * 0.6) && Math.max(...yer) - Math.min(...yer) <= yer.length) en = Math.max(en, turOrt(tur, tk, Math.max(...yer) + 1));
+      if (yer.length >= 2 && yer.length >= Math.ceil(ay.length * 0.6) && Math.max(...yer) - Math.min(...yer) <= yer.length)
+        aday(yer.length / ay.length + turOrt(tur, tk, Math.max(...yer) + 1), yer);
     });
-    return en > 0 ? { ok, anahtar: ay.join(" "), en } : null;
-  }).filter(Boolean);
-  return bulunan.filter(b => !bulunan.some(c => c.anahtar === b.anahtar && c.en > b.en)).map(b => b.ok);
+    if (en) bulunan.push({ ok, ...en });
+  });
+  // Aynı sözcüklere oturan adaylardan notla en çok örtüşen kalır ("Borsa İstanbul Zeytinburnu Anadolu Lisesi" yazıldıysa
+  // diğer "Borsa İstanbul" okulları elenir); notta ayrı ayrı geçen iki okul ise ikisi de kalır.
+  return bulunan.filter(b => !bulunan.some(c => c !== b && c.puan > b.puan && c.yer.some(y => b.yer.includes(y)))).map(b => b.ok);
 }
 // Okul adı (kısmi) → taban satırları
 function pdrOkulBul(q) {

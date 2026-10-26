@@ -12978,8 +12978,8 @@ const KS_ASISTAN_ARACLAR = {
     },
   },
   gorusme_duzelt: {
-    aciklama: "Kayıtlı bir görüşmeyi düzeltir: not metni, TARİHİ, konusu ya da türü (ONAY GEREKİR; eski ve yeni hâl danışmana gösterilir). 'tarih' hangi görüşmenin düzeltileceğini seçer (verilmezse en son görüşme); tarihi değiştirmek için 'yeni_tarih' ver. Yalnızca değişmesi gereken alanları ver; 'yeni_not' notun TAMAMININ düzeltilmiş hâli olmalı. Grup görüşmesinde her öğrencinin kaydı ayrıdır; gerekirse her biri için ayrı çağır.",
-    girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "tarih": "düzeltilecek görüşmenin şimdiki tarihi (isteğe bağlı)", "yeni_tarih": "GG.AA.YYYY (tarih yanlışsa)", "yeni_not": "düzeltilmiş tam not (not değişmiyorsa boş bırak)", "konu": "isteğe bağlı", "tur": "isteğe bağlı"}', ogrenciIster: true, yazma: true, yontem: "hepsi",
+    aciklama: "Kayıtlı bir görüşmeyi düzeltir: not metni, TARİHİ, konusu ya da türü (ONAY GEREKİR; eski ve yeni hâl danışmana gösterilir). 'tarih' hangi görüşmenin düzeltileceğini seçer (verilmezse en son görüşme); tarihi değiştirmek için 'yeni_tarih' ver. Yalnızca değişmesi gereken alanları ver; 'yeni_not' notun TAMAMININ düzeltilmiş hâli olmalı. Grup görüşmesinde her öğrencinin kaydı ayrıdır; gerekirse her biri için ayrı çağır. Grup görüşmesinde ortak notu öğrenciye göre YENİDEN YAZMA; bunun yerine o öğrencinin kaydına 'ozel_not' ver (alt_konu da verilebilir). ozel_not yalnız ortak notta o öğrencinin adının geçtiği cümlelere ya da danışmanın açıkça söylediğine dayanmalı; notta olmayan yargı ve suçlama ekleme (ör. adı geçmeyen öğrenciye 'zorbalık yaptı' yazma). Notta adı hiç geçmiyorsa danışmana sor.",
+    girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "tarih": "düzeltilecek görüşmenin şimdiki tarihi (isteğe bağlı)", "yeni_tarih": "GG.AA.YYYY (tarih yanlışsa)", "yeni_not": "düzeltilmiş tam not (not değişmiyorsa boş bırak)", "ozel_not": "isteğe bağlı: bu öğrenciye özel not (grup görüşmesi)", "alt_konu": "isteğe bağlı", "konu": "isteğe bağlı", "tur": "isteğe bağlı"}', ogrenciIster: true, yazma: true, yontem: "hepsi",
     bul: (g, ctx, o) => {
       const l = (ctx.records || []).filter(x => pdrAyniOgrenci(x.studentName, x.className, o.name, o.className)).sort((a, b) => ksTarihSirala(b, a));
       const t = ksAsistanTarihNormal(g.tarih);
@@ -12989,7 +12989,7 @@ const KS_ASISTAN_ARACLAR = {
       const r = KS_ASISTAN_ARACLAR.gorusme_duzelt.bul(g, ctx, o);
       if (!r) return `✏️ Görüşme düzeltme\nÖğrenci: ${ksAsistanEtiket(o)}\n⚠ Düzeltilecek görüşme bulunamadı.`;
       const yt = ksAsistanTarihNormal(g.yeni_tarih);
-      return `✏️ Görüşme düzeltme\nÖğrenci: ${ksAsistanEtiket(o)} · ${r.date}${r.grupKatilimcilari && r.grupKatilimcilari.length ? " · grup görüşmesi (yalnızca bu öğrencinin kaydı)" : ""}${yt ? `\n\nTARİH: ${r.date} → ${yt}` : ""}${g.yeni_not ? `\n\nESKİ: ${ksAsistanKisalt(r.summary || r.raw, 500)}\n\nYENİ: ${g.yeni_not}` : ""}${g.konu ? "\nKonu: " + (r.topic || "-") + " → " + g.konu : ""}${g.tur ? "\nTür: " + (r.meetingType || "Öğrenci") + " → " + g.tur : ""}${g.yeni_tarih && !yt ? "\n⚠ Yeni tarih anlaşılamadı (GG.AA.YYYY olmalı)." : ""}`;
+      return `✏️ Görüşme düzeltme\nÖğrenci: ${ksAsistanEtiket(o)} · ${r.date}${r.grupKatilimcilari && r.grupKatilimcilari.length ? " · grup görüşmesi (yalnızca bu öğrencinin kaydı)" : ""}${yt ? `\n\nTARİH: ${r.date} → ${yt}` : ""}${g.yeni_not ? `\n\nESKİ: ${ksAsistanKisalt(r.summary || r.raw, 500)}\n\nYENİ: ${g.yeni_not}` : ""}${g.ozel_not ? `\n\nÖZEL NOT (yalnız bu öğrenci): ${g.ozel_not}${r.ozelNot ? `\n(eski özel not: ${ksAsistanKisalt(r.ozelNot, 200)})` : ""}` : ""}${g.alt_konu && pdrAltKonuBul(pdrKonuBul(g.konu) || r.topic, g.alt_konu) ? "\nAlt konu: " + (r.altKonu || "-") + " → " + pdrAltKonuBul(pdrKonuBul(g.konu) || r.topic, g.alt_konu) : ""}${g.konu ? "\nKonu: " + (r.topic || "-") + " → " + g.konu : ""}${g.tur ? "\nTür: " + (r.meetingType || "Öğrenci") + " → " + g.tur : ""}${g.yeni_tarih && !yt ? "\n⚠ Yeni tarih anlaşılamadı (GG.AA.YYYY olmalı)." : ""}`;
     },
     calistir: async (g, ctx, o) => {
       const r = KS_ASISTAN_ARACLAR.gorusme_duzelt.bul(g, ctx, o);
@@ -12999,6 +12999,8 @@ const KS_ASISTAN_ARACLAR = {
       if (g.yeni_tarih && !yt) return "Yeni tarih anlaşılamadı; GG.AA.YYYY biçiminde ver. Değişiklik yapılmadı.";
       const guncel = (ctx.records || []).map(x => x.id !== r.id ? x : { ...x, ...(yt ? { date: yt } : {}),
         ...(yeniNot ? { summary: yeniNot, raw: yeniNot } : {}),
+        ...(String(g.ozel_not || "").trim() ? { ozelNot: String(g.ozel_not).trim() } : {}),
+        ...(g.alt_konu && pdrAltKonuBul(pdrKonuBul(g.konu) || r.topic, g.alt_konu) ? { altKonu: pdrAltKonuBul(pdrKonuBul(g.konu) || r.topic, g.alt_konu) } : {}),
         ...(g.konu ? { topic: g.konu } : {}), ...(["Öğrenci", "Veli", "Öğretmen"].includes(g.tur) ? { meetingType: g.tur } : {}),
         duzenlemeTarihi: today(), duzenleyen: "asistan" });
       ctx.records = guncel; await ctx.kaydet.records(guncel);
@@ -18176,6 +18178,20 @@ function pdrKayitMetni(r) {
   return oz;
 }
 function pdrOgrNotMetni(r, o, sade) {
+  const oz = String(r.ozelNot || "").trim();
+  if (oz) {
+    const ana = pdrOgrNotMetniTemel(r, o, sade);
+    return sade ? `${ana} ${oz}` : `${ana} [bu öğrenciye özel not: ${oz}]`;
+  }
+  return pdrOgrNotMetniTemel(r, o, sade);
+}
+// Notta öğrencinin adının (ilk ad / görünen soyadı) geçtiği cümleler — yapay zekâsız, yeni bilgi eklemez
+function pdrNottaAdiGecenCumleler(metin, ad) {
+  const kok = pdrAdKokleri(ad);
+  if (!kok.length) return [];
+  return pdrCumleler(metin).filter(c => { const tk = pdrSadeKelimeler(c); return kok.some(k => tk.some(t => t === k || (t.startsWith(k) && t.length - k.length <= 4))); });
+}
+function pdrOgrNotMetniTemel(r, o, sade) {
   const tam = pdrKayitMetni(r);
   if (!r.grupKatilimcilari || !r.grupKatilimcilari.length) return tam;
   if (r.form) return tam;
@@ -44807,7 +44823,8 @@ function pdrGorusmeTarihTasi(rec, eskiTarih, yeniTarih, guncelRecords, listeler)
 function RecordCard({ rec, records, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz, bireyiTanima, setBireyiTanima, uyumIzleme, setUyumIzleme, aktifYil, kayitliListesi, riskListesi, denemeler, konuHaritasiVerisi }) {
   const [open, setOpen] = useState(false);
   const [duzenle, setDuzenle] = useState(false);
-  const [editForm, setEditForm] = useState({ summary: rec.summary, topic: rec.topic || "", altKonu: rec.altKonu || "", raw: rec.raw || "", date: rec.date || "" });
+  const [editForm, setEditForm] = useState({ summary: rec.summary, topic: rec.topic || "", altKonu: rec.altKonu || "", raw: rec.raw || "", date: rec.date || "", ozelNot: rec.ozelNot || "" });
+  const [ozelNotUyari, setOzelNotUyari] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [kaydedildi, setKaydedildi] = useState(false);
   const [onerilenBdt, setOnerilenBdt] = useState(null);
@@ -44964,7 +44981,7 @@ function RecordCard({ rec, records, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz,
     const eskiOzet = String(rec.summary || "").trim(), yeniHam = String(editForm.raw || "").trim();
     const ozetKopya = eskiOzet && rec.raw !== undefined && String(rec.raw || "").trim().startsWith(eskiOzet) && !rec.form;
     const ozet = ozetKopya && editForm.summary === rec.summary && yeniHam && yeniHam !== eskiOzet ? yeniHam : editForm.summary;
-    onUpdate(rec.id, { summary: ozet, topic: editForm.topic, altKonu: editForm.topic ? editForm.altKonu : "", raw: editForm.raw, date: yeniTarih });
+    onUpdate(rec.id, { summary: ozet, topic: editForm.topic, altKonu: editForm.topic ? editForm.altKonu : "", raw: editForm.raw, date: yeniTarih, ozelNot: String(editForm.ozelNot || "").trim() });
     setDuzenle(false);
     setKaydedildi(true);
     setTimeout(() => setKaydedildi(false), 2000);
@@ -45002,6 +45019,12 @@ function RecordCard({ rec, records, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz,
       {open && !duzenle && (
         <div style={{ padding: "14px 16px" }}>
           <div style={{ fontSize: 13, color: TEXT, lineHeight: 1.7, whiteSpace: "pre-wrap", marginBottom: 12 }}>{pdrKayitMetni(rec)}</div>
+          {rec.ozelNot && (
+            <div data-testid="kayit-ozel-not" style={{ background: "#F3F0FF", border: `1px solid ${PURPLE}`, borderRadius: 9, padding: "8px 10px", marginBottom: 12 }}>
+              <div style={{ fontSize: 10.5, fontWeight: 800, color: PURPLE, marginBottom: 3 }}>👤 BU ÖĞRENCİYE ÖZEL NOT</div>
+              <div style={{ fontSize: 12.5, color: TEXT, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{rec.ozelNot}</div>
+            </div>
+          )}
           {rec.raw && (
             <details style={{ marginBottom: 8 }}>
               <summary style={{ fontSize: 12, color: MUTED, cursor: "pointer" }}>Ham not →</summary>
@@ -45147,8 +45170,25 @@ function RecordCard({ rec, records, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz,
           <textarea value={editForm.summary} onChange={e => setEditForm(f => ({ ...f, summary: e.target.value }))}
             rows={5} style={{ width: "100%", padding: "8px 10px", border: `1px solid ${ACCENT_LIGHT}`, background: "#F0FAF4", borderRadius: 8, fontSize: 13, resize: "vertical", marginBottom: 12, boxSizing: "border-box", fontFamily: "inherit", lineHeight: 1.7 }} />
 
+          {/* Grup görüşmesi: ortak not aynen kalır; bu öğrenciye özel not ayrıca yazılır */}
+          {rec.grupKatilimcilari?.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: MUTED, display: "block", marginBottom: 4 }}>BU ÖĞRENCİYE ÖZEL NOT (İSTEĞE BAĞLI)</label>
+              <div style={{ fontSize: 10.5, color: MUTED, lineHeight: 1.45, marginBottom: 5 }}>Yukarıdaki not grup için ortak kalır. Bu öğrencinin kendi anlatımını ya da onunla ilgili gözlemini buraya yaz. Ortak notta olmayan bir yargıyı (ör. "zorbalık yaptı") ancak kendin biliyorsan yaz.</div>
+              <button data-testid="ozel-not-taslak" onClick={() => {
+                const c = pdrNottaAdiGecenCumleler(editForm.raw || editForm.summary, rec.studentName);
+                if (!c.length) { setOzelNotUyari("Notta bu öğrencinin adının geçtiği bir cümle yok. Özel notu kendin yazabilirsin."); return; }
+                setOzelNotUyari("Taslak yalnızca notta adının geçtiği cümlelerden alındı; yeni bilgi eklenmedi. Kontrol edip düzenle.");
+                setEditForm(f => ({ ...f, ozelNot: (f.ozelNot ? f.ozelNot + "\n" : "") + "Ortak notta bu öğrenciyle ilgili: " + c.join(" ") }));
+              }} style={{ padding: "6px 10px", background: "#F3F0FF", color: PURPLE, border: `1px solid ${PURPLE}`, borderRadius: 8, fontSize: 11.5, fontWeight: 700, cursor: "pointer", marginBottom: 6 }}>📝 Notta adı geçen cümleleri getir</button>
+              {ozelNotUyari && <div data-testid="ozel-not-uyari" style={{ fontSize: 11, color: "#8a5a00", background: "#FFF6E5", borderRadius: 6, padding: "4px 8px", marginBottom: 6 }}>{ozelNotUyari}</div>}
+              <textarea data-testid="ozel-not" value={editForm.ozelNot || ""} onChange={e => setEditForm(f => ({ ...f, ozelNot: e.target.value }))} rows={3} placeholder="ör. Kendi anlatımına göre…"
+                style={{ width: "100%", padding: "8px 10px", border: `1px solid ${PURPLE}`, borderRadius: 8, fontSize: 13, resize: "vertical", boxSizing: "border-box", fontFamily: "inherit", lineHeight: 1.6 }} />
+            </div>
+          )}
+
           <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={() => { setDuzenle(false); setEditForm({ summary: rec.summary, topic: rec.topic || "", altKonu: rec.altKonu || "", raw: rec.raw || "" }); }} style={{
+            <button onClick={() => { setDuzenle(false); setOzelNotUyari(""); setEditForm({ summary: rec.summary, topic: rec.topic || "", altKonu: rec.altKonu || "", raw: rec.raw || "", date: rec.date || "", ozelNot: rec.ozelNot || "" }); }} style={{
               flex: 1, padding: "9px", background: CARD, color: MUTED, border: `1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer"
             }}>İptal</button>
             <button onClick={handleSave} style={{

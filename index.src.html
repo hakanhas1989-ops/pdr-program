@@ -12619,6 +12619,9 @@ const KS_ASISTAN_ARACLAR = {
       const yeni = { id: uid(), studentName: ad, className: sn, numara: no, yil: ctx.aktifYil, tarih: today() };
       const guncel = [yeni, ...(ctx.ogrenciler || [])];
       ctx.ogrenciler = guncel; await ctx.kaydet.ogrenciler(guncel);
+      // Aynı istek içinde ogrenci_ara / ogrenci_ozeti / görüşme kaydı yeni öğrenciyi hemen bulsun
+      // (ogrenciListesi isteğin başında ekrandaki listeden alınır; kendiliğinden yenilenmez)
+      ctx.ogrenciListesi = [{ name: ad, className: sn, numara: no }, ...(ctx.ogrenciListesi || []).filter(x => !pdrAyniOgrenci(x.name, x.className, ad, sn, x.numara, no))];
       const mevcut = (ctx.ogrenciler || []).filter(x => x.className === sn).length;
       return `Öğrenci eklendi: ${ad} (${sn}${no ? ", No: " + no : ""}); ${sn} sınıfında artık ${mevcut} öğrenci var. Sonradan katılan bir öğrenciyse okula uyum görüşmesi ve Uyum İzleme formu önerilir.`;
     },

@@ -11711,24 +11711,36 @@ function pdrAltKonuBul(konu, v) {
 // Görüşme notunda adı geçen (katılımcı listesinde olmayan) kayıtlı öğrenciler. Ad büyük harfle yazılmış olmalı.
 // Yalnız ad geçiyorsa (soyadsız) ana öğrencinin sınıfında tek eşleşme aranır; tam ad (ad + soyadın görünen kısmı) her sınıfta.
 function pdrNottakiOgrenciler(metin, liste, haric) {
-  const sozcuk = String(metin || "").split(/[^\p{L}\p{N}*'’]+/u).filter(Boolean);
-  const buyuk = sozcuk.filter(w => /^\p{Lu}/u.test(w)).map(w => ksSade(w.replace(/['’].*$/, "").replace(/\*/g, "")));
-  const harictir = (x) => (haric || []).some(h => h && pdrAyniOgrenci(h.name, h.className, x.name, x.className, h.numara, x.numara));
-  const anaSinif = ksSade(((haric || [])[0] || {}).className || "");
-  const bulunan = [];
-  (liste || []).forEach(x => {
-    if (harictir(x)) return;
-    const p = String(x.name || "").split(/\s+/).filter(Boolean);
-    const ad = ksSade(p[0] || ""); if (ad.length < 3) return;
-    const ek = (t, k) => t === k || (t.startsWith(k) && t.length - k.length <= 4);
-    const i = buyuk.findIndex(t => ek(t, ad));
-    if (i < 0) return;
-    const soy = ksSade(String(p[1] || "").replace(/\*/g, ""));
-    const tam = soy.length >= 2 && buyuk[i + 1] && buyuk[i + 1].startsWith(soy);
-    if (tam || ksSade(x.className || "") === anaSinif) bulunan.push({ x, tam, ad });
+  const sinifAnahtar = (c) => { const m = /(\d{1,2})\D*([\p{L}])/u.exec(String(c || "")); return m ? m[1] + ksSade(m[2]) : ""; };
+  // Cümle cümle: büyük harfle yazılmış sözcükler + o cümlede geçen sınıflar ("8-D", "8D", "8/D", "8. D", "8-D'den")
+  const cumleler = pdrCumleler(metin).map(c => {
+    const sozcuk = c.split(/[^\p{L}\p{N}*'’]+/u).filter(Boolean);
+    const buyuk = sozcuk.filter(w => /^\p{Lu}/u.test(w)).map(w => ksSade(w.replace(/['’].*$/, "").replace(/\*/g, "")));
+    const siniflar = new Set([...c.matchAll(/(?:^|[^\p{L}\p{N}])(\d{1,2})\s*[-/.]?\s*([\p{L}])(?![\p{L}])/gu)].map(m => m[1] + ksSade(m[2])));
+    return { buyuk, siniflar };
   });
-  // Aynı sınıfta aynı adı taşıyan birden çok öğrenci varsa ve soyadı yazılmamışsa hepsi listelenir (danışman seçer)
-  return bulunan.map(b => b.x).slice(0, 8);
+  const harictir = (x) => (haric || []).some(h => h && pdrAyniOgrenci(h.name, h.className, x.name, x.className, h.numara, x.numara));
+  const anaSinif = sinifAnahtar(((haric || [])[0] || {}).className);
+  const ek = (t, k) => t === k || (t.startsWith(k) && t.length - k.length <= 4);
+  // Cümle cümle aday: neden 3 = tam ad, 2 = aynı cümlede yazılan sınıf, 1 = ana öğrencinin sınıfı.
+  // Bir cümlede aynı ad için sınıfı yazılmış ya da tam adı geçen öğrenci varsa, o cümlede yalnız "aynı sınıf" diye bulunan adaşı sayılmaz.
+  // Katılımcılar da aday sayılır (seçilmez); böylece "8-D'den Mert" zaten gruptaysa aynı cümledeki adaşı sorulmaz
+  const adaylar = (liste || []).map(x => {
+    const p = String(x.name || "").split(/\s+/).filter(Boolean);
+    return { x, ad: ksSade(p[0] || ""), soy: ksSade(String(p[1] || "").replace(/\*/g, "")), sk: sinifAnahtar(x.className), katilimci: harictir(x) };
+  }).filter(a => a.ad.length >= 3);
+  const secilen = new Set();
+  cumleler.forEach(c => {
+    const bu = [];
+    adaylar.forEach(a => {
+      const i = c.buyuk.findIndex(t => ek(t, a.ad));
+      if (i < 0) return;
+      const neden = a.soy.length >= 2 && c.buyuk[i + 1] && c.buyuk[i + 1].startsWith(a.soy) ? 3 : a.sk && c.siniflar.has(a.sk) ? 2 : a.sk && a.sk === anaSinif ? 1 : 0;
+      if (neden) bu.push({ a, neden });
+    });
+    bu.filter(b => !b.a.katilimci && !(b.neden === 1 && bu.some(c2 => c2 !== b && c2.a.ad === b.a.ad && c2.neden >= 2))).forEach(b => secilen.add(b.a.x));
+  });
+  return [...secilen].slice(0, 8);
 }
 function ksAsistanDigerleriBul(ctx, g, o) {
   const ham = Array.isArray(g.diger_ogrenciler) ? g.diger_ogrenciler : [];

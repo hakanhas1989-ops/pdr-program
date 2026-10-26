@@ -14065,6 +14065,13 @@ Avcılar Kız Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler|305.173|33.
 Avcılar MTAL|mtal|Elektrik-Elektronik|300.300|35.14|292.784|33.49
 Avcılar MTAL|mtal|Makine ve Tasarım|271.496|45.64|270.404|41.36
 Mehmet Emin Horoz MTAL|mtal|Ulaştırma Hizmetleri|266.200|47.81|250.610|48.45`,
+  "Beyoğlu": `Beyoğlu Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (İngilizce, 5 yıl)|454.782|2.58|461.750|2.43
+Beyoğlu Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (Arapça, 5 yıl)|449.147|3.16|452.228|3.48
+İstanbul Atatürk Anadolu Lisesi|anadolu|İngilizce|428.703|5.62|426.501|6.69
+Beyoğlu Anadolu Lisesi|anadolu|İngilizce|406.580|8.97|406.538|9.67
+Galata MTAL|mtal|Elektrik-Elektronik Teknolojisi|227.480|67.95|210.289|69.30
+İstanbul Ticaret Odası MTAL|mtal|Moda Tasarım Teknolojileri|174.116|97.76|139.368|92.89
+Kabataş Ticaret MTAL|mtal|Pazarlama ve Perakende|171.563|98.26|162.233|88.76`,
   "İstanbul geneli (en yüksekler)": `İstanbul Erkek Lisesi|anadolu|Almanca|500.000||
 Kabataş Erkek Lisesi|anadolu|İngilizce|497.758||
 Galatasaray Lisesi|anadolu|Fransızca|497.432||
@@ -17979,18 +17986,34 @@ function pdrTabanListesi() { try { return typeof ksTabanSatirlar === "function" 
 function pdrNottakiOkullar(metin) {
   const cumleler = pdrCumleler(metin).map(pdrSadeKelimeler);
   const okullar = [...new Set(pdrTabanListesi().map(s => s.okul))];
-  return okullar.filter(ok => {
+  // Ayırt edici adın hemen ardından gelen okul türü sözcükleri ("anadolu lisesini" → anadolu, lisesi) ile okulun
+  // tür sözcüklerinin örtüşmesi (0–1). Aynı adı taşıyan okullardan (Beyoğlu Anadolu Lisesi / Beyoğlu Anadolu İmam
+  // Hatip Lisesi) notta yazılana en çok uyan seçilir.
+  const genelKok = (t) => { if (PDR_OKUL_GENEL.has(t)) return t; for (const w of PDR_OKUL_GENEL) if (w.length >= 4 && t.startsWith(w) && t.length - w.length <= 4) return w; return null; };
+  const turOrt = (tur, tk, j) => {
+    const pencere = []; for (let i = j; i < tk.length && i < j + 6; i++) { const g = genelKok(tk[i]); if (!g) break; pencere.push(g); }
+    if (!pencere.length) return 0.01;
+    const kes = new Set(pencere.filter(w => tur.includes(w))), bir = new Set([...pencere, ...tur]);
+    return Math.max(0.01, kes.size / bir.size);
+  };
+  const bulunan = okullar.map(ok => {
     const ay = pdrOkulAyirt(ok);
-    if (!ay.length) return false;
+    if (!ay.length) return null;
     const tur = pdrSadeKelimeler(ok).filter(w => PDR_OKUL_GENEL.has(w));
-    return cumleler.some(tk => {
-      if (ay.length === 1)                       // tek ayırt edici sözcük (örn. "Esenyurt Fen Lisesi"): okul türüyle birlikte geçmeli
-        return ay[0].length >= 5 && tk.some((t, i) => pdrKelimeEslesir(ay[0], t) && tur.includes(tk[i + 1]));
+    let en = 0;
+    cumleler.forEach(tk => {
+      if (ay.length === 1) {                     // tek ayırt edici sözcük (örn. "Esenyurt Fen Lisesi"): okul türüyle birlikte geçmeli
+        if (ay[0].length < 5) return;
+        tk.forEach((t, i) => { if (pdrKelimeEslesir(ay[0], t) && tur.includes(tk[i + 1])) en = Math.max(en, turOrt(tur, tk, i + 1)); });
+        return;
+      }
       // Ayırt edici sözcükler aynı cümlede ve yan yana (araya en fazla 1 sözcük) geçmeli
       const yer = ay.map(a => tk.findIndex(t => pdrKelimeEslesir(a, t))).filter(i => i >= 0);
-      return yer.length >= 2 && yer.length >= Math.ceil(ay.length * 0.6) && Math.max(...yer) - Math.min(...yer) <= yer.length;
+      if (yer.length >= 2 && yer.length >= Math.ceil(ay.length * 0.6) && Math.max(...yer) - Math.min(...yer) <= yer.length) en = Math.max(en, turOrt(tur, tk, Math.max(...yer) + 1));
     });
-  });
+    return en > 0 ? { ok, anahtar: ay.join(" "), en } : null;
+  }).filter(Boolean);
+  return bulunan.filter(b => !bulunan.some(c => c.anahtar === b.anahtar && c.en > b.en)).map(b => b.ok);
 }
 // Okul adı (kısmi) → taban satırları
 function pdrOkulBul(q) {
@@ -36789,6 +36812,20 @@ function OgrenciYonetim({
     const guncel = records.map(r => r.id === id ? { ...r, ...patch } : r);
     setRecords(guncel);
     await saveRecords(guncel);
+    // 🎯 Düzeltilen notta yeni bir hedef okul geçiyorsa (yeni kayıttaki gibi) eklemeyi öner
+    try {
+      const yeniMetin = `${patch.summary || ""} ${patch.raw || ""}`, eskiMetin = eski ? `${eski.summary || ""} ${eski.raw || ""}` : "";
+      if (eski && setOgrenciler && yeniMetin.trim() !== eskiMetin.trim() && !(eski.grupKatilimcilari && eski.grupKatilimcilari.length)) {
+        const k = { name: eski.studentName, className: eski.className, numara: eski.numara };
+        // Zaten hedeflerde olan okul sorulmaz (pdrNotTespitleri eler)
+        const t = pdrNotTespitleri(yeniMetin, [k], ogrenciler)[0];
+        const yeniOkullar = t ? t.okullar : [];
+        if (yeniOkullar.length && window.confirm(`🎯 Notta hedef okul geçiyor:\n• ${yeniOkullar.join(", ")}\n\nÖğrencinin hedef okullarına eklensin mi? (Özet kartında gereken net ve fark hesaplanır.)`)) {
+          const yeniOgr = ogrenciler.map(x => pdrAyniOgrenci(x.studentName, x.className, k.name, k.className, x.numara, k.numara) ? yeniOkullar.reduce((y, ok) => pdrHedefEkle(y, ok, null, "not"), x) : x);
+          setOgrenciler(yeniOgr); await saveOgrenciler(yeniOgr);
+        }
+      }
+    } catch (e) {}
     // Tarih değiştiyse o güne bağlı BDT / bireyi tanıma / uyum izleme kayıtları da taşınır
     if (eski && patch.date && patch.date !== eski.date) {
       const t = pdrGorusmeTarihTasi(eski, eski.date, patch.date, guncel, { bdtAnaliz, bireyiTanima, uyumIzleme });
@@ -44362,7 +44399,12 @@ function RecordCard({ rec, records, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz,
     const tm = /^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/.exec(String(editForm.date || "").trim());
     if (!tm || +tm[1] < 1 || +tm[1] > 31 || +tm[2] < 1 || +tm[2] > 12) { alert("⚠️ Tarih GG.AA.YYYY biçiminde olmalı (örn. 09.10.2026)."); return; }
     const yeniTarih = `${tm[1].padStart(2, "0")}.${tm[2].padStart(2, "0")}.${tm[3]}`;
-    onUpdate(rec.id, { summary: editForm.summary, topic: editForm.topic, altKonu: editForm.topic ? editForm.altKonu : "", raw: editForm.raw, date: yeniTarih });
+    // AI ile özetlenmeden kaydedilen görüşmede özet = ham notun kopyası. Danışman yalnız ham notu
+    // düzeltirse özet eskide kalmasın (asistan ve raporlar özeti okur): özet elle değiştirilmediyse ham nota eşitlenir.
+    const eskiOzet = String(rec.summary || "").trim(), yeniHam = String(editForm.raw || "").trim();
+    const ozetKopya = eskiOzet && rec.raw !== undefined && String(rec.raw || "").trim().startsWith(eskiOzet) && !rec.form;
+    const ozet = ozetKopya && editForm.summary === rec.summary && yeniHam && yeniHam !== eskiOzet ? yeniHam : editForm.summary;
+    onUpdate(rec.id, { summary: ozet, topic: editForm.topic, altKonu: editForm.topic ? editForm.altKonu : "", raw: editForm.raw, date: yeniTarih });
     setDuzenle(false);
     setKaydedildi(true);
     setTimeout(() => setKaydedildi(false), 2000);

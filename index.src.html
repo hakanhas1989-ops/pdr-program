@@ -12514,7 +12514,7 @@ const KS_ASISTAN_ARACLAR = {
     calistir: (g) => ksAlanBilgisi(g),
   },
   lise_taban_puanlari: {
-    aciklama: "İstanbul liselerinin 2026 LGS taban puanlarını ve yüzdelik dilimlerini getirir (2025 karşılaştırmalı). Ayrıntılı ilçeler: Beylikdüzü, Esenyurt, Başakşehir, Büyükçekmece, Avcılar; ayrıca İstanbul'un en yüksek puanlı liseleri. ilce ve okul_turu (fen | anadolu | sosyal | aihl | mtal) ile süzülür. puan, net (90 üzerinden toplam net) ya da yuzdelik verilirse okulları hedef / gerçekçi / güvenli diye ayırır; net → puan → yüzdelik dönüşümü yaklaşıktır. Bir öğrencinin netiyle tercih konuşulacaksa önce deneme_analizi ile ortalama netini al, sonra bu araca net olarak ver.",
+    aciklama: "İstanbul liselerinin 2026 LGS taban puanlarını ve yüzdelik dilimlerini getirir (2025 karşılaştırmalı). Ayrıntılı ilçeler: Beylikdüzü, Esenyurt, Başakşehir, Büyükçekmece, Avcılar, Beyoğlu, Küçükçekmece, Çatalca, Silivri, Fatih, Zeytinburnu, Beşiktaş, Şişli (Mecidiyeköy, Nişantaşı), Eyüpsultan, Kağıthane; ayrıca İstanbul'un en yüksek puanlı liseleri. Yalnız LGS puanıyla alan programlar (OBP ile alanlar yok). ilce ve okul_turu (fen | anadolu | sosyal | aihl | mtal) ile süzülür. puan, net (90 üzerinden toplam net) ya da yuzdelik verilirse okulları hedef / gerçekçi / güvenli diye ayırır; net → puan → yüzdelik dönüşümü yaklaşıktır. Bir öğrencinin netiyle tercih konuşulacaksa önce deneme_analizi ile ortalama netini al, sonra bu araca net olarak ver.",
     girdi: '{"ilce": "Beylikdüzü", "okul_turu": "isteğe bağlı", "net": 72, "puan": "isteğe bağlı", "yuzdelik": "isteğe bağlı"}', yontem: "hepsi",
     calistir: (g) => ksLiseTaban(g || {}),
   },
@@ -14143,8 +14143,78 @@ Zeytinburnu M. İhsan Mermerci Turizm MTAL|mtal|Konaklama ve Seyahat Hizmetleri|
 Zeytinburnu Merkezefendi Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (4 yıl)|205.758|82.89|160.001|89.17
 İstanbul Tekstil MTAL|mtal|Tekstil Teknolojisi|186.183|94.11||
 İstanbul Ticaret Odası MTAL|mtal|Matbaa Teknolojisi|162.095|99.64|150.806|90.83`,
-  "İstanbul geneli (en yüksekler)": `Kabataş Erkek Lisesi|anadolu|İngilizce|497.758||
-Galatasaray Lisesi|anadolu|Fransızca|497.432||
+  "Beşiktaş": `Kabataş Erkek Lisesi|anadolu|Almanca|500.000|0.01|500.000|0.01
+Kabataş Erkek Lisesi|anadolu|İngilizce|497.758|0.05|500.000|0.01
+Beşiktaş Sakıp Sabancı Anadolu Lisesi|anadolu|İngilizce|486.280|0.37|486.221|0.50
+Beşiktaş Anadolu Lisesi|anadolu|İngilizce|478.899|0.72|478.336|1.03
+Beşiktaş Atatürk Anadolu Lisesi|anadolu|İngilizce|463.810|1.76|462.284|2.43
+Arnavutköy Korkmaz Yiğit Anadolu Lisesi|anadolu|İngilizce|439.142|4.30|438.100|5.12
+İstanbul Teknik Üniversitesi MTAL|mtal|Bilişim Teknolojileri|432.218|5.16|437.790|5.16
+İstanbul Teknik Üniversitesi MTAL|mtal|Elektrik-Elektronik Teknolojisi|424.782|6.25|427.473|6.56
+İstanbul Teknik Üniversitesi MTAL|mtal|Yapay Zekâ (Anadolu Teknik, 5 yıl)|423.206|6.39||
+İstanbul Teknik Üniversitesi MTAL|mtal|Denizcilik|420.756|6.79|427.473|6.56
+Beşiktaş Kız Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (Almanca, 5 yıl)|387.579|12.35|380.316|14.10
+İSOV-Dinçkök MTAL|mtal|Yapay Zekâ (Anadolu Teknik, 5 yıl)|367.281|16.55||
+İSOV-Dinçkök MTAL|mtal|Bilişim Teknolojileri (5 yıl)|363.642|17.37||
+İSOV-Dinçkök MTAL|mtal|Endüstriyel Otomasyon Teknolojileri|339.927|23.27|300.505|31.45
+İSOV-Dinçkök MTAL|mtal|Elektrik-Elektronik Teknolojisi|337.836|23.83|252.093|47.92
+Etiler Turizm MTAL|mtal|Konaklama ve Seyahat Hizmetleri|254.457|53.04|236.252|53.61
+Etiler Turizm MTAL|mtal|Yiyecek İçecek Hizmetleri|248.817|55.77|230.639|56.06
+Rüştü Akın MTAL|mtal|Moda Tasarım Teknolojileri|210.406|79.68|193.514|80.27
+Ortaköy Zübeyde Hanım Kız MTAL|mtal|Moda Tasarım Teknolojileri|201.507|85.72|160.395|89.10
+Ortaköy Zübeyde Hanım Kız MTAL|mtal|Radyo-Televizyon|197.624|88.21|158.913|89.36
+M. Ali Büyükhanlı Ticaret MTAL|mtal|Muhasebe ve Finansman|192.430|91.14|196.723|78.17
+Beşiktaş Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (4 yıl)|186.767|93.95|189.363|83.10
+Ortaköy Zübeyde Hanım Kız MTAL|mtal|Grafik ve Fotoğraf|181.231|95.25|187.069|84.28
+Ortaköy Zübeyde Hanım Kız MTAL|mtal|Çocuk Gelişimi ve Eğitimi|154.219|100.00|149.769|91.01
+Ortaköy Zübeyde Hanım Kız MTAL|mtal|Yiyecek İçecek Hizmetleri|130.714|100.00|143.416|92.16`,
+  "Şişli (Mecidiyeköy, Nişantaşı)": `Nişantaşı Anadolu Lisesi|anadolu|İngilizce|455.840|2.48|456.938|2.93
+Nişantaşı Nuri Akın Anadolu Lisesi|anadolu|Almanca|454.151|2.65|452.323|3.42
+Nişantaşı Nuri Akın Anadolu Lisesi|anadolu|İngilizce|448.974|3.18|446.734|4.06
+Şişli Anadolu Lisesi|anadolu|İngilizce|423.698|6.31|425.407|6.85
+Yıldız Teknik Üniversitesi Maçka MTAL|mtal|Bilişim Teknolojileri|405.835|9.09|400.640|10.65
+Yıldız Teknik Üniversitesi Maçka MTAL|mtal|Elektrik-Elektronik Teknolojisi|404.236|9.35|400.640|10.65
+Hamidiye Etfal MTAL|mtal|Sağlık Hizmetleri|314.470|30.59|323.731|25.64
+Şişli MTAL|mtal|Motorlu Araçlar Teknolojisi|280.921|41.95|256.457|46.36
+Şişli MTAL|mtal|Elektrik-Elektronik Teknolojisi|277.916|43.09|245.201|50.40
+Şişli MTAL|mtal|Bilişim Teknolojileri|277.647|43.20|301.478|31.20
+Şişli MTAL|mtal|Elektrik-Elektronik (Anadolu Teknik)|267.527|47.66||
+Halil Rıfat Paşa MTAL|mtal|Bilişim Teknolojileri|254.512|53.02||
+Zincirlikuyu İSOV MTAL|mtal|İnşaat Teknolojisi|249.433|55.47|226.516|58.68
+Nişantaşı Rüştü Uzel Kız MTAL|mtal|Moda Tasarım Teknolojileri|227.264|68.09|191.142|81.82
+Zincirlikuyu İSOV MTAL|mtal|Harita-Tapu-Kadastro|225.160|69.46|211.384|68.58
+Nişantaşı Rüştü Uzel Kız MTAL|mtal|Çocuk Gelişimi ve Eğitimi|216.974|75.04|190.506|82.27
+Nişantaşı Rüştü Uzel Kız MTAL|mtal|Yiyecek İçecek Hizmetleri|215.729|75.53|168.090|87.71
+Halil Rıfat Paşa MTAL|mtal|Grafik ve Fotoğraf|209.283|80.47||
+Süleyman Şah Kız Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (4 yıl)|194.078|90.26|147.411|91.44
+Şişli Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (4 yıl)|189.467|92.64||
+Nişantaşı Rüştü Uzel Kız MTAL|mtal|Tekstil Teknolojisi|175.934|97.38|166.785|87.94`,
+  "Eyüpsultan": `Eyüpsultan Anadolu Lisesi|anadolu|İngilizce|434.074|4.91|434.243|5.63
+Eyüpsultan Kız Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (5 yıl)|366.350|16.76|361.596|17.60
+Eyüpsultan Kız Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (4 yıl)|345.493|21.80|334.618|23.18
+Eyüpsultan Hacı Osman Torun Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (4 yıl)|329.733|26.07|251.258|48.22
+Eyüpsultan Şehit Furkan Doğan Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (4 yıl)|306.783|32.92|279.041|38.26
+Göktürk Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (4 yıl)|274.627|44.38|153.524|99.82
+Alibeyköy MTAL|mtal|Elektrik-Elektronik Teknolojisi|269.768|46.34|252.441|47.80
+Alibeyköy MTAL|mtal|Makine ve Tasarım Teknolojisi|248.424|55.97|227.670|57.92
+Kemerburgaz Halis Kutmangil MTAL|mtal|Muhasebe ve Finansman|179.196|95.25|153.682|90.31`,
+  "Kağıthane": `Kağıthane Anadolu Lisesi|anadolu|Almanca|425.152|6.10|424.826|6.93
+Kağıthane Anadolu Lisesi|anadolu|İngilizce|417.688|7.19|416.187|8.17
+Hasbahçe Kız Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (4 yıl)|330.240|25.92|318.401|26.91
+Hasbahçe Kız Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (5 yıl)|321.712|28.37|318.831|26.80
+Kağıthane Kız Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (4 yıl)|296.527|36.40|265.752|43.02
+Kağıthane Kız Anadolu İmam Hatip Lisesi|aihl|Fen ve Teknoloji (5 yıl)|287.097|39.69|263.238|43.93
+Profilo MTAL|mtal|Bilişim Teknolojileri|263.670|48.89|277.187|38.92
+İstanbul Vali Hayri Kozakçıoğlu Ticaret MTAL|mtal|Adalet|250.164|55.11|227.474|58.05
+Profilo MTAL|mtal|Elektrik-Elektronik Teknolojisi|248.555|55.90|230.382|56.19
+Gültepe Şehit Cihan Erat MTAL|mtal|Elektrik-Elektronik Teknolojisi|231.102|65.68|206.571|71.73
+Kağıthane İTO Ticaret MTAL|mtal|Ulaştırma Hizmetleri|212.977|77.86|210.028|69.47
+İHKİB Kağıthane MTAL|mtal|Moda Tasarım Teknolojileri|204.172|83.96|179.890|85.58
+Gültepe Şehit Cihan Erat MTAL|mtal|Endüstriyel Otomasyon Teknolojileri|197.597|88.23|164.621|88.33
+Gültepe Şehit Cihan Erat MTAL|mtal|Makine ve Tasarım Teknolojisi|177.351|97.03|159.678|89.22
+İHKİB Kağıthane MTAL|mtal|Tekstil Teknolojisi|174.889|97.60|156.314|89.83
+Ekrem Cevahir Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (4 yıl)|167.174|98.91|207.846|70.89`,
+  "İstanbul geneli (en yüksekler)": `Galatasaray Lisesi|anadolu|Fransızca|497.432||
 İstanbul Atatürk Fen Lisesi|fen|İngilizce (5 yıl)|493.359||
 Haydarpaşa Lisesi|anadolu|İngilizce|487.783||
 Kadıköy Anadolu Lisesi|anadolu|İngilizce|483.867||

@@ -29273,6 +29273,7 @@ function testSonucOzeti(k) {
       return ilk2 ? `En yüksek: ${ilk2}` : "İşaretlenen madde yok";
     }
     case "nitel": return k.not ? "Nitel değerlendirme (nota bakınız)" : "—";
+    case "net_kontrol": return v.ozet || "—";
     case "beier_form_a": {
       const maddeler = v.maddeler || [];
       const cevaplanan = maddeler.filter(m => m.cevap && m.cevap.trim()).length;
@@ -39078,7 +39079,334 @@ function LgsTopluProgramKarti({ ogrenciler, denemeler, konuHaritasiVerisi, aktif
   );
 }
 // ===== LGS ÇALIŞMA PROGRAMI BİTİŞ =====
-function DenemeTabip({ denemeler, setDenemeler, kayitliListesi, aktifOgrenci, setAktifOgrenci, handleDenemeAnaliz, denemeAiLoading, denemeAnaliz, ogrenciler, setOgrenciler, aktifYil, sinavTuru, setSinavTuru, konuHaritasiVerisi }) {
+// ===== NET YÜKSELTME KONTROL LİSTESİ BAŞLANGIÇ =====
+// "Netim neden artmıyor?" — 8 bölüm, 50 madde. Öğrenci gerçekten ve düzenli yaptığını işaretler; boş kalan
+// maddeler netin kaçtığı yerleri gösterir. Puanlama cihazda; yapay zekâ yalnız istenirse doldurulmuş kâğıdın
+// fotoğrafındaki işaretleri okumak için kullanılır (danışman kaydetmeden önce kontrol eder).
+const NET_KONTROL_BOLUMLER = [
+ {
+  "baslik": "Hedef ve plan",
+  "neden": "Ne kadar çalıştığın kadar, neye çalıştığın da önemli. Plansız çalışma kolay derse kayar.",
+  "maddeler": [
+   "Toplam net hedefimi **ders ders** biliyorum (Türkçe …, Mat …, Fen …).",
+   "Haftalık programım **yazılı**; hangi gün hangi ders, kaç blok belli.",
+   "Programa haftada en az **5 gün** uyuyorum.",
+   "Zamanımın çoğunu **en çok puan getiren** Türkçe, Matematik ve Fen'e veriyorum.",
+   "En zayıf dersimi biliyorum ve ona **her gün** bir blok ayırıyorum.",
+   "Haftanın sonunda planı **gözden geçirip** gelecek haftayı düzeltiyorum."
+  ],
+  "oneri": "Boşsa: hedefini derslere böl, programı yaz ve görünür bir yere as."
+ },
+ {
+  "baslik": "Süre ve odak",
+  "neden": "Masa başında geçen süre değil, dikkatin gerçekten derste olduğu süre net getirir.",
+  "maddeler": [
+   "Çalışırken telefon **başka odada** (sessizde ama yanımda değil).",
+   "40 dk çalışıp 10 dk mola veriyorum; molada **ekrana** bakmıyorum.",
+   "Okul günleri en az **3 blok**, hafta sonu daha fazla çalışıyorum.",
+   "Günün ilk bloğunu **en zorlandığım** derse veriyorum.",
+   "Kaçırdığım günü ertesi güne yığmıyorum, **haftaya yayıyorum**.",
+   "\"Çalıştım\" dediğim sürede ne yaptığımı **sayıyla** söyleyebilirim (… soru, … konu)."
+  ],
+  "oneri": "Boşsa: telefonu çıkar, süreyi değil çözdüğün soru sayısını yaz."
+ },
+ {
+  "baslik": "Konu eksikleri",
+  "neden": "Konu oturmadan çözülen soru, ezberlenmiş yanlış olur. Eksik temel her denemede aynı neti götürür.",
+  "maddeler": [
+   "Her dersin **eksik konu listesi** elimde, haftada en az ikisini kapatıyorum.",
+   "Matematikte önceki yılların temeli (kesir, rasyonel, üslü, oran) **sağlam**.",
+   "Bir konuyu anlatım + örnek + kolay test sırasıyla **bitirmeden** zor soruya geçmiyorum.",
+   "Okulda işlenen konuyu **aynı hafta** tekrar edip soru çözüyorum.",
+   "Anlamadığım yeri **aynı hafta** öğretmenime ya da bir arkadaşıma soruyorum.",
+   "Konuyu kitabı kapatıp **birine anlatabiliyorum**."
+  ],
+  "oneri": "Boşsa: denemelerde en çok yanlış çıkan 3 konuyu yaz, bu hafta onları kapat."
+ },
+ {
+  "baslik": "Soru çözme biçimi",
+  "neden": "Az ya da hep aynı tür soru çözmek, sınavdaki yeni soruda takılmana yol açar.",
+  "maddeler": [
+   "Basamağıma uygun sayıda soruyu **her gün** çözüyorum.",
+   "**Yeni nesil** (uzun, grafikli, tablolu) soruları düzenli çözüyorum.",
+   "Test çözerken **süre tutuyorum** (sözel ≈ 1,5 dk, sayısal ≈ 2 dk/soru).",
+   "Bazen konuları **karışık** çözüyorum; hep aynı konudan art arda değil.",
+   "Cevap anahtarına testin **sonunda** bakıyorum, soru soru değil.",
+   "Soru kökünü sonuna kadar okuyup **olumsuz ifadenin** altını çiziyorum.",
+   "Seviyeme göre kaynak kullanıyorum; hep çok kolay ya da hep çok zor değil."
+  ],
+  "oneri": "Boşsa: her teste saat kur ve 10 sorudan 2'sini farklı konudan seç."
+ },
+ {
+  "baslik": "Yanlış analizi",
+  "neden": "Netin en hızlı arttığı yer burası: analiz edilmeyen yanlış, bir sonraki denemede yine yanlış olur.",
+  "maddeler": [
+   "**Hata defterim** var; yanlış ve boşları yazıyorum.",
+   "Her yanlışın nedenini yazıyorum: **B** bilmiyordum · **D** dikkat · **S** süre yetmedi.",
+   "Yanlışı çözümü okuyarak değil, **bakmadan yeniden çözerek** kapatıyorum.",
+   "Hata defterini haftada bir **baştan çözüyorum**.",
+   "Aynı türde hatanın **tekrar edip etmediğini** takip ediyorum.",
+   "Boş bıraktığım soruların neden boş kaldığını biliyorum."
+  ],
+  "oneri": "B çoksa konu çalış · D çoksa yavaş oku, işaretle · S çoksa süreli test çöz."
+ },
+ {
+  "baslik": "Deneme ve sınav stratejisi",
+  "neden": "Bilip de kaçırılan sorular çoğu zaman bilgiden değil, sınav içindeki karardan gelir.",
+  "maddeler": [
+   "Denemeyi **gerçek sürede**, ara vermeden, telefonsuz çözüyorum.",
+   "Denemeden sonraki **24 saat içinde** analiz ediyorum.",
+   "Takıldığım soruda **işaretleyip geçiyorum**, sonra dönüyorum.",
+   "3 yanlış 1 doğruyu götürür: hiç fikrim yoksa boş, iki şıkka indiysem işaretliyorum.",
+   "Cevapları optiğe **her sayfa sonunda** işliyorum, son dakikaya bırakmıyorum.",
+   "Hangi dersten başlayacağım ve her derse ne kadar süre ayıracağım **belli**.",
+   "Son 10 dakikada yeni soruya değil, **işaretlediklerime ve kodlamaya** dönüyorum."
+  ],
+  "oneri": "Boşsa: bir sonraki denemede yalnız bu bölümdeki iki maddeyi dene ve sonucu karşılaştır."
+ },
+ {
+  "baslik": "Tekrar ve hatırlama",
+  "neden": "Tekrar edilmeyen konu birkaç haftada unutulur; \"okudum, biliyorum\" hissi yanıltır.",
+  "maddeler": [
+   "Bir konuyu öğrendiğim gün, **3 gün** ve **1 hafta** sonra kısa tekrar ediyorum.",
+   "Tekrarda sadece okumuyorum; **kitabı kapatıp hatırlamaya** çalışıyorum.",
+   "Fosforlu kalemle çizmek yerine **kendime soru sorup** cevaplıyorum.",
+   "Eski konulardan da her hafta **soru çözüyorum**.",
+   "İnkılap, Din, İngilizce'yi **her gün 10-15 dk** tekrar ediyorum, sınav öncesine bırakmıyorum.",
+   "Her gün **paragraf** çözüyor ve kitap okuyorum."
+  ],
+  "oneri": "Boşsa: takvime tekrar günlerini yaz; tekrar = okumak değil, soru çözmek."
+ },
+ {
+  "baslik": "Beden, duygu, motivasyon",
+  "neden": "Yorgun ve kaygılı bir zihin bildiğini de hatırlayamaz. Netin bir kısmı burada kaybolur.",
+  "maddeler": [
+   "Her gece **8-10 saat** uyuyor, her gün aynı saatte yatıyorum.",
+   "Yatmadan önceki 1 saatte **ekrana** bakmıyorum.",
+   "Sabah **kahvaltı** yapıyor, gün içinde su içiyorum.",
+   "Deneme sonucunu **başkasıyla değil**, kendi önceki sonucumla karşılaştırıyorum.",
+   "Sınavda kaygım artınca ne yapacağımı biliyorum (derin nefes, soruya geri dönmek).",
+   "Zorlandığımda bunu **öğretmenime, aileme ya da rehber öğretmenime** söylüyorum."
+  ],
+  "oneri": "Boşsa: önce uyku saatini sabitle; kaygı yoğunsa rehber öğretmeninle konuş."
+ }
+];
+const NET_KONTROL_RENK = ["#1f4e79", "#7a3e9d", "#c0392b", "#d35400", "#1e8449", "#1f618d", "#7d6608", "#5d6d7e"];
+const NET_KONTROL_KISA = ["Plan", "Odak", "Konu", "Soru", "Yanlış", "Deneme", "Tekrar", "Beden"];
+// Madde numaraları 1..50 (bölüm sırasıyla)
+function netKontrolNumaralar() { let n = 0; return NET_KONTROL_BOLUMLER.map(b => b.maddeler.map(() => ++n)); }
+function netKontrolSonuc(isaretli) {
+  const s = new Set((isaretli || []).map(Number));
+  const nolar = netKontrolNumaralar();
+  const bolumler = NET_KONTROL_BOLUMLER.map((b, i) => { const toplam = nolar[i].length, yapilan = nolar[i].filter(n => s.has(n)).length; return { i, ad: b.baslik, kisa: NET_KONTROL_KISA[i], toplam, yapilan, bos: toplam - yapilan, oran: yapilan / toplam }; });
+  const zayif = [...bolumler].filter(b => b.bos > 0).sort((a, c) => a.oran - c.oran || c.bos - a.bos).slice(0, 2);
+  const isaretSay = bolumler.reduce((t, b) => t + b.yapilan, 0), toplam = bolumler.reduce((t, b) => t + b.toplam, 0);
+  return { bolumler, zayif, isaretSay, toplam };
+}
+function netKontrolOzetMetni(veri) {
+  const r = netKontrolSonuc(veri.isaretli);
+  const bos = new Set((veri.isaretli || []).map(Number));
+  const nolar = netKontrolNumaralar();
+  const eksik = r.zayif.map(z => `${z.ad} (${z.bos}/${z.toplam} boş: ${nolar[z.i].filter(n => !bos.has(n)).slice(0, 3).map(n => NET_KONTROL_BOLUMLER[z.i].maddeler[n - nolar[z.i][0]].replace(/\*\*/g, "").replace(/\s*\(.*?\)\s*/g, " ").trim()).join("; ")})`);
+  const deg = (veri.degisim || []).filter(x => String(x || "").trim());
+  return `İşaretli ${r.isaretSay}/${r.toplam}. Bölümlere göre boş madde: ${r.bolumler.map(b => `${b.kisa} ${b.bos}/${b.toplam}`).join(", ")}.${eksik.length ? " En zayıf: " + eksik.join(" · ") + "." : ""}${deg.length ? " Öğrencinin değiştireceği: " + deg.join("; ") + "." : ""}`;
+}
+// Yazdırılabilir liste (boş ya da doldurulmuş). Boş listede ad yazılmaz: fotoğrafı çekilip programa yüklenebilir.
+function netKontrolHtml(kayit, ogr) {
+  const E = pdrHtmlKac;
+  const isaret = new Set(((kayit && kayit.veri && kayit.veri.isaretli) || []).map(Number));
+  const nolar = netKontrolNumaralar();
+  const r = kayit ? netKontrolSonuc([...isaret]) : null;
+  const kalin = (t) => E(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+  const kutu = (b, i) => `<div class="kutu k${i + 1}"><h2>${i + 1}. ${E(b.baslik)} <span class="say" style="color:#eef">${r ? `${r.bolumler[i].yapilan}/${r.bolumler[i].toplam}` : `…/${b.maddeler.length}`}</span></h2>
+<div class="neden">${E(b.neden)}</div><ul>${b.maddeler.map((m, j) => `<li class="${isaret.has(nolar[i][j]) ? "x" : ""}"><i class="no">${nolar[i][j]}</i>${kalin(m)}</li>`).join("")}</ul>
+<div class="alt">${E(b.oneri)}</div></div>`;
+  const deg = (kayit && kayit.veri && kayit.veri.degisim) || [];
+  const tablo = NET_KONTROL_KISA.map((k, i) => `<div><b>${i + 1}. ${k}</b>${r ? `<span class="dolu">${r.bolumler[i].bos}</span>` : "…"}</div>`).join("");
+  const ust = kayit
+    ? `<span>${E(ogr.ad || "")} · ${E(ogr.sinif || "")} · ${E(kayit.tarih || "")}<br>İşaretli: ${r.isaretSay}/${r.toplam}</span>`
+    : `<span>Sınıf: …… Tarih: ………<br>Hedef net: …… · Son 3 deneme ortalaması: ……</span>`;
+  return `<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Net Yükseltme Kontrol Listesi</title><style>
+@page{size:A4;margin:8mm}
+*{box-sizing:border-box}
+body{margin:0;font-family:"DejaVu Sans",Arial,sans-serif;color:#1d2433;font-size:10.4pt;line-height:1.33}
+.sayfa{height:281mm;display:flex;flex-direction:column;page-break-after:always}
+.sayfa:last-child{page-break-after:auto}
+.ust{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #1f4e79;padding-bottom:1.2mm;margin-bottom:1.6mm}
+.ust h1{margin:0;font-size:15pt;color:#1f4e79}.ust span{font-size:7.5pt;color:#555;text-align:right}
+.giris{font-size:8.4pt;background:#eef3f9;border-radius:2mm;padding:1.4mm 2.4mm;margin-bottom:2mm}
+.izgara{flex:1;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:2.4mm;min-height:0}
+.kutu{border:1.2px solid #c9d3e0;border-radius:3mm;padding:2mm 2.6mm;overflow:hidden;display:flex;flex-direction:column}
+.kutu h2{margin:0 0 1.6mm;font-size:11.4pt;color:#fff;border-radius:2mm;padding:1.1mm 2.4mm}
+.neden{font-size:9.2pt;font-style:italic;color:#3c4656;margin-bottom:1.2mm}
+ul{list-style:none;margin:0;padding:0}
+li{position:relative;padding-left:5.6mm;margin:0 0 2.1mm}
+li:before{content:"";position:absolute;left:0;top:.35mm;width:3.4mm;height:3.4mm;border:1.3px solid #1f4e79;border-radius:.7mm;background:#fff}
+.alt{margin-top:auto;font-size:9pt;background:#fff6e5;border-left:3px solid #e08e0b;padding:.9mm 1.8mm;border-radius:1mm}
+.say{float:right;font-size:7.6pt;color:#555;font-weight:normal}
+.k1 h2{background:#1f4e79}.k2 h2{background:#7a3e9d}.k3 h2{background:#c0392b}.k4 h2{background:#d35400}
+.k5 h2{background:#1e8449}.k6 h2{background:#1f618d}.k7 h2{background:#7d6608}.k8 h2{background:#5d6d7e}
+.sonuc{margin-top:2mm;border:1.5px solid #1f4e79;border-radius:2.5mm;padding:1.6mm 2.6mm;font-size:8.4pt}
+.sonuc b{color:#1f4e79}
+.cizgi{border-bottom:1px dotted #777;height:5mm;margin:.4mm 0}
+.tablo{display:grid;grid-template-columns:repeat(8,1fr);gap:1mm;margin:1mm 0 1.4mm}
+.tablo div{border:1px solid #c9d3e0;border-radius:1mm;text-align:center;font-size:7.4pt;padding:.6mm 0}
+.tablo div b{display:block;font-size:7pt;color:#555;font-weight:normal}
+.dip{font-size:6.6pt;color:#666;margin-top:1.2mm;line-height:1.25}
+.s2 .kutu{font-size:9.4pt;line-height:1.28}.s2 li{margin-bottom:1.3mm}.s2 .neden{font-size:8.5pt}.s2 .alt{font-size:8.4pt}
+.no{font-style:normal;font-size:7pt;color:#7a8597;margin-right:1mm}
+li.x:before{background:#1f4e79;content:'✓';color:#fff;font-size:8pt;line-height:3.2mm;text-align:center}
+.dolu{font-weight:bold;color:#1f4e79}
+</style></head><body>
+<div class="sayfa"><div class="ust"><h1>Netim Neden Artmıyor? · Kontrol Listesi</h1>${ust}</div>
+<div class="giris"><b>Nasıl doldurulur?</b> Her maddeyi dürüstçe oku. <b>Gerçekten ve düzenli yapıyorsan</b> kutuyu işaretle; "bazen", "aslında yapacağım" işaret sayılmaz. <b>Boş kalan her kutu, netinin kaçtığı bir yer.</b> En çok boş kalan bölüm, önce düzeltmen gereken yerdir.</div>
+<div class="izgara">${NET_KONTROL_BOLUMLER.slice(0, 4).map(kutu).join("")}</div></div>
+<div class="sayfa s2"><div class="ust"><h1>Netim Neden Artmıyor? · Kontrol Listesi</h1><span>Sayfa 2</span></div>
+<div class="izgara">${NET_KONTROL_BOLUMLER.slice(4).map((b, i) => kutu(b, i + 4)).join("")}</div>
+<div class="sonuc"><b>Sonuç tablosu</b> · Her bölümde işaretleyemediğin madde sayısı:
+<div class="tablo">${tablo}</div>
+<b>En çok boş kalan iki bölüm:</b> ${r && r.zayif.length ? r.zayif.map(z => `<span class="dolu">${E(z.ad)}</span>`).join(" ve ") : "…………………… ve ……………………"}
+<br><b>Bu hafta değiştireceğim 3 şey</b> (küçük ve ölçülebilir olsun, ör. "telefonu her blokta salona bırakacağım"):
+${[0, 1, 2].map(i => `<div class="cizgi">${i + 1}. ${deg[i] ? `<span class="dolu">${E(deg[i])}</span>` : ""}</div>`).join("")}
+<b>2 hafta sonra</b> listeyi yeniden doldur ve boş kutu sayını karşılaştır.</div>
+<div class="dip">Dayanak: Dunlosky ve ark. (2013) etkili çalışma yöntemleri (kendini test etme, aralıklı tekrar yüksek; yeniden okuma ve fosforlu kalem düşük etkili) · Roediger ve Karpicke (2006) test etkisi · Cepeda ve ark. (2006) aralıklı tekrar · Rohrer ve Taylor (2007) karışık çözme · Ward ve ark. (2017) telefonun yakında durmasının dikkate etkisi · AASM (2016) 13-18 yaş için 8-10 saat uyku · MEB LGS kılavuzu (3 yanlış 1 doğru).</div>
+</div></body></html>`;
+}
+// Doldurulmuş kâğıdın fotoğrafından işaretli madde numaralarını okur (yapay zekâ). Kâğıtta ad yok.
+async function netKontrolFotoOku(file) {
+  const base64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = e => res(String(e.target.result).split(",")[1]); r.onerror = rej; r.readAsDataURL(file); });
+  const mediaType = file.type || (String(file.name || "").toLocaleLowerCase("tr").endsWith(".pdf") ? "application/pdf" : "image/jpeg");
+  const icerikTipi = mediaType === "application/pdf" ? "document" : "image";
+  const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-6", max_tokens: 800,
+      system: `Sen bir veri çıkarma asistanısın. Belge, "Netim Neden Artmıyor? Kontrol Listesi" adlı 50 maddelik bir listenin öğrenci tarafından doldurulmuş hâli. Her maddenin solunda bir kutu ve kutunun yanında küçük bir madde numarası (1-50) var.
+GÖREVİN: Kutusu işaretli (tik, çarpı, karalama, dolu) maddelerin numaralarını SADECE şu JSON biçiminde döndür, başka hiçbir şey yazma:
+{"isaretli": [1, 4, 7]}
+KURALLAR: Yalnız işaretli kutuları listele. Emin olamadığın (bulanık, kırpılmış) maddeyi EKLEME; danışman kaydetmeden önce kontrol edip düzeltecek. Numaralar 1 ile 50 arasında tam sayı.`,
+      messages: [{ role: "user", content: [{ type: icerikTipi, source: { type: "base64", media_type: mediaType, data: base64 } }, { type: "text", text: "İşaretli madde numaralarını JSON olarak ver." }] }],
+    }),
+  });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((j && (j.error && (j.error.message || j.error))) || "Okuma başarısız");
+  const metin = ((j.content || []).find(c => c.type === "text") || {}).text || "";
+  const m = /\{[\s\S]*\}/.exec(metin);
+  const v = m ? JSON.parse(m[0]) : null;
+  if (!v || !Array.isArray(v.isaretli)) throw new Error("İşaretler okunamadı");
+  return [...new Set(v.isaretli.map(Number).filter(n => Number.isInteger(n) && n >= 1 && n <= 50))].sort((a, b) => a - b);
+}
+function NetKontrolKarti({ ogrAd, ogrSinif, ogrNumara, testKayitlari, setTestKayitlari }) {
+  const [acik, setAcik] = useState(false);
+  const [isaret, setIsaret] = useState([]);
+  const [degisim, setDegisim] = useState(["", "", ""]);
+  const [durum, setDurum] = useState("");
+  const [okunuyor, setOkunuyor] = useState(false);
+  const [doldurAcik, setDoldurAcik] = useState(false);
+  const dosyaRef = useRef(null);
+  useEffect(() => { setIsaret([]); setDegisim(["", "", ""]); setDoldurAcik(false); setDurum(""); }, [ogrAd, ogrSinif]);
+  const tum = pdrSozlukOku(testKayitlari, ogrAd, ogrSinif, ogrNumara) || [];
+  const kayitlar = tum.filter(k => k.tip === "net_kontrol").sort((a, b) => pdrTarihMs(b.tarih) - pdrTarihMs(a.tarih) || String(b.id).localeCompare(String(a.id)));
+  const nolar = netKontrolNumaralar();
+  const r = netKontrolSonuc(isaret);
+  const sec = (n) => setIsaret(l => l.includes(n) ? l.filter(x => x !== n) : [...l, n].sort((a, b) => a - b));
+  async function yaz(liste, mesaj) {
+    const guncel = pdrSozlukYaz(testKayitlari, ogrAd, ogrSinif, [...tum.filter(k => k.tip !== "net_kontrol"), ...liste], ogrNumara);
+    setTestKayitlari(guncel);
+    try { await saveTestKayitlari(guncel); setDurum(mesaj); } catch (e) { setDurum("⚠ Kaydedilirken sorun oluştu — bağlantıyı kontrol edin."); }
+    setTimeout(() => setDurum(""), 3000);
+  }
+  async function kaydet() {
+    const veri = { isaretli: [...isaret], degisim: degisim.map(x => x.trim()) };
+    veri.ozet = netKontrolOzetMetni(veri);
+    const k = { id: uid(), tarih: today(), tip: "net_kontrol", testAdi: "Net Yükseltme Kontrol Listesi", veri };
+    await yaz([k, ...kayitlar], "✓ Kontrol listesi kaydedildi");
+    setIsaret([]); setDegisim(["", "", ""]); setDoldurAcik(false);
+  }
+  async function fotoSec(file) {
+    if (!file) return;
+    setOkunuyor(true); setDurum("");
+    try { const l = await netKontrolFotoOku(file); setIsaret(l); setDoldurAcik(true); setDurum(`📷 ${l.length} işaret okundu — kaydetmeden önce kontrol et, yanlışsa kutuya dokunup düzelt.`); }
+    catch (e) { setDurum("⚠ Fotoğraf okunamadı: " + ((e && e.message) || e) + ". Kutuları elle işaretleyebilirsin."); setDoldurAcik(true); }
+    finally { setOkunuyor(false); if (dosyaRef.current) dosyaRef.current.value = ""; }
+  }
+  const btn = (renk, dolu) => ({ padding: "7px 10px", borderRadius: 8, border: `1px solid ${renk}`, background: dolu ? renk : "#fff", color: dolu ? "#fff" : renk, fontSize: 11.5, fontWeight: 700, cursor: "pointer" });
+  const onceki = kayitlar[0] ? netKontrolSonuc(kayitlar[0].veri && kayitlar[0].veri.isaretli) : null;
+  return (
+    <div data-testid="net-kontrol" style={{ background: CARD, border: `1px solid ${BORDER}`, boxShadow: "0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius: 12, padding: 14, marginTop: 14 }}>
+      <button data-testid="net-kontrol-ac" onClick={() => setAcik(a => !a)} style={{ width: "100%", background: "none", border: "none", padding: 0, textAlign: "left", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ fontSize: 13, fontWeight: 800, color: ACCENT }}>✅ Net Yükseltme Kontrol Listesi{kayitlar.length ? ` (${kayitlar.length})` : ""}</span>
+        <span style={{ fontSize: 11, color: MUTED }}>{acik ? "▲ Kapat" : "▼ Aç"}</span>
+      </button>
+      {acik && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ fontSize: 10.5, color: MUTED, lineHeight: 1.5, marginBottom: 8 }}>
+            "Netim neden artmıyor?" — 8 bölüm, 50 madde. Öğrenci gerçekten ve düzenli yaptığını işaretler; boş kalan maddeler netin kaçtığı yerleri gösterir. Puanlama cihazda yapılır. Fotoğraftan okuma isteğe bağlıdır ve yapay zekâ kullanır; kâğıtta öğrenci adı yoktur.
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+            <button data-testid="net-kontrol-bos" onClick={() => ootBelgeAc(netKontrolHtml(null, {}), "Net Yukseltme Kontrol Listesi")} style={btn(ACCENT, false)}>🖨️ Boş liste yazdır</button>
+            <button data-testid="net-kontrol-doldur" onClick={() => setDoldurAcik(a => !a)} style={btn(ACCENT, doldurAcik)}>✏️ Ekranda doldur</button>
+            <button data-testid="net-kontrol-foto" disabled={okunuyor} onClick={() => dosyaRef.current && dosyaRef.current.click()} style={btn(PURPLE, false)}>{okunuyor ? "⏳ Okunuyor…" : "📷 Fotoğraftan oku"}</button>
+            <input ref={dosyaRef} type="file" accept="image/*,application/pdf" style={{ display: "none" }} onChange={e => fotoSec(e.target.files && e.target.files[0])} />
+          </div>
+          {durum && <div data-testid="net-kontrol-durum" style={{ fontSize: 11.5, color: durum.startsWith("⚠") ? "#B42318" : ACCENT, fontWeight: 700, marginBottom: 8 }}>{durum}</div>}
+          {doldurAcik && (
+            <div>
+              {NET_KONTROL_BOLUMLER.map((b, i) => (
+                <div key={i} style={{ border: `1px solid ${BORDER}`, borderRadius: 10, padding: "8px 10px", marginBottom: 8 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: NET_KONTROL_RENK[i] }}>{i + 1}. {b.baslik}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: r.bolumler[i].bos ? "#B42318" : ACCENT }}>{r.bolumler[i].yapilan}/{r.bolumler[i].toplam}</span>
+                  </div>
+                  {b.maddeler.map((m, j) => { const n = nolar[i][j]; return (
+                    <label key={n} style={{ display: "flex", gap: 7, alignItems: "flex-start", fontSize: 11.5, color: TEXT, lineHeight: 1.45, marginBottom: 4, cursor: "pointer" }}>
+                      <input type="checkbox" data-testid="net-kontrol-madde" data-no={n} checked={isaret.includes(n)} onChange={() => sec(n)} style={{ marginTop: 2 }} />
+                      <span><span style={{ color: MUTED, fontSize: 10 }}>{n}.</span> {m.replace(/\*\*/g, "")}</span>
+                    </label>
+                  ); })}
+                  {r.bolumler[i].bos > 0 && <div style={{ fontSize: 10.5, color: "#8a5a00", background: "#FFF6E5", borderRadius: 6, padding: "4px 7px", marginTop: 4 }}>{b.oneri}</div>}
+                </div>
+              ))}
+              <div style={{ background: "#EEF3F9", borderRadius: 10, padding: "8px 10px", marginBottom: 8, fontSize: 11.5, color: TEXT, lineHeight: 1.5 }}>
+                <b>İşaretli: {r.isaretSay}/{r.toplam}</b>{r.zayif.length ? <> · En çok boş: <b style={{ color: "#B42318" }}>{r.zayif.map(z => `${z.ad} (${z.bos} boş)`).join(", ")}</b></> : null}
+                {onceki && <div style={{ fontSize: 10.5, color: MUTED, marginTop: 2 }}>Önceki ({kayitlar[0].tarih}): {onceki.isaretSay}/{onceki.toplam} işaretli</div>}
+              </div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: TEXT, marginBottom: 4 }}>Bu hafta değiştireceği 3 şey (küçük ve ölçülebilir)</div>
+              {[0, 1, 2].map(i => <input key={i} data-testid="net-kontrol-degisim" value={degisim[i]} onChange={e => setDegisim(d => d.map((x, k) => k === i ? e.target.value : x))} placeholder={i === 0 ? "ör. Telefonu her blokta salona bırakacağım" : `${i + 1}.`}
+                style={{ width: "100%", padding: "7px 9px", border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12, boxSizing: "border-box", marginBottom: 5 }} />)}
+              <button data-testid="net-kontrol-kaydet" onClick={kaydet} style={{ ...btn(ACCENT, true), width: "100%", marginTop: 4 }}>💾 Kaydet</button>
+            </div>
+          )}
+          {kayitlar.length > 0 && (
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: MUTED, marginBottom: 4 }}>KAYITLAR</div>
+              {kayitlar.map((k, ki) => { const s = netKontrolSonuc(k.veri && k.veri.isaretli); const o = kayitlar[ki + 1] ? netKontrolSonuc(kayitlar[ki + 1].veri && kayitlar[ki + 1].veri.isaretli) : null; return (
+                <div key={k.id} data-testid="net-kontrol-kayit" style={{ border: `1px solid ${BORDER}`, borderRadius: 10, padding: "8px 10px", marginBottom: 6 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: TEXT }}>{k.tarih} · {s.isaretSay}/{s.toplam} işaretli{o ? <span style={{ color: s.isaretSay >= o.isaretSay ? ACCENT : "#B42318" }}> ({s.isaretSay - o.isaretSay >= 0 ? "+" : ""}{s.isaretSay - o.isaretSay})</span> : null}</span>
+                    <span style={{ display: "flex", gap: 6 }}>
+                      <button onClick={() => ootBelgeAc(netKontrolHtml(k, { ad: ogrAd, sinif: ogrSinif }), "Net Yukseltme Kontrol Listesi - " + ogrAd)} style={btn(ACCENT, false)}>🖨️ Yazdır</button>
+                      <button data-testid="net-kontrol-sil" onClick={() => { if (window.confirm(`${k.tarih} tarihli kontrol listesi silinsin mi?`)) yaz(kayitlar.filter(x => x.id !== k.id), "Kayıt silindi"); }} style={btn("#B42318", false)}>Sil</button>
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 6 }}>
+                    {s.bolumler.map((b, bi) => { const fark = o ? o.bolumler[bi].bos - b.bos : 0; return (
+                      <span key={bi} style={{ fontSize: 10.5, padding: "2px 7px", borderRadius: 10, background: b.bos === 0 ? "#E9F5EC" : b.oran < 0.5 ? "#FDECEA" : "#FFF6E5", color: TEXT }}>{b.kisa} {b.bos} boş{o && fark ? (fark > 0 ? ` ▼${fark}` : ` ▲${-fark}`) : ""}</span>
+                    ); })}
+                  </div>
+                  {s.zayif.length > 0 && <div style={{ fontSize: 11, color: TEXT, marginTop: 5 }}>En çok boş: <b>{s.zayif.map(z => z.ad).join(", ")}</b></div>}
+                  {(k.veri && k.veri.degisim || []).filter(Boolean).length > 0 && <div style={{ fontSize: 11, color: MUTED, marginTop: 3 }}>Değiştireceği: {k.veri.degisim.filter(Boolean).join(" · ")}</div>}
+                </div>
+              ); })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+// ===== NET YÜKSELTME KONTROL LİSTESİ BİTİŞ =====
+function DenemeTabip({ denemeler, setDenemeler, kayitliListesi, aktifOgrenci, setAktifOgrenci, handleDenemeAnaliz, denemeAiLoading, denemeAnaliz, ogrenciler, setOgrenciler, aktifYil, sinavTuru, setSinavTuru, konuHaritasiVerisi, testKayitlari, setTestKayitlari }) {
   const dersler = aktifDersler(sinavTuru);
   const [excelPanelAcik, setExcelPanelAcik] = useState(false);
   const [guncelYilExcelAcik, setGuncelYilExcelAcik] = useState(false);
@@ -39706,6 +40034,10 @@ function DenemeTabip({ denemeler, setDenemeler, kayitliListesi, aktifOgrenci, se
               {(!sinavTuru || sinavTuru === "lgs") && (
                 <LgsCalismaProgramiKarti ogrenciDenemeler={ogrenciDenemeler} ogrAd={seciliOgrenci} ogrSinif={seciliOgrenciSinif}
                   konuVerisi={pdrSozlukOku(konuHaritasiVerisi || {}, seciliOgrenci, seciliOgrenciSinif, seciliOgrenciNumara) || {}} />
+              )}
+              {/* Net yükseltme kontrol listesi (LGS) */}
+              {(!sinavTuru || sinavTuru === "lgs") && setTestKayitlari && (
+                <NetKontrolKarti ogrAd={seciliOgrenci} ogrSinif={seciliOgrenciSinif} ogrNumara={seciliOgrenciNumara} testKayitlari={testKayitlari || {}} setTestKayitlari={setTestKayitlari} />
               )}
             </>
           )}
@@ -48841,6 +49173,7 @@ function pdrBaslangicSekmesi() {
             sinavTuru={sinavTuru}
             setSinavTuru={setSinavTuru}
             konuHaritasiVerisi={konuHaritasiVerisi}
+            testKayitlari={testKayitlari} setTestKayitlari={setTestKayitlari}
           />
         )}
 

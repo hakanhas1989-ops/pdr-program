@@ -14214,12 +14214,15 @@ Gültepe Şehit Cihan Erat MTAL|mtal|Endüstriyel Otomasyon Teknolojileri|197.59
 Gültepe Şehit Cihan Erat MTAL|mtal|Makine ve Tasarım Teknolojisi|177.351|97.03|159.678|89.22
 İHKİB Kağıthane MTAL|mtal|Tekstil Teknolojisi|174.889|97.60|156.314|89.83
 Ekrem Cevahir Anadolu İmam Hatip Lisesi|aihl|Fen ve Sosyal Bilimler (4 yıl)|167.174|98.91|207.846|70.89`,
-  "İstanbul geneli (en yüksekler)": `Galatasaray Lisesi|anadolu|Fransızca|497.432||
-İstanbul Atatürk Fen Lisesi|fen|İngilizce (5 yıl)|493.359||
-Haydarpaşa Lisesi|anadolu|İngilizce|487.783||
-Kadıköy Anadolu Lisesi|anadolu|İngilizce|483.867||
-Validebağ Fen Lisesi|fen|İngilizce (5 yıl)|477.820||
-Teknopark İstanbul MTAL|mtal|Siber Güvenlik|469.518||`,
+  "İstanbul geneli (en yüksekler)": `Galatasaray Lisesi|anadolu|Fransızca|497.432|0.05|500.000|0.01
+İstanbul Atatürk Fen Lisesi|fen|Almanca (5 yıl)|494.887|0.07|495.353|0.09
+İstanbul Atatürk Fen Lisesi|fen|İngilizce (5 yıl)|493.359|0.13|493.964|0.14
+Haydarpaşa Lisesi|anadolu|Almanca|488.848||487.768|0.46
+Haydarpaşa Lisesi|anadolu|İngilizce|487.783||482.983|0.64
+Kadıköy Anadolu Lisesi|anadolu|İngilizce|483.867|0.45|485.280|0.54
+Validebağ Fen Lisesi|fen|İngilizce (5 yıl)|477.820|0.77|477.210|1.05
+Teknopark İstanbul MTAL|mtal|Siber Güvenlik|469.518|1.31|473.594|1.36
+Teknopark İstanbul MTAL|mtal|Bilişim Teknolojileri|458.212|2.25|468.103|1.80`,
 };
 // Yaklaşık net → puan → yüzdelik (2025-2026 sonuçlarından derlenmiş, ±; o yılın soru zorluğuna ve ortalamalara göre değişir)
 const KS_LGS_NET_PUAN = [[90, 500, 0.01], [85, 482, 0.3], [80, 462, 1.2], [75, 442, 3.5], [70, 422, 7], [65, 400, 12], [60, 380, 18], [55, 355, 25], [50, 330, 34], [45, 305, 43], [40, 280, 53], [30, 235, 70], [20, 195, 85]];
@@ -14267,9 +14270,10 @@ function ksLiseTaban(g) {
   let puan = sayi(g.puan), yuz = sayi(g.yuzdelik), net = sayi(g.net), aciklama = "";
   if (puan === null && net !== null) { const t = ksNetPuanTahmin(net); puan = t.puan; if (yuz === null) yuz = t.yuzdelik; aciklama = `${net} net ≈ ${t.puan} puan ≈ %${String(t.yuzdelik).replace(".", ",")} dilim (yaklaşık; yılın zorluğuna göre ±15-20 puan oynar).`; }
   else if (puan === null && yuz !== null) { puan = ksYuzdelikPuanTahmin(yuz); aciklama = `%${yuz} dilim ≈ ${puan} puan (yaklaşık).`; }
-  const bicim = (s) => `• ${s.okul} — ${s.alan} [${KS_TABAN_TUR_AD[s.tur] || s.tur}${!ilceG ? ", " + s.ilce : ""}]: 2026 taban ${s.taban != null ? s.taban.toFixed(3).replace(".", ",") : "?"}${s.yuzdelik != null ? " (%" + String(s.yuzdelik).replace(".", ",") + ")" : ""}${s.taban25 != null ? " · 2025: " + s.taban25.toFixed(3).replace(".", ",") + (s.yuzdelik25 != null ? " (%" + String(s.yuzdelik25).replace(".", ",") + ")" : "") : ""}`;
+  const gerekNet = (t) => { try { return t != null && typeof ksPuanNetTahmin === "function" ? String(Math.round(ksPuanNetTahmin(t) * 2) / 2).replace(".", ",") : null; } catch (e) { return null; } };
+  const bicim = (s) => `• ${s.okul} — ${s.alan} [${KS_TABAN_TUR_AD[s.tur] || s.tur}${!ilceG ? ", " + s.ilce : ""}]: 2026 taban ${s.taban != null ? s.taban.toFixed(3).replace(".", ",") : "?"}${s.yuzdelik != null ? " (%" + String(s.yuzdelik).replace(".", ",") + " dilim)" : " (2026 yüzdeliği yayımlanmadı)"}${gerekNet(s.taban) ? " · ≈ " + gerekNet(s.taban) + " net" : ""}${s.taban25 != null ? " · 2025: " + s.taban25.toFixed(3).replace(".", ",") + (s.yuzdelik25 != null ? " (%" + String(s.yuzdelik25).replace(".", ",") + ")" : "") : ""}`;
   satirlar.sort((a, b) => (b.taban || 0) - (a.taban || 0));
-  const not = "\n\nNot: 2026 yerleştirme tabanlarıdır (MEB tercih kılavuzu verisi). Taban her yıl kontenjana, soru zorluğuna ve tercihlere göre değişir; tercihten önce o yılın resmî MEB kılavuzuyla doğrulanmalı. Yüzdelik dilim, puandan daha kararlı bir karşılaştırma ölçüsüdür. Yalnızca sınavla öğrenci alan programlar listelenir; adrese dayalı (sınavsız) yerleştirme ayrıdır.";
+  const not = "\n\nNot: 2026 yerleştirme tabanlarıdır (MEB tercih kılavuzu verisi). \"≈ net\" o tabana karşılık gelen yaklaşık toplam nettir (90 soru üzerinden; ders dağılımına ve yılın zorluğuna göre birkaç net oynar). Taban her yıl kontenjana, soru zorluğuna ve tercihlere göre değişir; tercihten önce o yılın resmî MEB kılavuzuyla doğrulanmalı. Yüzdelik dilim, puandan daha kararlı bir karşılaştırma ölçüsüdür. Yalnızca sınavla öğrenci alan programlar listelenir; adrese dayalı (sınavsız) yerleştirme ayrıdır.";
   if (puan === null) {
     return `İstanbul LGS taban puanları${ilceG ? " — " + satirlar[0]?.ilce : ""}${turAnahtar ? " (" + KS_TABAN_TUR_AD[turAnahtar] + ")" : ""} — ${satirlar.length} program:\n${satirlar.map(bicim).join("\n")}${not}`;
   }

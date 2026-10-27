@@ -12400,6 +12400,7 @@ const KS_ASISTAN_ARACLAR = {
       const G = ksAsistanGirdi(ctx, o);
       const X = ksSupBaglam(G);
       const s = [`Öğrenci: ${ksAsistanEtiket(o)}`];
+      { const oz = ksAsistanOzelDurum(ctx, o, true); if (oz) s.push(oz); }
       const son = X.notlar[X.notlar.length - 1];
       s.push(`Görüşme: ${X.notlar.length} kayıt${son ? `; son görüşme ${son.date}${son.topic ? " (" + son.topic + ")" : ""}${X.sonGun !== null ? `, ${X.sonGun} gün önce` : ""}` : ""}.`);
       if (X.notlar.length) s.push(`Notlara göre öne çıkan alan: ${X.r.tur}${X.alt ? " (" + KS_ALT_AD[X.alt] + ")" : ""}; risk düzeyi ${X.r.duzey}${X.r.islev.length ? "; etkilenen işlevler: " + X.r.islev.map(a => KS_ISLEV_AD[a]).join(", ") : ""}.`);
@@ -13303,6 +13304,7 @@ function ksAsistanOkulKayitlari(g, ctx) {
 // Prof. Hakan ve kapalı süpervizyon da aynı metni kullanır; her biri ayrı ayrı yazılmasın diye tek yerde.
 function ksTaramaOzetMetni(ctx, o) {
   const p = [];
+  try { const oz = ksAsistanOzelDurum(ctx, o, true); if (oz) p.push(oz); } catch (e) {}
   try { const t = ksAsistanTaramaSonuclari(ctx, o); if (t) p.push(t); } catch (e) {}
   try {
     const no2 = ((/(\d+)/.exec(String(o.className || "")) || [])[1] | 0), kd = no2 >= 9 ? "lise" : no2 >= 5 ? "ortaokul" : no2 >= 1 ? "ilkokul" : null;
@@ -13311,11 +13313,32 @@ function ksTaramaOzetMetni(ctx, o) {
   } catch (e) {}
   return p.join("\n\n");
 }
+// Özel durum: kaynaştırma / tanı (öğrenci kaydı + son kaynaştırma değerlendirmesi), sınıf mevcudu, sosyometri.
+// Öğrenciyi değerlendiren her araç (özet, dosya, kapalı sistem) bunu görür.
+function ksAsistanOzelDurum(ctx, o, kisa) {
+  const b = [];
+  if (!Array.isArray(ctx.ogrenciler)) return ""; // öğrenci listesi verilmeyen bağlamda "tanı yok" denmesin
+  try {
+    const ogr = pdrOgrKaydi(ctx, o);
+    const tani = (ogr && ogr.kaynastirma) || [];
+    const tk = (typeof butunlesikTestKayitlari === "function" ? butunlesikTestKayitlari(ctx.testKayitlari, o.name, o.className, o.numara) : pdrSozlukOku(ctx.testKayitlari, o.name, o.className, o.numara)) || [];
+    const ked = tk.filter(t => t.tip === "kaynastirma_ed").sort((a, c) => ksTarihAnahtar(c.tarih).localeCompare(ksTarihAnahtar(a.tarih)))[0];
+    let kedOz = ""; if (ked && typeof testSonucOzeti === "function") { try { kedOz = String(testSonucOzeti(ked) || ""); } catch (e) {} }
+    if (tani.length) b.push(`KAYNAŞTIRMA / TANI: ${tani.join(", ")} (öğrenci kaydında işaretli; RAM raporuna dayalı tanıdır — değerlendirmede ve önerilerde dikkate al, etiket gibi kullanma)${ked ? `. Son kaynaştırma değerlendirmesi ${ked.tarih || "?"}${kedOz && kedOz !== "—" ? ": " + ksAsistanKisalt(kedOz, kisa ? 160 : 400) : ""}` : ". Kaynaştırma değerlendirme formu doldurulmamış"}.`);
+    else b.push(`KAYNAŞTIRMA / TANI: öğrenci kaydında işaretli tanı yok${ked ? ` (ama ${ked.tarih || "?"} tarihli kaynaştırma değerlendirmesi var${kedOz && kedOz !== "—" ? ": " + ksAsistanKisalt(kedOz, 160) : ""})` : ""}.`);
+    // Sınıf mevcudu (bu yılın öğrenci listesinden)
+    const sinifOgr = (ctx.ogrenciler || []).filter(x => (!x.yil || !ctx.aktifYil || x.yil === ctx.aktifYil) && ksSade(x.className || "") === ksSade(o.className || ""));
+    if (sinifOgr.length) { const kn = sinifOgr.filter(x => (x.kaynastirma || []).length).length; b.push(`SINIF: ${o.className} — kayıtlı ${sinifOgr.length} öğrenci${kn ? `, ${kn} kaynaştırma öğrencisi` : ""}.`); }
+  } catch (e) {}
+  if (kisa && Array.isArray(ctx.sosyometri)) { try { const sos = String(ksAsistanEkKayitlar(ctx, o) || "").split("\n").find(l => l.startsWith("SOSYOMETRİ")); b.push(sos || "SOSYOMETRİ: bu öğrencinin sınıfı için bu yıl kayıt yok."); } catch (e) {} }
+  return b.join("\n");
+}
 function ksAsistanOgrenciDosyasi(ctx, o) {
   const ad = o.name, sinif = o.className, no = o.numara;
   const ayni = (x) => pdrAyniOgrenci(x.studentName, x.className, ad, sinif);
   const K = (t, n) => ksAsistanKisalt(String(t || "").replace(/\s+/g, " ").trim(), n);
   const b = [`ÖĞRENCİ DOSYASI: ${ksAsistanEtiket(o)}`];
+  { const oz = ksAsistanOzelDurum(ctx, o, false); if (oz) b.push(oz); }
   // Görüşmeler
   const gor = (ctx.records || []).filter(ayni).sort((a, c) => ksTarihSirala(c, a));
   if (gor.length) {
@@ -14452,6 +14475,7 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - Bir öğrenci için müdahale planı yaptığında ya da kaydettiğinde, ardından mudahale_programi_ara ile (aranan: planın anahtar kavramları, ogrenci: öğrenci) Müdahale Programları kütüphanesinden aday oturumları al; en uygun 1-3 oturumu seçip mudahale_programi_kaydet ile (plan kaydedildiyse plana_ekle: true) onaya sun. Danışman 'program/etkinlik/oturum öner' dediğinde de aynısını yap. Listede olmayan oturum adı uydurma.
 - Bir araç sonucunda "🎓 SÜPERVİZÖR … düzeltme istedi" yazarsa notları uygula ve aracı düzeltilmiş içerikle hemen yeniden çağır; danışmana soru sorma. Süpervizör notu "uygun" ise yanıtında tek cümleyle belirtebilirsin.
 - Lise taban puanı, yüzdelik dilim, "kaç netle hangi okul", tercih listesi sorulduğunda lise_taban_puanlari kullan (Beylikdüzü, Esenyurt, Başakşehir, Büyükçekmece, Avcılar ayrıntılı). Öğrenci adı geçiyorsa önce deneme_analizi ile ortalama netini al. Araçta olmayan okulun puanını uydurma; değerlerin 2026 tabanı olduğunu ve her yıl değiştiğini söyle.
+- Öğrenciyi değerlendirirken (risk, müdahale, seans hazırlığı, çalışma programı, veli yazısı) öğrenci özeti/dosyasındaki KAYNAŞTIRMA / TANI, SINIF ve SOSYOMETRİ satırlarını dikkate al: tanı varsa önerileri ona göre uyarla (BEP, sınav/ödev uyarlaması, RAM süreci), hiç seçilmeyen öğrencide akran ilişkisini ele al. Tanıyı etiket gibi kullanma, tanı koyma; kayıtta tanı yoksa tanı varmış gibi konuşma.
 - Veri girişi: deneme netleri → deneme_kaydet; Profil 1 boyut puanları → profil_puanla; kariyer hedefi, ilgi, aile notu, d2 → profil2_guncelle; devamsızlık → devamsizlik_kaydet; yeni öğrenci → ogrenci_ekle (önce ogrenci_ara); konu tamamlama yüzdesi → konu_guncelle; risk kapatma → risk_kapat; plan durumu → mudahale_durum; hatırlatmayı bitirme → hatirlatma_tamamla. Hepsi onay ister; danışmanın söylediği değerleri aynen ver, tahmin etme.
 - Danışman öğrencinin yazılı sınav puanını ya da yıl sonu not ortalamasını söylerse not_kaydet kullan (birden çok dersi tek çağrıda ver). Sayıları aynen yaz; hangi yazılı olduğu belli değilse yazili alanını boş bırak, program boş olana yazar.
 - Danışman bir yanıtı ya da bu sohbeti öğrencinin dosyasına kaydetmek/göndermek isterse asistan_notu_kaydet kullan (kapsam: son ya da hepsi). Kaydedilecek metni yeniden yazma; program yanıtları aynen kaydeder.
@@ -36047,7 +36071,8 @@ function ProfDanismaEkrani({
   denemeler, riskListesi, mudahalePlan, sevkler,
   hazirlikNotlari, ilerlemeNotlari, profNotlari, setProfNotlari, sinavTuru,
   akademikTaramalar, liseTaramalar, benlikOlcekleri, testKayitlari, setAktifOgrenci,
-  ilkokulTaramalar, bilproDegerlendirmeler, oogDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, pasPerformanslar
+  ilkokulTaramalar, bilproDegerlendirmeler, oogDegerlendirmeler, castDegerlendirmeler, pasDegerlendirmeler, pasPerformanslar,
+  ogrenciler, sosyometri, aktifYil
 }) {
   const [seciliAd, setSeciliAd] = useState(aktifOgrenci?.name || "");
   const [aramaMetni, setAramaMetni] = useState("");
@@ -36072,7 +36097,8 @@ function ProfDanismaEkrani({
     const numara = (kayitliListesi.find(o => o.name === ad && (o.className || "") === (sinif || "")) || {}).numara;
     return ksTaramaOzetMetni({ bilproDegerlendirmeler: bilproDegerlendirmeler || [], oogDegerlendirmeler: oogDegerlendirmeler || [], castDegerlendirmeler: castDegerlendirmeler || [],
       pasDegerlendirmeler: pasDegerlendirmeler || [], pasPerformanslar: pasPerformanslar || [], ilkokulTaramalar: ilkokulTaramalar || [],
-      akademikTaramalar: akademikTaramalar || [], liseTaramalar: liseTaramalar || [] }, { name: ad, className: sinif, numara });
+      akademikTaramalar: akademikTaramalar || [], liseTaramalar: liseTaramalar || [],
+      ...(Array.isArray(ogrenciler) ? { ogrenciler, testKayitlari: testKayitlari || {}, aktifYil } : {}), ...(Array.isArray(sosyometri) ? { sosyometri } : {}) }, { name: ad, className: sinif, numara });
   }
   function tumVeriHazirla(ad, sinif) {
     const adLower = ad.toLocaleLowerCase("tr").trim();
@@ -48683,6 +48709,7 @@ function pdrBaslangicSekmesi() {
             ilkokulTaramalar={ilkokulTaramalar} bilproDegerlendirmeler={bilproDegerlendirmeler}
             oogDegerlendirmeler={oogDegerlendirmeler} castDegerlendirmeler={castDegerlendirmeler}
             pasDegerlendirmeler={pasDegerlendirmeler} pasPerformanslar={pasPerformanslar}
+            ogrenciler={ogrenciler} sosyometri={sosyometri} aktifYil={aktifYil}
           />
         )}
 

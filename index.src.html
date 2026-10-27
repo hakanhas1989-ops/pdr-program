@@ -12986,8 +12986,18 @@ const KS_ASISTAN_ARACLAR = {
     },
   },
   gorusme_duzelt: {
-    aciklama: "Kayıtlı bir görüşmeyi düzeltir: not metni, TARİHİ, konusu ya da türü (ONAY GEREKİR; eski ve yeni hâl danışmana gösterilir). 'tarih' hangi görüşmenin düzeltileceğini seçer (verilmezse en son görüşme); tarihi değiştirmek için 'yeni_tarih' ver. Yalnızca değişmesi gereken alanları ver; 'yeni_not' notun TAMAMININ düzeltilmiş hâli olmalı. Grup görüşmesinde her öğrencinin kaydı ayrıdır; gerekirse her biri için ayrı çağır. Grup görüşmesinde ortak notu öğrenciye göre YENİDEN YAZMA; bunun yerine o öğrencinin kaydına 'ozel_not' ver (alt_konu da verilebilir). ozel_not yalnız ortak notta o öğrencinin adının geçtiği cümlelere ya da danışmanın açıkça söylediğine dayanmalı; notta olmayan yargı ve suçlama ekleme (ör. adı geçmeyen öğrenciye 'zorbalık yaptı' yazma). Notta adı hiç geçmiyorsa danışmana sor.",
-    girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "tarih": "düzeltilecek görüşmenin şimdiki tarihi (isteğe bağlı)", "yeni_tarih": "GG.AA.YYYY (tarih yanlışsa)", "yeni_not": "düzeltilmiş tam not (not değişmiyorsa boş bırak)", "ozel_not": "isteğe bağlı: bu öğrenciye özel not (grup görüşmesi)", "alt_konu": "isteğe bağlı", "konu": "isteğe bağlı", "tur": "isteğe bağlı"}', ogrenciIster: true, yazma: true, yontem: "hepsi",
+    // Aynı grup görüşmesinin diğer katılımcı kayıtları (aynı tarih, aynı ortak not, birbirini katılımcı olarak gösteren)
+    grupKayitlari: (r, ctx) => !(r.grupKatilimcilari || []).length ? [r] : (ctx.records || []).filter(x => x.id === r.id || (x.date === r.date && (x.grupKatilimcilari || []).includes(r.studentName) && (r.grupKatilimcilari || []).includes(x.studentName) && String(x.raw || x.summary || "").slice(0, 60) === String(r.raw || r.summary || "").slice(0, 60))),
+    // Eski not aynen kalır; ek tarihle sona eklenir. AI'sız kayıtta (özet = ham not) özet de ham notla birlikte güncellenir.
+    ekUygula: (x, ek) => {
+      const satir = `[Ek · ${today()}] ${ek}`;
+      const ham = String(x.raw || "").trim(), oz = String(x.summary || "").trim();
+      const kopya = !x.form && (!oz || (ham && ham.startsWith(oz)));
+      const yeniHam = (ham || oz) ? `${ham || oz}\n\n${satir}` : satir;
+      return { raw: yeniHam, summary: kopya ? yeniHam : `${oz}\n\n${satir}` };
+    },
+    aciklama: "Kayıtlı bir görüşmeyi düzeltir ya da GÜNCELLER: not metni, TARİHİ, konusu ya da türü (ONAY GEREKİR; eski ve yeni hâl danışmana gösterilir). Var olan bir görüşmeye YENİ BİLGİ EKLEMEK için (\"o görüşmeye şunu da ekle\", \"yıl sonu notlarını ekle\") 'ek_not' ver: eski not aynen kalır, ek tarihle sonuna eklenir — bu durumda yeni_not KULLANMA. Grup görüşmesinde ek bütün katılımcıların kaydına eklenecekse grup_hepsi: true ver. 'tarih' hangi görüşmenin düzeltileceğini seçer (verilmezse en son görüşme); tarihi değiştirmek için 'yeni_tarih' ver. Yalnızca değişmesi gereken alanları ver; 'yeni_not' notun TAMAMININ düzeltilmiş hâli olmalı. Grup görüşmesinde her öğrencinin kaydı ayrıdır; gerekirse her biri için ayrı çağır. Grup görüşmesinde ortak notu öğrenciye göre YENİDEN YAZMA; bunun yerine o öğrencinin kaydına 'ozel_not' ver (alt_konu da verilebilir). ozel_not yalnız ortak notta o öğrencinin adının geçtiği cümlelere ya da danışmanın açıkça söylediğine dayanmalı; notta olmayan yargı ve suçlama ekleme (ör. adı geçmeyen öğrenciye 'zorbalık yaptı' yazma). Notta adı hiç geçmiyorsa danışmana sor.",
+    girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "tarih": "düzeltilecek görüşmenin şimdiki tarihi (isteğe bağlı)", "yeni_tarih": "GG.AA.YYYY (tarih yanlışsa)", "yeni_not": "düzeltilmiş tam not (not değişmiyorsa boş bırak)", "ek_not": "isteğe bağlı: nota eklenecek yeni bilgi (eski not korunur)", "grup_hepsi": "isteğe bağlı true", "ozel_not": "isteğe bağlı: bu öğrenciye özel not (grup görüşmesi)", "alt_konu": "isteğe bağlı", "konu": "isteğe bağlı", "tur": "isteğe bağlı"}', ogrenciIster: true, yazma: true, yontem: "hepsi",
     bul: (g, ctx, o) => {
       const l = (ctx.records || []).filter(x => pdrAyniOgrenci(x.studentName, x.className, o.name, o.className)).sort((a, b) => ksTarihSirala(b, a));
       const t = ksAsistanTarihNormal(g.tarih);
@@ -12997,15 +13007,20 @@ const KS_ASISTAN_ARACLAR = {
       const r = KS_ASISTAN_ARACLAR.gorusme_duzelt.bul(g, ctx, o);
       if (!r) return `✏️ Görüşme düzeltme\nÖğrenci: ${ksAsistanEtiket(o)}\n⚠ Düzeltilecek görüşme bulunamadı.`;
       const yt = ksAsistanTarihNormal(g.yeni_tarih);
-      return `✏️ Görüşme düzeltme\nÖğrenci: ${ksAsistanEtiket(o)} · ${r.date}${r.grupKatilimcilari && r.grupKatilimcilari.length ? " · grup görüşmesi (yalnızca bu öğrencinin kaydı)" : ""}${yt ? `\n\nTARİH: ${r.date} → ${yt}` : ""}${g.yeni_not ? `\n\nESKİ: ${ksAsistanKisalt(r.summary || r.raw, 500)}\n\nYENİ: ${g.yeni_not}` : ""}${g.ozel_not ? `\n\nÖZEL NOT (yalnız bu öğrenci): ${g.ozel_not}${r.ozelNot ? `\n(eski özel not: ${ksAsistanKisalt(r.ozelNot, 200)})` : ""}` : ""}${g.alt_konu && pdrAltKonuBul(pdrKonuBul(g.konu) || r.topic, g.alt_konu) ? "\nAlt konu: " + (r.altKonu || "-") + " → " + pdrAltKonuBul(pdrKonuBul(g.konu) || r.topic, g.alt_konu) : ""}${g.konu ? "\nKonu: " + (r.topic || "-") + " → " + g.konu : ""}${g.tur ? "\nTür: " + (r.meetingType || "Öğrenci") + " → " + g.tur : ""}${g.yeni_tarih && !yt ? "\n⚠ Yeni tarih anlaşılamadı (GG.AA.YYYY olmalı)." : ""}`;
+      return `✏️ Görüşme düzeltme\nÖğrenci: ${ksAsistanEtiket(o)} · ${r.date}${r.grupKatilimcilari && r.grupKatilimcilari.length ? (String(g.ek_not || "").trim() && (g.grup_hepsi === true || String(g.grup_hepsi) === "true") ? " · grup görüşmesi" : " · grup görüşmesi (yalnızca bu öğrencinin kaydı)") : ""}${yt ? `\n\nTARİH: ${r.date} → ${yt}` : ""}${g.yeni_not ? `\n\nESKİ: ${ksAsistanKisalt(r.summary || r.raw, 500)}\n\nYENİ: ${g.yeni_not}` : ""}${String(g.ek_not || "").trim() ? `\n\nMEVCUT NOT (aynen kalır): ${ksAsistanKisalt(pdrKayitMetni(r), 400)}\n\n➕ EKLENECEK: [Ek · ${today()}] ${String(g.ek_not).trim()}${(g.grup_hepsi === true || String(g.grup_hepsi) === "true") && KS_ASISTAN_ARACLAR.gorusme_duzelt.grupKayitlari(r, ctx).length > 1 ? `\n(grup görüşmesinin ${KS_ASISTAN_ARACLAR.gorusme_duzelt.grupKayitlari(r, ctx).length} kaydının hepsine)` : ""}` : ""}${g.ozel_not ? `\n\nÖZEL NOT (yalnız bu öğrenci): ${g.ozel_not}${r.ozelNot ? `\n(eski özel not: ${ksAsistanKisalt(r.ozelNot, 200)})` : ""}` : ""}${g.alt_konu && pdrAltKonuBul(pdrKonuBul(g.konu) || r.topic, g.alt_konu) ? "\nAlt konu: " + (r.altKonu || "-") + " → " + pdrAltKonuBul(pdrKonuBul(g.konu) || r.topic, g.alt_konu) : ""}${g.konu ? "\nKonu: " + (r.topic || "-") + " → " + g.konu : ""}${g.tur ? "\nTür: " + (r.meetingType || "Öğrenci") + " → " + g.tur : ""}${g.yeni_tarih && !yt ? "\n⚠ Yeni tarih anlaşılamadı (GG.AA.YYYY olmalı)." : ""}`;
     },
     calistir: async (g, ctx, o) => {
       const r = KS_ASISTAN_ARACLAR.gorusme_duzelt.bul(g, ctx, o);
       if (!r) return "Düzeltilecek görüşme bulunamadı; tarih ver ya da gorusme_notlari ile kontrol et.";
-      const yeniNot = String(g.yeni_not || "").trim();
+      const yeniNot = String(g.yeni_not || "").trim(), ekNot = String(g.ek_not || "").trim();
       const yt = ksAsistanTarihNormal(g.yeni_tarih);
       if (g.yeni_tarih && !yt) return "Yeni tarih anlaşılamadı; GG.AA.YYYY biçiminde ver. Değişiklik yapılmadı.";
-      const guncel = (ctx.records || []).map(x => x.id !== r.id ? x : { ...x, ...(yt ? { date: yt } : {}),
+      if (yeniNot && ekNot) return "Aynı anda hem yeni_not hem ek_not verilemez; bilgi eklemek için yalnız ek_not ver. Değişiklik yapılmadı.";
+      // Ek bütün grup kayıtlarına mı?
+      const ekHedef = ekNot && (g.grup_hepsi === true || String(g.grup_hepsi) === "true") ? KS_ASISTAN_ARACLAR.gorusme_duzelt.grupKayitlari(r, ctx).map(x => x.id) : [r.id];
+      const D = KS_ASISTAN_ARACLAR.gorusme_duzelt;
+      const guncel0 = ekNot ? (ctx.records || []).map(x => ekHedef.includes(x.id) ? { ...x, ...D.ekUygula(x, ekNot), duzenlemeTarihi: today(), duzenleyen: "asistan" } : x) : (ctx.records || []);
+      const guncel = guncel0.map(x => x.id !== r.id ? x : { ...x, ...(yt ? { date: yt } : {}),
         ...(yeniNot ? { summary: yeniNot, raw: yeniNot } : {}),
         ...(String(g.ozel_not || "").trim() ? { ozelNot: String(g.ozel_not).trim() } : {}),
         ...(g.alt_konu && pdrAltKonuBul(pdrKonuBul(g.konu) || r.topic, g.alt_konu) ? { altKonu: pdrAltKonuBul(pdrKonuBul(g.konu) || r.topic, g.alt_konu) } : {}),
@@ -13019,7 +13034,7 @@ const KS_ASISTAN_ARACLAR = {
         if (t.tasindi) tasimaNotu = ` O güne bağlı ${t.tasindi} kayıt (BDT/bireyi tanıma/uyum) da yeni tarihe taşındı.`;
         if (t.atlandi) tasimaNotu = ` Eski tarihte bu öğrencinin başka görüşmesi de olduğu için o güne bağlı BDT/bireyi tanıma/uyum kayıtları taşınmadı; danışmana söyle.`;
       }
-      return `Görüşme düzeltildi (${r.date}${yt ? " → " + yt : ""}).${tasimaNotu}${r.grupKatilimcilari && r.grupKatilimcilari.length ? ` Bu bir grup görüşmesi; diğer öğrencilerin (${r.grupKatilimcilari.join(", ")}) kayıtları ayrı, gerekirse onları da düzeltmeyi öner.` : ""} Bu nota dayanan risk/müdahale kaydı varsa yeniden değerlendirme gerekebilir.`;
+      return `${ekNot ? `Görüşmeye ek yapıldı (${r.date}${ekHedef.length > 1 ? `; grup görüşmesinin ${ekHedef.length} kaydına` : ""}); eski not aynen duruyor.` : `Görüşme düzeltildi (${r.date}${yt ? " → " + yt : ""}).`}${tasimaNotu}${r.grupKatilimcilari && r.grupKatilimcilari.length && !(ekNot && ekHedef.length > 1) ? ` Bu bir grup görüşmesi; diğer öğrencilerin (${r.grupKatilimcilari.join(", ")}) kayıtları ayrı, gerekirse onları da düzeltmeyi öner.` : ""} Bu nota dayanan risk/müdahale kaydı varsa yeniden değerlendirme gerekebilir.`;
     },
   },
   olcum_takibi: {

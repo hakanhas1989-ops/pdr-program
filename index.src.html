@@ -12985,6 +12985,17 @@ const KS_ASISTAN_ARACLAR = {
       return `Sevk sonucu kaydedildi (${s.sevkYeri || "sevk"}, ${s.tarih}).`;
     },
   },
+  arac_listesi: {
+    aciklama: "Bütün araçların adını ve kısa açıklamasını verir (bu istekte sana yalnızca seçilmiş araçlar gösterilmiş olabilir). ara verirsen adında ya da açıklamasında geçenlerin tam açıklamasını ve girdisini verir. Gereken bir araç listende yoksa kullan.",
+    girdi: '{"ara": "isteğe bağlı kelime"}', yontem: "hepsi",
+    calistir: (g, ctx) => {
+      const q = ksSade(String(g.ara || "").trim());
+      const l = Object.entries(KS_ASISTAN_ARACLAR).filter(([ad, a]) => !q || ksSade(ad + " " + a.aciklama).includes(q));
+      if (!l.length) return "Eşleşen araç yok.";
+      return q ? l.slice(0, 8).map(([ad, a]) => `- ${ad}${a.yazma ? " [ONAY GEREKİR]" : a.ekranYazma ? " [EKRANDA DOLDURUR]" : ""}: ${a.aciklama} Girdi: ${a.girdi}`).join("\n")
+        : "TÜM ARAÇLAR:\n" + l.map(([ad, a]) => `- ${ad}: ${String(a.aciklama).split(/[.:]/)[0].slice(0, 90)}`).join("\n") + "\n\nAyrıntı için arac_listesi'ni ara ile çağır.";
+    },
+  },
   deneyim_gunlugu: {
     aciklama: "Kendi çalışma kaydını getirir (cihazda tutulan son işler): hangi araçları kullandığın, onaylanan/reddedilen işlemler, hata veren ya da yapılamayan işler, danışmanın 👎 verdiği ya da düzelterek yeniden sorduğu istekler ve şu an onaylı dersler. Danışman 'kendini değerlendir', 'nerede hata yapıyorsun', 'ne öğrendin' dediğinde kullan; sonra bulduğun örüntüleri anlat ve en fazla 5 ders öner, kabul ederse ders_kaydet ile kaydet.",
     girdi: '{}', yontem: "hepsi",
@@ -14564,9 +14575,91 @@ function pdrDeneyimOzeti() {
   return b.join("\n");
 }
 // ===== ASİSTAN DENEYİM DEFTERİ BİTİŞ =====
-function ksAsistanSistem(ayar, ctx) {
+// ===== ASİSTAN ARAÇ SEÇİMİ BAŞLANGIÇ =====
+// Ücretsiz modelde (Gemma, günlük kota) her istekte 67 aracın tamamı yerine soruyla ilgili araçlar gönderilir;
+// öğrencinin kaydı olmayan sekmelerin OKUMA araçları elenir (veri GİREN araçlara dokunulmaz) ve tek satırlık
+// veri haritası eklenir. Listede olmayan bir araç da çağrılabilir (çalışır); arac_listesi tam listeyi verir.
+// Claude'da önbellek (♻) bozulmasın diye tam liste gider.
+const KS_ARAC_GRUPLARI = {
+  cekirdek: { araclar: ["ogrenci_ara", "ogrenci_ozeti", "ogrenci_dosyasi", "gorusme_notlari", "liste", "bugun_brifing", "ekranda_ac", "arac_listesi"] },
+  gorusme: { re: /gorus|not(u|unu|lari|larini)?\b|kaydet|yaz\b|yazar|ekle|duzelt|guncelle|grup|veli|ogretmen|form|bireyi tan|bdt|carpitma|olcum|iyi olus|seans/,
+    araclar: ["gorusme_kaydet", "ekranda_gorusme", "gorusme_duzelt", "gorusme_analizi", "form_sablonu", "form_analizi", "ekranda_form_doldur", "bireyi_tanima_ekle", "bdt_ekle", "asistan_notu_kaydet", "olcum_takibi"] },
+  degerlendirme: { re: /degerlendir|analiz|durum|nasil|yorum|incele|profil|supervizyon|vaka|formulasyon|oneri|ne yapmali|test|tarama|olcek|bilpro|oog|otizm|duzey|kaynastir|tani|sosyometri|aile|kardes/,
+    araclar: ["risk_analizi", "seans_hazirlik", "mudahale_plani", "profil_analizi", "supervizyon", "gorusme_analizi", "olcum_takibi", "test_sonucu", "duzey_taramasi", "mudahale_programi_ara", "form_analizi", "deneme_analizi"] },
+  risk: { re: /risk|kriz|zarar|intihar|olum|istismar|siddet|zorba|tehlike|guvenlik|sevk|ram\b|rapor/,
+    araclar: ["risk_analizi", "risk_kaydet", "ekranda_risk", "risk_kapat", "sevk_kaydet", "sevk_sonuc"] },
+  mudahale: { re: /mudahale|plan|program|hedef|uyum|izlem|takip/,
+    araclar: ["mudahale_plani", "mudahale_kaydet", "ekranda_mudahale", "mudahale_durum", "mudahale_programi_ara", "mudahale_programi_kaydet", "uyum_kaydet", "seans_hazirlik"] },
+  akademik: { re: /deneme|net|lgs|yks|puan|yuzdelik|okul|lise|tercih|taban|konu|ders|calisma|karne|yazili|yil sonu|not ortalam|sinav/,
+    araclar: ["deneme_kaydet", "deneme_analizi", "konu_guncelle", "lgs_konu_onceligi", "hedef_okul", "hedef_okul_kaydet", "lise_taban_puanlari", "sinav_rehberi", "not_kaydet"] },
+  ogrenci: { re: /ekle|yeni ogrenci|nakil|kaydet|devamsiz|profil|kariyer|ilgi|meslek|d2/,
+    araclar: ["ogrenci_ekle", "devamsizlik_kaydet", "profil_puanla", "profil2_guncelle"] },
+  hatirlatma: { re: /hatirla|randevu|takvim|yarin|haftaya|gun sonra|unutma/,
+    araclar: ["hatirlatma_ekle", "ekranda_hatirlatma", "hatirlatma_tamamla"] },
+  rapor: { re: /grafik|sema|diyagram|infografik|rapor|meb|istatistik|sinif|sube|okul genel|sosyometri|kriz kayd|grup calisma|karsilastir|liste/,
+    araclar: ["grafik_ciz", "diyagram_ciz", "infografik_rapor", "meb_raporu", "okul_kayitlari", "sinif_bilgisi"] },
+  veli: { re: /mektup|yazi|davet|veli|bilgilendir|tesekkur|bildirim/, araclar: ["veli_mektubu"] },
+  program: { re: /program|nerede|nasil yap|sekme|ekran|oturum|etkinlik|ozellik|ne yapabil/, araclar: ["program_rehberi", "program_ara", "program_oturumu"] },
+  bilgi: { re: /nedir|ne demek|acikla|kuram|bilgi|kitap|kaynak|arastirma|teknik|yontem|ornek/, araclar: ["kutuphane_ara", "kutuphane_oku", "alan_bilgisi", "sinav_rehberi"] },
+  deneyim: { re: /kendini|ogrendi|ders kaydet|dersler|deneyim|hata yap/, araclar: ["deneyim_gunlugu", "ders_kaydet"] },
+};
+// Mesajda adı geçen tek öğrenci (ad ya da ad + sınıf); birden çok aday varsa null
+function ksAsistanMesajOgrencisi(metin, ctx) {
+  const t = ksSade(String(metin || "")), tk = t.split(/[^a-z0-9ğüşöçı]+/).filter(Boolean);
+  const sinifler = new Set([...t.matchAll(/(\d{1,2})\s*[-/.]?\s*([a-z])(?![a-z])/g)].map(m => m[1] + m[2]));
+  const ad = (o) => ksSade(String(o.name || "").split(/\s+/)[0] || "");
+  let l = (ctx.ogrenciListesi || []).filter(o => { const a = ad(o); return a.length >= 3 && tk.some(w => w === a || (w.startsWith(a) && w.length - a.length <= 4)); });
+  if (l.length > 1 && sinifler.size) { const s2 = l.filter(o => { const m = /(\d{1,2})\D*([a-zçğıöşü])/i.exec(ksSade(o.className || "")); return m && sinifler.has(m[1] + m[2]); }); if (s2.length) l = s2; }
+  return l.length === 1 ? l[0] : null;
+}
+// Öğrencinin hangi sekmelerde kaydı var (sayı ya da var/yok)
+function ksAsistanVeriHaritasi(ctx, o) {
+  const ayni = (x) => pdrAyniOgrenci(x.studentName, x.className, o.name, o.className, x.numara, o.numara);
+  const say = (l) => (l || []).filter(ayni).length;
+  let deneme = 0; try { deneme = Object.keys(pdrSozlukOku(ctx.denemeler || {}, o.name, o.className, o.numara) || {}).filter(k => k !== "7sinif").length; } catch (e) {}
+  let test = 0; try { test = (pdrSozlukOku(ctx.testKayitlari || {}, o.name, o.className, o.numara) || []).length; } catch (e) {}
+  let konu = false; try { konu = !!Object.keys(pdrSozlukOku(ctx.konuHaritasiVerisi || {}, o.name, o.className, o.numara) || pdrSozlukOku(ctx.konuHaritasiVerisi || {}, o.name, o.className) || {}).length; } catch (e) {}
+  const tarama = say(ctx.akademikTaramalar) + say(ctx.liseTaramalar) + say(ctx.ilkokulTaramalar) + say(ctx.bilproDegerlendirmeler) + say(ctx.oogDegerlendirmeler) + say(ctx.castDegerlendirmeler);
+  const sos = (ctx.sosyometri || []).some(x => (!x.yil || !ctx.aktifYil || x.yil === ctx.aktifYil) && ksSade(x.sinif || "") === ksSade(o.className || ""));
+  const form = (ctx.records || []).filter(ayni).filter(r => r.form).length;
+  const olcum = (ctx.records || []).filter(ayni).filter(r => r.olcum).length;
+  const h = { gorusme: say(ctx.records), deneme, test, tarama, konu, sos, form, olcum, risk: say(ctx.riskListesi), bt: say(ctx.bireyiTanima), bdt: say(ctx.bdtAnaliz),
+    profil1: say(ctx.profiles), profil2: say(ctx.profiles2) };
+  let mud = 0; try { mud = Object.entries(ctx.mudahalePlan || {}).filter(([k]) => ksSade(k).startsWith(ksSade(o.name))).reduce((t, [, l]) => t + (l || []).length, 0); } catch (e) {}
+  h.mudahale = mud;
+  return h;
+}
+function ksAsistanAracSecimi(gecmis, ctx, ayar) {
+  const kul = (gecmis || []).filter(m => m.role === "user" && !String(m.content).startsWith("<sonuc"));
+  const son = String((kul[kul.length - 1] || {}).content || "");
+  // Kısa takip mesajlarında ("evet", "onu da ekle") önceki mesaj da hesaba katılır
+  const metin = ksSade((son.split(/\s+/).length < 4 && kul.length > 1 ? String(kul[kul.length - 2].content || "") + " " : "") + son);
+  const sec = new Set(KS_ARAC_GRUPLARI.cekirdek.araclar);
+  let grupSay = 0;
+  Object.entries(KS_ARAC_GRUPLARI).forEach(([g, d]) => { if (d.re && d.re.test(metin)) { d.araclar.forEach(a => sec.add(a)); grupSay++; } });
+  // Hiçbir gruba uymayan soru: değerlendirme + görüşme (en sık kullanılanlar)
+  if (!grupSay) ["degerlendirme", "gorusme"].forEach(g => KS_ARAC_GRUPLARI[g].araclar.forEach(a => sec.add(a)));
+  // Bir önceki istekte kullanılan araçlar kalsın (devam eden iş: "evet", "onu da ekle")
+  const sonKul = (gecmis || []).map(m => m.role === "user" && !String(m.content).startsWith("<sonuc")).lastIndexOf(true);
+  const oncekiKul = (gecmis || []).slice(0, Math.max(0, sonKul)).map(m => m.role === "user" && !String(m.content).startsWith("<sonuc")).lastIndexOf(true);
+  (gecmis || []).slice(Math.max(0, oncekiKul)).forEach(m => { const x = /<sonuc ad="([a-z_0-9]+)"/.exec(String(m.content || "")); if (x) sec.add(x[1]); });
+  // Öğrencinin kaydı olmayan sekmelerin OKUMA araçları çıkar (veri giren araçlar kalır)
+  const o = ksAsistanMesajOgrencisi(son, ctx) || ksAsistanMesajOgrencisi(metin, ctx);
+  let harita = "";
+  if (o) {
+    const h = ksAsistanVeriHaritasi(ctx, o);
+    const cikar = { deneme_analizi: !h.deneme, test_sonucu: !h.test && !h.tarama, duzey_taramasi: !h.tarama, form_analizi: !h.form, olcum_takibi: !h.olcum, profil_analizi: !h.profil1 && !h.gorusme, risk_kapat: !h.risk, mudahale_durum: !h.mudahale, lgs_konu_onceligi: false };
+    Object.entries(cikar).forEach(([a, c]) => { if (c) sec.delete(a); });
+    const v = (n, ad) => `${ad} ${n || "yok"}`;
+    harita = `VERİ HARİTASI (${ksAsistanEtiket(o)}; programda bu öğrenci için hangi sekmede kayıt var): ${[v(h.gorusme, "görüşme"), v(h.deneme, "deneme"), v(h.test, "test"), v(h.tarama, "tarama"), `konu haritası ${h.konu ? "var" : "yok"}`, `sınıf sosyometrisi ${h.sos ? "var" : "yok"}`, v(h.risk, "risk kaydı"), v(h.mudahale, "müdahale planı"), v(h.bt, "bireyi tanıma"), v(h.bdt, "BDT"), v(h.profil1, "Profil 1"), v(h.profil2, "Profil 2"), v(h.form, "form görüşmesi"), v(h.olcum, "ölçüm")].join(", ")}. "yok" olan sekmeyi açmak için araç çağırma; gerekiyorsa danışmana o çalışmanın yapılmasını öner.`;
+  }
+  const liste = [...sec].filter(a => KS_ASISTAN_ARACLAR[a] && ksAsistanAracAcik(a, ayar));
+  return { liste, harita, toplam: Object.keys(KS_ASISTAN_ARACLAR).filter(a => ksAsistanAracAcik(a, ayar)).length };
+}
+// ===== ASİSTAN ARAÇ SEÇİMİ BİTİŞ =====
+function ksAsistanSistem(ayar, ctx, secim) {
   const gunler = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
-  const araclar = Object.entries(KS_ASISTAN_ARACLAR).filter(([ad]) => ksAsistanAracAcik(ad, ayar)).map(([ad, a]) => `- ${ad}${a.yazma ? " [ONAY GEREKİR]" : a.ekranYazma ? " [EKRANDA DOLDURUR]" : ""}: ${a.aciklama} Girdi: ${a.girdi}`).join("\n");
+  const araclar = Object.entries(KS_ASISTAN_ARACLAR).filter(([ad]) => ksAsistanAracAcik(ad, ayar) && (!secim || secim.liste.includes(ad))).map(([ad, a]) => `- ${ad}${a.yazma ? " [ONAY GEREKİR]" : a.ekranYazma ? " [EKRANDA DOLDURUR]" : ""}: ${a.aciklama} Girdi: ${a.girdi}`).join("\n");
   const ekranModu = (ayar.kayitYontemi || "ekran") !== "sohbet";
   const ek = String(ayar.kurallar || "").trim() || PDR_ASISTAN_VARSAYILAN_KURALLAR;
   return `Sen "PDR Asistanı"sın: bir okul psikolojik danışmanının (rehber öğretmen) öğrenci takip programının içinde çalışan yardımcısısın. Danışmanla meslektaş gibi, doğru Türkçe imlayla konuşursun.
@@ -14579,8 +14672,8 @@ VERİ VE GİZLİLİK
 - Öğrenci adları sana "Öğrenci-1" gibi kodlarla, sınıflar "8-Ş1" gibi, diğer kişi/okul/yer adları "[KİŞİ-1]", "[OKUL-1]", "[YER-1]" gibi gelir. Kodları aynen kullan; gerçek adları tahmin etmeye çalışma. Danışman ekranında kodları gerçek adlarla görür.
 - Öğrencilerle ilgili bilgiyi yalnızca araçlardan al. Araç sonucunda olmayan bilgiyi uydurma; gerekirse araç çağır ya da bilmediğini söyle.
 
-ARAÇLAR
-${araclar}
+ARAÇLAR${secim ? ` (bu soru için seçilen ${secim.liste.length}/${secim.toplam} araç; gereken araç listede yoksa adıyla yine çağırabilirsin ya da arac_listesi ile tam listeyi al)` : ""}
+${araclar}${secim && secim.harita ? "\n\n" + secim.harita : ""}
 
 ARAÇ ÇAĞIRMA BİÇİMİ
 Araç çalıştırmak istediğinde yanıtına YALNIZCA bir ya da birkaç blok yaz:
@@ -14893,7 +14986,9 @@ async function ksSupKaydet(ctx, liste, yanit, talep) {
 }
 // ── 🎓 PROF. HAKAN SÜPERVİZYONU BİTİŞ ──
 async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTur = 8, iptal = null }) {
-  const sistem = ksAsistanSistem(ayar, ctx);
+  // Ücretsiz modelde (günlük kota) yalnız soruyla ilgili araçlar; Claude'da önbellek için tam liste
+  let secim = null; try { if (ayar && ayar.saglayici === "ucretsiz" && ayar.aracSecimi !== false) secim = ksAsistanAracSecimi(gecmis, ctx, ayar); } catch (e) { secim = null; }
+  const sistem = ksAsistanSistem(ayar, ctx, secim);
   ksAsistanGecmisDuzenle(gecmis);
   let toplamGiris = 0, toplamCikis = 0, toplamUcret = 0, toplamOnb = 0, sonGiden = "", model = "", yedek = false, kritik = false, ekranIsi = false;
   let birikmis = "", devamBas = -1, devamSay = 0;   // yarıda kesilen yanıtın parçaları

@@ -14680,7 +14680,7 @@ Araç çalıştırmak istediğinde yanıtına YALNIZCA bir ya da birkaç blok ya
 <arac>{"ad": "araç_adı", "girdi": {...}}</arac>
 Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç çağır ya da danışmana nihai yanıtını düz metin olarak yaz (nihai yanıtta <arac> bloğu kullanma).
 - Öğrenciyi "ogrenci" alanında adıyla/koduyla belirt; aynı adda birden çok öğrenci varsa "sinif" ekle.
-- HIZ İÇİN: Bir iş için gereken okuma araçlarının HEPSİNİ aynı yanıtta birlikte çağır (ör. ogrenci_dosyasi + liste), tek tek tur atma. Gereksiz araç çağırma.
+- HIZ İÇİN: Bir iş için gereken okuma araçlarının HEPSİNİ aynı yanıtta birlikte çağır (ör. ogrenci_dosyasi + test_sonucu + deneme_analizi), tek tek tur atma. Gereksiz araç çağırma. Program öğrenci özetini isteğe hazır eklediyse (<sonuc ad="ogrenci_ozeti">) öğrenciyi yeniden arama; özet yetiyorsa doğrudan yanıtla, ayrıntı gerekiyorsa gereken araçları tek yanıtta birlikte iste.
 - Danışman tarihi "yarın", "cuma" gibi söylerse bugünün tarihine göre GG.AA.YYYY olarak hesapla.
 - "Bugün ne yapmalıyım", "bugün kimlerle ilgilenmeliyim", "öncelikler" gibi sorularda İLK bugun_brifing aracını çağır; program öncelik sırasını kendisi çıkarır, sen sırayı bozmadan kısa anlat. Gerekirse liste aracıyla ayrıntıya in.
 - Sınıf, okul ya da öğrenci düzeyinde "hangi konular konuşulmuş", "kaç veli görüşmesi", "en çok hangi sınıfla", "eğilim", "karşılaştır", "dönem özeti", "kaç öğrencide zorbalık geçti" gibi sayı/analiz sorularında gorusme_analizi kullan; sayıları kendin tahmin etme. Yorum yaparken bulguyu, olası anlamını ve somut bir sonraki adımı söyle (örn. sınıf rehberlik etkinliği, veli toplantısı, grup çalışması).
@@ -15034,6 +15034,26 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
       return bitir("🎓 Süpervizör şu an yanıt veremedi: " + ksAsistanKisalt((e && e.message) || String(e), 160));
     }
   }
+  // ⚡ Ön yükleme: mesajda adı geçen tek öğrencinin özeti ilk istekle birlikte gider; model öğrenciyi aramak ve
+  // özetini açmak için ayrıca tur atmaz. Kayıt/ekleme gibi yazma isteklerinde ve süpervizör isteğinde yapılmaz.
+  try {
+    if (!ksSupManuelMi(sonKullanici) && ayar.onYukleme !== false && gecmis.length && gecmis[gecmis.length - 1].role === "user" && !String(gecmis[gecmis.length - 1].content).startsWith("<sonuc")) {
+      const sd = ksSade(sonKullanici);
+      const yazmaNiyet = /(hatirlat|ekle|kaydet|duzelt|guncelle|\bsil\b|ekranda|\bac\b|goster|nakil|yaz\b)/.test(sd) && !/(degerlendir|analiz|durum|nasil|incele|ozet|hazirlik|oneri|plan|risk|supervizyon|yorum)/.test(sd);
+      const o = !yazmaNiyet ? ksAsistanMesajOgrencisi(sonKullanici, ctx) : null;
+      const yakinda = gecmis.slice(-6).some(m => String(m.content || "").includes('<sonuc ad="ogrenci_ozeti">') || String(m.content || "").includes('<sonuc ad="ogrenci_dosyasi">'));
+      if (o && !yakinda) {
+        let oz = String(await KS_ASISTAN_ARACLAR.ogrenci_ozeti.calistir({ ogrenci: o.name, sinif: o.className }, ctx, o));
+        try { if (!/⚠ KRİTİK/.test(oz)) { const X = ksSupBaglam(ksAsistanGirdi(ctx, o)); if (X.c.kritikTurler.length) oz = `⚠ KRİTİK: ${X.c.kritikTurler.join(", ")} ile ilgili ifadeler var — önce güvenlik.\n` + oz; } } catch (e) {}
+        oz = ksAsistanKisalt(oz, 4500);
+        if (/⚠ KRİTİK/.test(oz)) kritik = true;
+        sonOgr = o; kullanilanAraclar.add("ogrenci_ozeti"); aracSonuclari.ogrenci_ozeti = oz;
+        olay({ tip: "arac", ad: "ogrenci_ozeti", ogrenci: ksAsistanEtiket(o), ogrKimlik: { name: o.name, className: o.className || "", numara: o.numara || "" }, sonuc: oz });
+        gecmis.push({ role: "assistant", content: `<arac>{"ad": "ogrenci_ozeti", "girdi": {"ogrenci": ${JSON.stringify(o.name)}, "sinif": ${JSON.stringify(o.className || "")}}}</arac>` });
+        gecmis.push({ role: "user", content: `<sonuc ad="ogrenci_ozeti">\n(Program bu özeti isteğinle birlikte hazırladı; ogrenci_ara ve ogrenci_ozeti'yi tekrar çağırma.)\n${oz}\n</sonuc>` });
+      }
+    }
+  } catch (e) { if (e && e.durduruldu) throw e; }
   for (let tur = 0; tur < enFazlaTur; tur++) {
     olay({ tip: "dusunuyor" });
     ksAsistanDurdu(iptal);
@@ -15325,8 +15345,17 @@ async function ksEkranBul(secici, ms = 4000) {
   }
   return null;
 }
+// ⚡ Hızlı ekran: imleç ve harf harf yazma animasyonu olmadan doldurur (Ayarlar → Hızlı ekran)
+const ksEkranHizli = () => { try { return pdrAsistanAyarOku().hizliEkran === true; } catch (e) { return false; } };
 async function ksEkranGit(el) {
   ksEkranKontrol();
+  if (ksEkranHizli()) {
+    el.scrollIntoView({ behavior: "auto", block: "center" });
+    const r = el.getBoundingClientRect(); const k = ksEkranKatman(); const i = k.querySelector("#pdr-asistan-imlec");
+    i.style.left = (r.left + Math.min(r.width * 0.5, 40)) + "px"; i.style.top = (r.top + r.height * 0.55) + "px";
+    ksEkranHalka(el); ksEkranBalonKonum(el);
+    await ksEkranBekle(60); return;
+  }
   el.scrollIntoView({ behavior: "smooth", block: "center" });
   await ksEkranBekle(380);
   const r = el.getBoundingClientRect();
@@ -15341,7 +15370,7 @@ async function ksEkranTikla(el) {
   d.style.left = (r.left + Math.min(r.width * 0.5, 40)) + "px"; d.style.top = (r.top + r.height * 0.55) + "px";
   d.classList.remove("tik"); void d.offsetWidth; d.classList.add("tik");
   el.click();
-  await ksEkranBekle(350);
+  await ksEkranBekle(ksEkranHizli() ? 120 : 350);
 }
 function ksEkranDegerYaz(el, v) {
   const proto = el.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : el.tagName === "SELECT" ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
@@ -15353,17 +15382,17 @@ async function ksEkranYaz(el, metin) {
   await ksEkranGit(el);
   try { el.focus({ preventScroll: true }); } catch (e) {}
   const s = String(metin || "");
-  const adim = Math.max(1, Math.ceil(s.length / 60));
-  for (let n = adim; n < s.length + adim; n += adim) {
+  const adim = ksEkranHizli() ? s.length + 1 : Math.max(1, Math.ceil(s.length / 60));
+  for (let n = adim; n < s.length + adim && !ksEkranHizli(); n += adim) {
     ksEkranKontrol();
     ksEkranDegerYaz(el, s.slice(0, Math.min(n, s.length)));
     await ksEkranBekle(28);
   }
   ksEkranDegerYaz(el, s);
   try { el.blur(); } catch (e) {}
-  await ksEkranBekle(200);
+  await ksEkranBekle(ksEkranHizli() ? 60 : 200);
 }
-async function ksEkranSec(el, deger) { await ksEkranGit(el); ksEkranDegerYaz(el, deger); await ksEkranBekle(300); }
+async function ksEkranSec(el, deger) { await ksEkranGit(el); ksEkranDegerYaz(el, deger); await ksEkranBekle(ksEkranHizli() ? 100 : 300); }
 function ksEkranAyniOgr(el, o) { return el && ksSade(el.getAttribute("data-ad") || "") === ksSade(o.name || "") && ksSade(el.getAttribute("data-sinif") || "") === ksSade(o.className || ""); }
 
 // Sekmeyi aç (öğrenci verilirse önce o öğrenci etkin yapılır)
@@ -35903,6 +35932,14 @@ function AsistanEkrani({
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: TEXT, marginBottom: 10, marginTop: -4, cursor: "pointer" }}>
             <input type="checkbox" checked={ayar.hizliKomut !== false} onChange={e => ayarDegis({ hizliKomut: e.target.checked })} />
             ⚡ Hızlı komutlar ("Ali'nin dosyasını aç" gibi net istekleri modele gitmeden anında yap)
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: TEXT, marginBottom: 10, marginTop: -4, cursor: "pointer" }}>
+            <input type="checkbox" data-testid="ayar-onyukleme" checked={ayar.onYukleme !== false} onChange={e => ayarDegis({ onYukleme: e.target.checked })} />
+            ⚡ Öğrenci özetini baştan gönder (mesajda adı geçen öğrencinin özeti ilk istekle gider; asistan aramak için ayrıca tur atmaz)
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: TEXT, marginBottom: 10, marginTop: -4, cursor: "pointer" }}>
+            <input type="checkbox" data-testid="ayar-hizli-ekran" checked={ayar.hizliEkran === true} onChange={e => ayarDegis({ hizliEkran: e.target.checked })} />
+            ⚡ Hızlı ekran (formu harf harf yazma ve imleç animasyonu olmadan anında doldurur; Kaydet'e yine sen basarsın)
           </label>
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: TEXT, marginBottom: 10, marginTop: -4, cursor: "pointer" }}>
             <input type="checkbox" checked={ayar.onbellek !== false} onChange={e => ayarDegis({ onbellek: e.target.checked })} />

@@ -13313,6 +13313,29 @@ function ksTaramaOzetMetni(ctx, o) {
   } catch (e) {}
   return p.join("\n\n");
 }
+// Aile ve ev: kardeş sayısı, evde kimlerle yaşadığı, aile yapısındaki değişiklikler.
+// Ayrı bir alan yok; bilgi görüşme notlarında (form cevapları dahil), Bireyi Tanıma "Aile" maddelerinde ve
+// Profil 2 aile notunda dağınık. Bunlardan ilgili cümleler toplanır (yapay zekâsız, cihazda).
+const KS_AILE_EV_RE = /(kardes|abla|abi\b|abisi|agabey|ikiz|tek cocuk|ile (birlikte )?(yasiyor|kaliyor|oturuyor)|yaninda (kaliyor|yasiyor)|evde kimlerle|evde yasayan|aile hakkinda|aile yapisi|anneanne|babaanne|dedesi|ninesi|bosan|ayri (yasiyor|yasi|evde)|ayrilmis|ayrildi|uvey|koruyucu aile|vefat|hayatini kaybet|cekirdek aile|genis aile)/;
+function ksAsistanAileEv(ctx, o, adet) {
+  if (!Array.isArray(ctx.records)) return ""; // görüşme kayıtları verilmeyen bağlamda "geçmiyor" denmesin
+  const ayni = (x) => pdrAyniOgrenci(x.studentName, x.className, o.name, o.className, x.numara, o.numara);
+  const parca = [];
+  (ctx.records || []).filter(ayni).sort((a, c) => ksTarihSirala(c, a)).forEach(r => {
+    const metin = String(pdrKayitMetni(r) || "") + (r.ozelNot ? " " + r.ozelNot : "");
+    metin.split(/\n+|(?<=[.!?…])\s+|\s\|\s|;\s/).map(x => x.trim()).filter(Boolean).forEach(c => {
+      if (KS_AILE_EV_RE.test(ksSade(c)) && !parca.some(p => p.c === c)) parca.push({ t: r.date, c });
+    });
+  });
+  const bt = (ctx.bireyiTanima || []).filter(x => ayni(x) && x.kategori === "aile").map(x => ({ t: x.tarih, c: x.metin }));
+  const p2 = (ctx.profiles2 || []).find(x => pdrAyniOgrenci(x.studentName, x.className, o.name, o.className));
+  const l = [];
+  if (p2 && String(p2.aile_notu || "").trim()) l.push(`Profil 2 aile notu: ${ksAsistanKisalt(p2.aile_notu, 200)}`);
+  bt.slice(0, adet).forEach(x => l.push(`Bireyi Tanıma (aile${x.t ? ", " + x.t : ""}): ${ksAsistanKisalt(x.c, 160)}`));
+  parca.slice(0, adet).forEach(x => l.push(`Görüşme ${x.t || ""}: ${ksAsistanKisalt(x.c, 180)}`));
+  if (!l.length) return "AİLE VE EV: kardeş sayısı ve evde kimlerle yaşadığı kayıtlarda geçmiyor (gerekirse danışmana sor; tahmin etme).";
+  return `AİLE VE EV (kardeş, evde kimlerle yaşadığı, aile yapısı — kayıtlardan aynen):\n${l.map(x => "• " + x).join("\n")}`;
+}
 // Özel durum: kaynaştırma / tanı (öğrenci kaydı + son kaynaştırma değerlendirmesi), sınıf mevcudu, sosyometri.
 // Öğrenciyi değerlendiren her araç (özet, dosya, kapalı sistem) bunu görür.
 function ksAsistanOzelDurum(ctx, o, kisa) {
@@ -13330,6 +13353,7 @@ function ksAsistanOzelDurum(ctx, o, kisa) {
     const sinifOgr = (ctx.ogrenciler || []).filter(x => (!x.yil || !ctx.aktifYil || x.yil === ctx.aktifYil) && ksSade(x.className || "") === ksSade(o.className || ""));
     if (sinifOgr.length) { const kn = sinifOgr.filter(x => (x.kaynastirma || []).length).length; b.push(`SINIF: ${o.className} — kayıtlı ${sinifOgr.length} öğrenci${kn ? `, ${kn} kaynaştırma öğrencisi` : ""}.`); }
   } catch (e) {}
+  try { const ae = ksAsistanAileEv(ctx, o, kisa ? 3 : 6); if (ae) b.push(ae); } catch (e) {}
   if (kisa && Array.isArray(ctx.sosyometri)) { try { const sos = String(ksAsistanEkKayitlar(ctx, o) || "").split("\n").find(l => l.startsWith("SOSYOMETRİ")); b.push(sos || "SOSYOMETRİ: bu öğrencinin sınıfı için bu yıl kayıt yok."); } catch (e) {} }
   return b.join("\n");
 }
@@ -14475,7 +14499,7 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - Bir öğrenci için müdahale planı yaptığında ya da kaydettiğinde, ardından mudahale_programi_ara ile (aranan: planın anahtar kavramları, ogrenci: öğrenci) Müdahale Programları kütüphanesinden aday oturumları al; en uygun 1-3 oturumu seçip mudahale_programi_kaydet ile (plan kaydedildiyse plana_ekle: true) onaya sun. Danışman 'program/etkinlik/oturum öner' dediğinde de aynısını yap. Listede olmayan oturum adı uydurma.
 - Bir araç sonucunda "🎓 SÜPERVİZÖR … düzeltme istedi" yazarsa notları uygula ve aracı düzeltilmiş içerikle hemen yeniden çağır; danışmana soru sorma. Süpervizör notu "uygun" ise yanıtında tek cümleyle belirtebilirsin.
 - Lise taban puanı, yüzdelik dilim, "kaç netle hangi okul", tercih listesi sorulduğunda lise_taban_puanlari kullan (Beylikdüzü, Esenyurt, Başakşehir, Büyükçekmece, Avcılar ayrıntılı). Öğrenci adı geçiyorsa önce deneme_analizi ile ortalama netini al. Araçta olmayan okulun puanını uydurma; değerlerin 2026 tabanı olduğunu ve her yıl değiştiğini söyle.
-- Öğrenciyi değerlendirirken (risk, müdahale, seans hazırlığı, çalışma programı, veli yazısı) öğrenci özeti/dosyasındaki KAYNAŞTIRMA / TANI, SINIF ve SOSYOMETRİ satırlarını dikkate al: tanı varsa önerileri ona göre uyarla (BEP, sınav/ödev uyarlaması, RAM süreci), hiç seçilmeyen öğrencide akran ilişkisini ele al. Tanıyı etiket gibi kullanma, tanı koyma; kayıtta tanı yoksa tanı varmış gibi konuşma.
+- Öğrenciyi değerlendirirken (risk, müdahale, seans hazırlığı, çalışma programı, veli yazısı) öğrenci özeti/dosyasındaki KAYNAŞTIRMA / TANI, SINIF, AİLE VE EV (kardeş sayısı, evde kimlerle yaşadığı) ve SOSYOMETRİ satırlarını dikkate al: tanı varsa önerileri ona göre uyarla (BEP, sınav/ödev uyarlaması, RAM süreci), hiç seçilmeyen öğrencide akran ilişkisini ele al. Tanıyı etiket gibi kullanma, tanı koyma; kayıtta tanı yoksa tanı varmış gibi konuşma.
 - Veri girişi: deneme netleri → deneme_kaydet; Profil 1 boyut puanları → profil_puanla; kariyer hedefi, ilgi, aile notu, d2 → profil2_guncelle; devamsızlık → devamsizlik_kaydet; yeni öğrenci → ogrenci_ekle (önce ogrenci_ara); konu tamamlama yüzdesi → konu_guncelle; risk kapatma → risk_kapat; plan durumu → mudahale_durum; hatırlatmayı bitirme → hatirlatma_tamamla. Hepsi onay ister; danışmanın söylediği değerleri aynen ver, tahmin etme.
 - Danışman öğrencinin yazılı sınav puanını ya da yıl sonu not ortalamasını söylerse not_kaydet kullan (birden çok dersi tek çağrıda ver). Sayıları aynen yaz; hangi yazılı olduğu belli değilse yazili alanını boş bırak, program boş olana yazar.
 - Danışman bir yanıtı ya da bu sohbeti öğrencinin dosyasına kaydetmek/göndermek isterse asistan_notu_kaydet kullan (kapsam: son ya da hepsi). Kaydedilecek metni yeniden yazma; program yanıtları aynen kaydeder.
@@ -36098,7 +36122,7 @@ function ProfDanismaEkrani({
     return ksTaramaOzetMetni({ bilproDegerlendirmeler: bilproDegerlendirmeler || [], oogDegerlendirmeler: oogDegerlendirmeler || [], castDegerlendirmeler: castDegerlendirmeler || [],
       pasDegerlendirmeler: pasDegerlendirmeler || [], pasPerformanslar: pasPerformanslar || [], ilkokulTaramalar: ilkokulTaramalar || [],
       akademikTaramalar: akademikTaramalar || [], liseTaramalar: liseTaramalar || [],
-      ...(Array.isArray(ogrenciler) ? { ogrenciler, testKayitlari: testKayitlari || {}, aktifYil } : {}), ...(Array.isArray(sosyometri) ? { sosyometri } : {}) }, { name: ad, className: sinif, numara });
+      ...(Array.isArray(ogrenciler) ? { ogrenciler, testKayitlari: testKayitlari || {}, aktifYil, records: records || [], profiles2: profiles2 || [] } : {}), ...(Array.isArray(sosyometri) ? { sosyometri } : {}) }, { name: ad, className: sinif, numara });
   }
   function tumVeriHazirla(ad, sinif) {
     const adLower = ad.toLocaleLowerCase("tr").trim();

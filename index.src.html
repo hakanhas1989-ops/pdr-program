@@ -12985,6 +12985,29 @@ const KS_ASISTAN_ARACLAR = {
       return `Sevk sonucu kaydedildi (${s.sevkYeri || "sevk"}, ${s.tarih}).`;
     },
   },
+  deneyim_gunlugu: {
+    aciklama: "Kendi çalışma kaydını getirir (cihazda tutulan son işler): hangi araçları kullandığın, onaylanan/reddedilen işlemler, hata veren ya da yapılamayan işler, danışmanın 👎 verdiği ya da düzelterek yeniden sorduğu istekler ve şu an onaylı dersler. Danışman 'kendini değerlendir', 'nerede hata yapıyorsun', 'ne öğrendin' dediğinde kullan; sonra bulduğun örüntüleri anlat ve en fazla 5 ders öner, kabul ederse ders_kaydet ile kaydet.",
+    girdi: '{}', yontem: "hepsi",
+    calistir: () => pdrDeneyimOzeti(),
+  },
+  ders_kaydet: {
+    aciklama: "Deneyimden çıkardığın dersleri kaydeder ya da eski dersleri siler (ONAY GEREKİR). Her ders tek cümlelik, genel ve uygulanabilir olmalı; öğrenci adı, sınıf, numara ya da kişisel bilgi içeremez (içeren ders kaydedilmez). En çok 20 ders tutulur. sil: silinecek derslerin numaraları (deneyim_gunlugu listesindeki).",
+    girdi: '{"dersler": ["kısa genel kural"], "sil": [1]}', yazma: true, yontem: "hepsi",
+    onayOzeti: (g) => {
+      const eski = pdrDerslerOku(), sil = (Array.isArray(g.sil) ? g.sil : []).map(Number).filter(n => n >= 1 && n <= eski.length);
+      const yeni = (Array.isArray(g.dersler) ? g.dersler : []).map(x => String(x || "").trim()).filter(Boolean);
+      return `🧠 Asistanın öğrendikleri${yeni.length ? `\n\nEKLENECEK:\n${yeni.map(x => (pdrDersKisiselMi(x) ? "⚠ (kişisel bilgi var, kaydedilmeyecek) " : "• ") + x).join("\n")}` : ""}${sil.length ? `\n\nSİLİNECEK:\n${sil.map(n => "✕ " + eski[n - 1].metin).join("\n")}` : ""}\n\nOnaylarsan bu dersler bundan sonraki her istekte asistana verilir. İstediğin an Ayarlar → 🧠 Öğrendikleri'nden silebilirsin.`;
+    },
+    calistir: async (g) => {
+      const eski = pdrDerslerOku(), sil = new Set((Array.isArray(g.sil) ? g.sil : []).map(Number));
+      const yeni = (Array.isArray(g.dersler) ? g.dersler : []).map(x => String(x || "").replace(/\s+/g, " ").trim().slice(0, 220)).filter(Boolean);
+      const red = yeni.filter(pdrDersKisiselMi), kabul = yeni.filter(x => !pdrDersKisiselMi(x) && !eski.some(e => e.metin === x));
+      const kalan = eski.filter((_, i) => !sil.has(i + 1));
+      const sonuc = [...kalan, ...kabul.map(metin => ({ id: "ders" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), metin, tarih: today() }))];
+      pdrDerslerYaz(sonuc);
+      return `${kabul.length} ders eklendi, ${eski.length - kalan.length} ders silindi; şu an ${Math.min(sonuc.length, PDR_DERS_SINIR)} ders var.${red.length ? ` ${red.length} ders kişisel bilgi içerdiği için kaydedilmedi; genel olarak yeniden yaz.` : ""}${sonuc.length > PDR_DERS_SINIR ? " Sınır aşıldığı için en eski dersler düştü." : ""}`;
+    },
+  },
   gorusme_duzelt: {
     // Aynı grup görüşmesinin diğer katılımcı kayıtları (aynı tarih, aynı ortak not, birbirini katılımcı olarak gösteren)
     grupKayitlari: (r, ctx) => !(r.grupKatilimcilari || []).length ? [r] : (ctx.records || []).filter(x => x.id === r.id || (x.date === r.date && (x.grupKatilimcilari || []).includes(r.studentName) && (r.grupKatilimcilari || []).includes(x.studentName) && String(x.raw || x.summary || "").slice(0, 60) === String(r.raw || r.summary || "").slice(0, 60))),
@@ -14471,6 +14494,62 @@ function ksKademeMetni(ctx) {
 - Öğrencinin sınıf düzeyini her zaman kayıtlı sınıfından (örn. "7-Ş1" → 7. sınıf) al; yaşını, gelişim dönemini, önerilerini ve dilini o düzeye göre ayarla (ilkokulda oyun temelli, somut, veliyle birlikte; ortaokulda ergenliğe uygun; lisede özerkliğe saygılı, kariyer odaklı). Başka kademeye ait sınav, ders ya da test önerme (örn. ilkokulda LGS/deneme, lisede LGS konuları, ortaokulda alan seçimi/YKS).
 - Danışman kademe dışı bir sınıf düzeyi söylerse (örn. ortaokulda "3. sınıf"), bunun programın kademesine uymadığını kibarca belirt ve doğrulamasını iste.`;
 }
+// ===== ASİSTAN DENEYİM DEFTERİ BAŞLANGIÇ =====
+// Model kendisi öğrenmez; program asistanın işlerini cihazda kaydeder (onay/ret, hata, 👍/👎, danışmanın
+// düzelterek yeniden sorduğu istekler). "Kendini değerlendir" denince asistan bu kayda bakıp ders önerir;
+// danışman onaylarsa ders her istekte asistana verilir. Derslerde öğrenci adı ve kişisel bilgi olmaz.
+const PDR_DENEYIM_ANAHTAR = "pdr_asistan_deneyim", PDR_DERS_ANAHTAR = "pdr_asistan_dersler", PDR_DENEYIM_SINIR = 300, PDR_DERS_SINIR = 20;
+function pdrDeneyimOku() { try { const l = JSON.parse(localStorage.getItem(PDR_DENEYIM_ANAHTAR) || "[]"); return Array.isArray(l) ? l : []; } catch (e) { return []; } }
+function pdrDeneyimYaz(l) { try { localStorage.setItem(PDR_DENEYIM_ANAHTAR, JSON.stringify(l.slice(-PDR_DENEYIM_SINIR))); } catch (e) {} }
+function pdrDeneyimEkle(o) {
+  const id = "d" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+  const k = (t, n) => { t = String(t || "").replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n - 1) + "…" : t; };
+  const kayit = { id, t: today(), soru: k(o.soru, 160), model: o.model || "",
+    araclar: (o.araclar || []).filter(a => a && a.ad).map(a => ({ ad: a.ad, ...(a.onay !== undefined ? { onay: a.onay } : {}), ...(a.sonuc ? { sonuc: k(a.sonuc, 140) } : {}) })).slice(0, 12),
+    ...(o.hata ? { hata: k(o.hata, 200) } : {}), ...(o.durdu ? { durdu: true } : {}), ...(o.duzeltme ? { duzeltme: k(o.duzeltme, 160) } : {}), ...(o.yerel ? { yerel: true } : {}) };
+  pdrDeneyimYaz([...pdrDeneyimOku(), kayit]);
+  return id;
+}
+function pdrDeneyimPuanla(id, puan) { if (!id) return; pdrDeneyimYaz(pdrDeneyimOku().map(x => x.id === id ? { ...x, puan: x.puan === puan ? 0 : puan } : x)); }
+function pdrDerslerOku() { try { const l = JSON.parse(localStorage.getItem(PDR_DERS_ANAHTAR) || "[]"); return Array.isArray(l) ? l : []; } catch (e) { return []; } }
+function pdrDerslerYaz(l) { try { localStorage.setItem(PDR_DERS_ANAHTAR, JSON.stringify(l.slice(-PDR_DERS_SINIR))); } catch (e) {} }
+// Ders metni kişisel bilgi içeriyor mu? (kayıtlı öğrenci adı, uzun sayı, e-posta, telefon)
+function pdrDersKisiselMi(t) {
+  const x = String(t || "");
+  if (/\d{5,}|@|\b0?5\d{2}\s?\d{3}/.test(x)) return true;
+  try { if (PDR_KALKAN.regex) { PDR_KALKAN.regex.lastIndex = 0; let m; const re = new RegExp(PDR_KALKAN.regex.source, "gu"); while ((m = re.exec(x))) { const d = PDR_KALKAN.desen.get(m[2]); if (d && (d.tur === "tam" || /^\p{Lu}/u.test(m[2]))) return true; } } } catch (e) {}
+  try { if (PDR_KALKAN.maskeRegex) { const re = new RegExp(PDR_KALKAN.maskeRegex.source, "gu"); if (re.test(x)) return true; } } catch (e) {}
+  return /Öğrenci-\d+|\[(KİŞİ|OKUL|YER)-\d+\]/.test(x);
+}
+function pdrDersMetni() {
+  const l = pdrDerslerOku().filter(d => d && d.metin);
+  return l.length ? `\n\nDENEYİMDEN ÖĞRENDİKLERİN (danışman onayladı; bunlara uy)\n${l.map(d => "- " + d.metin).join("\n")}` : "";
+}
+function pdrDeneyimOzeti() {
+  const l = pdrDeneyimOku();
+  if (!l.length) return "Deneyim kaydı boş: henüz kaydedilmiş iş yok.";
+  const ilk = l[0].t, son = l[l.length - 1].t;
+  const arac = {}; let onay = 0, ret = 0;
+  l.forEach(x => (x.araclar || []).forEach(a => { if (a.onay === true) onay++; else if (a.onay === false) ret++; else arac[a.ad] = (arac[a.ad] || 0) + 1; }));
+  const hatalar = l.filter(x => x.hata || (x.araclar || []).some(a => /bulunamad|kayıtlı değil|yapılmadı|eklenmedi|anlaşılamadı|doldurulmadı|verilemez/i.test(a.sonuc || "")));
+  const retli = l.filter(x => (x.araclar || []).some(a => a.onay === false));
+  const kotu = l.filter(x => x.puan === -1), iyi = l.filter(x => x.puan === 1), duz = l.filter(x => x.duzeltme), durdu = l.filter(x => x.durdu);
+  const satir = (x) => `• ${x.t} · "${x.soru}"${(x.araclar || []).length ? " → " + x.araclar.map(a => a.ad + (a.onay === false ? " (REDDEDİLDİ)" : "") + (a.sonuc && /bulunamad|kayıtlı değil|yapılmadı|eklenmedi|anlaşılamadı|doldurulmadı|verilemez/i.test(a.sonuc) ? ` [${a.sonuc}]` : "")).join(", ") : ""}${x.hata ? ` [HATA: ${x.hata}]` : ""}${x.duzeltme ? ` [danışman önce şöyle sormuştu, beğenmeyip düzeltti: "${x.duzeltme}"]` : ""}`;
+  const b = [`DENEYİM KAYDI (${l.length} iş, ${ilk} – ${son})`,
+    `Araç kullanımı: ${Object.entries(arac).sort((a, c) => c[1] - a[1]).slice(0, 12).map(([a, n]) => `${a} ${n}`).join(", ") || "—"}`,
+    `Onay isteyen işlemler: ${onay} onaylandı, ${ret} reddedildi. Danışman puanı: 👍 ${iyi.length}, 👎 ${kotu.length}. Düzeltip yeniden sorduğu: ${duz.length}. Yarıda durdurduğu: ${durdu.length}.`];
+  if (kotu.length) b.push(`\n👎 BEĞENİLMEYEN YANITLAR:\n${kotu.slice(-10).map(satir).join("\n")}`);
+  if (retli.length) b.push(`\nREDDEDİLEN İŞLEMLER:\n${retli.slice(-10).map(satir).join("\n")}`);
+  if (hatalar.length) b.push(`\nHATA / YAPILAMAYAN İŞLER:\n${hatalar.slice(-12).map(satir).join("\n")}`);
+  if (duz.length) b.push(`\nDANIŞMANIN DÜZELTEREK YENİDEN SORDUĞU İSTEKLER:\n${duz.slice(-8).map(satir).join("\n")}`);
+  if (durdu.length) b.push(`\nYARIDA DURDURULAN:\n${durdu.slice(-5).map(satir).join("\n")}`);
+  if (iyi.length) b.push(`\n👍 BEĞENİLEN YANITLAR:\n${iyi.slice(-6).map(satir).join("\n")}`);
+  const d = pdrDerslerOku();
+  b.push(`\nŞU AN ONAYLI DERSLER (${d.length}/${PDR_DERS_SINIR}):\n${d.length ? d.map((x, i) => `${i + 1}. ${x.metin}`).join("\n") : "(yok)"}`);
+  b.push(`\nŞimdi kendini değerlendir: tekrarlayan hata ve beğenilmeme örüntülerini bul, nedenini kısaca açıkla ve en fazla 5 yeni, kısa, genel ders öner (ad, sınıf, numara ve kişisel bilgi YAZMA; "Öğrenci-3" gibi kod da yazma; tek tek olayları değil genel kuralı yaz). Gereksiz ya da çelişen eski dersleri silmeyi öner. Danışmana göster; kabul ederse ders_kaydet ile kaydet.`);
+  return b.join("\n");
+}
+// ===== ASİSTAN DENEYİM DEFTERİ BİTİŞ =====
 function ksAsistanSistem(ayar, ctx) {
   const gunler = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
   const araclar = Object.entries(KS_ASISTAN_ARACLAR).filter(([ad]) => ksAsistanAracAcik(ad, ayar)).map(([ad, a]) => `- ${ad}${a.yazma ? " [ONAY GEREKİR]" : a.ekranYazma ? " [EKRANDA DOLDURUR]" : ""}: ${a.aciklama} Girdi: ${a.girdi}`).join("\n");
@@ -14541,7 +14620,7 @@ DEĞİŞTİRİLEMEZ KURALLAR
 6. Yanıtların kısa ve uygulanabilir olsun. Uzun araç çıktısını olduğu gibi kopyalama; özetle, önemli noktaları ve sonraki adımı belirt. Markdown başlığı ve tablo kullanma; gerekirse kısa maddeler kullan.
 
 DANIŞMANIN KURALLARI
-${ek}
+${ek}${pdrDersMetni()}
 
 Bugün: ${today()} ${gunler[new Date().getDay()]}.`;
 }
@@ -35245,6 +35324,7 @@ function AsistanNotlariSekmesi({ ogrenci, sinif, numara, asistanNotlari, setAsis
 }
 const PDR_ASISTAN_ORNEKLER = [
   "Bugün öncelikle kimlerle ilgilenmeliyim?",
+  "🧠 Kendini değerlendir",
   "3 haftadır görüşmediğim riskli öğrencileri listele",
   "Açık hatırlatmalarım neler?",
   "Son görüşmelerimi özetle",
@@ -35366,7 +35446,8 @@ async function pdrAsistanIstek(m, kullanilan, ctx) {
       adimlar.push({ ad: yk.ad, ogrenci: yk.ogr ? ksAsistanEtiket(yk.ogr) : "", ogrKimlik: yk.ogr ? { name: yk.ogr.name, className: yk.ogr.className || "", numara: yk.ogr.numara || "" } : null, sonuc });
       const yanit = yk.ad === "ekranda_ac" ? (ksAsistanDogrudanYanit("ekranda_ac", sonuc) || sonuc) : sonuc;
       S.gecmis.push({ role: "assistant", content: `(Hızlı komut olarak yapıldı) ${ksAsistanKisalt(yanit, 600)}` });
-      S.gorunen = [...S.gorunen, { rol: "asistan", metin: yanit, adimlar, yerel: true, soru: m }];
+      const dIdY = pdrDeneyimEkle({ soru: m, araclar: adimlar, yerel: true, duzeltme: S.sonDuzeltme }); S.sonDuzeltme = null;
+      S.gorunen = [...S.gorunen, { rol: "asistan", metin: yanit, adimlar, yerel: true, soru: m, deneyimId: dIdY }];
       if (kullanilan.sesliMod && dinleyenVar() && yk.ad === "ekranda_ac") pdrAsistanSesliOkuOrtak(S.gorunen.length - 1, yanit);
       return;
     }
@@ -35397,7 +35478,8 @@ async function pdrAsistanIstek(m, kullanilan, ctx) {
     try { await ksSupKaydet(ctx, s.supervizyon, s.yanit, m); } catch (e) { console.warn("Süpervizyon kaydedilemedi", e); }
     const dolar = kullanilan.saglayici === "ucretsiz" ? null : ksAsistanMaliyet(s.model, s.ucretGiris ?? s.giris, s.cikis);
     if (dolar) S.toplamDolar += dolar;
-    S.gorunen = [...S.gorunen, { rol: "asistan", soru: m, metin: s.yanit, adimlar, supervizyon: s.supervizyon && s.supervizyon.length ? s.supervizyon : null, model: s.model, giris: s.giris, cikis: s.cikis, onbellek: s.onbellek || 0, dolar, giden: s.giden, kritik: s.kritik, yedek: s.yedek, ucretsiz: kullanilan.saglayici === "ucretsiz" }];
+    const dId = pdrDeneyimEkle({ soru: m, araclar: adimlar, model: s.model, duzeltme: S.sonDuzeltme }); S.sonDuzeltme = null;
+    S.gorunen = [...S.gorunen, { rol: "asistan", deneyimId: dId, soru: m, metin: s.yanit, adimlar, supervizyon: s.supervizyon && s.supervizyon.length ? s.supervizyon : null, model: s.model, giris: s.giris, cikis: s.cikis, onbellek: s.onbellek || 0, dolar, giden: s.giden, kritik: s.kritik, yedek: s.yedek, ucretsiz: kullanilan.saglayici === "ucretsiz" }];
     // Sesli modda cevap kendiliğinden okunur
     if (kullanilan.sesliMod && dinleyenVar()) pdrAsistanSesliOkuOrtak(S.gorunen.length - 1, s.yanit);
   } catch (e) {
@@ -35406,9 +35488,11 @@ async function pdrAsistanIstek(m, kullanilan, ctx) {
       for (let j = S.gecmis.length - 1; j >= 0; j--) { const x = S.gecmis[j]; if (x.role === "user" && !String(x.content).startsWith("<sonuc")) { S.gecmis.length = j + 1; break; } }
       S.gecmis.push({ role: "assistant", content: "(Danışman bu isteği yarıda durdurdu.)" });
       const yapilan = adimlar.filter(a => a.onay === true).map(a => PDR_ASISTAN_ARAC_AD[a.ad] || a.ad);
+      pdrDeneyimEkle({ soru: m, araclar: adimlar, durdu: true, duzeltme: S.sonDuzeltme }); S.sonDuzeltme = null;
       S.gorunen = [...S.gorunen, { rol: "asistan", durdu: true, metin: "⏹ Durdurdun." + (yapilan.length ? ` Durdurmadan önce onayladığın işlem(ler) yapılmıştı: ${yapilan.join(", ")}.` : " Hiçbir kayıt yapılmadı."), adimlar }];
       return;
     }
+    pdrDeneyimEkle({ soru: m, araclar: adimlar, hata: (e && e.message) || String(e), duzeltme: S.sonDuzeltme }); S.sonDuzeltme = null;
     S.gorunen = [...S.gorunen, { rol: "asistan", hata: true, metin: (e && e.message) || String(e), adimlar, ucretsizIdi: kullanilan.saglayici === "ucretsiz" }];
     // yarım kalan turu geçmişten çıkar (bir sonraki istek düzgün başlasın)
     while (S.gecmis.length && S.gecmis[S.gecmis.length - 1].role === "user" && S.gecmis[S.gecmis.length - 1].content.startsWith("<sonuc")) S.gecmis.pop();
@@ -35419,6 +35503,30 @@ async function pdrAsistanIstek(m, kullanilan, ctx) {
 }
 
 // 🎓 Asistan yanıtının altındaki süpervizyon kutusu
+// Ayarlar → 🧠 Öğrendikleri: onaylı dersler, deneyim kaydı, "Kendini değerlendir"
+function PdrOgrendiklerPaneli({ gonder }) {
+  const [, yenile] = useState(0);
+  const dersler = pdrDerslerOku(), deneyim = pdrDeneyimOku();
+  const sonDeg = deneyim.filter(x => /kendini değerlendir/i.test(x.soru || "")).pop();
+  const yeniIs = sonDeg ? deneyim.length - 1 - deneyim.lastIndexOf(sonDeg) : deneyim.length;
+  const k = { padding: "6px 10px", borderRadius: 8, border: `1px solid ${PURPLE}`, background: "#fff", color: PURPLE, fontSize: 11.5, fontWeight: 700, cursor: "pointer" };
+  return (
+    <div data-testid="ogrendikleri" style={{ background: "#F7F4FF", border: `1px solid #DDD3FF`, borderRadius: 10, padding: "8px 10px", marginBottom: 10 }}>
+      <div style={{ fontSize: 12, fontWeight: 800, color: PURPLE, marginBottom: 4 }}>🧠 Öğrendikleri ({dersler.length}/{PDR_DERS_SINIR})</div>
+      <div style={{ fontSize: 10.5, color: MUTED, lineHeight: 1.45, marginBottom: 6 }}>Asistan işlerini bu cihazda kaydeder (onay/ret, hata, 👍/👎, düzelterek sorduğun istekler). "Kendini değerlendir" deyince bu kayda bakıp ders önerir; onayladıkların her istekte asistana verilir. Derslerde öğrenci adı ve kişisel bilgi olmaz. Deneyim kaydı: {deneyim.length} iş{sonDeg ? ` · son değerlendirme ${sonDeg.t}, sonrasında ${yeniIs} iş` : ""}.</div>
+      {dersler.length > 0 && dersler.map((d, i) => (
+        <div key={d.id || i} style={{ display: "flex", gap: 6, alignItems: "flex-start", fontSize: 11.5, color: TEXT, lineHeight: 1.45, marginBottom: 4 }}>
+          <span style={{ color: MUTED }}>{i + 1}.</span><span style={{ flex: 1 }}>{d.metin}</span>
+          <button data-testid="ders-sil" onClick={() => { if (window.confirm("Bu ders silinsin mi?\n\n" + d.metin)) { pdrDerslerYaz(dersler.filter(x => x !== d)); yenile(x => x + 1); } }} style={{ background: "none", border: "none", color: "#B42318", fontSize: 12, fontWeight: 800, cursor: "pointer", padding: 0 }}>✕</button>
+        </div>
+      ))}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
+        <button data-testid="kendini-degerlendir" onClick={() => gonder("🧠 Kendini değerlendir: deneyim kaydına bak, tekrarlayan hatalarını bul ve ders öner.")} style={{ ...k, background: PURPLE, color: "#fff" }}>🧠 Kendini değerlendir</button>
+        {deneyim.length > 0 && <button onClick={() => { if (window.confirm("Deneyim kaydı temizlensin mi? (Onaylı dersler kalır.)")) { pdrDeneyimYaz([]); yenile(x => x + 1); } }} style={k}>Kaydı temizle</button>}
+      </div>
+    </div>
+  );
+}
 function PdrSupervizyonKutusu({ liste }) {
   const [taslakAcik, setTaslakAcik] = useState({});
   if (!liste || !liste.length) return null;
@@ -35598,7 +35706,7 @@ function AsistanEkrani({
     pdrAsistanSustur(); setOkunan(null); setAcik({}); pdrAsistanBildir();
     return m.metin;
   }
-  function duzenle(i) { const t = geriAl(i); if (t !== null) setGirdi(t); }
+  function duzenle(i) { const t = geriAl(i); if (t !== null) { PDR_ASISTAN_SOHBET.sonDuzeltme = t; setGirdi(t); } }
   function claudeIleSor(i) {
     const t = geriAl(i); if (t === null) return;
     const y = { ...ayar, saglayici: "claude" }; setAyarState(y); pdrAsistanAyarYaz(y);
@@ -35715,6 +35823,8 @@ function AsistanEkrani({
           </select>
           <div style={{ fontSize: 11, color: MUTED, marginBottom: 3 }}>Worker adresi</div>
           <input value={ayar.ucretsizUrl} onChange={e => ayarDegis({ ucretsizUrl: e.target.value.trim() })} style={{ ...inp, marginBottom: 10, fontSize: 12 }} />
+
+          <PdrOgrendiklerPaneli gonder={gonder} />
 
           <div style={{ fontSize: 12, fontWeight: 800, color: TEXT, marginBottom: 4 }}>📋 Asistana kurallarım</div>
           <textarea value={ayar.kurallar} onChange={e => ayarDegis({ kurallar: e.target.value })} rows={4} placeholder={PDR_ASISTAN_VARSAYILAN_KURALLAR} style={{ ...inp, resize: "vertical", marginBottom: 4 }} />
@@ -35844,6 +35954,10 @@ function AsistanEkrani({
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, marginTop: 8, paddingTop: 6, borderTop: `1px solid ${BORDER}`, fontSize: 10.5, color: MUTED, flexWrap: "wrap" }}>
                 <span>{m.yerel ? "⚡ Hızlı komut · model kullanılmadı · ücretsiz" : <>{modelAd(m.model)}{m.yedek ? " (yedek)" : ""} · {m.ucretsiz ? `ücretsiz · ${m.giris + m.cikis} token` : `≈ ${dolarYaz(m.dolar)} · ${m.giris + m.cikis} token${m.onbellek ? ` · ♻ ${Math.round(100 * m.onbellek / Math.max(1, m.giris))}% önbellekten` : ""}`}</>}</span>
                 <span style={{ display: "flex", gap: 10 }}>
+                  {m.deneyimId && <>
+                    <button data-testid="asistan-begen" title="İyi yanıt (asistan bundan öğrenir)" onClick={() => { pdrDeneyimPuanla(m.deneyimId, 1); m.puan = m.puan === 1 ? 0 : 1; pdrAsistanBildir(); }} style={{ background: m.puan === 1 ? "#DCFCE7" : "none", border: "none", borderRadius: 6, fontSize: 12, cursor: "pointer", padding: "0 3px" }}>👍</button>
+                    <button data-testid="asistan-begenme" title="Kötü yanıt (asistan bundan öğrenir)" onClick={() => { pdrDeneyimPuanla(m.deneyimId, -1); m.puan = m.puan === -1 ? 0 : -1; pdrAsistanBildir(); }} style={{ background: m.puan === -1 ? "#FEE2E2" : "none", border: "none", borderRadius: 6, fontSize: 12, cursor: "pointer", padding: "0 3px" }}>👎</button>
+                  </>}
                   <button onClick={() => sesliOku(i, m.metin)} style={{ background: "none", border: "none", color: ACCENT, fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: 0 }}>{okunan === i ? "⏹ Sustur" : "🔊 Sesli oku"}</button>
                   <button onClick={() => { try { navigator.clipboard.writeText(temizMetin(m.metin)); } catch (e) {} }} style={{ background: "none", border: "none", color: ACCENT, fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: 0 }}>📋 Kopyala</button>
                   {!m.yerel && !S.calisiyor && i === S.gorunen.length - 1 && !(m.supervizyon || []).some(x => x.tur === "elle") && <button data-testid="supervizore-sor" onClick={() => gonder("🎓 Süpervizöre sor")} style={{ background: "none", border: "none", color: PURPLE, fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: 0 }}>🎓 Süpervizöre sor</button>}

@@ -12102,6 +12102,7 @@ function ksAsistanTestSonucu(g, ctx, o) {
       if (t.not) b.push(`Danışman notu: ${K(t.not, 120)}`);
     } catch (e) { b.push("Bu kaydın özeti çıkarılamadı."); }
   });
+  try { const tipler = new Set(l.map(t => t.tip + "|" + (t.testAdi || ""))); const dg = pdrTestDegisimMetni(tum, oySinifNo(o.className), k => tipler.has(k.tip + "|" + (k.testAdi || ""))); if (dg) b.push("\n" + dg); } catch (e) {}
   if (tum.length > l.length) b.push(`\n(Toplam ${tum.length} test kaydı var; "test" alanıyla belirli bir testi isteyebilirsin.)`);
   if (tr) b.push("\n" + tr);
   return b.join("\n");
@@ -12795,7 +12796,7 @@ const KS_ASISTAN_ARACLAR = {
     calistir: (g, ctx, o) => ksAsistanLgsOncelik(g, ctx, o),
   },
   test_sonucu: {
-    aciklama: "Öğrencinin uygulanan testlerinin sonuçlarını programın kendi puanlamasıyla getirir: okul olgunluğu (karar, alan yüzdeleri, risk göstergeleri ve gerekçeleri, güçlü yanlar, okul/ev eylem planı, yönlendirme, izleme tarihi), okuma-yazma değerlendirmesi ve programı (destek modülleri, izleme kararı), kaynaştırma (bağımsız beceriler, desteklenecek alanlar, RAM rapor süresi), BİLPRO bilişsel profil (alan puanları, kapasite-verimlilik farkı, dikkat göstergeleri, klinik örüntüler ve ayırıcı değerlendirme, öğretmen/veli önerileri, okul içi yüzdelik), ÖÖG ön-tarama, otizm taraması, CAS tarzı tarama ve performans testi ve diğer testlerin özeti. Test sonucu sorulduğunda, veliye anlatım ya da plan hazırlanırken kullan. test: isteğe bağlı test adı (örn. okul olgunluğu).",
+    aciklama: "Öğrencinin uygulanan testlerinin sonuçlarını programın kendi puanlamasıyla getirir: okul olgunluğu (karar, alan yüzdeleri, risk göstergeleri ve gerekçeleri, güçlü yanlar, okul/ev eylem planı, yönlendirme, izleme tarihi), okuma-yazma değerlendirmesi ve programı (destek modülleri, izleme kararı), kaynaştırma (bağımsız beceriler, desteklenecek alanlar, RAM rapor süresi), BİLPRO bilişsel profil (alan puanları, kapasite-verimlilik farkı, dikkat göstergeleri, klinik örüntüler ve ayırıcı değerlendirme, öğretmen/veli önerileri, okul içi yüzdelik), ÖÖG ön-tarama, otizm taraması, CAS tarzı tarama ve performans testi ve diğer testlerin özeti. Test sonucu sorulduğunda, veliye anlatım ya da plan hazırlanırken kullan. test: isteğe bağlı test adı (örn. okul olgunluğu). Aynı test birden çok kez uygulandıysa önceki ve ilk uygulamaya göre DEĞİŞİMİ (ilerledi/geriledi, sayılarla) de verir; 'ilerledi mi', 'gelişme var mı', 'önceki teste göre' sorularında kullan.",
     girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "test": "isteğe bağlı"}', ogrenciIster: true, yontem: "hepsi",
     calistir: (g, ctx, o) => ksAsistanTestSonucu(g, ctx, o),
   },
@@ -13474,6 +13475,7 @@ function ksAsistanOgrenciDosyasi(ctx, o) {
       if (!sayi.length && !yazi.length && typeof testSonucOzeti === "function") { try { const oz = testSonucOzeti(t); if (oz && oz !== "—") yazi.push(K(String(oz), 260)); } catch (e) {} }
       b.push(`• ${t.testAdi || t.tip} (${t.tarih || "?"})${sayi.length ? ": " + sayi.join(", ") : ""}${yazi.length ? " — " + yazi[0] : ""}${t.not ? " · not: " + K(t.not, 80) : ""}`);
     });
+    try { const dg = pdrTestDegisimMetni(testler, oySinifNo(sinif)); if (dg) b.push(dg); } catch (e) {}
   } else b.push("\nTESTLER: uygulanmış test kaydı yok.");
   try {
     const no2 = ((/(\d+)/.exec(String(sinif || "")) || [])[1] | 0), kd = no2 >= 9 ? "lise" : no2 >= 5 ? "ortaokul" : no2 >= 1 ? "ilkokul" : null;
@@ -14584,7 +14586,7 @@ const KS_ARAC_GRUPLARI = {
   cekirdek: { araclar: ["ogrenci_ara", "ogrenci_ozeti", "ogrenci_dosyasi", "gorusme_notlari", "liste", "bugun_brifing", "ekranda_ac", "arac_listesi"] },
   gorusme: { re: /gorus|not(u|unu|lari|larini)?\b|kaydet|yaz\b|yazar|ekle|duzelt|guncelle|grup|veli|ogretmen|form|bireyi tan|bdt|carpitma|olcum|iyi olus|seans/,
     araclar: ["gorusme_kaydet", "ekranda_gorusme", "gorusme_duzelt", "gorusme_analizi", "form_sablonu", "form_analizi", "ekranda_form_doldur", "bireyi_tanima_ekle", "bdt_ekle", "asistan_notu_kaydet", "olcum_takibi"] },
-  degerlendirme: { re: /degerlendir|analiz|durum|nasil|yorum|incele|profil|supervizyon|vaka|formulasyon|oneri|ne yapmali|test|tarama|olcek|bilpro|oog|otizm|duzey|kaynastir|tani|sosyometri|aile|kardes/,
+  degerlendirme: { re: /degerlendir|analiz|durum|nasil|yorum|incele|profil|supervizyon|vaka|formulasyon|oneri|ne yapmali|test|tarama|olcek|bilpro|oog|otizm|duzey|kaynastir|tani|sosyometri|aile|kardes|ilerle|gelisme|gelisim|degisim|onceki test|ilk test/,
     araclar: ["risk_analizi", "seans_hazirlik", "mudahale_plani", "profil_analizi", "supervizyon", "gorusme_analizi", "olcum_takibi", "test_sonucu", "duzey_taramasi", "mudahale_programi_ara", "form_analizi", "deneme_analizi"] },
   risk: { re: /risk|kriz|zarar|intihar|olum|istismar|siddet|zorba|tehlike|guvenlik|sevk|ram\b|rapor/,
     araclar: ["risk_analizi", "risk_kaydet", "ekranda_risk", "risk_kapat", "sevk_kaydet", "sevk_sonuc"] },
@@ -26792,6 +26794,7 @@ function OOTPaneli({ seciliAd, seciliSinif, seciliNumara, testKayitlari, setTest
         <div key={k.id} data-testid="oot-kayit" style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 12, marginBottom: 8 }}>
           <div style={{ fontWeight: 800, fontSize: 13.5 }}>{k.tarih}</div>
           <div style={{ fontSize: 12.5, color: MUTED, marginTop: 2 }}>{ootKisaOzet(k.veri)}</div>
+          <TestDegisimKutusu kayit={k} tumKayitlar={kayitlar} />
           <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
             <button onClick={() => { setAktif(k); setGorunum("sonuc"); }} style={btn}>Sonucu aç</button>
             <button onClick={() => sil(k)} style={{ ...btn, color: "#C0392B" }}>Sil</button>
@@ -26915,6 +26918,7 @@ function OYPaneli({ seciliAd, seciliSinif, seciliNumara, testKayitlari, setTestK
         {degler.map(d => (
           <div key={d.id} style={{ padding: "8px 0", borderTop: `1px solid ${BORDER}` }}>
             <div style={{ fontSize: 12.5, color: TEXT, lineHeight: 1.5 }}><b>{d.tarih}</b> — {oyKisaOzetDeg({ ...d.veri, tarih: d.tarih })}</div>
+            <TestDegisimKutusu kayit={d} tumKayitlar={degler} sinifNo={sinifNo} />
             <div style={{ display: "flex", gap: 6, marginTop: 5, flexWrap: "wrap" }}>
               <button onClick={() => oyYazdir(oyRaporHtml(d, bilgi), dosyaAd("Okuma_Degerlendirme_Raporu"))} style={oyBtn("#155E75")}>🖨 Rapor</button>
               {(!program || program.veri.kaynakId !== d.id) && oyProfil(d.veri, d.veri.sinifNo || sinifNo, d.tarih).moduller.length > 0 && <button onClick={() => kurulumBaslat(d)} style={oyBtn("#15803D", true)}>🧭 Bu değerlendirmeyle program oluştur</button>}
@@ -29602,6 +29606,107 @@ function testSonucOzeti(k) {
     default: return v.sonuc || "—";
   }
 }
+// ── Aynı testin tekrar uygulamaları arasındaki değişim (ekran + asistan) ──
+// Her test için sayısal ölçümleri çıkarır; iyi: "yuksek" (artış iyi), "dusuk" (azalış iyi), "notr" (yön bilinmiyor)
+function pdrTestSayi(x) { if (x === null || x === undefined || x === "") return null; const n = parseFloat(String(x).replace(",", ".")); return isFinite(n) ? n : null; }
+function pdrTestOlcumleri(k, sinifNo) {
+  const v = (k && k.veri) || {}; const S = pdrTestSayi; const l = [];
+  const ekle = (ad, deger, iyi, birim) => { const d = S(deger); if (d !== null) l.push({ ad, deger: d, iyi: iyi || "notr", birim: birim || "" }); };
+  try {
+    switch (k.tip) {
+      case "d2": ekle("Doğru", v.dogru, "yuksek"); ekle("Yanlış/atlanan", v.yanlisAtlanan, "dusuk"); ekle("Dikkat puanı", v.dikkatPuani, "yuksek"); ekle("PR", v.pr, "yuksek"); break;
+      case "alt_test": Object.entries(v.altPuanlar || {}).forEach(([a, d]) => ekle(a, d, "notr")); break;
+      case "iq_esdeger": ekle("Ham puan", v.hamPuan, "yuksek"); ekle("Zekâ bölümü", v.zekaBolumu, "yuksek"); break;
+      case "gelisimsel_hata": ekle("Hata puanı", v.hataPuani, "dusuk"); break;
+      case "toplam_duzey": case "toplam_duzey_serbest": ekle("Toplam puan", v.toplamPuan, "notr"); break;
+      case "net_kontrol": { const r = netKontrolSonuc(v.isaretli); ekle("Yapılan madde", r.isaretSay, "yuksek", "/" + r.toplam); r.bolumler.forEach(b => ekle(b.kisa || b.ad, b.yapilan, "yuksek", "/" + b.toplam)); break; }
+      case "okuma_degerlendirme": {
+        const p = oyProfil(v, v.sinifNo || sinifNo || 0, k.tarih);
+        if (p.akicilik) { ekle("Okuma hızı", p.akicilik.ana.ddk, "yuksek", " DDK"); ekle("Okuma doğruluğu", p.akicilik.ana.dogruluk, "yuksek", "%"); ekle("Anlama", p.akicilik.ana.anlama, "yuksek", "%"); }
+        if (p.harf) ekle("Bilinen harf", p.harf.bilinen, "yuksek", "/29");
+        if (p.fono) ekle("Fonolojik farkındalık", p.fono.yuzde, "yuksek", "%");
+        if (p.yazma) ekle("Dikte", p.yazma.yuzde, "yuksek", "%");
+        break;
+      }
+      case "okul_olgunlugu": {
+        const s = ootSonuc(v); if (!s.karar || s.karar.k === "eksik") break;
+        ekle("Alan ortalaması", s.testYuzde, "yuksek", "%"); if (s.goz) ekle("Gözlem", s.goz.yuzde, "yuksek", "%");
+        s.alanlar.forEach(a => ekle(a.ad, a.yuzde, "yuksek", "%")); break;
+      }
+      case "kaynastirma_ed": {
+        KED_DERSLER.forEach(d => { const o = kedDersOzet(v, d); if (o.n) ekle(d.ad + " (bağımsız yapılan)", o.bagimsiz.length, "yuksek", "/" + o.n); });
+        kedGelisimOzet(v).forEach(a => { if (a.ort != null) ekle(a.ad + " (ort.)", a.ort, "yuksek", "/4"); }); break;
+      }
+      case "scas_cocuk": { const s = scasPuanla(v.cevaplar || [], v.cinsiyetKullanilan, v.yasGrubuKullanilan); ekle("Kaygı genel toplam", s.genelToplam, "dusuk"); break; }
+      case "dikkat_cdt": { const s = cdtPuanla(v); if (s && s.tamam && s.indeksler) s.indeksler.forEach(i => ekle(i.ad + " (yüzdelik)", i.yuzdelik, "yuksek")); break; }
+      case "insan_ciz": { const s = iczPuanla(v); ekle("Gelişimsel ayrıntı", s.varOlanSayi, "yuksek", "/30"); ekle("Duygusal gösterge", (s.gecerli || []).length, "dusuk"); break; }
+      default: break;
+    }
+  } catch (e) {}
+  return l;
+}
+// Aynı testin kayıtlarını (tip + test adı) gruplar, eskiden yeniye sıralar
+function pdrTestGruplari(kayitlar) {
+  const g = {};
+  (kayitlar || []).forEach(k => { if (!k || !k.tip) return; const anahtar = k.tip + "|" + (k.testAdi || ""); (g[anahtar] = g[anahtar] || []).push(k); });
+  return Object.values(g).map(l => l.slice().sort((a, b) => (pdrTarihMs(a.tarih) || 0) - (pdrTarihMs(b.tarih) || 0) || String(a.id).localeCompare(String(b.id))));
+}
+// İki uygulama arasındaki farklar
+function pdrTestDegisim(onceki, simdi, sinifNo) {
+  const a = pdrTestOlcumleri(onceki, sinifNo), b = pdrTestOlcumleri(simdi, sinifNo);
+  return b.map(y => {
+    const x = a.find(z => z.ad === y.ad); if (!x) return null;
+    const fark = Math.round((y.deger - x.deger) * 10) / 10;
+    const durum = fark === 0 ? "aynı" : y.iyi === "notr" ? "değişti" : ((fark > 0) === (y.iyi === "yuksek")) ? "ilerledi" : "geriledi";
+    return { ad: y.ad, once: x.deger, sonra: y.deger, fark, durum, birim: y.birim };
+  }).filter(Boolean);
+}
+function pdrTestDegerYaz(x, birim) { return birim === "%" ? "%" + x : x + (birim || ""); }
+function pdrTestDegisimSatir(d) {
+  const ok = { ilerledi: "▲ ilerledi", geriledi: "▼ geriledi", aynı: "= aynı", "değişti": "değişti" }[d.durum];
+  return `${d.ad}: ${pdrTestDegerYaz(d.once, d.birim)} → ${pdrTestDegerYaz(d.sonra, d.birim)} (${d.fark > 0 ? "+" : ""}${d.fark}, ${ok})`;
+}
+// Asistan ve rapor için: tekrar uygulanmış her testin ilk → son ve önceki → son değişimi
+function pdrTestDegisimMetni(kayitlar, sinifNo, sadeceTip) {
+  const satir = [];
+  pdrTestGruplari(kayitlar).filter(l => l.length >= 2 && (!sadeceTip || sadeceTip(l[0]))).forEach(l => {
+    const ilk = l[0], onc = l[l.length - 2], son = l[l.length - 1];
+    const d1 = pdrTestDegisim(onc, son, sinifNo); if (!d1.length) return;
+    const ad = son.testAdi || son.tip;
+    const say = (d, t) => d.filter(x => x.durum === t).length;
+    const gen = say(d1, "ilerledi") > say(d1, "geriledi") ? "genel olarak ilerleme var" : say(d1, "geriledi") > say(d1, "ilerledi") ? "genel olarak gerileme var" : say(d1, "ilerledi") ? "karışık (bazı alanlar ilerledi, bazıları geriledi)" : "belirgin değişim yok";
+    satir.push(`■ ${ad}: ${l.length} uygulama (${l.map(x => x.tarih || "?").join(" → ")}) — son iki uygulamaya göre ${gen}.`);
+    satir.push(`  Öncekine göre (${onc.tarih || "?"} → ${son.tarih || "?"}): ${d1.slice(0, 8).map(pdrTestDegisimSatir).join("; ")}`);
+    if (l.length >= 3) { const d0 = pdrTestDegisim(ilk, son, sinifNo); if (d0.length) satir.push(`  İlk uygulamadan bu yana (${ilk.tarih || "?"} → ${son.tarih || "?"}): ${d0.slice(0, 8).map(pdrTestDegisimSatir).join("; ")}`); }
+    if (son.tip === "scas_cocuk") { const r = d1.find(x => x.ad === "Kaygı genel toplam"); const y = r && scasGuvenilirDegisimYorumu(r.sonra, r.once); if (y) satir.push(`  Güvenilir değişim: ${y.ad}.`); }
+    if (son.tip === "kaynastirma_ed") { const kz = kedKazanimlar(onc.veri || {}, son.veri || {}); if (kz.length) satir.push(`  Yeni kazanılan beceriler: ${kz.slice(0, 6).join("; ")}${kz.length > 6 ? ` (+${kz.length - 6})` : ""}`); }
+  });
+  return satir.length ? "📈 TEKRARLANAN TESTLERDE DEĞİŞİM (cihazda hesaplandı; küçük farklar ölçüm hatası olabilir)\n" + satir.join("\n") : "";
+}
+// Ekran: bir test kaydının altında, aynı testin bir önceki uygulamasına göre değişim kutusu
+function TestDegisimKutusu({ kayit, tumKayitlar, sinifNo }) {
+  const grup = pdrTestGruplari(tumKayitlar).find(l => l.some(x => x.id === kayit.id)) || [];
+  const i = grup.findIndex(x => x.id === kayit.id);
+  if (i < 1) return null;
+  const onceki = grup[i - 1];
+  const d = pdrTestDegisim(onceki, kayit, sinifNo);
+  if (!d.length) return null;
+  const renk = { ilerledi: "#15803D", geriledi: "#B45309", aynı: MUTED, "değişti": "#1D4ED8" };
+  const ilk = i >= 2 ? pdrTestDegisim(grup[0], kayit, sinifNo) : [];
+  return (
+    <div data-test-degisim="1" style={{ marginTop: 8, padding: "8px 10px", borderRadius: 9, background: "#F0FDF4", border: "1px solid #BBF7D0" }}>
+      <div style={{ fontSize: 12, fontWeight: 800, color: "#166534", marginBottom: 4 }}>📈 Önceki uygulamaya göre değişim ({onceki.tarih || "?"} → {kayit.tarih || "?"})</div>
+      {d.slice(0, 10).map(x => (
+        <div key={x.ad} style={{ fontSize: 12, display: "flex", justifyContent: "space-between", gap: 8, padding: "2px 0" }}>
+          <span>{x.ad}</span>
+          <span><span style={{ color: MUTED }}>{pdrTestDegerYaz(x.once, x.birim)} → </span><b>{pdrTestDegerYaz(x.sonra, x.birim)}</b> <b style={{ color: renk[x.durum] }}>{x.fark > 0 ? "+" : ""}{x.fark} {({ ilerledi: "▲", geriledi: "▼", aynı: "=", "değişti": "" })[x.durum]}</b></span>
+        </div>
+      ))}
+      {ilk.length > 0 && <div style={{ fontSize: 11, color: MUTED, marginTop: 4 }}>İlk uygulamadan ({grup[0].tarih}) bu yana: {ilk.filter(x => x.durum === "ilerledi").length} alanda ilerleme, {ilk.filter(x => x.durum === "geriledi").length} alanda gerileme · toplam {grup.length} uygulama</div>}
+      <div style={{ fontSize: 10.5, color: MUTED, marginTop: 3 }}>Küçük farklar ölçüm hatası olabilir; kararı tek uygulamaya göre değil, eğilime göre verin.</div>
+    </div>
+  );
+}
 function testDuzeyHesapla(testTanim, puan) {
   const p = parseFloat(puan);
   if (isNaN(p) || !testTanim.duzeyler) return "";
@@ -30761,6 +30866,7 @@ KURALLAR:
                         </div>
                         <div style={{ fontSize:11, color:MUTED, marginTop:2 }}>{k.tarih} · {testSonucOzeti(k)}</div>
                         {k.not && <div style={{ fontSize:12, color:TEXT, marginTop:4, lineHeight:1.4 }}>{k.not}</div>}
+                        <TestDegisimKutusu kayit={k} tumKayitlar={kayitlar} sinifNo={oySinifNo(seciliSinif)} />
                         {beierMi && k.veri?.guvenlikUyarisi && (
                           <div style={{ fontSize:11, fontWeight:700, color:"#C0392B", marginTop:4 }}>⚠️ Güvenlik uyarısı var — açıp oku</div>
                         )}

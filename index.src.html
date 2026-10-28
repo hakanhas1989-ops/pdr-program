@@ -30115,6 +30115,11 @@ function d2PrBant(pr) {
   if (p < 85) return { ad: "normal", renk: "#15803D", bg: "#E6F5EE" };
   return { ad: "iyi", renk: "#15803D", bg: "#E6F5EE" };
 }
+// E% ya da FR'nin yaşıtlara göre anlamı (düşük değer iyi)
+function d2BantAnlam(pr) {
+  if (pr == null) return "";
+  return pr <= 10 ? "yaşıtlarının en zayıf %10'unda" : pr < 25 ? "yaşıtlarının ortalamasının altında" : pr < 75 ? "yaşıtlarıyla benzer düzeyde" : pr < 90 ? "yaşıtlarının ortalamasının üstünde" : "yaşıtlarının en iyi %10'unda";
+}
 function d2PrYaz(p) { return String(p).replace(".", ","); }
 // E% yorumu: uygulamada kullanılan ölçüt (0–1,5 normal · 1,5–2,5 dikkat edilmeli · 2,5 üstü dikkat problemi)
 function d2HataBant(e) {
@@ -30150,7 +30155,7 @@ function d2Yorum(v) {
   const E1 = d2Sayi(d.E1), E2 = d2Sayi(d.E2);
   if (E1 !== null) b.push(`E1 ${E1}: ${E1 > (E2 || 0) * 3 && E1 >= 20 ? "atlama yüksek — seçici dikkat düşük" : "atlanan hedef sayısı"}.`);
   if (E2 !== null && E2 > 0 && E1 !== null && E2 >= E1) b.push(`E2 (${E2}) E1'den yüksek: normal öğrencilerde E2 genellikle düşüktür; öğrenme güçlüğü / dikkatsizlik açısından değerlendirilmeli.`);
-  const hb = d2HataBant(d.E_yuzde); if (hb) b.push(`E% ${d.E_yuzde}: ${hb.ad}${n.eMetin ? ` (yaş normunda ${n.eMetin})` : ""}.`);
+  const hb = d2HataBant(d.E_yuzde); if (hb) { const ePR = n.eMetin ? ({ "PR ≤10": 10, "PR 10–25": 17, "PR 25–50": 37, "PR 50–75": 62, "PR 75–90": 82, "PR >90": 95 })[n.eMetin] : null; b.push(`E% ${d.E_yuzde}: belgedeki ölçüte göre ${hb.ad}${n.eMetin ? `; yaşıtlarına göre (norm tablosu) ${n.eMetin}, ${d2BantAnlam(ePR)}` : ""}.`); }
   if (d2Sayi(d.FR) !== null) b.push(`FR ${d.FR}${n.frMetin ? ` (yaş normunda ${n.frMetin})` : ""}: ${d2Sayi(d.FR) > 6 ? "6'yı geçtiği için dikkat salınımı var" : "dalgalanma normal sınırda (≤6)"}.`);
   const y = d2Yarilar(d); if (y) b.push(y.metin);
   d2Uyarilar(d).filter(x => !/^FR /.test(x)).forEach(x => b.push(x));
@@ -30290,7 +30295,20 @@ function D2Paneli({ seciliAd, seciliSinif, seciliNumara, seciliOgr, profiles2, s
           </div>
         )}
         {pb && <div style={{borderRadius:8,padding:"7px 10px",marginBottom:6,background:pb.bg,color:pb.renk,fontSize:12,fontWeight:700}}>PR {h.PR} → {pb.ad}{d2Sayi(h.PR) < 75 ? " (beklenen: %75 üstü)" : ""}</div>}
-        {hb && <div style={{borderRadius:8,padding:"7px 10px",marginBottom:6,background:hb.bg,color:hb.renk,fontSize:12,fontWeight:700}}>E% {h.E_yuzde} → {hb.ad}<div style={{fontSize:10,fontWeight:500,color:MUTED,marginTop:2}}>Ölçüt: 0–1,5 normal · 1,5–2,5 dikkat edilmeli · 2,5 üstü dikkat problemi</div></div>}
+        {hb && (
+          <div data-d2="e-karsilastir" style={{borderRadius:8,padding:"8px 10px",marginBottom:6,background:"#fff",border:`1px solid ${BORDER}`,fontSize:12,lineHeight:1.55}}>
+            <div style={{fontWeight:800,marginBottom:4}}>E% (hata oranı) = %{String(h.E_yuzde).replace(".", ",")} — iki ölçüte göre</div>
+            <div style={{background:hb.bg,color:hb.renk,borderRadius:6,padding:"5px 8px",fontWeight:700,marginBottom:4}}>1) Belgedeki ölçüt: {hb.ad}<div style={{fontSize:10,fontWeight:500,color:MUTED}}>0–1,5 normal · 1,5–2,5 dikkat edilmeli · 2,5 üstü dikkat problemi</div></div>
+            {norm.e ? (() => { const q = norm.e.pr; const bant = q <= 10 ? { renk: "#B91C1C", bg: "#FDECEA" } : q < 25 ? { renk: "#B45309", bg: "#FDF6E3" } : q < 75 ? { renk: "#0E7490", bg: "#E0F2FE" } : { renk: "#15803D", bg: "#E6F5EE" }; return (
+              <div style={{background:bant.bg,color:bant.renk,borderRadius:6,padding:"5px 8px",fontWeight:700}}>2) Yaşıtlarına göre (norm tablosu): {norm.e.metin} — {d2BantAnlam(norm.e.pr)}
+                <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:3,marginTop:5,fontWeight:500,color:TEXT}}>
+                  {[10,25,50,75,90].map((pr, i) => <div key={pr} style={{textAlign:"center",background:"#ffffffaa",borderRadius:5,padding:"3px 0",fontSize:10.5}}><div style={{color:MUTED}}>PR {pr}</div><b>%{String(norm.eSinir[i]).replace(".", ",")}</b></div>)}
+                </div>
+                <div style={{fontSize:10.5,fontWeight:500,color:MUTED,marginTop:4}}>Örnek: PR 50 sütunu, bu yaştaki çocukların yarısının bu orana kadar hata yaptığını gösterir. Hata oranı soldaki değerlere yaklaştıkça yaşıtlarına göre kötüleşir.</div>
+              </div>); })() : <div style={{fontSize:11,color:MUTED}}>2) Yaşıtlarına göre karşılaştırma için doğum tarihi ve cinsiyet girin.</div>}
+            {norm.e && hb && d2Sayi(h.E_yuzde) > 2.5 && norm.e.pr >= 25 && <div style={{fontSize:11,color:TEXT,marginTop:5}}>ℹ İki ölçüt farklı sonuç veriyor: belgedeki sabit ölçüte göre problemli, ama bu hata oranı yaşıtlarının çoğunda görülen düzeyde.</div>}
+          </div>
+        )}
         {yar && <div style={{fontSize:11.5,color:TEXT,marginBottom:6}}>⏱ İlk 7 satır TN {yar.ilk.tn} · son 7 satır TN {yar.son.tn} — {yar.metin}</div>}
         {uy.map((x, i) => <div key={i} style={{fontSize:11.5,color:"#B45309",marginBottom:4}}>⚠ {x}</div>)}
         <label style={lbl}>DANIŞMAN YORUMU / GÖZLEM</label>

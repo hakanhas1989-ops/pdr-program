@@ -20886,7 +20886,8 @@ function ozTestDurum(k) {
     switch (k.tip) {
       case "d2": { const g = d2GenelSonuc(v); if (g) return { renk: g.renk === "#B91C1C" ? OZ_KIRMIZI : g.renk === "#15803D" ? OZ_YESIL : OZ_SARI }; const pr = ozSayi(v.pr); if (pr != null) return { renk: pr < 50 ? OZ_KIRMIZI : pr < 75 ? OZ_SARI : OZ_YESIL }; break; }
       case "dikkat_cdt": { const s = cdtPuanla(v); if (s && s.tamam && s.indeksler) { const y = s.indeksler.map(i => i.yuzdelik).filter(x => x != null); if (y.length) { const m = Math.min(...y); return { renk: m < 16 ? OZ_KIRMIZI : m < 25 ? OZ_SARI : OZ_YESIL }; } } break; }
-      case "stroop_tbag": { const r = stroopHesapla(v); if (r.oran != null) return { renk: r.oran >= 1.8 ? OZ_KIRMIZI : r.oran >= 1.5 ? OZ_SARI : OZ_YESIL }; break; }
+      case "stroop_tbag": { const r = stroopHesapla(v); if (r.oran != null) return { renk: r.oran >= 2.3 ? OZ_KIRMIZI : r.oran >= 1.8 ? OZ_SARI : OZ_YESIL }; break; }
+      case "metropolitan": { const r = metroHesapla(v); if (r.genelH) return { renk: r.genelH.harf === "E" ? OZ_KIRMIZI : r.genelH.harf === "D" ? OZ_SARI : OZ_YESIL }; break; }
       case "wisc_r": { const r = wiscHesapla(v); const c = wiscSinif(r.tp != null ? r.tp : r.sz != null ? r.sz : r.pf); if (c) return { renk: c.renk === "#B91C1C" ? OZ_KIRMIZI : c.renk === "#B45309" ? OZ_SARI : OZ_YESIL }; break; }
       case "iq_esdeger": { const c = wiscSinif(ozSayi(v.zekaBolumu)); if (c) return { renk: c.renk === "#B91C1C" ? OZ_KIRMIZI : c.renk === "#B45309" ? OZ_SARI : OZ_YESIL }; break; }
       case "scas_cocuk": { const s = scasPuanla(v.cevaplar || [], v.cinsiyetKullanilan, v.yasGrubuKullanilan); if (s.genelDuzey) return { renk: s.genelDuzey.ad === "Normal" ? OZ_YESIL : s.genelDuzey.ad === "Hafif Yüksek" ? OZ_SARI : OZ_KIRMIZI }; break; }
@@ -20912,7 +20913,7 @@ function ozetRaporVeri(rapor) {
   // Görüşme listesi (en yeniden) ve geliş nedeni (ilk görüşme / formdaki yönlendirme nedeni)
   const notIlk = r => ozKisalt(String(r.raw || r.summary || "").replace(/^📋[^\n]*\n?/, "").split(/\n/).find(x => x.trim()) || "", 70);
   V.gorusme.liste = [...gor].reverse().slice(0, 6).map(r => ({ tarih: r.date, tur: r.meetingType || "Öğrenci", konu: konuGoster(r), not: notIlk(r) }));
-  const yonl = gor.map(r => (String(r.summary || "") + "\n" + String(r.raw || "")).match(/(?:Yönlendirme|Geliş|Başvuru) nedeni\s*[:：]\s*([^\n|]+)/i)).find(Boolean);
+  const yonl = gor.map(r => (String(r.summary || "") + "\n" + String(r.raw || "")).match(/(?:Yönlendirme|Geliş|Başvuru|Görüşme) nedeni\s*[:：]\s*(.+?)(?= · |\n|\||$)/i)).find(Boolean);
   if (gor.length) { const ilk = gor[0]; V.gelisNedeni = { tarih: ilk.date, konu: konuGoster(ilk), metin: yonl ? ozKisalt(yonl[1], 140) : ozKisalt(String(ilk.raw || ilk.summary || "").replace(/^📋[^\n]*\n?/, "").replace(/\s+/g, " "), 140) }; }
   V.gorusme.konular = Object.entries(konu).sort((a, b) => b[1] - a[1]).slice(0, 4);
   // Devamsızlık, olay, kaynaştırma
@@ -20922,7 +20923,7 @@ function ozetRaporVeri(rapor) {
   V.kaynastirma = rapor.kaynastirma || [];
   // Riskler, müdahale, sevk, öneriler
   V.riskler = (rapor.riskListesi || []).filter(r => ayni(r) && !r.kapandi);
-  V.planlar = ((rapor.mudahalePlan || {})[ad] || []);
+  V.planlar = pdrSozlukOku(rapor.mudahalePlan || {}, ad, sinif) || (rapor.mudahalePlan || {})[ad] || [];
   V.sevkler = (rapor.sevkler || []).filter(ayni).sort((a, b) => pdrTarihMs(b.tarih) - pdrTarihMs(a.tarih));
   V.oneriler = (pdrSozlukOku(rapor.mudahaleOnerileri, ad, sinif) || []).filter((o, i, l) => o && l.findIndex(y => y && y.baslik === o.baslik) === i);
   // Denemeler
@@ -20984,7 +20985,7 @@ function ozetRaporVeri(rapor) {
   Object.entries(OZ_TEST_GRUP).forEach(([g, tipler]) => { V.testler[g] = gruplar.filter(l => tipler.includes(l[0].tip)).map(satir).sort((a, b) => pdrTarihMs(b.tarih) - pdrTarihMs(a.tarih)); });
   const tumTip = Object.values(OZ_TEST_GRUP).flat();
   V.testler.diger = gruplar.filter(l => !tumTip.includes(l[0].tip)).map(satir);
-  if (!V.testler.dikkat.some(x => x.k.tip === "d2") && p2.d2 && (p2.d2.PR || p2.d2.TN)) V.testler.dikkat.push({ k: { tip: "d2", veri: p2.d2 }, ad: "D2 Dikkat Testi (profil)", tarih: "", ozet: d2KisaOzet(p2.d2), durum: ozTestDurum({ tip: "d2", veri: p2.d2 }), deg: null });
+  if (!V.testler.dikkat.some(x => x.k.tip === "d2" && x.k.testAdi !== "Frankfurter Dikkat Testi") && p2.d2 && (p2.d2.PR || p2.d2.TN)) V.testler.dikkat.push({ k: { tip: "d2", veri: p2.d2 }, ad: "D2 Dikkat Testi (profil)", tarih: "", ozet: d2KisaOzet(p2.d2), durum: ozTestDurum({ tip: "d2", veri: p2.d2 }), deg: null });
   // Sınav kaygısı
   const sk = (rapor.sinavKaygisi || {})[pdrOgrAnahtar(ad, sinif, no)] || pdrSozlukOku(rapor.sinavKaygisi, ad, sinif) || null;
   V.kaygi = sk ? Object.entries(sk.kaygiDuzeyleri || {}).map(([h, v]) => ({ etiket: h + ".H", y: ozSayi(v) })).filter(x => x.y != null).sort((a, b) => parseInt(a.etiket) - parseInt(b.etiket)) : [];
@@ -21067,7 +21068,7 @@ function ozetRaporKutulari(V) {
     let h = "";
     if (V.denemeler.length) {
       h += ozAlt(`Deneme toplam net (${V.denemeler.length} deneme${V.maksNet ? ", en fazla " + V.maksNet : ""})`);
-      h += ozCizgi(V.denemeler.map(d => ({ y: d.net, etiket: "D" + d.no })), { renk: "#1D4ED8", refY: V.gdo, refEtiket: "geçen yıl ort.", min: 0 });
+      h += ozCizgi(V.denemeler.map(d => ({ y: d.net, etiket: "D" + d.no })), { renk: "#1D4ED8", refY: V.gdo, refEtiket: "geçen yıl ort.", min: Math.min(0, ...V.denemeler.map(d => d.net)) });
     } else if (V.gdo != null) h += `<div class="oz-k">Geçen yıl deneme ortalaması: <b>${V.gdo}</b> (bu yıl deneme girilmedi)</div>`;
     if (V.dersNet.length) { h += ozAlt("Ders netleri — son deneme (çizgi: ortalama)"); h += V.dersNet.map(d => ozCubuk(d.ad, d.son, d.maks, d.renk, d.son != null ? d.son + "/" + d.maks : "—", d.ort)).join(""); }
     if (V.yilSonu.length) { h += ozAlt("Yıl sonu not ortalamaları"); h += `<div class="oz-kartlar">${V.yilSonu.map(([s, v, ham]) => `<div class="oz-kart"><b style="color:#5B3F9E">${e(ham || v)}</b><span>${e(s)}. sınıf</span></div>`).join("")}</div>`; }
@@ -21103,7 +21104,7 @@ function ozetRaporKutulari(V) {
     let h = "";
     const wisc = V.testler.bilissel.find(x => x.k.tip === "wisc_r");
     if (wisc) { const r = wiscHesapla(wisc.k.veri || {}); h += ozAlt("WISC-R zekâ bölümleri (çizgi: 100)"); h += [["Sözel", r.sz], ["Performans", r.pf], ["Toplam", r.tp]].filter(x => x[1] != null).map(([a, z]) => { const c = wiscSinif(z); return ozCubuk(a, z - 40, 120, c.renk, `${z} · ${c.ad.replace(/ \(.*\)/, "")}`, 60); }).join(""); if (r.kf && r.kf.dikkat != null) h += `<div class="oz-k">Kaufman dikkat faktörü: <b style="color:${r.kf.dikkatDusuk ? OZ_KIRMIZI : OZ_YESIL}">${ozYuvarla(r.kf.dikkat)}</b>${r.kf.dikkatDusuk ? " — diğer faktörlerin altında" : ""}</div>`; }
-    const d2 = V.testler.dikkat.find(x => x.k.tip === "d2" && x.k.veri && (x.k.veri.PR || x.k.veri.pr));
+    const d2 = V.testler.dikkat.find(x => x.k.tip === "d2" && x.k.testAdi !== "Frankfurter Dikkat Testi" && x.k.veri && (x.k.veri.PR || x.k.veri.pr));
     if (d2) { const v = d2.k.veri; const pr = ozSayi(v.PR != null && v.PR !== "" ? v.PR : v.pr); let ey = null; try { ey = ozSayi(d2Hesapla(v).E_yuzde); } catch (er) {} h += ozAlt("D2 dikkat (çizgi: hedef PR 75)"); h += ozCubuk("PR (yüzdelik)", pr, 100, pr < 50 ? OZ_KIRMIZI : pr < 75 ? OZ_SARI : OZ_YESIL, pr, 75); if (ey != null) h += ozCubuk("E% (hata oranı)", Math.min(ey, 10), 10, ey > 2.5 ? OZ_KIRMIZI : ey > 1.5 ? OZ_SARI : OZ_YESIL, "%" + ey, 2.5); }
     const cdt = V.testler.dikkat.find(x => x.k.tip === "dikkat_cdt");
     if (cdt) { try { const s = cdtPuanla(cdt.k.veri); if (s && s.tamam && s.indeksler) { h += ozAlt("ÇDT indeksleri (yüzdelik; çizgi: 16)"); h += s.indeksler.filter(i => i.yuzdelik != null).map(i => ozCubuk(i.ad, i.yuzdelik, 100, i.yuzdelik < 16 ? OZ_KIRMIZI : i.yuzdelik < 25 ? OZ_SARI : OZ_YESIL, "%" + Math.round(i.yuzdelik), 16)).join(""); } } catch (er) {} }
@@ -22472,7 +22473,7 @@ function RaporModalIc({ rapor, onKapat }) {
 
             {/* Bir Sonraki Seans Planı */}
             {(() => {
-              const aktifPlanlar = (raporMudahale[ogrenci] || []).filter(p => p.durum === "Devam Ediyor");
+              const aktifPlanlar = (pdrSozlukOku(raporMudahale || {}, ogrenci, ogrenciSinif) || (raporMudahale || {})[ogrenci] || []).filter(p => p.durum === "Devam Ediyor");
               const sonGorusme = gorusmeler?.length > 0 ? [...gorusmeler].sort((a,b) => {
                 const parse = d => { const [g,ay,y]=(d||"").split("."); return new Date(`${y}-${ay}-${g}`); };
                 return parse(b.date) - parse(a.date);
@@ -23627,6 +23628,8 @@ function metroHesapla(ek) {
 function metroRapor(ek) {
   const r = metroHesapla(ek); const L = ["METROPOLİTAN OKUL OLGUNLUĞU TESTİ — DEĞERLENDİRME"];
   L.push("Alt testler: " + METRO_ALT.map((x, i) => `${x.ad} ${r.a[i] ?? "—"}/${x.maks}`).join(" · "));
+  const asan = METRO_ALT.filter((x, i) => r.a[i] != null && (r.a[i] > x.maks || r.a[i] < 0));
+  if (asan.length) L.push(`⚠ Kontrol edin: ${asan.map(x => `${x.ad} (0–${x.maks})`).join(", ")} alt testinde girilen puan geçerli aralığın dışında.`);
   if (r.okuma != null) L.push(`Okuma olgunluğu (1–4. alt testler): ${r.okuma}/66 puan → ${r.okumaH.harf} (${r.okumaH.ad})`);
   if (r.sayi != null) L.push(`Sayı olgunluğu (5. alt test): ${r.sayi}/24 puan → ${r.sayiH.harf} (${r.sayiH.ad})`);
   if (r.genel != null) L.push(`Genel (toplam) olgunluk (1–6. alt testler): ${r.genel}/100 puan (%${r.genel}) → ${r.genelH.harf} (${r.genelH.ad})`);
@@ -23707,6 +23710,9 @@ function wiscRapor(ek, tum, haricId) {
   [["Sözel zekâ bölümü", r.sz], ["Performans zekâ bölümü", r.pf], ["Toplam zekâ bölümü", r.tp]].forEach(([a, v]) => { if (v != null) L.push(`${a}: ${v} → ${wiscSinif(v).ad}`); });
   if (r.fark != null) { const f = Math.abs(r.fark); L.push(`Sözel–performans farkı: ${r.fark > 0 ? "+" : ""}${r.fark} (${r.fark > 0 ? "sözel lehine" : r.fark < 0 ? "performans lehine" : "fark yok"}). ${f >= 15 ? "Fark klinik açıdan anlamlı ve belirgin; toplam zekâ bölümü tek başına yorumlanmamalı, iki alan ayrı ayrı değerlendirilmelidir." : f >= 12 ? "Fark istatistiksel olarak anlamlı düzeyde; iki alan arasında belirgin bir dengesizlik olabilir." : "Fark anlamlı düzeyde değil; zihinsel işlevler dengeli görünüyor."}`); }
   const ap = WISC_ALT.filter(x => r.p[x.k] != null);
+  const disZb = [["Sözel", r.sz], ["Performans", r.pf], ["Toplam", r.tp]].filter(([, v]) => v != null && (v < 40 || v > 160)).map(([a]) => a);
+  const disAlt = ap.filter(x => r.p[x.k] < 1 || r.p[x.k] > 19).map(x => x.ad);
+  if (disZb.length || disAlt.length) L.push(`⚠ Kontrol edin: ${[...disZb.map(a => a + " zekâ bölümü (40–160)"), ...disAlt.map(a => a + " (ölçek puanı 1–19)")].join(", ")} geçerli aralığın dışında; ham puan girilmiş olabilir.`);
   if (ap.length) {
     L.push("", "Alt test ölçek puanları (ort. 10, ss 3; 7 ve altı zayıf, 13 ve üstü güçlü): " + ap.map(x => `${x.ad} ${r.p[x.k]}`).join(" · "));
     if (r.guc.length) L.push("Kendi ortalamasına göre güçlü alanlar: " + r.guc.map(x => `${x.ad} (${r.p[x.k]}) — ${WISC_OLCER[x.k]}`).join("; "));

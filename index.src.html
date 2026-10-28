@@ -10246,8 +10246,10 @@ function pdrKapaliP2Analizi({ sinavlar = {}, d2 = {}, gecmisYillar = {}, ilgiler
       const duz = PR >= 75 ? "ortalamanın üstünde" : PR >= 25 ? "ortalama düzeyde" : PR >= 10 ? "ortalamanın altında" : "belirgin biçimde düşük";
       parcalar.push(`D2 dikkat testinde yüzdelik sıra ${PR}; genel dikkat performansı yaşıtlarına göre ${duz}`);
     }
-    if (EY !== null) parcalar.push(EY > 10 ? `hata yüzdesi (%${EY}) yüksek — hız uğruna doğruluktan ödün veriyor olabilir, dikkatsizlik hatalarına eğilim var` : EY < 3 ? `hata yüzdesi (%${EY}) düşük — dikkatli ve özenli çalışıyor` : `hata yüzdesi (%${EY}) olağan aralıkta`);
-    if (FR !== null && FR >= 15) parcalar.push(`satırlar arası dalgalanma (FR ${FR}) yüksek — dikkatin süreklilik içinde iniş çıkış gösterdiğini düşündürüyor`);
+    if (EY !== null) parcalar.push(EY > 15 ? `hata yüzdesi (%${EY}) yüksek — hız uğruna doğruluktan ödün veriyor olabilir, dikkatsizlik hatalarına eğilim var` : EY < 5 ? `hata yüzdesi (%${EY}) düşük — dikkatli ve özenli çalışıyor` : `hata yüzdesi (%${EY}) olağan aralıkta`);
+    { const e1 = sayi(d2.E1), e2 = sayi(d2.E2); if (e1 !== null && e2 !== null && e1 + e2 > 0) parcalar.push(e1 >= e2 * 3 ? "hataların çoğu atlama (E1) — tarama sırasında hedefleri kaçırıyor" : e2 > e1 ? "hataların çoğu yanlış işaretleme (E2) — dürtüsellik ya da görsel ayırt etme güçlüğü araştırılabilir" : "atlama ve yanlış işaretleme dengeli"); }
+    if (sayi(d2.CP) !== null && sayi(d2.CP) < 0) parcalar.push("CP negatif — rastgele işaretleme olabilir, sonuç geçerliliği şüpheli");
+    if (FR !== null && FR >= 30) parcalar.push(`satırlar arası dalgalanma (FR ${FR}) yüksek — dikkatin süreklilik içinde iniş çıkış gösterdiğini düşündürüyor`);
     let yorum = parcalar.join("; ") + ".";
     if (PR !== null && PR < 25) yorum += " Dikkat desteği önerilir: kısa ve bölünmüş çalışma blokları (25 dk çalışma + 5 dk mola), dikkat dağıtıcıların azaltılması, ön sıralarda oturma. Sınıf içi gözlemle birlikte belirtiler belirginse ve birden çok ortamda görülüyorsa uzman değerlendirmesi önerilebilir.";
     if (PR !== null && PR < 25 && dersOrt.length && dersOrt.reduce((s, d) => s + d.ort, 0) / dersOrt.length < 60) yorum += " Düşük dikkat performansı ile akademik düşüklük birlikte görülüyor; akademik güçlükte dikkatin payı olabilir.";
@@ -12086,6 +12088,9 @@ function ksAsistanTestSonucu(g, ctx, o) {
         const p = oyProfil(v, v.sinifNo || oySinifNo(o.className), t.tarih);
         if (p.moduller.length) b.push(`Destek gereken modüller: ${p.moduller.map(m => `${OY_MODULLER[m.k].ad} (${K(m.neden, 90)})`).join("; ")}`);
         if (p.kademe) b.push(`Önerilen destek: ${p.kademe}`);
+      } else if (t.tip === "d2" && t.veri && (t.veri.TN || t.veri.TN_E || t.veri.E1)) {
+        b.push(d2KisaOzet(v));
+        b.push(`Yorum: ${d2Yorum(v)}`);
       } else if (t.tip === "okuma_programi") {
         b.push(oyKisaOzetProgram(v));
         const iz = oyIzlemeAnaliz(v); if (iz.karar) b.push(`İzleme kararı: ${iz.karar.metin}`);
@@ -15959,7 +15964,7 @@ async function getP2Analiz({ studentName, className, sinavlar, d2, gecmisYillar,
     return null;
   }).filter(Boolean).join(", ");
 
-  const d2Metni = d2 && (d2.TN || d2.TN_E) ? `D2 Dikkat Testi: TN=${d2.TN||"—"}, E1=${d2.E1||"—"}, E2=${d2.E2||"—"}, TN-E=${d2.TN_E||"—"}, E%=${d2.E_yuzde||"—"}, PR=${d2.PR||"—"}` : "";
+  const d2Metni = d2 && (d2.TN || d2.TN_E) ? `D2 Dikkat Testi: TN=${d2.TN||"—"}, E1=${d2.E1||"—"}, E2=${d2.E2||"—"}, E=${d2.E||(d2Sayi(d2.E1)!==null||d2Sayi(d2.E2)!==null?(d2Sayi(d2.E1)||0)+(d2Sayi(d2.E2)||0):"—")}, TN-E=${d2.TN_E||"—"}, E%=${d2.E_yuzde||"—"}, CP=${d2.CP||"—"}, FR=${d2.FR||"—"}, PR=${d2.PR||"—"}` : "";
 
   // Geçmiş yıl sonu not ortalamaları — D2 Testler sekmesine taşındıktan sonra bile
   // buradaki analiz D2 sonucunu profiles2'nin en son kaydından okumaya devam ediyor
@@ -15998,7 +16003,7 @@ bir akademik seyir tespit ederek yap - eger gecmis yil verisi yoksa bunu belirtm
 
 AKADEMIK DURUM: (yazili sinav puanlarina VE gecmis yil sonu ortalamalarina (varsa) gore guclu/zayif dersler,
 akademik seyrin yukselen mi dusen mi istikrarli mi oldugu, genel akademik profil)
-DIKKAT PROFİLİ: ${d2Metni ? "(D2 sonuclarini yorumla — TN psikomotor hiz, E1 secici dikkat, TN-E performans, E% hata orani, PR yuzdelik. Dikkat destegi gerekip gerekmedigini belirt VE bu dikkat profilinin akademik durumla iliskisini degerlendir)" : "(D2 verisi girilmemis)"}
+DIKKAT PROFİLİ: ${d2Metni ? "(D2 sonuclarini yorumla — TN islenen toplam/psikomotor hiz, E1 atlama (ihmal), E2 yanlis isaretleme (durtusellik/ayirt etme), E toplam hata, TN-E toplam performans, E% hata orani (cocuklarda %5-15 olagan; sabit kesme yok), CP konsantrasyon performansi, FR satirlar arasi dalgalanma, PR yasa gore yuzdelik (25-75 ortalama). Norm karari PR ile verilir. Dikkat destegi gerekip gerekmedigini belirt VE bu dikkat profilinin akademik durumla iliskisini degerlendir)" : "(D2 verisi girilmemis)"}
 DENEME ANALİZİ: ${avg ? `(Deneme ortalamasi ${avg}/90 — LGS hedef okul araligini belirt, gidebilecegi liseleri soylet, trend varsa yorum yap)` : "(Deneme verisi yok)"}
 İLGİ-KARİYER UYUMU: (ilgi alanlari ile kariyer hedefi arasindaki uyum)
 LGS CALISMA ONERISI: (ders bazli somut calisma stratejisi, hangi derse ne kadar agirlik verilmeli)
@@ -20245,7 +20250,7 @@ function pdrOncekiSinifDuzeyleri(className) {
   return liste.reverse();
 }
 
-const EMPTY_D2 = { TN: "", E1: "", E2: "", CP: "", FR: "", E_yuzde: "", TN_E: "", PR: "", yorum: "" };
+const EMPTY_D2 = { TN: "", E1: "", E2: "", E: "", CP: "", FR: "", E_yuzde: "", TN_E: "", PR: "", yorum: "" };
 const EMPTY_PROF2 = { studentName:"", className:"", sinavlar:{...EMPTY_SINAV}, d2: {...EMPTY_D2}, gecmisYillar:{}, ilgiler:[], ilgiNot:"", kariyer_hedef:"", aile_notu:"" };
 
 function today() { return new Date().toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" }); }
@@ -21838,9 +21843,8 @@ function RaporModalIc({ rapor, onKapat }) {
                     const d2 = profil2.d2;
                     const pr = parseFloat(d2.PR) || 0;
                     const e = parseFloat(d2.E_yuzde) || 0;
-                    const eRenk = e<=1.5?"#1A8C5B":e<=2.5?"#B07D1A":"#C0392B";
-                    const eBg = e<=1.5?"#E6F5EE":e<=2.5?"#FDF6E3":"#FDECEA";
-                    const prRenk = pr>=85?"#1A8C5B":pr>=70?"#9E78ED":pr>=60?"#B07D1A":"#C0392B";
+                    const hbB = d2HataBant(e) || { ad: "", renk: MUTED, bg: "#F3F4F6" }, prB = d2PrBant(pr) || { ad: "", renk: MUTED };
+                    const eRenk = hbB.renk, eBg = hbB.bg, prRenk = prB.renk;
                     return (
                       <div style={{ marginBottom: 10 }}>
                         <div style={{ fontSize: 10, fontWeight: 700, color: "#9B87F0", textTransform: "uppercase", marginBottom: 8 }}>D2 Dikkat Testi</div>
@@ -21849,7 +21853,7 @@ function RaporModalIc({ rapor, onKapat }) {
                         <table style={{ width:"100%", borderCollapse:"collapse", marginBottom:8, fontSize:10 }}>
                           <thead>
                             <tr style={{ background:"#F3F0FF" }}>
-                              {[["TN","Psikomotor"],["E1","Seçici Dkt"],["E2","Öğr.Güçlük"],["CP","Doğru Perf"],["FR","Salınım"],["TN-E","Test Perf"],["E%","Hata Oranı"],["PR","Yüzdelik"]].map(([k,ac])=>(
+                              {[["TN","İşlenen"],["E1","Atlama"],["E2","Yanlış İşr."],["E","Top. Hata"],["CP","Doğru Perf"],["FR","Salınım"],["TN-E","Test Perf"],["E%","Hata Oranı"],["PR","Yüzdelik"]].map(([k,ac])=>(
                                 <th key={k} style={{padding:"4px 3px",textAlign:"center",color:"#9B87F0",fontWeight:700,fontSize:9,borderBottom:"2px solid #9B87F044",borderRight:"1px solid #eee"}}>
                                   <div>{k}</div><div style={{fontSize:7,color:"#888",fontWeight:400}}>{ac}</div>
                                 </th>
@@ -21858,7 +21862,7 @@ function RaporModalIc({ rapor, onKapat }) {
                           </thead>
                           <tbody>
                             <tr>
-                              {[d2.TN, d2.E1, d2.E2, d2.CP, d2.FR, d2.TN_E, d2.E_yuzde?d2.E_yuzde+"%":null, d2.PR].map((v,i)=>(
+                              {[d2.TN, d2.E1, d2.E2, d2.E || ((d2Sayi(d2.E1)!==null||d2Sayi(d2.E2)!==null) ? String((d2Sayi(d2.E1)||0)+(d2Sayi(d2.E2)||0)) : null), d2.CP, d2.FR, d2.TN_E, d2.E_yuzde?d2.E_yuzde+"%":null, d2.PR].map((v,i)=>(
                                 <td key={i} style={{padding:"5px 3px",textAlign:"center",fontWeight:900,fontSize:13,color:"#9B87F0",borderRight:"1px solid #f0eeff",borderBottom:"1px solid #f0eeff"}}>
                                   {v||"—"}
                                 </td>
@@ -21874,25 +21878,26 @@ function RaporModalIc({ rapor, onKapat }) {
                               <div style={{ marginBottom: 5 }}>
                                 <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, marginBottom:2 }}>
                                   <span style={{ fontWeight:700, color:"#333" }}>PR (Yüzdelik Dilim)</span>
-                                  <span style={{ fontWeight:900, color:prRenk }}>{pr} — {pr>=85?"İYİ":pr>=70?"NORMAL":pr>=60?"VASAT":"AVERAJ"}</span>
+                                  <span style={{ fontWeight:900, color:prRenk }}>{pr} — {prB.ad.toLocaleUpperCase("tr")}</span>
                                 </div>
                                 <div style={{ height:10, background:"#eee", borderRadius:4, position:"relative", overflow:"hidden" }}>
                                   <div style={{ width:`${Math.min(pr,100)}%`, height:"100%", background:prRenk, borderRadius:4 }}/>
+                                  <div style={{ position:"absolute", top:0, left:"25%", width:1, height:"100%", background:"#1A1A2E", opacity:0.5 }}/>
                                   <div style={{ position:"absolute", top:0, left:"75%", width:1, height:"100%", background:"#1A1A2E", opacity:0.5 }}/>
                                 </div>
-                                <div style={{ fontSize:7, color:"#888", textAlign:"right" }}>Hedef ≥ %75</div>
+                                <div style={{ fontSize:7, color:"#888", textAlign:"right" }}>Ortalama aralık: PR 25–75</div>
                               </div>
                             )}
                             {e > 0 && (
                               <div>
                                 <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, marginBottom:2 }}>
                                   <span style={{ fontWeight:700, color:"#333" }}>E% (Hata Oranı)</span>
-                                  <span style={{ fontWeight:900, color:eRenk }}>{e}% — {e<=1.5?"NORMAL":e<=2.5?"DİKKAT":"PROBLEM"}</span>
+                                  <span style={{ fontWeight:900, color:eRenk }}>%{e} — {hbB.ad.split(" —")[0].toLocaleUpperCase("tr")}</span>
                                 </div>
                                 <div style={{ height:10, background:"#eee", borderRadius:4, overflow:"hidden" }}>
-                                  <div style={{ width:`${Math.min((e/5)*100,100)}%`, height:"100%", background:eRenk, borderRadius:4 }}/>
+                                  <div style={{ width:`${Math.min((e/40)*100,100)}%`, height:"100%", background:eRenk, borderRadius:4 }}/>
                                 </div>
-                                <div style={{ fontSize:7, color:"#888", textAlign:"right" }}>Normal: 0–1.5 | Dikkat: 1.5–2.5 | Problem: 2.5+</div>
+                                <div style={{ fontSize:7, color:"#888", textAlign:"right" }}>Kaba ölçüt: %5 altı özenli · %5–15 olağan · %15–25 yüksekçe · %25+ yüksek (asıl karar PR ile)</div>
                               </div>
                             )}
                           </div>
@@ -21901,7 +21906,7 @@ function RaporModalIc({ rapor, onKapat }) {
                         {/* Yorum etiketi */}
                         {d2.E_yuzde && (
                           <div style={{background:eBg,borderRadius:5,padding:"3px 7px",fontSize:9,fontWeight:700,color:eRenk,marginBottom:4,display:"inline-block"}}>
-                            E = {d2.E_yuzde}% → {e<=1.5?"✓ NORMAL":e<=2.5?"⚠ DİKKAT EDİLMELİ":"✗ DİKKAT PROBLEMİ"}
+                            E% = {d2.E_yuzde} → {hbB.ad}
                           </div>
                         )}
                         {d2.yorum && <div style={{ fontSize:9, color:"#555", marginTop:3 }}>📝 {d2.yorum}</div>}
@@ -29564,7 +29569,7 @@ function IczPaneli({ seciliAd, seciliSinif, seciliNumara, seciliCinsiyet, testKa
 function testSonucOzeti(k) {
   const v = k.veri || {};
   switch (k.tip) {
-    case "d2": return `Doğru: ${v.dogru||"—"} · Yanlış/Atlanan: ${v.yanlisAtlanan||"—"} · Dikkat Puanı: ${v.dikkatPuani||"—"}${v.pr?` · PR: ${v.pr}`:""}`;
+    case "d2": if (v.TN || v.TN_E || v.E1 || v.satirlar && v.satirlar.length) return d2KisaOzet(v); return `Doğru: ${v.dogru||"—"} · Yanlış/Atlanan: ${v.yanlisAtlanan||"—"} · Dikkat Puanı: ${v.dikkatPuani||"—"}${v.pr?` · PR: ${v.pr}`:""}`;
     case "alt_test": {
       const altlar = Object.entries(v.altPuanlar||{}).map(([k2,val])=>`${k2}: ${val}`).join(", ");
       return `${altlar}${v.genelSonuc?` · Sonuç: ${v.genelSonuc}`:""}`;
@@ -29614,7 +29619,14 @@ function pdrTestOlcumleri(k, sinifNo) {
   const ekle = (ad, deger, iyi, birim) => { const d = S(deger); if (d !== null) l.push({ ad, deger: d, iyi: iyi || "notr", birim: birim || "" }); };
   try {
     switch (k.tip) {
-      case "d2": ekle("Doğru", v.dogru, "yuksek"); ekle("Yanlış/atlanan", v.yanlisAtlanan, "dusuk"); ekle("Dikkat puanı", v.dikkatPuani, "yuksek"); ekle("PR", v.pr, "yuksek"); break;
+      case "d2": {
+        if (v.TN || v.TN_E || v.E1 || (v.satirlar && v.satirlar.length)) {
+          const d = d2Hesapla(v);
+          ekle("TN (işlenen)", d.TN, "yuksek"); ekle("E1 (atlanan)", d.E1, "dusuk"); ekle("E2 (yanlış işaretleme)", d.E2, "dusuk"); ekle("E (toplam hata)", d.E, "dusuk");
+          ekle("TN-E (performans)", d.TN_E, "yuksek"); ekle("E% (hata oranı)", d.E_yuzde, "dusuk", "%"); ekle("CP (konsantrasyon)", d.CP, "yuksek"); ekle("FR (dalgalanma)", d.FR, "dusuk"); ekle("PR (yüzdelik)", d.PR, "yuksek");
+        } else { ekle("Doğru", v.dogru, "yuksek"); ekle("Yanlış/atlanan", v.yanlisAtlanan, "dusuk"); ekle("Dikkat puanı", v.dikkatPuani, "yuksek"); ekle("PR", v.pr, "yuksek"); }
+        break;
+      }
       case "alt_test": Object.entries(v.altPuanlar || {}).forEach(([a, d]) => ekle(a, d, "notr")); break;
       case "iq_esdeger": ekle("Ham puan", v.hamPuan, "yuksek"); ekle("Zekâ bölümü", v.zekaBolumu, "yuksek"); break;
       case "gelisimsel_hata": ekle("Hata puanı", v.hataPuani, "dusuk"); break;
@@ -29963,85 +29975,207 @@ function TestZamanCizelgesi({ kayitlar }) {
   );
 }
 
+// ── D2 Dikkat Testi (Brickenkamp; Türkçe uyarlama Toker 1988) ────────────────
+// 14 satır × 47 harf, satır başına 20 sn. Puanlar:
+//  TN  = işlenen toplam harf (psikomotor hız)          E1 = atlanan hedef (ihmal)
+//  E2  = yanlış işaretlenen (hatalı işaretleme)        E  = E1 + E2 (toplam hata)
+//  TN-E = TN − E (toplam performans)                   E% = E / TN × 100 (hata oranı)
+//  CP  = doğru işaretlenen hedef − E2 (konsantrasyon performansı)
+//  FR  = en yüksek satır TN − en düşük satır TN (dalgalanma; düşük olması iyi)
+// Yüzdelik (PR) yaşa göre norm tablosundan okunur; program norm tablosu içermez.
+const D2_ALANLAR = [
+  { k: "TN", ad: "TN", ac: "İşlenen toplam (hız)" }, { k: "E1", ad: "E1", ac: "Atlanan (ihmal)" }, { k: "E2", ad: "E2", ac: "Yanlış işaretleme" },
+  { k: "E", ad: "E", ac: "Toplam hata" }, { k: "TN_E", ad: "TN-E", ac: "Toplam performans" }, { k: "E_yuzde", ad: "E%", ac: "Hata oranı" },
+  { k: "CP", ad: "CP", ac: "Konsantrasyon perf." }, { k: "FR", ad: "FR", ac: "Dalgalanma" }, { k: "PR", ad: "PR", ac: "Yüzdelik (norm)" },
+];
+function d2Sayi(x) { if (x === null || x === undefined || String(x).trim() === "") return null; const n = parseFloat(String(x).replace(",", ".")); return isFinite(n) ? n : null; }
+// Girilen ham değerlerden türetilen puanları hesaplar (satır satır giriş varsa TN/E1/E2/FR oradan)
+function d2Hesapla(girdi) {
+  const d = { ...(girdi || {}) }; const S = d2Sayi;
+  const satir = (d.satirlar || []).map(s => ({ tn: S(s && s.tn), e1: S(s && s.e1), e2: S(s && s.e2) }));
+  const dolu = satir.filter(s => s.tn !== null);
+  if (dolu.length >= 2) {
+    d.TN = String(dolu.reduce((t, s) => t + s.tn, 0));
+    if (satir.some(s => s.e1 !== null)) d.E1 = String(satir.reduce((t, s) => t + (s.e1 || 0), 0));
+    if (satir.some(s => s.e2 !== null)) d.E2 = String(satir.reduce((t, s) => t + (s.e2 || 0), 0));
+    d.FR = String(Math.max(...dolu.map(s => s.tn)) - Math.min(...dolu.map(s => s.tn)));
+  }
+  const TN = S(d.TN), E1 = S(d.E1), E2 = S(d.E2), dogru = S(d.dogru);
+  if (E1 !== null || E2 !== null) d.E = String((E1 || 0) + (E2 || 0));
+  if (TN !== null && TN > 0 && (E1 !== null || E2 !== null)) { const E = (E1 || 0) + (E2 || 0); d.TN_E = String(TN - E); d.E_yuzde = (E / TN * 100).toFixed(1); }
+  if (dogru !== null && E2 !== null) d.CP = String(dogru - E2);
+  return d;
+}
+// Satır satır girişte ilk 7 ve son 7 satırın hız/hata karşılaştırması (sürdürülebilir dikkat)
+function d2Yarilar(d) {
+  const s = (d.satirlar || []).map(x => ({ tn: d2Sayi(x && x.tn), e: (d2Sayi(x && x.e1) || 0) + (d2Sayi(x && x.e2) || 0) }));
+  if (s.filter(x => x.tn !== null).length < 10) return null;
+  const top = (l) => l.reduce((t, x) => ({ tn: t.tn + (x.tn || 0), e: t.e + x.e }), { tn: 0, e: 0 });
+  const a = top(s.slice(0, 7)), b = top(s.slice(7, 14));
+  if (!a.tn) return null;
+  const dusus = Math.round((a.tn - b.tn) / a.tn * 100);
+  return { ilk: a, son: b, dusus, metin: dusus >= 15 ? `İkinci yarıda hız %${dusus} düştü — dikkati sürdürmekte zorlanma / yorulma olabilir.` : dusus <= -10 ? `İkinci yarıda hızlandı (%${-dusus}) — başta temkinli başlamış ya da ısınma etkisi.` : "Hız test boyunca dengeli kaldı." };
+}
+function d2PrBant(pr) {
+  const p = d2Sayi(pr); if (p === null) return null;
+  if (p < 10) return { ad: "belirgin düşük", renk: "#B91C1C", bg: "#FDECEA" };
+  if (p < 25) return { ad: "ortalamanın altı", renk: "#B45309", bg: "#FDF6E3" };
+  if (p <= 75) return { ad: "ortalama", renk: "#0E7490", bg: "#E0F2FE" };
+  if (p <= 90) return { ad: "ortalamanın üstü", renk: "#15803D", bg: "#E6F5EE" };
+  return { ad: "belirgin yüksek", renk: "#15803D", bg: "#E6F5EE" };
+}
+// E% için norm yerine geçmeyen kaba ölçüt (4-5. sınıf örnekleminde ortalama ≈ %13, ortanca ≈ %8,5)
+function d2HataBant(e) {
+  const x = d2Sayi(e); if (x === null) return null;
+  if (x < 5) return { ad: "düşük hata — özenli çalışıyor", renk: "#15803D", bg: "#E6F5EE" };
+  if (x <= 15) return { ad: "olağan aralık", renk: "#0E7490", bg: "#E0F2FE" };
+  if (x <= 25) return { ad: "yüksekçe — aceleye / dikkatsizliğe işaret edebilir", renk: "#B45309", bg: "#FDF6E3" };
+  return { ad: "yüksek — doğruluk belirgin biçimde düşük", renk: "#B91C1C", bg: "#FDECEA" };
+}
+function d2Uyarilar(d) {
+  const u = []; const S = d2Sayi;
+  const TN = S(d.TN), E1 = S(d.E1), E2 = S(d.E2), CP = S(d.CP), FR = S(d.FR);
+  if (CP !== null && CP < 0) u.push("CP negatif: rastgele işaretleme ya da yönergenin anlaşılmaması olabilir — sonucu geçerli saymadan önce uygulamayı gözden geçirin.");
+  if (E2 !== null && TN && E2 / TN > 0.1) u.push("E2 (yanlış işaretleme) çok yüksek: yönergeyi anlamama, görsel ayırt etme güçlüğü ya da dürtüsellik araştırılmalı.");
+  if (E1 !== null && E2 !== null && E1 > 0 && E2 > E1) u.push("Yanlış işaretleme atlamadan fazla: dürtüsel/aceleci bir çalışma tarzına işaret edebilir.");
+  if (FR !== null && FR >= 30) u.push(`Satırlar arası dalgalanma yüksek (FR ${FR}): dikkatin süreklilik içinde iniş çıkış gösterdiğini düşündürür.`);
+  return u;
+}
+function d2KisaOzet(v) {
+  const d = d2Hesapla(v || {});
+  const p = [];
+  if (d.TN) p.push(`TN ${d.TN}`); if (d.E1) p.push(`E1 ${d.E1}`); if (d.E2) p.push(`E2 ${d.E2}`); if (d.E) p.push(`E ${d.E}`);
+  if (d.TN_E) p.push(`TN-E ${d.TN_E}`); if (d.E_yuzde) p.push(`E% ${d.E_yuzde}`); if (d.CP) p.push(`CP ${d.CP}`); if (d.FR) p.push(`FR ${d.FR}`);
+  if (d.PR) { const b = d2PrBant(d.PR); p.push(`PR ${d.PR}${b ? ` (${b.ad})` : ""}`); }
+  return p.join(" · ");
+}
+// Kısa yorum (kapalı sistem; asistan, rapor ve panel ortak kullanır)
+function d2Yorum(v) {
+  const d = d2Hesapla(v || {}); const b = [];
+  const pb = d2PrBant(d.PR); if (pb) b.push(`Yaşa göre yüzdelik ${d.PR}: genel dikkat performansı ${pb.ad}.`);
+  const hb = d2HataBant(d.E_yuzde); if (hb) b.push(`Hata oranı %${d.E_yuzde}: ${hb.ad}.`);
+  const E1 = d2Sayi(d.E1), E2 = d2Sayi(d.E2);
+  if (E1 !== null && E2 !== null && E1 + E2 > 0) b.push(E1 >= E2 * 3 ? "Hataların çoğu atlama (E1): seçici dikkat/tarama sırasında hedefleri kaçırma." : E2 > E1 ? "Hataların çoğu yanlış işaretleme (E2): dürtüsellik ya da görsel ayırt etme." : "Atlama ve yanlış işaretleme dengeli.");
+  const y = d2Yarilar(d); if (y) b.push(y.metin);
+  d2Uyarilar(d).forEach(x => b.push(x));
+  if (!d.PR) b.push("PR girilmemiş: yorum için TN-E (ya da CP) puanının yaşa göre norm tablosundaki yüzdeliğini girin.");
+  return b.join(" ");
+}
+
 // ── D2 Dikkat Testi Paneli (Testler sekmesi) ────────────────────────────────
-// AMAÇ: D2 girişini Profil 2 formundan Testler sekmesine taşımak. Veri hâlâ
-// AYNI YERDE (profiles2 dizisindeki öğrencinin en son kaydının d2 alanı)
-// tutuluyor — böylece PDF rapor, AI Akademik analizi ve profil ekranındaki
-// mevcut gösterim kodu HİÇ DEĞİŞMEDEN çalışmaya devam ediyor. Sadece giriş
-// noktası taşındı.
-function D2Paneli({ seciliAd, seciliSinif, seciliNumara, profiles2, setProfiles2 }) {
+// Her uygulama Testler kaydı olarak saklanır (geçmiş ve önceki uygulamayla karşılaştırma için);
+// en son uygulama ayrıca Profil 2'nin d2 alanına yazılır (profil ekranı, PDF rapor ve AI analizi
+// eskisi gibi oradan okur).
+function D2Paneli({ seciliAd, seciliSinif, seciliNumara, profiles2, setProfiles2, testKayitlari, setTestKayitlari }) {
   const mevcutP2 = profiles2.find(p => pdrAyniOgrenci(p.studentName, p.className, seciliAd, seciliSinif, p.numara, seciliNumara));
-  const [d2, setD2] = useState({ ...EMPTY_D2, ...(mevcutP2?.d2 || {}) });
-  const [kaydedildi, setKaydedildi] = useState(false);
+  const tumKayitlar = (testKayitlari && pdrSozlukOku(testKayitlari, seciliAd, seciliSinif, seciliNumara)) || [];
+  const d2Kayitlar = tumKayitlar.filter(k => k.tip === "d2" && k.testAdi === "D2 Dikkat Testi").sort((a, b) => (pdrTarihMs(b.tarih) || 0) - (pdrTarihMs(a.tarih) || 0));
+  const bos = () => ({ ...EMPTY_D2, E: "", dogru: "", satirlar: [] });
+  const [d2, setD2] = useState(bos());
+  const [tarih, setTarih] = useState(today());
+  const [satirAcik, setSatirAcik] = useState(false);
+  const [durum, setDurum] = useState("");
   const inp = { width:"100%", padding:"9px 11px", borderRadius:9, border:`1px solid ${BORDER}`, fontSize:13, boxSizing:"border-box", background:CARD, color:TEXT };
   const lbl = { fontSize:10, fontWeight:700, color:MUTED, display:"block", marginBottom:3 };
-
-  useEffect(() => {
-    setD2({ ...EMPTY_D2, ...(mevcutP2?.d2 || {}) });
-  }, [seciliAd, seciliSinif, seciliNumara]);
-
-  function alanGuncelle(key, val) {
-    setD2(nd0 => {
-      const nd = { ...nd0, [key]: val };
-      const tn = parseFloat(key === "TN" ? val : nd.TN), e1 = parseFloat(key === "E1" ? val : nd.E1) || 0, e2 = parseFloat(key === "E2" ? val : nd.E2) || 0;
-      if (!isNaN(tn) && tn > 0) { nd.TN_E = String(tn - e1 - e2); nd.E_yuzde = (((e1 + e2) / tn) * 100).toFixed(2); }
-      return nd;
-    });
-  }
-
+  useEffect(() => { setD2(bos()); setTarih(today()); setDurum(""); }, [seciliAd, seciliSinif, seciliNumara]);
+  const h = d2Hesapla(d2);
+  const satirlarDolu = (d2.satirlar || []).filter(s => s && d2Sayi(s.tn) !== null).length >= 2;
+  const alan = (k, v) => setD2(x => ({ ...x, [k]: v }));
+  const satirAlan = (i, k, v) => setD2(x => { const s = [...(x.satirlar || [])]; while (s.length < 14) s.push({ tn: "", e1: "", e2: "" }); s[i] = { ...s[i], [k]: v }; return { ...x, satirlar: s }; });
+  // Eski (yalnız Profil 2'de duran) D2 sonucu: ilk yeni kayıtta geçmişe aktarılır
+  const eskiP2 = mevcutP2 && mevcutP2.d2 && (mevcutP2.d2.TN || mevcutP2.d2.TN_E || mevcutP2.d2.PR) && !d2Kayitlar.some(k => k.veri && k.veri.kaynak === "profil2" || (k.veri && String(k.veri.TN) === String(mevcutP2.d2.TN) && String(k.veri.PR) === String(mevcutP2.d2.PR))) ? mevcutP2.d2 : null;
   async function kaydet() {
-    let guncel;
-    if (mevcutP2) {
-      guncel = profiles2.map(p => p.id === mevcutP2.id ? { ...p, d2 } : p);
-    } else {
-      guncel = [{ id: uid(), date: today(), studentName: seciliAd, className: seciliSinif, numara: seciliNumara || "", ...EMPTY_PROF2, d2 }, ...profiles2];
-    }
-    setProfiles2(guncel);
-    await saveProfiles2(guncel);
-    setKaydedildi(true); setTimeout(() => setKaydedildi(false), 2000);
+    if (!d2Sayi(h.TN) && !d2Sayi(h.TN_E) && !d2Sayi(h.PR)) { setDurum("⚠ En az TN (ya da satır satır TN) girin."); return; }
+    const veri = { ...h, satirlar: satirlarDolu ? (h.satirlar || []).slice(0, 14) : [] };
+    const yeni = { id: uid(), kategori: "objektif", testAdi: "D2 Dikkat Testi", tip: "d2", tarih: tarih || today(), not: d2.yorum || "", veri };
+    const ekler = [yeni];
+    if (eskiP2) ekler.push({ id: uid(), kategori: "objektif", testAdi: "D2 Dikkat Testi", tip: "d2", tarih: mevcutP2.date || "", not: eskiP2.yorum || "", veri: { ...d2Hesapla({ ...eskiP2 }), kaynak: "profil2" } });
+    const guncelT = pdrSozlukYaz(testKayitlari, seciliAd, seciliSinif, [...ekler, ...tumKayitlar], seciliNumara);
+    setTestKayitlari(guncelT);
+    // Profil 2'ye en yeni uygulama yazılır (tarihi daha eski bir kayıt girilirse profil değişmez)
+    const enYeni = [...ekler, ...d2Kayitlar].sort((a, b) => (pdrTarihMs(b.tarih) || 0) - (pdrTarihMs(a.tarih) || 0))[0];
+    const p2d2 = { ...EMPTY_D2 }; Object.keys(EMPTY_D2).forEach(k => { if (enYeni.veri[k] !== undefined) p2d2[k] = String(enYeni.veri[k] ?? ""); }); p2d2.yorum = enYeni.not || enYeni.veri.yorum || "";
+    const guncelP = mevcutP2 ? profiles2.map(p => p.id === mevcutP2.id ? { ...p, d2: p2d2 } : p) : [{ id: uid(), date: today(), studentName: seciliAd, className: seciliSinif, numara: seciliNumara || "", ...EMPTY_PROF2, d2: p2d2 }, ...profiles2];
+    setProfiles2(guncelP);
+    try { await saveTestKayitlari(guncelT); await saveProfiles2(guncelP); setDurum("✓ Kaydedildi — geçmiş uygulamalarda ve öğrenci profilinde görünür."); setD2(bos()); setSatirAcik(false); }
+    catch (e) { setDurum("⚠ Kaydedilirken sorun oluştu — internet bağlantısını kontrol edin."); }
   }
-
+  async function sil(k) {
+    if (!window.confirm(`${k.tarih} tarihli D2 kaydı silinsin mi?`)) return;
+    const guncelT = pdrSozlukYaz(testKayitlari, seciliAd, seciliSinif, tumKayitlar.filter(x => x.id !== k.id), seciliNumara);
+    setTestKayitlari(guncelT); try { await saveTestKayitlari(guncelT); } catch (e) {}
+  }
+  const kutu = (renkli) => ({ background: renkli ? "#F3F0FF" : CARD, borderRadius: 8, padding: "7px 6px", textAlign: "center" });
+  const pb = d2PrBant(h.PR), hb = d2HataBant(h.E_yuzde), yar = d2Yarilar(h), uy = d2Uyarilar(h);
   return (
-    <div>
+    <div data-d2-panel="1">
       <div style={{background:CARD,border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)",borderRadius:12,padding:14,marginBottom:12}}>
-        <div style={{fontSize:12,fontWeight:700,color:PURPLE,textTransform:"uppercase",letterSpacing:0.5,marginBottom:10}}>D2 Dikkat Testi — {seciliAd}</div>
+        <div style={{fontSize:12,fontWeight:700,color:PURPLE,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>D2 Dikkat Testi — {seciliAd}</div>
+        <div style={{fontSize:11,color:MUTED,lineHeight:1.5,marginBottom:10}}>14 satır, satır başına 20 sn. Ham puanları girin; E, TN-E, E%, CP ve FR kendiliğinden hesaplanır. PR'yi el kitabındaki yaşa göre norm tablosundan girin.</div>
+        <label style={lbl}>UYGULAMA TARİHİ</label>
+        <input data-d2="tarih" value={tarih} onChange={e => setTarih(e.target.value)} placeholder="gg.aa.yyyy" style={{...inp, marginBottom:8}} />
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:8}}>
-          {[{key:"TN",label:"TN"},{key:"E1",label:"E1"},{key:"E2",label:"E2"},{key:"CP",label:"CP"},{key:"FR",label:"FR"},{key:"PR",label:"PR"}].map(f=>(
-            <div key={f.key}>
-              <label style={{...lbl,color:PURPLE}}>{f.key}</label>
-              <input type="number" placeholder="—" value={d2?.[f.key]||""}
-                onChange={e=>alanGuncelle(f.key, e.target.value)}
-                style={{...inp,borderColor:d2?.[f.key]?PURPLE:BORDER}} />
+          {[{ k: "TN", l: "TN (işlenen)" }, { k: "E1", l: "E1 (atlanan)" }, { k: "E2", l: "E2 (yanlış)" }, { k: "dogru", l: "Doğru işaretlenen" }, { k: "PR", l: "PR (norm)" }].map(f => (
+            <div key={f.k}>
+              <label style={{...lbl,color:PURPLE}}>{f.l}</label>
+              <input data-d2={f.k} type="number" inputMode="numeric" placeholder="—" value={satirlarDolu && ["TN","E1","E2"].includes(f.k) ? (h[f.k] || "") : (d2[f.k] || "")} disabled={satirlarDolu && ["TN","E1","E2"].includes(f.k)}
+                onChange={e => alan(f.k, e.target.value)} style={{...inp,borderColor:d2[f.k]?PURPLE:BORDER}} />
             </div>
           ))}
+          <div>
+            <label style={{...lbl,color:PURPLE}}>CP (elle)</label>
+            <input data-d2="CP" type="number" placeholder={h.CP && d2Sayi(d2.dogru) !== null ? h.CP : "—"} value={d2Sayi(d2.dogru) !== null ? h.CP || "" : (d2.CP || "")} disabled={d2Sayi(d2.dogru) !== null} onChange={e => alan("CP", e.target.value)} style={inp} />
+          </div>
         </div>
-        {(d2?.TN_E||d2?.E_yuzde) && (
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
-            {[{k:"TN_E",l:"TN-E (Test Performansı)"},{k:"E_yuzde",l:"E% (Hata Oranı)"}].map(f=>(
-              <div key={f.k} style={{background:"#F3F0FF",borderRadius:8,padding:"8px",textAlign:"center"}}>
-                <div style={{fontSize:18,fontWeight:900,color:PURPLE}}>{d2?.[f.k]||"—"}</div>
-                <div style={{fontSize:10,color:PURPLE,fontWeight:700}}>{f.l}</div>
+        <button data-d2="satir-ac" onClick={() => setSatirAcik(a => !a)} style={{ background:"none", border:`1px dashed ${PURPLE}`, color:PURPLE, borderRadius:9, padding:"7px 10px", fontSize:12, fontWeight:700, cursor:"pointer", width:"100%", marginBottom:8 }}>{satirAcik ? "▲ Satır satır girişi kapat" : "▼ Satır satır gir (14 satır) — TN, E1, E2 ve FR kendiliğinden hesaplanır"}</button>
+        {satirAcik && (
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ display:"grid", gridTemplateColumns:"34px 1fr 1fr 1fr", gap:4, fontSize:10, fontWeight:700, color:MUTED, marginBottom:3 }}><span>Satır</span><span>TN</span><span>E1</span><span>E2</span></div>
+            {Array.from({ length: 14 }).map((_, i) => (
+              <div key={i} style={{ display:"grid", gridTemplateColumns:"34px 1fr 1fr 1fr", gap:4, marginBottom:3 }}>
+                <span style={{ fontSize:12, fontWeight:700, color:PURPLE, alignSelf:"center" }}>{i + 1}</span>
+                {["tn", "e1", "e2"].map(k => <input key={k} data-d2={`satir-${i}-${k}`} type="number" inputMode="numeric" value={((d2.satirlar || [])[i] || {})[k] || ""} onChange={e => satirAlan(i, k, e.target.value)} style={{ ...inp, padding:"6px 7px", fontSize:12 }} />)}
               </div>
             ))}
           </div>
         )}
-        {d2?.E_yuzde && (
-          <div style={{borderRadius:8,padding:"8px 12px",marginBottom:6,border:"2px solid",...(()=>{const e=parseFloat(d2.E_yuzde);return e<=1.5?{background:"#E6F5EE",borderColor:"#1A8C5B",color:"#1A8C5B"}:e<=2.5?{background:"#FDF6E3",borderColor:"#B07D1A",color:"#B07D1A"}:{background:"#FDECEA",borderColor:"#C0392B",color:"#C0392B"};})()}}>
-            <b>E = {d2.E_yuzde}%</b> → {(()=>{const e=parseFloat(d2.E_yuzde);return e<=1.5?"NORMAL (0–1.5)":e<=2.5?"DİKKAT EDİLMELİ (1.5–2.5)":"DİKKAT PROBLEMİ (2.5+)";})()}
-          </div>
-        )}
-        <label style={lbl}>DANIŞMAN YORUMU</label>
-        <textarea placeholder="D2 gözlemi…" value={d2?.yorum||""}
-          onChange={e=>setD2(nd=>({...nd,yorum:e.target.value}))}
-          rows={2} style={{...inp,resize:"vertical"}} />
+        <div data-d2="sonuc" style={{display:"grid",gridTemplateColumns:"repeat(3, 1fr)",gap:6,marginBottom:8}}>
+          {D2_ALANLAR.map(f => (
+            <div key={f.k} style={kutu(["E","TN_E","E_yuzde","FR"].includes(f.k) || (f.k === "CP" && d2Sayi(d2.dogru) !== null))}>
+              <div style={{fontSize:16,fontWeight:900,color:PURPLE}}>{h[f.k] ? (f.k === "E_yuzde" ? "%" + h[f.k] : h[f.k]) : "—"}</div>
+              <div style={{fontSize:9.5,color:PURPLE,fontWeight:700}}>{f.ad}</div>
+              <div style={{fontSize:8.5,color:MUTED}}>{f.ac}</div>
+            </div>
+          ))}
+        </div>
+        {pb && <div style={{borderRadius:8,padding:"7px 10px",marginBottom:6,background:pb.bg,color:pb.renk,fontSize:12,fontWeight:700}}>PR {h.PR} → {pb.ad}</div>}
+        {hb && <div style={{borderRadius:8,padding:"7px 10px",marginBottom:6,background:hb.bg,color:hb.renk,fontSize:12,fontWeight:700}}>E% {h.E_yuzde} → {hb.ad}<div style={{fontSize:10,fontWeight:500,color:MUTED,marginTop:2}}>Kaba ölçüttür; asıl karar yaşa göre norm (PR) ile verilir.</div></div>}
+        {yar && <div style={{fontSize:11.5,color:TEXT,marginBottom:6}}>⏱ İlk 7 satır TN {yar.ilk.tn} · son 7 satır TN {yar.son.tn} — {yar.metin}</div>}
+        {uy.map((x, i) => <div key={i} style={{fontSize:11.5,color:"#B45309",marginBottom:4}}>⚠ {x}</div>)}
+        <label style={lbl}>DANIŞMAN YORUMU / GÖZLEM</label>
+        <textarea placeholder="Uygulama sırasındaki gözlem (yorgunluk, acele, yönerge…)" value={d2.yorum || ""} onChange={e => alan("yorum", e.target.value)} rows={2} style={{...inp,resize:"vertical"}} />
       </div>
-      <button onClick={kaydet} style={{
-        width:"100%", padding:"11px", borderRadius:11, border:"none",
-        background: kaydedildi ? ACCENT : PURPLE, color:"#fff", fontSize:13.5, fontWeight:800, cursor:"pointer"
-      }}>{kaydedildi ? "✓ Kaydedildi" : "D2 Sonucunu Kaydet"}</button>
+      <button data-d2="kaydet" onClick={kaydet} style={{ width:"100%", padding:"11px", borderRadius:11, border:"none", background: PURPLE, color:"#fff", fontSize:13.5, fontWeight:800, cursor:"pointer" }}>D2 Sonucunu Kaydet</button>
+      {durum && <div style={{fontSize:12,fontWeight:700,color:durum.startsWith("✓")?"#15803D":"#B45309",marginTop:6}}>{durum}</div>}
+      {eskiP2 && <div style={{fontSize:10.5,color:MUTED,marginTop:6}}>Profilde daha önce girilmiş bir D2 sonucu var (TN {eskiP2.TN || "—"}, PR {eskiP2.PR || "—"}); yeni kayıtta geçmişe eklenir ve karşılaştırmaya girer.</div>}
+      {d2Kayitlar.length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 11, fontWeight: 800, color: MUTED, marginBottom: 6 }}>GEÇMİŞ D2 UYGULAMALARI ({d2Kayitlar.length})</div>
+          {d2Kayitlar.map(k => (
+            <div key={k.id} data-d2-kayit="1" style={{ background:CARD, border:`1px solid ${BORDER}`, borderRadius:10, padding:"9px 11px", marginBottom:7 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", gap:8 }}>
+                <b style={{ fontSize:12.5 }}>{k.tarih || "?"}</b>
+                <button onClick={() => sil(k)} style={{ background:"none", border:"none", color:"#C0392B", cursor:"pointer" }}>🗑</button>
+              </div>
+              <div style={{ fontSize:11.5, color:MUTED, marginTop:2 }}>{d2KisaOzet(k.veri)}</div>
+              <div style={{ fontSize:11.5, color:TEXT, marginTop:3, lineHeight:1.45 }}>{d2Yorum(k.veri)}</div>
+              <TestDegisimKutusu kayit={k} tumKayitlar={tumKayitlar} />
+            </div>
+          ))}
+        </div>
+      )}
       <div style={{fontSize:10,color:MUTED,marginTop:8,lineHeight:1.5}}>
-        Bu sonuç Profil 2'nin öğrenciye ait en son kaydına yazılır; profil ekranında ve PDF raporda
-        otomatik görünür.
+        D2 bir tarama aracıdır, tek başına tanı koydurmaz. En son uygulama öğrencinin Profil 2'sine de yazılır; profil ekranında, PDF raporda ve asistanda görünür.
       </div>
     </div>
   );
@@ -30455,7 +30589,7 @@ KURALLAR:
               ) : kategori === "d2panel" ? (
                 <div>
                   <button onClick={()=>setKategori(null)} style={{ background:"none", border:"none", color:MUTED, fontSize:12, cursor:"pointer", marginBottom:8, padding:0 }}>← Kategoriyi değiştir</button>
-                  <D2Paneli seciliAd={seciliAd} seciliSinif={seciliSinif} seciliNumara={seciliNumara} profiles2={profiles2} setProfiles2={setProfiles2} />
+                  <D2Paneli seciliAd={seciliAd} seciliSinif={seciliSinif} seciliNumara={seciliNumara} profiles2={profiles2} setProfiles2={setProfiles2} testKayitlari={testKayitlari} setTestKayitlari={setTestKayitlari} />
                 </div>
               ) : kategori === "oog" ? (
                 <div>
@@ -30532,7 +30666,10 @@ KURALLAR:
               <label style={lbl}>UYGULAMA TARİHİ</label>
               <input type="text" placeholder="GG.AA.YYYY" value={form.tarih} onChange={e=>setForm(f=>({...f,tarih:e.target.value}))} style={{...inp, marginBottom:10}} />
 
-              {seciliTest.tip === "d2" && (<>
+              {seciliTest.tip === "d2" && seciliTest.ad === "D2 Dikkat Testi" && (
+                <button data-d2="yonlendir" onClick={()=>{ setSeciliTest(null); setKategori("d2panel"); }} style={{ width:"100%", padding:"12px", borderRadius:11, border:`2px solid ${PURPLE}`, background:"#F3F0FF", color:PURPLE, fontSize:13, fontWeight:800, cursor:"pointer", marginBottom:10 }}>🎯 D2'yi ayrıntılı girişte kaydet (TN, E1, E2, E, TN-E, E%, CP, FR, PR) →</button>
+              )}
+              {seciliTest.tip === "d2" && seciliTest.ad !== "D2 Dikkat Testi" && (<>
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:10 }}>
                   <div><label style={lbl}>DOĞRU İŞARETLENEN</label><input value={form.dogru} onChange={e=>setForm(f=>({...f,dogru:e.target.value}))} style={inp} /></div>
                   <div><label style={lbl}>YANLIŞ / ATLANAN</label><input value={form.yanlisAtlanan} onChange={e=>setForm(f=>({...f,yanlisAtlanan:e.target.value}))} style={inp} /></div>
@@ -35421,7 +35558,7 @@ function ksP2Plani(g, ctx, o) {
   const D2 = { TN: "TN", E1: "E1", E2: "E2", CP: "CP", FR: "FR", PR: "PR", E_YUZDE: "E_yuzde", "E%": "E_yuzde", TN_E: "TN_E", "TN-E": "TN_E" };
   const d2 = {};
   Object.entries(d2g).forEach(([k, v]) => { const a = D2[String(k).toUpperCase().replace(/\s/g, "")]; const n = ksSayi(v); if (!a) { sorunlar.push(`d2 alanı tanınmadı: ${k}`); return; } if (n === null || n < 0) { sorunlar.push(`d2 ${k}: geçersiz değer (${v})`); return; } d2[a] = String(n); });
-  if (Object.keys(d2).length) { degisim.d2 = { ...EMPTY_D2, ...((kayit && kayit.d2) || {}), ...d2 }; satirlar.push(`• d2: ${Object.entries(d2).map(([k, v]) => `${k} ${v}`).join(", ")}`); }
+  if (Object.keys(d2).length) { degisim.d2 = (({ satirlar, ...x }) => x)(d2Hesapla({ ...EMPTY_D2, ...((kayit && kayit.d2) || {}), ...d2 })); satirlar.push(`• d2: ${Object.entries(d2).map(([k, v]) => `${k} ${v}`).join(", ")}`); }
   return { kayit, degisim, satirlar, sorunlar };
 }
 async function ksP2Yaz(ctx, o, kayit, degisim) {
@@ -36585,7 +36722,7 @@ ${ogrP1?.analiz ? `PDR Analizi: ${ogrP1.analiz}` : ""}
 
 PROFİL 2 — AKADEMİK:
 ${ogrP2?.sinavlar ? DERSLER.map(d=>`${d.label}: 1.Yazılı ${ogrP2.sinavlar[d.key+"1"]||"-"}, 2.Yazılı ${ogrP2.sinavlar[d.key+"2"]||"-"}`).join(", ") : "Girilmemiş"}
-${ogrP2?.d2 ? `D2 Dikkat: TN=${ogrP2.d2.TN||"-"}, E%=${ogrP2.d2.E_yuzde||"-"}, PR=${ogrP2.d2.PR||"-"}` : ""}
+${ogrP2?.d2 && (ogrP2.d2.TN || ogrP2.d2.PR) ? `D2 Dikkat: ${d2KisaOzet(ogrP2.d2)}` : ""}
 ${ogrP2?.kariyer_hedef ? `Kariyer Hedefi: ${ogrP2.kariyer_hedef}` : ""}
 
 DENEME SONUÇLARI:
@@ -38580,7 +38717,7 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
                         )}
                         {d2Var && (
                           <div style={{ fontSize:12, marginBottom:8, color:TEXT }}>
-                            <b style={{ color:"#0E7490" }}>🎯 d2 Dikkat:</b> {[["TN", "TN"], ["E_yuzde", "E%"], ["TN_E", "TN-E"], ["CP", "CP"], ["PR", "Yüzdelik"]].filter(([k]) => String(d2[k] || "").trim()).map(([k, ad]) => `${ad} ${d2[k]}`).join(" · ")}
+                            <b style={{ color:"#0E7490" }}>🎯 d2 Dikkat:</b> {d2KisaOzet(d2)}
                           </div>
                         )}
                       </>
@@ -42751,7 +42888,7 @@ function ProfilMerkez({
                     <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                       <thead>
                         <tr style={{background:"#F3F0FF"}}>
-                          {[["TN","Psikomotor Hız"],["E1","Seçici Dikkat"],["E2","Öğrenme Güçlüğü"],["CP","Doğru Perf."],["FR","Hız Salınımı"],["TN-E","Test Performansı"],["E%","Hata Oranı"],["PR","Yüzdelik"]].map(([k,ac])=>(
+                          {[["TN","İşlenen (Hız)"],["E1","Atlama (İhmal)"],["E2","Yanlış İşaretleme"],["E","Toplam Hata"],["CP","Doğru Perf."],["FR","Hız Salınımı"],["TN-E","Test Performansı"],["E%","Hata Oranı"],["PR","Yüzdelik"]].map(([k,ac])=>(
                             <th key={k} style={{padding:"6px 8px",textAlign:"center",color:PURPLE,fontWeight:700,fontSize:10,borderBottom:`2px solid ${PURPLE}22`}}>
                               <div>{k}</div><div style={{fontSize:8,color:MUTED,fontWeight:400}}>{ac}</div>
                             </th>
@@ -42761,7 +42898,7 @@ function ProfilMerkez({
                       <tbody>
                         <tr>
                           {[
-                            mevcutP2.d2.TN, mevcutP2.d2.E1, mevcutP2.d2.E2,
+                            mevcutP2.d2.TN, mevcutP2.d2.E1, mevcutP2.d2.E2, mevcutP2.d2.E || ((d2Sayi(mevcutP2.d2.E1)!==null||d2Sayi(mevcutP2.d2.E2)!==null) ? String((d2Sayi(mevcutP2.d2.E1)||0)+(d2Sayi(mevcutP2.d2.E2)||0)) : null),
                             mevcutP2.d2.CP, mevcutP2.d2.FR, mevcutP2.d2.TN_E,
                             mevcutP2.d2.E_yuzde ? mevcutP2.d2.E_yuzde+"%" : null,
                             mevcutP2.d2.PR
@@ -42779,8 +42916,8 @@ function ProfilMerkez({
                     const pr = parseFloat(mevcutP2.d2.PR);
                     const e = parseFloat(mevcutP2.d2.E_yuzde)||0;
                     const bars = [
-                      { label:"PR (Yüzdelik)", val:pr, max:100, color:pr>=85?"#1A8C5B":pr>=70?"#457B9D":pr>=60?"#B07D1A":"#C0392B", hedef:75 },
-                      { label:"E% (Hata)", val:e, max:10, color:e<=1.5?"#1A8C5B":e<=2.5?"#B07D1A":"#C0392B", hedef:null, ters:true },
+                      { label:"PR (Yüzdelik)", val:pr, max:100, color:(d2PrBant(pr)||{renk:MUTED}).renk, hedef:25 },
+                      { label:"E% (Hata)", val:e, max:40, color:(d2HataBant(e)||{renk:MUTED}).renk, hedef:null, ters:true },
                     ];
                     return (
                       <div style={{marginBottom:12}}>
@@ -42794,7 +42931,7 @@ function ProfilMerkez({
                               <div style={{width:`${Math.min((b.val/b.max)*100,100)}%`,height:"100%",background:b.color,borderRadius:6,transition:"width .5s"}}/>
                               {b.hedef && <div style={{position:"absolute",top:0,left:`${b.hedef}%`,width:2,height:"100%",background:"#1A1A2E",opacity:0.5}}/>}
                             </div>
-                            {b.hedef && <div style={{fontSize:9,color:MUTED,textAlign:"right"}}>Hedef ≥{b.hedef}</div>}
+                            {b.hedef && <div style={{fontSize:9,color:MUTED,textAlign:"right"}}>PR {b.hedef} altı ortalamanın altıdır</div>}
                           </div>
                         ))}
                       </div>
@@ -42802,8 +42939,9 @@ function ProfilMerkez({
                   })()}
                   {/* E% yorum */}
                   {mevcutP2.d2.E_yuzde && (
-                    <div style={{borderRadius:8,padding:"8px 12px",marginBottom:8,border:"2px solid",...(()=>{const e=parseFloat(mevcutP2.d2.E_yuzde);return e<=1.5?{background:"#E6F5EE",borderColor:"#1A8C5B",color:"#1A8C5B"}:e<=2.5?{background:"#FDF6E3",borderColor:"#B07D1A",color:"#B07D1A"}:{background:"#FDECEA",borderColor:"#C0392B",color:"#C0392B"};})(),...{fontSize:12,fontWeight:700}}}>
-                      E = {mevcutP2.d2.E_yuzde}% → {(()=>{const e=parseFloat(mevcutP2.d2.E_yuzde);return e<=1.5?"✓ NORMAL (0–1.5)":e<=2.5?"⚠ DİKKAT EDİLMELİ (1.5–2.5)":"✗ DİKKAT PROBLEMİ (2.5+)";})()}
+                    <div style={{borderRadius:8,padding:"8px 12px",marginBottom:8,border:"2px solid",borderColor:(d2HataBant(mevcutP2.d2.E_yuzde)||{renk:MUTED}).renk,background:(d2HataBant(mevcutP2.d2.E_yuzde)||{bg:"#fff"}).bg,color:(d2HataBant(mevcutP2.d2.E_yuzde)||{renk:MUTED}).renk,fontSize:12,fontWeight:700}}>
+                      E% = {mevcutP2.d2.E_yuzde} → {(d2HataBant(mevcutP2.d2.E_yuzde)||{ad:"—"}).ad}
+                      <div style={{fontSize:10.5,fontWeight:500,color:TEXT,marginTop:4,lineHeight:1.5}}>{d2Yorum(mevcutP2.d2)}</div>
                     </div>
                   )}
                   {mevcutP2.d2.yorum && <div style={{fontSize:12,color:MUTED,marginBottom:8}}>📝 {mevcutP2.d2.yorum}</div>}

@@ -12089,6 +12089,8 @@ function ksAsistanTestSonucu(g, ctx, o) {
         const p = oyProfil(v, v.sinifNo || oySinifNo(o.className), t.tarih);
         if (p.moduller.length) b.push(`Destek gereken modüller: ${p.moduller.map(m => `${OY_MODULLER[m.k].ad} (${K(m.neden, 90)})`).join("; ")}`);
         if (p.kademe) b.push(`Önerilen destek: ${p.kademe}`);
+      } else if (EK_TESTLER.includes(t.tip)) {
+        b.push(K(ekTestRapor(t), 1800));
       } else if (t.tip === "d2" && t.veri && (t.veri.TN || t.veri.TN_E || t.veri.E1)) {
         b.push(d2KisaOzet(v));
         b.push(`Yorum: ${d2Yorum(v)}`);
@@ -23221,6 +23223,263 @@ function scasRaporHtmlOlustur(sonuc, bilgi) {
 }
 
 
+// ===== EK TESTLER: Stroop TBAG · Metropolitan · Louisa Düss · WISC-R =====
+const EK_TESTLER = ["stroop_tbag", "metropolitan", "louisa_duss", "wisc_r"];
+const ekSayi = x => { if (x === null || x === undefined || String(x).trim() === "") return null; const n = parseFloat(String(x).replace(",", ".")); return isFinite(n) ? n : null; };
+const ekYaz = x => x == null ? "—" : String(Math.round(x * 100) / 100).replace(".", ",");
+
+// ── Stroop Testi TBAG Formu (Karakaş, BİLNOT bataryası) ──
+// 4 kart (6 satır × 4 madde, sarı-mavi-kırmızı-yeşil), 5 bölüm; her bölümde süre, hata, düzeltme (15 puan).
+// Bozucu etki (enterferans) = 5. bölüm süresi − 3. bölüm süresi (konuşma hızı farkı dışarıda kalır).
+const STROOP_BOLUMLER = [
+  { ad: "Siyah basılmış renk adlarını okuma", kisa: "Okuma (siyah)", olcer: "temel okuma hızı, otomatik sözel işleme (okuma için kontrol kartı)" },
+  { ad: "Farklı renkte basılmış renk adlarını okuma", kisa: "Okuma (renkli)", olcer: "renk uyaranlarına rağmen okumayı sürdürme, seçici dikkat" },
+  { ad: "Renkli dairelerin rengini söyleme", kisa: "Renk söyleme (daire)", olcer: "renk adlandırma hızı (renk söyleme için kontrol kartı)" },
+  { ad: "Renkli basılmış nötr kelimelerin rengini söyleme", kisa: "Renk söyleme (nötr kelime)", olcer: "kelime varken renge odaklanma, seçici dikkat" },
+  { ad: "Farklı renkte basılmış renk adlarının mürekkep rengini söyleme", kisa: "Renk söyleme (bozucu etki)", olcer: "otomatik okumayı ketleme (inhibisyon), bilişsel esneklik, bozucu etkiye direnç" },
+];
+function stroopHesapla(ek) {
+  const b = (ek && ek.b) || []; const s = i => ekSayi((b[i] || {}).sure), h = i => ekSayi((b[i] || {}).hata) || 0, d = i => ekSayi((b[i] || {}).duz) || 0;
+  const sure = [0, 1, 2, 3, 4].map(s);
+  const r = { sure, hata: [0, 1, 2, 3, 4].map(h), duz: [0, 1, 2, 3, 4].map(d) };
+  r.enterferans = sure[4] != null && sure[2] != null ? sure[4] - sure[2] : null;
+  r.fark51 = sure[4] != null && sure[0] != null ? sure[4] - sure[0] : null;
+  r.renkOkuma = sure[2] != null && sure[0] != null ? sure[2] - sure[0] : null;
+  r.oran = sure[4] && sure[2] ? sure[4] / sure[2] : null;
+  r.toplamHata = r.hata.reduce((a, x) => a + x, 0); r.toplamDuz = r.duz.reduce((a, x) => a + x, 0);
+  r.oranDuzey = r.oran == null ? null : r.oran < 1.3 ? "hafif" : r.oran < 1.8 ? "belirgin (beklenen)" : r.oran < 2.3 ? "güçlü" : "çok güçlü";
+  return r;
+}
+function stroopRapor(ek) {
+  const r = stroopHesapla(ek); const L = [];
+  L.push("STROOP TESTİ TBAG FORMU — DEĞERLENDİRME");
+  L.push("Bölüm süreleri: " + STROOP_BOLUMLER.map((x, i) => `${i + 1}. ${x.kisa}: ${ekYaz(r.sure[i])} sn${r.hata[i] ? `, ${r.hata[i]} hata` : ""}${r.duz[i] ? `, ${r.duz[i]} düzeltme` : ""}`).join(" · "));
+  L.push("");
+  if (r.sure[0] != null && r.sure[1] != null) {
+    const f = r.sure[1] - r.sure[0];
+    L.push(`Okuma (1–2. bölüm): Siyah renk adlarını ${ekYaz(r.sure[0])} sn'de, farklı renkte basılmış adları ${ekYaz(r.sure[1])} sn'de okudu. ${Math.abs(f) <= 2 ? "İki okuma arasında belirgin fark yok; otomatik okuma renk uyaranından etkilenmiyor." : f > 0 ? `Renkli kartta okuma ${ekYaz(f)} sn uzadı; renk uyaranları okumayı bir ölçüde zorlamış, seçici dikkatte çaba gerekmiş olabilir.` : "Renkli kartta okuma daha hızlı; ısınma etkisi olabilir."}${r.hata[1] ? ` 2. bölümde ${r.hata[1]} hata dikkat dağınıklığına işaret edebilir.` : ""}`);
+  }
+  if (r.renkOkuma != null) L.push(`Renk söyleme hızı (3. bölüm, ${ekYaz(r.sure[2])} sn): Renk adlandırma okumadan ${ekYaz(r.renkOkuma)} sn ${r.renkOkuma >= 0 ? "daha uzun" : "daha kısa"} sürdü${r.renkOkuma >= 0 ? " (beklenen: renk söyleme okumadan daha az otomatiktir)" : ""}.`);
+  if (r.sure[3] != null) L.push(`Nötr kelimelerde renk söyleme (4. bölüm, ${ekYaz(r.sure[3])} sn): ${r.sure[2] != null ? (r.sure[3] - r.sure[2] > 2 ? `Kelime varken renk söyleme dairelere göre ${ekYaz(r.sure[3] - r.sure[2])} sn uzadı; anlamsız da olsa kelime okuma eğilimi seçici dikkati zorluyor.` : "Dairelere göre belirgin uzama yok; anlamsız kelimeler rengi söylemeyi pek etkilemiyor.") : ""}`);
+  if (r.enterferans != null) {
+    L.push(`Bozucu etki (5. bölüm, ${ekYaz(r.sure[4])} sn): Stroop bozucu etki puanı = 5. bölüm − 3. bölüm = ${ekYaz(r.enterferans)} sn (5. bölüm 3. bölümün ${ekYaz(r.oran)} katı; bozucu etki ${r.oranDuzey}). 5. − 1. bölüm farkı ${ekYaz(r.fark51)} sn.`);
+    L.push(r.oran >= 2.3 ? "Kelimenin anlamını bastırıp yalnızca rengi söylemekte belirgin zorlanma var; ketleme (inhibisyon), dikkat kontrolü ve bilişsel esneklikte güçlük olabilir." : r.oran >= 1.8 ? "Bozucu etki güçlü; otomatik okumayı bastırmak için belirgin zihinsel kaynak harcanıyor. Çelişkili ya da dikkat dağıtıcı ortamlarda yavaşlama beklenebilir." : r.oran >= 1.3 ? "Bozucu etki beklenen düzeyde; ketleme becerisi işlevsel görünüyor." : "Bozucu etki zayıf; otomatik okumayı bastırmada zorlanma görülmüyor.");
+  }
+  if (r.hata[4] || r.duz[4]) L.push(`5. bölümde ${r.hata[4]} hata, ${r.duz[4]} düzeltme: ${r.duz[4] >= r.hata[4] && r.duz[4] ? "hatalarını fark edip düzeltiyor — öz-izleme çalışıyor, ancak ilk anda okuma eğilimini bastıramıyor." : "düzeltilmeyen hatalar, çelişkili uyaran altında tepkiyi denetlemede güçlüğe ve hatayı fark etmeden ilerlemeye işaret edebilir."}`);
+  L.push("");
+  L.push(`Genel: ${r.toplamHata} hata, ${r.toplamDuz} düzeltme. Süreler seçici dikkati, hatalar çalışma belleği ve dikkat kontrolünü, 5. bölüm süresi bilgi işleme hızını ve ketleme becerisini gösterir.`);
+  L.push("Öneri: Sonuçlar yaş ve eğitim düzeyine göre TBAG norm tablolarıyla karşılaştırılmalıdır (program kişi-içi karşılaştırma yapar, norm içermez). Gerekirse dikkat ve yürütücü işlevler başka araçlarla (iz sürme, sayı dizisi, sürekli performans testleri) desteklenmelidir.");
+  return { r, metin: L.join("\n") };
+}
+
+// ── Metropolitan Okul Olgunluğu Testi (Form R) ──
+const METRO_ALT = [{ ad: "Kelime anlama", maks: 19 }, { ad: "Cümleler", maks: 14 }, { ad: "Genel bilgi", maks: 14 }, { ad: "Eşleştirme", maks: 19 }, { ad: "Sayılar", maks: 24 }, { ad: "Kopya etme", maks: 10 }];
+const METRO_DUZEY = [["A", "Üstün"], ["B", "Ortanın üstü"], ["C", "Orta"], ["D", "Ortanın altı"], ["E", "Zayıf, tehlike"]];
+function metroHarf(puan, sinirlar) { if (puan == null) return null; const i = sinirlar.findIndex(s => puan >= s); const k = i < 0 ? 4 : i; return { harf: METRO_DUZEY[k][0], ad: METRO_DUZEY[k][1] }; }
+function metroHesapla(ek) {
+  const a = METRO_ALT.map((_, i) => ekSayi((ek && ek.a || [])[i]));
+  const top = (l) => l.every(x => x == null) ? null : l.reduce((t, x) => t + (x || 0), 0);
+  const okuma = top(a.slice(0, 4)), sayi = a[4], genel = top(a);
+  return { a, okuma, sayi, genel, okumaH: metroHarf(okuma, [61, 56, 47, 33]), sayiH: metroHarf(sayi, [21, 16, 10, 5]), genelH: metroHarf(genel, [90, 80, 65, 40]), eksik: a.some(x => x == null) };
+}
+function metroRapor(ek) {
+  const r = metroHesapla(ek); const L = ["METROPOLİTAN OKUL OLGUNLUĞU TESTİ — DEĞERLENDİRME"];
+  L.push("Alt testler: " + METRO_ALT.map((x, i) => `${x.ad} ${r.a[i] ?? "—"}/${x.maks}`).join(" · "));
+  if (r.okuma != null) L.push(`Okuma olgunluğu (1–4. alt testler): ${r.okuma}/66 puan → ${r.okumaH.harf} (${r.okumaH.ad})`);
+  if (r.sayi != null) L.push(`Sayı olgunluğu (5. alt test): ${r.sayi}/24 puan → ${r.sayiH.harf} (${r.sayiH.ad})`);
+  if (r.genel != null) L.push(`Genel (toplam) olgunluk (1–6. alt testler): ${r.genel}/100 puan (%${r.genel}) → ${r.genelH.harf} (${r.genelH.ad})`);
+  L.push("");
+  if (r.genel != null) L.push(`Uygulanan Metropolitan Okul Olgunluğu Testi sonucuna göre öğrenci okuma hazırlığında ${r.okumaH ? `${r.okumaH.harf} (${r.okumaH.ad.toLocaleLowerCase("tr")}) (${r.okuma} puan)` : "—"} seviyesinde, sayı hazırlığında ${r.sayiH ? `${r.sayiH.harf} (${r.sayiH.ad.toLocaleLowerCase("tr")}) (${r.sayi} puan)` : "—"} seviyesinde, genel hazırlıkta ise ${r.genel} puan ile ${r.genelH.harf} (${r.genelH.ad.toLocaleLowerCase("tr")}) düzeyinde bulunmuştur.`);
+  const zayif = METRO_ALT.map((x, i) => ({ ...x, p: r.a[i] })).filter(x => x.p != null && x.p / x.maks < 0.5);
+  if (zayif.length) L.push(`Desteklenmesi gereken alanlar (maksimum puanın yarısının altında): ${zayif.map(x => `${x.ad} (${x.p}/${x.maks})`).join(", ")}.`);
+  if (r.genelH && "DE".includes(r.genelH.harf)) L.push("Genel olgunluk düzeyi ortanın altında/zayıf: okula başlama kararı, gelişim alanlarının (dil, görsel algı, ince motor, sayı kavramı) desteklenmesi ve aileyle iş birliği açısından ayrıntılı değerlendirilmelidir; gerekirse RAM'a yönlendirme düşünülebilir.");
+  else if (r.genelH) L.push("Genel olgunluk düzeyi okula başlama için yeterli görünmektedir; zayıf alt testler varsa sınıf içinde desteklenmelidir.");
+  if (ek && ek.adamCiz) L.push(`Bir Adam Çiz: ${ek.adamCiz}`);
+  L.push("Test 5–6,5 yaş için hazırlanmış bir okul olgunluğu tarama aracıdır; tek başına karar verdirmez.");
+  return { r, metin: L.join("\n") };
+}
+
+// ── Louisa Düss Psikanalitik Hikâyeler Testi ──
+const DUSS_OYKULER = [
+  { ad: "Kuş öyküsü", amac: "Ana babadan birine bağlılık ya da bağımsızlık; geleceği görme biçimi", metin: "Bir ormanda çam ağacındaki yuvalarında yaşayan baba, anne ve yavru kuş yuvalarında uyuyorlarmış. Derken gece sert, çok sert bir rüzgâr çıkmış. Rüzgâr ağacın dallarını silkelemiş, sarsmış. Yuva da kuşlar da yere düşmüşler. Kuşlar korkuyla uyanmışlar. Anne kuş hemen uçup bir çam ağacına, baba da başka bir çam ağacına konmuş. Şimdi yavru kuş ne yapacak? O da çok güzel uçabiliyormuş artık…", normal: ["Yuvasına yakın bir dala uçar", "Annesinin yanına kaçar", "Babasının yanına uçar, çünkü o daha kuvvetlidir", "Yerde kalır, ebeveyni onu buluncaya kadar bağırır"] },
+  { ad: "Evlilik yıldönümü öyküsü", amac: "Ana baba beraberliğine karşı kıskançlık; ana baba ile ilgili sarsıcı bir yaşantı", metin: "Bir anne ile babanın evlenmelerinin yıldönümüymüş. Birbirlerini çok seviyorlarmış ve o gün için çok güzel bir eğlence hazırlamışlar. Bu güzel eğlencenin tam orta yerinde çocuk kalkıp bahçeye çıkıyor. Neden acaba?", normal: ["Ebeveyni için çiçek toplayacak", "Konuşulanlar onu ilgilendirmiyor", "Eğlenecek (en sık yanıt)", "Okulda kötü not almış, bahçenin dibinde derdini düşünecek"] },
+  { ad: "Kuzu öyküsü", amac: "Sütten kesilme ve kardeş kıskançlığı", metin: "Bir çayırda bir anne koyunla küçük bir kuzu yaşıyormuş. Küçük kuzu bütün gün annesinin yanında sıçrayıp duruyormuş. Her gece annesi ona çok sevdiği sıcak sütü veriyormuş. Aynı zamanda kuzu ot da yemeye başlamış. Bir gün anne koyuna minicik bir kuzu getirmişler. Gelen kuzu çok acıkmış, anne koyundan süt istiyormuş. Fakat anne koyunun ikisine de yetecek kadar sütü yokmuş. Büyük kuzuya demiş ki: 'İkiniz için de taze sütüm yok! Sen artık taze ot yiyeceksin!' Büyük kuzu ne yapsın?", normal: [], not: "Yalnız sütten kesilmeye bakılacaksa küçük kuzunun gelişi çıkarılır: 'Koyunun artık sütü yok, kuzu ot yemeye başlamalı.'" },
+  { ad: "Cenaze öyküsü", amac: "Saldırganlık, ölüm istemi, suçluluk ve kendini cezalandırma", metin: "Köyün yolundan bir cenaze geçiyor. Herkes soruyor: 'Kim ölmüş?' Cevap veriyorlar: 'Şu evde oturan ailelerden biri.' Kimdir bu ölen?", normal: [], not: "Ölümü bilmeyen çocuklara: 'Aileden biri yola çıkmış ve bir daha gelmemek üzere çok uzağa gitmiş. Acaba bu kim?'" },
+  { ad: "Korku öyküsü", amac: "Kaygı, bunalım ve kendini suçlama", metin: "Bir çocuk usulca şöyle demiş: 'Ah, ne kadar korktum!' Acaba o neden korkmuş?", normal: ["Annesi ona göz açtırmadı / kızdı", "Dayak yemekten", "Okulda kötü not almaktan", "Bir hayvandan", "Savaştan", "Ana babadan birinin ölümünden", "Servetini kaybetmekten"] },
+  { ad: "Fil öyküsü", amac: "Hadımlık (beden bütünlüğü) kaygısı", metin: "Bir çocuğun çok sevdiği küçük bir fili varmış. Fil uzun hortumuyla çok güzelmiş. Bir gün gezmeden dönüp odasına girince çocuk fili çok değişmiş bulmuş. Değişen nedir, niçin değişmiş?", normal: ["Çocuk yeni bir oyuncak bulmuş, fil ilgisini çekmiyor", "Değişen fil değil, çocuk büyümüş", "Değişmemiştir", "Derisini değiştirmişler", "Çocuk yokken filin üstüne su dökülmüş"] },
+  { ad: "Yapılmış eşya öyküsü", amac: "Anal dönem: sahiplenme, inatçılık", metin: "Bir çocuk topraktan birçok şey yapmayı başarmış (bir kule vb.). Bunları çok seviyormuş. Annesi bunları kendisine vermesini isterse ne yapacak? Verecek mi?", normal: ["Annesine verecek", "Onunla oynayacak, annesi isterse verecek", "Herkese gösterecek"] },
+  { ad: "Anne/baba ile gezinti öyküsü", amac: "Ödipal (Oedipus / Elektra) bağlanma", metin: "Bir kız çocuk babasıyla (erkek çocuksa annesiyle) ormanda baş başa çok güzel bir gezinti yapmışlar. İkisi de çok hoşlanmış. Eve döndüklerinde annenin (babanın) yüzünün her zamanki gibi olmadığını görmüşler. Niçin?", normal: ["Anne (baba) memnundur", "Çok çalışmış, yorgundur", "Güzel yemek hazırlamıştır", "Geç döndükleri için", "Onlar yokken kötü bir haber almıştır"] },
+  { ad: "Haber öyküsü", amac: "İstek ve korkular", metin: "Bir çocuk okuldan (gezmeden) dönmüş. Annesi ona demiş ki: 'Derslerine hemen başlama, sana bir haberim var!' Annesi ona ne söyleyecek?", normal: ["Bir öykü anlatmak istiyor", "Güzel bir yemek/ziyafet var", "İyi bir haber almıştır", "Hayatı ve çalışması hakkında öğüt verecek"] },
+  { ad: "Kötü rüya öyküsü", amac: "Önceki öykülerin denetimi (çatışmaların yinelenmesi)", metin: "Bir çocuk sabahleyin çok yorgun uyanmış ve demiş ki: 'Ah, öyle kötü bir rüya gördüm ki!' Acaba ne görmüş?", normal: ["Bilmiyorum, hiç rüya görmem", "Savaş görmüş", "Onu yiyen bir hayvan görmüş"] },
+];
+const DUSS_ISARET = [["red", "Yanıt vermeyi reddetti"], ["sessiz", "Uzun süre sustu"], ["ani", "Beklenmedik, ani yanıt"], ["fisilti", "Fısıldadı / kulağa eğildi"], ["tekrar", "Aynı tema tekrarlandı"], ["ilgi", "Aşırı ilgi / testin bitmemesini istedi"]];
+function dussHesapla(ek) {
+  const y = (ek && ek.yanit) || [], is = (ek && ek.isaret) || [];
+  const isaretli = DUSS_OYKULER.map((o, i) => ({ i, o, isaretler: DUSS_ISARET.filter(([k]) => (is[i] || {})[k]).map(([, a]) => a), yanit: y[i] || "" }));
+  return { yanitSay: y.filter(x => String(x || "").trim()).length, sinyal: isaretli.filter(x => x.isaretler.length) , tum: isaretli };
+}
+function dussRapor(ek) {
+  const r = dussHesapla(ek); const L = ["LOUISA DÜSS PSİKANALİTİK HİKÂYELER TESTİ — DEĞERLENDİRME", `Yanıtlanan öykü: ${r.yanitSay}/10`, ""];
+  r.tum.forEach(x => { if (x.yanit || x.isaretler.length) L.push(`${x.i + 1}. ${x.o.ad} (${x.o.amac}): ${x.yanit || "—"}${x.isaretler.length ? `  [Gözlem: ${x.isaretler.join(", ")}]` : ""}`); });
+  L.push("");
+  if (r.sinyal.length) L.push(`Çatışma belirtisi gözlenen öyküler: ${r.sinyal.map(x => `${x.i + 1}. ${x.o.ad} → ${x.o.amac.toLocaleLowerCase("tr")}`).join("; ")}. Yanıt vermeyi reddetme, uzun sessizlik, ani/beklenmedik yanıt, fısıldama ve aynı temanın yinelenmesi o öykünün çocukta bir çatışmaya dokunduğunu düşündürür.`);
+  else L.push("Kayda geçirilen davranışsal çatışma belirtisi yok.");
+  if (ek && ek.yorum) L.push("", "Danışman yorumu: " + ek.yorum);
+  L.push("", "Yorumlamada yanıtların tümü birlikte değerlendirilir; tek bir yanıttan sonuç çıkarılmaz. Projektif bir araçtır; bulgular görüşme ve gözlemle desteklenmelidir.");
+  return { r, metin: L.join("\n") };
+}
+
+// ── WISC-R (Savaşır & Şahin, 1988) sonuç değerlendirmesi ──
+// Program norm tablosu içermez: ölçek puanları (ort. 10, ss 3) ve zekâ bölümleri (ort. 100, ss 15)
+// el kitabından/RAM raporundan girilir; program sınıflama ve profil analizi yapar.
+const WISC_ALT = [
+  { k: "gb", ad: "Genel Bilgi", alan: "S" }, { k: "b", ad: "Benzerlikler", alan: "S" }, { k: "a", ad: "Aritmetik", alan: "S" }, { k: "kh", ad: "Kelime Hazinesi (Sözcük Dağarcığı)", alan: "S" }, { k: "y", ad: "Yargılama", alan: "S" }, { k: "st", ad: "Sayı Dizisi (yedek)", alan: "S" },
+  { k: "rt", ad: "Resim Tamamlama", alan: "P" }, { k: "rd", ad: "Resim Düzenleme", alan: "P" }, { k: "kd", ad: "Küplerle Desen", alan: "P" }, { k: "pb", ad: "Parça Birleştirme", alan: "P" }, { k: "ko", ad: "Şifre (Kodlama)", alan: "P" }, { k: "l", ad: "Labirentler (yedek)", alan: "P" },
+];
+const WISC_OLCER = { gb: "genel kültür, uzun süreli bellek, okul ve çevreden edinilen bilgi", b: "soyut düşünme, kavram oluşturma", a: "sayısal akıl yürütme, dikkat ve çalışma belleği", kh: "sözcük bilgisi, dil gelişimi", y: "sosyal yargı, pratik akıl, sağduyu", st: "kısa süreli işitsel bellek, dikkat", rt: "görsel ayrıntıyı fark etme, görsel dikkat", rd: "olay sıralama, sosyal ilişkileri kavrama, planlama", kd: "görsel-uzamsal analiz-sentez, sözel olmayan akıl yürütme", pb: "parça-bütün ilişkisi, görsel organizasyon", ko: "işlem hızı, görsel-motor koordinasyon, dikkat", l: "planlama, görsel-motor kontrol" };
+function wiscSinif(zb) {
+  if (zb == null) return null;
+  if (zb >= 130) return { ad: "Çok üstün", renk: "#15803D" }; if (zb >= 120) return { ad: "Üstün", renk: "#15803D" }; if (zb >= 110) return { ad: "Parlak normal (normalin üstü)", renk: "#0E7490" };
+  if (zb >= 90) return { ad: "Normal", renk: "#0E7490" }; if (zb >= 80) return { ad: "Donuk normal (normalin altı)", renk: "#B45309" }; if (zb >= 70) return { ad: "Sınır zekâ", renk: "#B91C1C" };
+  return { ad: "Zihinsel yetersizlik düzeyi (≤69)", renk: "#B91C1C" };
+}
+function wiscHesapla(ek) {
+  const o = (ek && ek.alt) || {}; const p = {}; WISC_ALT.forEach(x => { p[x.k] = ekSayi(o[x.k]); });
+  const sz = ekSayi(ek && ek.sozel), pf = ekSayi(ek && ek.perf), tp = ekSayi(ek && ek.toplam);
+  const ort = l => { const v = l.map(k => p[k]).filter(x => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+  const sAna = ["gb", "b", "a", "kh", "y"], pAna = ["rt", "rd", "kd", "pb", "ko"];
+  const sOrt = ort(sAna), pOrt = ort(pAna), genelOrt = ort([...sAna, ...pAna]);
+  const guc = [], zayif = [];
+  WISC_ALT.forEach(x => { const v = p[x.k]; const m = x.alan === "S" ? sOrt : pOrt; if (v == null || m == null) return; if (v - m >= 3) guc.push(x); if (m - v >= 3) zayif.push(x); });
+  const ban = { uzamsal: ort(["rt", "kd", "pb"]), kavrama: ort(["b", "kh", "y"]), siralama: ort(["st", "a", "ko"]), edinilmis: ort(["gb", "a", "kh"]) };
+  const acid = ["a", "ko", "gb", "st"].every(k => p[k] != null) ? ["a", "ko", "gb", "st"].reduce((t, k) => t + p[k], 0) / 4 : null;
+  return { p, sz, pf, tp, fark: sz != null && pf != null ? sz - pf : null, sOrt, pOrt, genelOrt, guc, zayif, ban, acid };
+}
+function wiscRapor(ek) {
+  const r = wiscHesapla(ek); const L = ["WISC-R (WECHSLER ÇOCUKLAR İÇİN ZEKÂ ÖLÇEĞİ) — SONUÇ DEĞERLENDİRMESİ"];
+  [["Sözel zekâ bölümü", r.sz], ["Performans zekâ bölümü", r.pf], ["Toplam zekâ bölümü", r.tp]].forEach(([a, v]) => { if (v != null) L.push(`${a}: ${v} → ${wiscSinif(v).ad}`); });
+  if (r.fark != null) { const f = Math.abs(r.fark); L.push(`Sözel–performans farkı: ${r.fark > 0 ? "+" : ""}${r.fark} (${r.fark > 0 ? "sözel lehine" : r.fark < 0 ? "performans lehine" : "fark yok"}). ${f >= 15 ? "Fark klinik açıdan anlamlı ve belirgin; toplam zekâ bölümü tek başına yorumlanmamalı, iki alan ayrı ayrı değerlendirilmelidir." : f >= 12 ? "Fark istatistiksel olarak anlamlı düzeyde; iki alan arasında belirgin bir dengesizlik olabilir." : "Fark anlamlı düzeyde değil; zihinsel işlevler dengeli görünüyor."}`); }
+  const ap = WISC_ALT.filter(x => r.p[x.k] != null);
+  if (ap.length) {
+    L.push("", "Alt test ölçek puanları (ort. 10, ss 3; 7 ve altı zayıf, 13 ve üstü güçlü): " + ap.map(x => `${x.ad} ${r.p[x.k]}`).join(" · "));
+    if (r.guc.length) L.push("Kendi ortalamasına göre güçlü alanlar: " + r.guc.map(x => `${x.ad} (${r.p[x.k]}) — ${WISC_OLCER[x.k]}`).join("; "));
+    if (r.zayif.length) L.push("Kendi ortalamasına göre zayıf alanlar: " + r.zayif.map(x => `${x.ad} (${r.p[x.k]}) — ${WISC_OLCER[x.k]}`).join("; "));
+    const b = r.ban;
+    if (b.uzamsal != null && b.kavrama != null && b.siralama != null) {
+      L.push(`Bannatyne kategorileri: uzamsal ${ekYaz(b.uzamsal)}, sözel kavrama ${ekYaz(b.kavrama)}, sıralama ${ekYaz(b.siralama)}${b.edinilmis != null ? `, edinilmiş bilgi ${ekYaz(b.edinilmis)}` : ""}.`);
+      if (b.uzamsal > b.kavrama && b.kavrama > b.siralama) L.push("Uzamsal > Sözel kavrama > Sıralama örüntüsü: özgül öğrenme güçlüğü yaşayan çocuklarda sık görülen profil; okuma-yazma ve matematik becerileri ayrıca değerlendirilmelidir (tek başına tanı koydurmaz).");
+    }
+    if (r.acid != null && r.genelOrt != null && r.genelOrt - r.acid >= 2) L.push(`ACID alt testleri (Aritmetik, Şifre, Genel Bilgi, Sayı Dizisi) ortalaması ${ekYaz(r.acid)}, genel ortalamanın (${ekYaz(r.genelOrt)}) belirgin altında: dikkat, çalışma belleği ve işlem hızına dayalı bu profil öğrenme güçlüğü ve dikkat sorunlarında sık görülür.`);
+  }
+  L.push("", "Not: WISC-R uygulaması ve puanlaması eğitimli uzman tarafından el kitabı normlarıyla yapılır; program yalnızca girilen puanları sınıflar ve profil analizi yapar. Sonuçlar tek başına tanı koydurmaz.");
+  return { r, metin: L.join("\n") };
+}
+function ekTestRapor(k) {
+  const v = (k && k.veri) || {};
+  try {
+    if (k.tip === "stroop_tbag") return stroopRapor(v).metin; if (k.tip === "metropolitan") return metroRapor(v).metin;
+    if (k.tip === "louisa_duss") return dussRapor(v).metin; if (k.tip === "wisc_r") return wiscRapor(v).metin;
+  } catch (e) {}
+  return "";
+}
+function ekTestOzet(k) {
+  const v = (k && k.veri) || {};
+  if (k.tip === "stroop_tbag") { const r = stroopHesapla(v); return `Süreler ${r.sure.map(ekYaz).join(" / ")} sn · bozucu etki (5−3) ${ekYaz(r.enterferans)} sn (${r.oranDuzey || "—"}) · ${r.toplamHata} hata, ${r.toplamDuz} düzeltme`; }
+  if (k.tip === "metropolitan") { const r = metroHesapla(v); return `Okuma ${r.okuma ?? "—"}/66 ${r.okumaH ? r.okumaH.harf : ""} · Sayı ${r.sayi ?? "—"}/24 ${r.sayiH ? r.sayiH.harf : ""} · Genel ${r.genel ?? "—"}/100 ${r.genelH ? `${r.genelH.harf} (${r.genelH.ad})` : ""}`; }
+  if (k.tip === "louisa_duss") { const r = dussHesapla(v); return `${r.yanitSay}/10 öykü yanıtlandı · ${r.sinyal.length} öyküde çatışma belirtisi${r.sinyal.length ? ": " + r.sinyal.map(x => x.o.ad).join(", ") : ""}`; }
+  if (k.tip === "wisc_r") { const r = wiscHesapla(v); return [r.sz != null ? `Sözel ${r.sz}` : "", r.pf != null ? `Performans ${r.pf}` : "", r.tp != null ? `Toplam ${r.tp} (${wiscSinif(r.tp).ad})` : ""].filter(Boolean).join(" · ") || "Puan girilmedi"; }
+  return "—";
+}
+function ekTestGecerli(tip, ek) {
+  ek = ek || {};
+  if (tip === "stroop_tbag") return (ek.b || []).some(x => ekSayi(x && x.sure) != null);
+  if (tip === "metropolitan") return (ek.a || []).some(x => ekSayi(x) != null);
+  if (tip === "louisa_duss") return (ek.yanit || []).some(x => String(x || "").trim());
+  if (tip === "wisc_r") return [ek.sozel, ek.perf, ek.toplam, ...Object.values(ek.alt || {})].some(x => ekSayi(x) != null);
+  return false;
+}
+async function dussAiYorum(ek, yas, cinsiyet) {
+  const r = dussHesapla(ek);
+  const veri = r.tum.map(x => `${x.i + 1}. ${x.o.ad} (amaç: ${x.o.amac})\nÇocuğun yanıtı: ${x.yanit || "(yanıt yok)"}${x.isaretler.length ? `\nGözlem: ${x.isaretler.join(", ")}` : ""}${x.o.normal.length ? `\nSık görülen olağan yanıtlar: ${x.o.normal.join("; ")}` : ""}`).join("\n\n");
+  const system = `Sen okul psikolojik danışmanına destek veren, projektif testler konusunda deneyimli bir uzmansın. Louisa Düss Psikanalitik Hikâyeler Testi yanıtlarını TEMKİNLİ biçimde yorumlarsın.
+KURALLAR: Tanı koymazsın; "düşündürebilir / görüşmede araştırılabilir" diliyle hipotez yazarsın. Yanıtların tümünü birlikte değerlendirirsin; aynı temanın birden çok öyküde yinelenmesine, olağan yanıtlardan belirgin ayrışmaya, reddetme/sessizlik/ani yanıt gibi gözlemlere dikkat edersin. Olağan yanıta uyan öyküleri kısaca "olağan" diye geçersin. Türkçe, sade, markdown kullanmadan, en fazla ~350 kelime.
+BÖLÜMLER (başlıkları aynen kullan): Genel izlenim: / Öne çıkan temalar: / Öykü öykü notlar: / Görüşmede açılabilecek konular:`;
+  const metin = await iczAiCagir(system, [{ type: "text", text: `Yaş: ${yas || "bilinmiyor"} · Cinsiyet: ${cinsiyet || "bilinmiyor"}\n\n${veri}` }], 1500);
+  return pdrKalinTemizle(metin).replace(/##+ ?/g, "").trim();
+}
+
+function EkTestFormu({ tip, ek, setEk, cinsiyet, yas }) {
+  const e = ek || {};
+  const inp = { width: "100%", padding: "8px 9px", border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 13, boxSizing: "border-box", background: "#fff" };
+  const lbl = { fontSize: 10.5, fontWeight: 800, color: MUTED, display: "block", marginBottom: 3 };
+  const kutu = { background: "#F8FAFC", border: `1px solid ${BORDER}`, borderRadius: 9, padding: "9px 10px", fontSize: 12, lineHeight: 1.55, whiteSpace: "pre-wrap", marginTop: 8 };
+  const [acik, setAcik] = useState(-1); const [aiDurum, setAiDurum] = useState("");
+  if (tip === "stroop_tbag") {
+    const b = e.b || []; const set = (i, k, v) => { const l = [...b]; while (l.length < 5) l.push({}); l[i] = { ...l[i], [k]: v }; setEk({ ...e, b: l }); };
+    return (<div data-ektest="stroop">
+      <div style={{ fontSize: 11.5, color: MUTED, marginBottom: 6, lineHeight: 1.5 }}>Her bölüm için tamamlama süresi (sn), hata ve düzeltme sayısı. Bozucu etki = 5. bölüm − 3. bölüm.</div>
+      {STROOP_BOLUMLER.map((x, i) => (
+        <div key={i} style={{ marginBottom: 7 }}>
+          <div style={{ fontSize: 12, fontWeight: 800 }}>{i + 1}. {x.ad}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr", gap: 6 }}>
+            {[["sure", "Süre (sn)"], ["hata", "Hata"], ["duz", "Düzeltme"]].map(([k, a]) => <div key={k}><label style={lbl}>{a}</label><input data-stroop={`${i}-${k}`} type="number" step="0.01" value={(b[i] || {})[k] || ""} onChange={ev => set(i, k, ev.target.value)} style={inp} /></div>)}
+          </div>
+        </div>
+      ))}
+      {ekTestGecerli(tip, e) && <div data-ektest-sonuc="1" style={kutu}>{stroopRapor(e).metin}</div>}
+    </div>);
+  }
+  if (tip === "metropolitan") {
+    const a = e.a || []; const set = (i, v) => { const l = [...a]; l[i] = v; setEk({ ...e, a: l }); };
+    return (<div data-ektest="metro">
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+        {METRO_ALT.map((x, i) => <div key={i}><label style={lbl}>{i + 1}. {x.ad} (0–{x.maks})</label><input data-metro={i} type="number" min="0" max={x.maks} value={a[i] ?? ""} onChange={ev => set(i, ev.target.value)} style={inp} /></div>)}
+      </div>
+      <label style={{ ...lbl, marginTop: 6 }}>Bir Adam Çiz değerlendirmesi (isteğe bağlı)</label>
+      <input value={e.adamCiz || ""} onChange={ev => setEk({ ...e, adamCiz: ev.target.value })} style={inp} />
+      {ekTestGecerli(tip, e) && <div data-ektest-sonuc="1" style={kutu}>{metroRapor(e).metin}</div>}
+    </div>);
+  }
+  if (tip === "louisa_duss") {
+    const y = e.yanit || [], is = e.isaret || [];
+    const setY = (i, v) => { const l = [...y]; l[i] = v; setEk({ ...e, yanit: l }); };
+    const setI = (i, k, v) => { const l = [...is]; l[i] = { ...(l[i] || {}), [k]: v }; setEk({ ...e, isaret: l }); };
+    return (<div data-ektest="duss">
+      <div style={{ fontSize: 11.5, color: MUTED, marginBottom: 6, lineHeight: 1.5 }}>Yönerge: "Şimdi sana yarım kalmış bir öykü anlatacağım. Arkasını sen tamamlayacaksın. Aklına ne gelirse onu söyle." Öyküler eklemesiz, dramatize etmeden okunur; belirsiz noktada yönlendirmeden "Niçin öyle yapmış?" diye sorulur.</div>
+      {DUSS_OYKULER.map((o, i) => (
+        <div key={i} style={{ border: `1px solid ${BORDER}`, borderRadius: 9, padding: "7px 9px", marginBottom: 6 }}>
+          <div onClick={() => setAcik(acik === i ? -1 : i)} style={{ cursor: "pointer", fontSize: 12.5, fontWeight: 800 }}>{acik === i ? "▲" : "▼"} {i + 1}. {o.ad} <span style={{ fontWeight: 500, color: MUTED, fontSize: 11 }}>— {o.amac}</span></div>
+          {acik === i && <div style={{ fontSize: 12, background: "#FFFBEB", borderRadius: 7, padding: "6px 8px", margin: "5px 0", lineHeight: 1.55 }}>{o.metin}{o.not && <div style={{ fontSize: 10.5, color: MUTED, marginTop: 3 }}>Not: {o.not}</div>}{o.normal.length > 0 && <div style={{ fontSize: 10.5, color: "#15803D", marginTop: 3 }}>Sık görülen olağan yanıtlar: {o.normal.join(" · ")}</div>}</div>}
+          <textarea data-duss={i} rows={2} value={y[i] || ""} onChange={ev => setY(i, ev.target.value)} placeholder="Çocuğun yanıtı" style={{ ...inp, marginTop: 4, resize: "vertical" }} />
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 10px", marginTop: 3 }}>{DUSS_ISARET.map(([k, a]) => <label key={k} style={{ fontSize: 10.5, color: MUTED, display: "flex", gap: 3, alignItems: "center" }}><input type="checkbox" checked={!!(is[i] || {})[k]} onChange={ev => setI(i, k, ev.target.checked)} />{a}</label>)}</div>
+        </div>
+      ))}
+      <button onClick={async () => { setAiDurum("⏳ Yorum yazılıyor…"); try { const t = await dussAiYorum(e, yas, cinsiyet); setEk({ ...e, yorum: t }); setAiDurum(""); } catch (er) { setAiDurum("AI yorumu alınamadı; kendiniz yazabilirsiniz."); } }} disabled={!ekTestGecerli(tip, e)} style={{ padding: "8px 12px", borderRadius: 9, border: "none", background: "#4F46E5", color: "#fff", fontWeight: 800, fontSize: 12.5, cursor: "pointer", opacity: ekTestGecerli(tip, e) ? 1 : 0.5 }}>✦ AI ile yorum yaz (isteğe bağlı)</button>
+      {aiDurum && <div style={{ fontSize: 11.5, color: MUTED, marginTop: 4 }}>{aiDurum}</div>}
+      <div style={{ fontSize: 10.5, color: MUTED, marginTop: 3 }}>Yalnız yanıtlar, yaş ve cinsiyet gider; ad gönderilmez.</div>
+      <label style={{ ...lbl, marginTop: 6 }}>Yorum (düzenleyebilirsiniz)</label>
+      <textarea data-duss-yorum="1" rows={6} value={e.yorum || ""} onChange={ev => setEk({ ...e, yorum: ev.target.value })} style={{ ...inp, resize: "vertical" }} />
+      {ekTestGecerli(tip, e) && <div data-ektest-sonuc="1" style={kutu}>{dussRapor(e).metin}</div>}
+    </div>);
+  }
+  if (tip === "wisc_r") {
+    const alt = e.alt || {}; const setA = (k, v) => setEk({ ...e, alt: { ...alt, [k]: v } });
+    return (<div data-ektest="wisc">
+      <div style={{ fontSize: 11.5, color: MUTED, marginBottom: 6, lineHeight: 1.5 }}>RAM raporundaki ya da el kitabıyla hesaplanmış puanları girin. Program norm tablosu içermez; sınıflama ve profil analizi yapar.</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
+        {[["sozel", "Sözel ZB"], ["perf", "Performans ZB"], ["toplam", "Toplam ZB"]].map(([k, a]) => <div key={k}><label style={lbl}>{a}</label><input data-wisc={k} type="number" value={e[k] || ""} onChange={ev => setEk({ ...e, [k]: ev.target.value })} style={inp} /></div>)}
+      </div>
+      <div style={{ fontSize: 11.5, fontWeight: 800, margin: "8px 0 4px" }}>Alt test ölçek puanları (1–19, isteğe bağlı)</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+        {WISC_ALT.map(x => <div key={x.k}><label style={lbl}>{x.alan === "S" ? "Sözel" : "Performans"} · {x.ad}</label><input data-wisc={x.k} type="number" min="1" max="19" value={alt[x.k] || ""} onChange={ev => setA(x.k, ev.target.value)} style={inp} /></div>)}
+      </div>
+      {ekTestGecerli(tip, e) && <div data-ektest-sonuc="1" style={kutu}>{wiscRapor(e).metin}</div>}
+    </div>);
+  }
+  return null;
+}
+// ===== EK TESTLER BİTİŞ =====
+
 const TEST_LISTESI = {
   objektif: [
     { ad: "D2 Dikkat Testi", tip: "d2" },
@@ -23229,9 +23488,9 @@ const TEST_LISTESI = {
       genelEtiket: "Algısal Bölüm (PQ)" },
     { ad: "Bender Gestalt Görsel Motor Algı Testi", tip: "gelisimsel_hata" },
     { ad: "R.B Catell 2A-3A Zeka Testi", tip: "iq_esdeger" },
-    { ad: "Metropolitan Okul Öncesi Olgunluk Testi", tip: "alt_test",
-      altTestler: ["Kelime Anlama","Cümleler","Genel Bilgi","Eşleştirme","Sayılar","Kopya Etme"],
-      genelEtiket: "Olgunluk Düzeyi" },
+    { ad: "Metropolitan Okul Öncesi Olgunluk Testi", tip: "metropolitan" },
+    { ad: "Stroop Testi TBAG Formu", tip: "stroop_tbag" },
+    { ad: "WISC-R (Wechsler Çocuklar İçin Zekâ Ölçeği)", tip: "wisc_r" },
     { ad: "Ankara Gelişim Tarama Envanteri (AGTE)", tip: "alt_test",
       altTestler: ["Dil-Bilişsel","İnce Motor","Kaba Motor","Sosyal Beceri-Özbakım"],
       genelEtiket: "Genel Gelişim Düzeyi" },
@@ -23252,7 +23511,7 @@ const TEST_LISTESI = {
   projektif: [
     { ad: "BEİER Cümle Tamamlama Testi (Form A, 8-16 Yaş)", tip: "beier_form_a" },
     { ad: "Goodenough–Harris Bir İnsan Çiz Testi", tip: "iq_esdeger" },
-    { ad: "Louisa Düss Psikanalitik Hikayeler", tip: "nitel" },
+    { ad: "Louisa Düss Psikanalitik Hikayeler", tip: "louisa_duss" },
   ],
 };
 
@@ -29759,6 +30018,7 @@ function IczPaneli({ seciliAd, seciliSinif, seciliNumara, seciliCinsiyet, secili
 // kullanılır, testin tipine göre farklı alanlardan oluşturulur.
 function testSonucOzeti(k) {
   const v = k.veri || {};
+  if (EK_TESTLER.includes(k.tip)) return ekTestOzet(k);
   switch (k.tip) {
     case "d2": if (v.TN || v.TN_E || v.E1 || v.satirlar && v.satirlar.length) return d2KisaOzet(v); return `Doğru: ${v.dogru||"—"} · Yanlış/Atlanan: ${v.yanlisAtlanan||"—"} · Dikkat Puanı: ${v.dikkatPuani||"—"}${v.pr?` · PR: ${v.pr}`:""}`;
     case "alt_test": {
@@ -29842,6 +30102,10 @@ function pdrTestOlcumleri(k, sinifNo) {
       }
       case "scas_cocuk": { const s = scasPuanla(v.cevaplar || [], v.cinsiyetKullanilan, v.yasGrubuKullanilan); ekle("Kaygı genel toplam", s.genelToplam, "dusuk"); break; }
       case "dikkat_cdt": { const s = cdtPuanla(v); if (s && s.tamam && s.indeksler) s.indeksler.forEach(i => ekle(i.ad + " (yüzdelik)", i.yuzdelik, "yuksek")); break; }
+      case "stroop_tbag": { const r = stroopHesapla(v); r.sure.forEach((x, i) => ekle(`${i + 1}. bölüm süresi`, x, "dusuk", " sn")); ekle("Bozucu etki (5−3)", r.enterferans, "dusuk", " sn"); ekle("Toplam hata", r.toplamHata, "dusuk"); break; }
+      case "metropolitan": { const r = metroHesapla(v); METRO_ALT.forEach((x, i) => ekle(x.ad, r.a[i], "yuksek", "/" + x.maks)); ekle("Okuma olgunluğu", r.okuma, "yuksek", "/66"); ekle("Sayı olgunluğu", r.sayi, "yuksek", "/24"); ekle("Genel olgunluk", r.genel, "yuksek", "/100"); break; }
+      case "wisc_r": { const r = wiscHesapla(v); ekle("Sözel ZB", r.sz, "yuksek"); ekle("Performans ZB", r.pf, "yuksek"); ekle("Toplam ZB", r.tp, "yuksek"); WISC_ALT.forEach(x => ekle(x.ad, r.p[x.k], "yuksek")); break; }
+      case "louisa_duss": { const r = dussHesapla(v); ekle("Çatışma belirtisi olan öykü", r.sinyal.length, "dusuk", "/10"); break; }
       case "insan_ciz": { const s = iczPuanla(v); ekle("Gelişimsel ayrıntı", s.varOlanSayi, "yuksek", "/30"); ekle("Duygusal gösterge", (s.gecerli || []).length, "dusuk"); let z = null; try { z = iczZihinsel(v, k.tarih); } catch (e) {} if (z) { ekle(z.yontem === "goodenough" ? "Goodenough ham puan" : "Goodenough-Harris ham puan", z.ham, "yuksek", "/" + z.maks); if (z.sp != null && !String(z.spMetin).match(/[<>]/)) ekle("Goodenough-Harris standart puan", z.sp, "yuksek"); if (z.iq != null) ekle("Goodenough zekâ bölümü", z.iq, "yuksek"); } break; }
       default: break;
     }
@@ -29917,8 +30181,9 @@ function testDuzeyHesapla(testTanim, puan) {
   return bulunan ? bulunan.ad : testTanim.duzeyler[testTanim.duzeyler.length-1].ad;
 }
 
-const TEST_FORM_BOS = { tarih: today(), not: "", dogru:"", yanlisAtlanan:"", dikkatPuani:"", pr:"", altPuanlar:{}, genelSonuc:"", hamPuan:"", zekaYasi:"", zekaBolumu:"", hataPuani:"", gelisimselYas:"", toplamPuan:"", duzeyYorum:"", oneCikanAlanlar:"", genelYorum:"", isaretliMaddeler:[], maddeler:[], guvenlikUyarisi:"", scasCevaplar:[] };
+const TEST_FORM_BOS = { tarih: today(), not: "", dogru:"", yanlisAtlanan:"", dikkatPuani:"", pr:"", altPuanlar:{}, genelSonuc:"", hamPuan:"", zekaYasi:"", zekaBolumu:"", hataPuani:"", gelisimselYas:"", toplamPuan:"", duzeyYorum:"", oneCikanAlanlar:"", genelYorum:"", isaretliMaddeler:[], maddeler:[], guvenlikUyarisi:"", scasCevaplar:[], ek:{} };
 function testVeriOlustur(tip, testTanim, form) {
+  if (EK_TESTLER.includes(tip)) return { ...(form.ek || {}) };
   switch (tip) {
     case "d2": return { dogru: form.dogru, yanlisAtlanan: form.yanlisAtlanan, dikkatPuani: form.dikkatPuani, pr: form.pr };
     case "alt_test": return { altPuanlar: form.altPuanlar, genelSonuc: form.genelSonuc };
@@ -29934,6 +30199,7 @@ function testVeriOlustur(tip, testTanim, form) {
   }
 }
 function testFormGecerliMi(tip, form) {
+  if (EK_TESTLER.includes(tip)) return ekTestGecerli(tip, form.ek);
   switch (tip) {
     case "d2": return !!form.dogru;
     case "alt_test": return Object.values(form.altPuanlar||{}).some(v=>v);
@@ -31049,6 +31315,9 @@ KURALLAR:
                 </div>
               </>)}
 
+              {EK_TESTLER.includes(seciliTest.tip) && (
+                <EkTestFormu tip={seciliTest.tip} ek={form.ek} setEk={ek => setForm(f => ({ ...f, ek }))} cinsiyet={seciliOgr?.cinsiyet || ""} yas={cdtYasTahmin(seciliSinif)} />
+              )}
               {seciliTest.tip === "alt_test" && (<>
                 {seciliTest.altTestler.map(alt => (
                   <div key={alt} style={{ marginBottom:8 }}>
@@ -31363,7 +31632,8 @@ KURALLAR:
                   const scasMi = k.tip === "scas_cocuk";
                   const cdtMi = k.tip === "dikkat_cdt";
                   const iczMi = k.tip === "insan_ciz";
-                  const genisletilebilir = mesEgilimMi || beierMi || scasMi || cdtMi || iczMi;
+                  const ekMi = EK_TESTLER.includes(k.tip);
+                  const genisletilebilir = mesEgilimMi || beierMi || scasMi || cdtMi || iczMi || ekMi;
                   const detayAcik = acikTestId === k.id;
                   return (
                   <div key={k.id} style={{ background:CARD, border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius:10, padding:"10px 12px" }}>
@@ -31384,6 +31654,11 @@ KURALLAR:
                         <button onClick={(e)=>{e.stopPropagation(); handleSil(k.id);}} style={{ background:"none", border:"none", color:"#C0392B", fontSize:14, cursor:"pointer" }}>🗑</button>
                       </div>
                     </div>
+                    {ekMi && detayAcik && (() => { const t = ekTestRapor(k); return (
+                      <div data-ektest-rapor="1" style={{ marginTop:10, borderTop:`1px solid ${BORDER}`, paddingTop:10 }}>
+                        <div style={{ fontSize:12, lineHeight:1.6, whiteSpace:"pre-wrap", color:TEXT }}>{t}</div>
+                        <button onClick={(e)=>{ e.stopPropagation(); try { navigator.clipboard.writeText(t); } catch (er) {} }} style={{ marginTop:6, padding:"6px 10px", borderRadius:8, border:`1px solid ${BORDER}`, background:"#fff", fontSize:11.5, fontWeight:700, cursor:"pointer" }}>📋 Raporu kopyala</button>
+                      </div>); })()}
                     {mesEgilimMi && detayAcik && (() => {
                       const sonuc = mesleklEgilimSonucHesapla(k.veri?.isaretliMaddeler||[]);
                       const liseOnerisi = mesleklEgilimLiseOnerisiHesapla(sonuc);

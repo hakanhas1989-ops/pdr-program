@@ -12090,7 +12090,7 @@ function ksAsistanTestSonucu(g, ctx, o) {
         if (p.moduller.length) b.push(`Destek gereken modüller: ${p.moduller.map(m => `${OY_MODULLER[m.k].ad} (${K(m.neden, 90)})`).join("; ")}`);
         if (p.kademe) b.push(`Önerilen destek: ${p.kademe}`);
       } else if (EK_TESTLER.includes(t.tip)) {
-        b.push(K(ekTestRapor(t), 1800));
+        b.push(K(ekTestRapor(t, tum), 2200));
       } else if (t.tip === "d2" && t.veri && (t.veri.TN || t.veri.TN_E || t.veri.E1)) {
         b.push(d2KisaOzet(v));
         b.push(`Yorum: ${d2Yorum(v)}`);
@@ -22062,6 +22062,8 @@ function RaporModalIc({ rapor, onKapat }) {
                           {k.kategori === "objektif" ? "🔵" : "🟣"} {k.testAdi} <span style={{ fontWeight:400, color:"#888" }}>({k.tarih})</span>
                         </div>
                         <div style={{ fontSize:10, color:"#555", marginTop:2 }}>{testSonucOzeti(k)}</div>
+                        {(() => { let t = ""; try { t = EK_TESTLER.includes(k.tip) ? ekTestRapor(k, ogrTestleri).split("\n").slice(1).filter(l => l.trim() && !/^(Bölüm süreleri|Alt testler|Alt test ölçek puanları|Not:|Öneri:|Test 5–6|Yorumlamada)/.test(l)).join("\n") : k.tip === "d2" && k.veri && (k.veri.TN || k.veri.PR) ? d2Yorum(k.veri) : ""; } catch (e) {} return t ? <div style={{ fontSize:9.5, color:"#333", marginTop:3, lineHeight:1.5, whiteSpace:"pre-wrap" }}>{t}</div> : null; })()}
+                        <TestDegisimKutusu kayit={k} tumKayitlar={ogrTestleri} />
                         {k.not && <div style={{ fontSize:9, color:"#777", marginTop:2, lineHeight:1.5 }}>{k.not}</div>}
                       </div>
                     ))}
@@ -23353,9 +23355,14 @@ function wiscHesapla(ek) {
   WISC_ALT.forEach(x => { const v = p[x.k]; const m = x.alan === "S" ? sOrt : pOrt; if (v == null || m == null) return; if (v - m >= 3) guc.push(x); if (m - v >= 3) zayif.push(x); });
   const ban = { uzamsal: ort(["rt", "kd", "pb"]), kavrama: ort(["b", "kh", "y"]), siralama: ort(["st", "a", "ko"]), edinilmis: ort(["gb", "a", "kh"]) };
   const acid = ["a", "ko", "gb", "st"].every(k => p[k] != null) ? ["a", "ko", "gb", "st"].reduce((t, k) => t + p[k], 0) / 4 : null;
-  return { p, sz, pf, tp, fark: sz != null && pf != null ? sz - pf : null, sOrt, pOrt, genelOrt, guc, zayif, ban, acid };
+  // Kaufman'ın WISC-R üç faktörü
+  const kf = { kavrama: ort(["gb", "b", "kh", "y"]), orgutleme: ort(["rt", "rd", "kd", "pb"]), dikkat: ["a", "st", "ko"].filter(k => p[k] != null).length >= 2 ? ort(["a", "st", "ko"]) : null };
+  const digerKf = [kf.kavrama, kf.orgutleme].filter(x => x != null);
+  kf.dikkatDusuk = kf.dikkat != null && digerKf.length > 0 && (digerKf.reduce((a, b) => a + b, 0) / digerKf.length) - kf.dikkat >= 3 || (kf.dikkat != null && ["a", "st", "ko"].filter(k => p[k] != null).every(k => p[k] <= 7));
+  const oogOruntu = ban.uzamsal != null && ban.kavrama != null && ban.siralama != null && ban.uzamsal > ban.kavrama && ban.kavrama > ban.siralama;
+  return { p, sz, pf, tp, fark: sz != null && pf != null ? sz - pf : null, sOrt, pOrt, genelOrt, guc, zayif, ban, acid, kf, oogOruntu, acidDusuk: acid != null && genelOrt != null && genelOrt - acid >= 2 };
 }
-function wiscRapor(ek) {
+function wiscRapor(ek, tum, haricId) {
   const r = wiscHesapla(ek); const L = ["WISC-R (WECHSLER ÇOCUKLAR İÇİN ZEKÂ ÖLÇEĞİ) — SONUÇ DEĞERLENDİRMESİ"];
   [["Sözel zekâ bölümü", r.sz], ["Performans zekâ bölümü", r.pf], ["Toplam zekâ bölümü", r.tp]].forEach(([a, v]) => { if (v != null) L.push(`${a}: ${v} → ${wiscSinif(v).ad}`); });
   if (r.fark != null) { const f = Math.abs(r.fark); L.push(`Sözel–performans farkı: ${r.fark > 0 ? "+" : ""}${r.fark} (${r.fark > 0 ? "sözel lehine" : r.fark < 0 ? "performans lehine" : "fark yok"}). ${f >= 15 ? "Fark klinik açıdan anlamlı ve belirgin; toplam zekâ bölümü tek başına yorumlanmamalı, iki alan ayrı ayrı değerlendirilmelidir." : f >= 12 ? "Fark istatistiksel olarak anlamlı düzeyde; iki alan arasında belirgin bir dengesizlik olabilir." : "Fark anlamlı düzeyde değil; zihinsel işlevler dengeli görünüyor."}`); }
@@ -23369,16 +23376,46 @@ function wiscRapor(ek) {
       L.push(`Bannatyne kategorileri: uzamsal ${ekYaz(b.uzamsal)}, sözel kavrama ${ekYaz(b.kavrama)}, sıralama ${ekYaz(b.siralama)}${b.edinilmis != null ? `, edinilmiş bilgi ${ekYaz(b.edinilmis)}` : ""}.`);
       if (b.uzamsal > b.kavrama && b.kavrama > b.siralama) L.push("Uzamsal > Sözel kavrama > Sıralama örüntüsü: özgül öğrenme güçlüğü yaşayan çocuklarda sık görülen profil; okuma-yazma ve matematik becerileri ayrıca değerlendirilmelidir (tek başına tanı koydurmaz).");
     }
+    if (r.kf.kavrama != null || r.kf.orgutleme != null || r.kf.dikkat != null) {
+      L.push(`Kaufman faktörleri: sözel kavrama ${ekYaz(r.kf.kavrama)}, algısal örgütleme ${ekYaz(r.kf.orgutleme)}, dikkat dağınıklığından kurtulma (Aritmetik, Sayı Dizisi, Şifre) ${ekYaz(r.kf.dikkat)}.`);
+      if (r.kf.dikkatDusuk) L.push("Dikkat dağınıklığından kurtulma faktörü diğer faktörlerin belirgin altında: dikkati sürdürme, çalışma belleği ve işlem hızında güçlük olasılığı. Bu örüntü DEHB'de sık görülür; ancak kaygı, motivasyon ve sınav ortamı da bu alt testleri düşürebilir (tek başına tanı koydurmaz).");
+    }
     if (r.acid != null && r.genelOrt != null && r.genelOrt - r.acid >= 2) L.push(`ACID alt testleri (Aritmetik, Şifre, Genel Bilgi, Sayı Dizisi) ortalaması ${ekYaz(r.acid)}, genel ortalamanın (${ekYaz(r.genelOrt)}) belirgin altında: dikkat, çalışma belleği ve işlem hızına dayalı bu profil öğrenme güçlüğü ve dikkat sorunlarında sık görülür.`);
+  }
+  if (tum) {
+    const d = ekDigerBulgular(tum, haricId);
+    if (d.dikkat.length || d.okuma.length) {
+      L.push("", "Diğer testlerle birlikte:");
+      [...d.dikkat, ...d.okuma].forEach(x => L.push(`• ${x.ad}: ${x.metin}`));
+      const dikkatWisc = r.kf.dikkatDusuk || r.acidDusuk;
+      if (d.dikkat.length) {
+        const olumsuz = d.dikkat.filter(x => x.olumsuz).length;
+        if (dikkatWisc && olumsuz) L.push(`→ WISC-R'daki dikkat örüntüsü ile ${olumsuz} dikkat testindeki düşük bulgu aynı yönde; dikkat güçlüğü hipotezi güçleniyor. Öğretmen-veli gözlemi (birden çok ortam) ile birlikte değerlendirilip gerekirse çocuk psikiyatrisine yönlendirme düşünülebilir.`);
+        else if (dikkatWisc && !olumsuz) L.push("→ WISC-R'da dikkat örüntüsü görülse de diğer dikkat testleri yaşıtlarıyla benzer; düşüklük dikkat dışı etkenlerden (kaygı, motivasyon, sayısal güçlük) kaynaklanıyor olabilir.");
+        else if (!dikkatWisc && olumsuz) L.push("→ WISC-R'da belirgin dikkat örüntüsü yok, ancak dikkat testlerinde düşük bulgu var; sonuçlar tutarsız, gözlemle netleştirilmeli.");
+        else L.push("→ WISC-R ve dikkat testleri birlikte belirgin bir dikkat güçlüğüne işaret etmiyor.");
+      }
+      if (d.okuma.length && (r.oogOruntu || r.acidDusuk)) L.push(d.okuma.some(x => x.olumsuz) ? "→ WISC-R'daki öğrenme güçlüğü örüntüsü okuma-yazma değerlendirmesindeki güçlükle aynı yönde; ÖÖG açısından RAM değerlendirmesi düşünülebilir." : "→ WISC-R'da öğrenme güçlüğü örüntüsü var ama okuma-yazma değerlendirmesinde destek gereken alan çıkmadı; matematik ve yazma becerileri ayrıca değerlendirilmeli.");
+    }
   }
   L.push("", "Not: WISC-R uygulaması ve puanlaması eğitimli uzman tarafından el kitabı normlarıyla yapılır; program yalnızca girilen puanları sınıflar ve profil analizi yapar. Sonuçlar tek başına tanı koydurmaz.");
   return { r, metin: L.join("\n") };
 }
-function ekTestRapor(k) {
+// Öğrencinin diğer testlerinden dikkat ve okuma göstergeleri (WISC yorumunu bağlama oturtmak için)
+function ekDigerBulgular(tum, haricId) {
+  const son = tip => (tum || []).filter(k => k.tip === tip && k.id !== haricId && (tip !== "d2" || k.testAdi === "D2 Dikkat Testi")).sort((a, b) => (pdrTarihMs(b.tarih) || 0) - (pdrTarihMs(a.tarih) || 0))[0];
+  const dikkat = [], okuma = [];
+  try { const k = son("d2"); if (k && k.veri && (k.veri.TN || k.veri.PR)) { const g = d2GenelSonuc(k.veri); const pr = d2Sayi(k.veri.PR); const olumsuz = (pr != null && pr < 50) || (g && g.renk === "#B91C1C"); dikkat.push({ ad: `D2 (${k.tarih})`, olumsuz, metin: g ? g.metin : `PR ${k.veri.PR}` }); } } catch (e) {}
+  try { const k = son("dikkat_cdt"); if (k) { const s = cdtPuanla(k.veri); if (s && s.tamam) { const dusuk = s.indeksler.filter(i => i.yuzdelik != null && i.yuzdelik < 16); dikkat.push({ ad: `ÇDT (${k.tarih})`, olumsuz: dusuk.length > 0, metin: dusuk.length ? `düşük indeks: ${dusuk.map(i => `${i.ad} (%${Math.round(i.yuzdelik)})`).join(", ")}` : "indeksler yaşıtlarıyla benzer" }); } } } catch (e) {}
+  try { const k = son("stroop_tbag"); if (k) { const r = stroopHesapla(k.veri); if (r.oran != null) dikkat.push({ ad: `Stroop (${k.tarih})`, olumsuz: r.oran >= 1.8, metin: `bozucu etki ${ekYaz(r.enterferans)} sn (${r.oranDuzey})` }); } } catch (e) {}
+  try { const k = son("okuma_degerlendirme"); if (k) { const p = oyProfil(k.veri, k.veri.sinifNo || 0, k.tarih); okuma.push({ ad: `Okuma-yazma değerlendirmesi (${k.tarih})`, olumsuz: p.moduller.length > 0, metin: p.moduller.length ? `destek gereken: ${p.moduller.map(m => OY_MODULLER[m.k].ad).join(", ")}` : "destek gereken alan yok" }); } } catch (e) {}
+  return { dikkat, okuma };
+}
+function ekTestRapor(k, tum) {
   const v = (k && k.veri) || {};
   try {
     if (k.tip === "stroop_tbag") return stroopRapor(v).metin; if (k.tip === "metropolitan") return metroRapor(v).metin;
-    if (k.tip === "louisa_duss") return dussRapor(v).metin; if (k.tip === "wisc_r") return wiscRapor(v).metin;
+    if (k.tip === "louisa_duss") return dussRapor(v).metin; if (k.tip === "wisc_r") return wiscRapor(v, tum, k.id).metin;
   } catch (e) {}
   return "";
 }
@@ -23477,6 +23514,58 @@ function EkTestFormu({ tip, ek, setEk, cinsiyet, yas }) {
     </div>);
   }
   return null;
+}
+// ── Ek testler için yazdırılabilir (PDF) rapor ──
+function ekTestRaporHtml(k, bilgi, tum) {
+  const v = (k && k.veri) || {}; const e = cdtEsc; const b = bilgi || {};
+  const RENK = { d2: "#6D28D9", stroop_tbag: "#B45309", metropolitan: "#0E7490", louisa_duss: "#7C3AED", wisc_r: "#1D4ED8" }[k.tip] || "#334155";
+  const baslik = t => `<div style="background:${RENK};color:#fff;font-size:12.5px;font-weight:700;padding:6px 11px;border-radius:6px;margin:14px 0 7px;page-break-after:avoid">${t}</div>`;
+  const th = t => `<th style="text-align:left;padding:5px 7px;background:#F8FAFC;color:#475569;font-size:10.5px;border-bottom:1px solid #E2E8F0">${t}</th>`;
+  const td = (t, ek) => `<td style="padding:5px 7px;border-bottom:1px solid #EEF2F7;font-size:11px;${ek || ""}">${t}</td>`;
+  const tablo = (bas, satirlar) => `<table style="width:100%;border-collapse:collapse"><tr>${bas.map(th).join("")}</tr>${satirlar.map(s => `<tr>${s.join("")}</tr>`).join("")}</table>`;
+  let ust = "", olcum = "";
+  if (k.tip === "stroop_tbag") {
+    const r = stroopHesapla(v);
+    olcum = tablo(["Bölüm", "Görev", "Ölçtüğü", "Süre (sn)", "Hata", "Düzeltme"], STROOP_BOLUMLER.map((x, i) => [td(i + 1), td(e(x.ad)), td(e(x.olcer), "color:#64748B"), td(`<b>${ekYaz(r.sure[i])}</b>`), td(r.hata[i]), td(r.duz[i])]))
+      + `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">${[["Bozucu etki (5−3)", ekYaz(r.enterferans) + " sn"], ["5. / 3. bölüm oranı", ekYaz(r.oran) + " (" + (r.oranDuzey || "—") + ")"], ["5−1 farkı", ekYaz(r.fark51) + " sn"], ["Toplam hata / düzeltme", `${r.toplamHata} / ${r.toplamDuz}`]].map(([a, d]) => `<div style="flex:1 1 140px;border:1px solid #E5E7EB;border-radius:8px;padding:7px;text-align:center"><div style="font-size:15px;font-weight:700;color:${RENK}">${e(d)}</div><div style="font-size:10px;color:#555">${a}</div></div>`).join("")}</div>`;
+  } else if (k.tip === "metropolitan") {
+    const r = metroHesapla(v);
+    olcum = tablo(["Alt test", "Ham puan", "En yüksek", "Oran"], METRO_ALT.map((x, i) => [td(`${i + 1}. ${e(x.ad)}`), td(`<b>${r.a[i] ?? "—"}</b>`), td(x.maks), td(r.a[i] != null ? `<div style="background:#E2E8F0;border-radius:4px;height:8px;width:120px"><div style="background:${RENK};height:8px;border-radius:4px;width:${Math.min(100, r.a[i] / x.maks * 100)}%"></div></div>` : "")]))
+      + `<div style="margin-top:8px">` + tablo(["Olgunluk alanı", "Puan", "Harf", "Düzey"], [["Okuma olgunluğu (1–4)", r.okuma, "/66", r.okumaH], ["Sayı olgunluğu (5)", r.sayi, "/24", r.sayiH], ["Genel olgunluk (1–6)", r.genel, "/100", r.genelH]].map(([a, p, m, h]) => [td(a), td(`<b>${p ?? "—"}</b>${m}`), td(`<b style="color:${RENK}">${h ? h.harf : "—"}</b>`), td(h ? e(h.ad) : "—")])) + `</div>`;
+  } else if (k.tip === "wisc_r") {
+    const r = wiscHesapla(v);
+    ust = `<div style="display:flex;gap:8px;flex-wrap:wrap">${[["Sözel ZB", r.sz], ["Performans ZB", r.pf], ["Toplam ZB", r.tp]].map(([a, z]) => { const c = wiscSinif(z); return `<div style="flex:1 1 140px;border:1px solid ${c ? c.renk + "66" : "#E5E7EB"};background:${c ? c.renk + "10" : "#fff"};border-radius:8px;padding:8px;text-align:center"><div style="font-size:22px;font-weight:700;color:${c ? c.renk : "#333"}">${z ?? "—"}</div><div style="font-size:10.5px;color:#555">${a}${c ? " · " + e(c.ad) : ""}</div></div>`; }).join("")}</div>`;
+    const ap = WISC_ALT.filter(x => r.p[x.k] != null);
+    if (ap.length) olcum = tablo(["Alt test", "Ölçek puanı", "1 ——— 10 ——— 19", "Ölçtüğü"], ap.map(x => { const val = r.p[x.k]; const c = val <= 7 ? "#B91C1C" : val >= 13 ? "#15803D" : RENK; return [td(`${x.alan === "S" ? "Sözel" : "Perf."} · ${e(x.ad)}`), td(`<b style="color:${c}">${val}</b>`), td(`<div style="position:relative;background:#E2E8F0;border-radius:4px;height:9px;width:150px"><div style="position:absolute;left:50%;top:-2px;width:1px;height:13px;background:#475569"></div><div style="background:${c};height:9px;border-radius:4px;width:${Math.min(100, val / 19 * 100)}%"></div></div>`), td(e(WISC_OLCER[x.k] || ""), "color:#64748B;font-size:10px")]; }));
+  } else if (k.tip === "d2") {
+    const d = d2Hesapla(v); const n = v.norm || {};
+    const nm = { TN: n.tnPR != null ? `SS ${n.tnSS}, PR ${d2PrYaz(n.tnPR)}` : "", TN_E: n.tnePR != null ? `SS ${n.tneSS}, PR ${d2PrYaz(n.tnePR)}` : "", E_yuzde: n.eMetin || "", FR: n.frMetin || "" };
+    olcum = tablo(["Puan", "Açıklama", "Ham", "Yaş normu"], D2_ALANLAR.filter(f => d[f.k]).map(f => [td(`<b>${f.ad}</b>`), td(e(f.ac), "color:#64748B"), td(`<b>${e(f.k === "E_yuzde" ? "%" + d[f.k] : d[f.k])}</b>`), td(e(nm[f.k] || ""))])) + (n.tablo ? `<div style="font-size:10.5px;color:#555;margin-top:4px">Norm: ${e(n.tablo)}${n.yas ? " · yaş " + e(n.yas) : ""}</div>` : "");
+    const gs = d2GenelSonuc(v); if (gs) ust = `<div style="border:2px solid ${gs.renk};background:${gs.renk}12;color:${gs.renk};border-radius:8px;padding:8px 10px;font-weight:700;font-size:13px">Genel sonuç: ${e(gs.metin)}</div>`;
+  } else if (k.tip === "louisa_duss") {
+    const r = dussHesapla(v);
+    olcum = tablo(["Öykü", "Amaç", "Çocuğun yanıtı", "Gözlem"], r.tum.map(x => [td(`<b>${x.i + 1}. ${e(x.o.ad)}</b>`), td(e(x.o.amac), "color:#64748B;font-size:10px"), td(e(x.yanit || "—")), td(x.isaretler.length ? `<span style="color:#B91C1C">${e(x.isaretler.join(", "))}</span>` : "—")]));
+  }
+  const satirlar = k.tip === "d2" ? d2Yorum(v).split(/(?<=\.) (?=[A-ZÇĞİÖŞÜ→E])/).filter(x => !/^GENEL SONUÇ/.test(x)) : ekTestRapor(k, tum).split("\n").slice(1);
+  const metin = satirlar.map(l => l.trim() === "" ? "<div style=\"height:5px\"></div>" : `<div style="margin:0 0 3px;${l.startsWith("→") ? "font-weight:700;color:" + RENK : ""}">${e(l)}</div>`).join("");
+  return `<div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:12px">
+    <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;border-bottom:2px solid ${RENK};padding-bottom:8px">
+      <div><div style="font-size:18px;font-weight:700;color:${RENK}">${e(k.testAdi || "")} — Değerlendirme Raporu</div><div style="font-size:11px;color:#666;margin-top:2px">PDR Servisi · test sonuç raporu</div></div>
+      <div style="font-size:11.5px;text-align:right;line-height:1.55"><b>${e(b.ogrenci || "")}</b>${b.sinif ? " · " + e(b.sinif) : ""}<br>Uygulama tarihi: ${e(k.tarih || "")}</div>
+    </div>
+    ${ust ? `<div style="margin-top:10px">${ust}</div>` : ""}
+    ${olcum ? baslik("Puanlar") + olcum : ""}
+    ${baslik("Değerlendirme")}<div style="font-size:11.5px;line-height:1.55">${metin}</div>
+    ${k.not ? baslik("Danışman notu") + `<div style="font-size:11.5px;line-height:1.55">${e(k.not)}</div>` : ""}
+    <div style="margin-top:14px;display:flex;justify-content:space-between;font-size:11px;color:#333"><div>Uygulayan: ........................................</div><div>İmza: ....................</div></div>
+  </div>`;
+}
+function ekTestPdfIndir(k, ogrenci, sinif, tum) {
+  const id = "ek-rapor-" + k.id; let tmp = document.getElementById(id);
+  if (!tmp) { tmp = document.createElement("div"); tmp.id = id; Object.assign(tmp.style, { position: "absolute", left: "-9999px", top: "0", width: "800px", padding: "18px" }); document.body.appendChild(tmp); }
+  tmp.innerHTML = ekTestRaporHtml(k, { ogrenci, sinif }, tum);
+  raporIndir(id, String(k.testAdi || "Test").replace(/[^\wçğıöşüâÇĞİÖŞÜÂ]+/g, "_") + "_" + String(ogrenci || "").replace(/\s+/g, "_") + "_" + String(k.tarih || "").replace(/\./g, "-"));
+  setTimeout(() => { const el = document.getElementById(id); if (el) el.remove(); }, 8000);
 }
 // ===== EK TESTLER BİTİŞ =====
 
@@ -30806,6 +30895,7 @@ function D2Paneli({ seciliAd, seciliSinif, seciliNumara, seciliOgr, profiles2, s
               </div>
               <div style={{ fontSize:11.5, color:MUTED, marginTop:2 }}>{d2KisaOzet(k.veri)}</div>
               <div style={{ fontSize:11.5, color:TEXT, marginTop:3, lineHeight:1.45 }}>{d2Yorum(k.veri)}</div>
+              <button data-d2-pdf="1" onClick={() => ekTestPdfIndir(k, seciliAd, seciliSinif, tumKayitlar)} style={{ marginTop:5, padding:"5px 9px", borderRadius:8, border:"none", background:PURPLE, color:"#fff", fontSize:11, fontWeight:800, cursor:"pointer" }}>📄 PDF Rapor</button>
               <TestDegisimKutusu kayit={k} tumKayitlar={tumKayitlar} />
             </div>
           ))}
@@ -31654,10 +31744,13 @@ KURALLAR:
                         <button onClick={(e)=>{e.stopPropagation(); handleSil(k.id);}} style={{ background:"none", border:"none", color:"#C0392B", fontSize:14, cursor:"pointer" }}>🗑</button>
                       </div>
                     </div>
-                    {ekMi && detayAcik && (() => { const t = ekTestRapor(k); return (
+                    {ekMi && detayAcik && (() => { const t = ekTestRapor(k, kayitlar); return (
                       <div data-ektest-rapor="1" style={{ marginTop:10, borderTop:`1px solid ${BORDER}`, paddingTop:10 }}>
                         <div style={{ fontSize:12, lineHeight:1.6, whiteSpace:"pre-wrap", color:TEXT }}>{t}</div>
-                        <button onClick={(e)=>{ e.stopPropagation(); try { navigator.clipboard.writeText(t); } catch (er) {} }} style={{ marginTop:6, padding:"6px 10px", borderRadius:8, border:`1px solid ${BORDER}`, background:"#fff", fontSize:11.5, fontWeight:700, cursor:"pointer" }}>📋 Raporu kopyala</button>
+                        <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:6 }}>
+                          <button data-ektest-pdf="1" onClick={(e)=>{ e.stopPropagation(); ekTestPdfIndir(k, seciliAd, seciliSinif, kayitlar); }} style={{ padding:"6px 10px", borderRadius:8, border:"none", background:"#1D4ED8", color:"#fff", fontSize:11.5, fontWeight:800, cursor:"pointer" }}>📄 PDF Rapor</button>
+                          <button onClick={(e)=>{ e.stopPropagation(); try { navigator.clipboard.writeText(t); } catch (er) {} }} style={{ padding:"6px 10px", borderRadius:8, border:`1px solid ${BORDER}`, background:"#fff", fontSize:11.5, fontWeight:700, cursor:"pointer" }}>📋 Raporu kopyala</button>
+                        </div>
                       </div>); })()}
                     {mesEgilimMi && detayAcik && (() => {
                       const sonuc = mesleklEgilimSonucHesapla(k.veri?.isaretliMaddeler||[]);

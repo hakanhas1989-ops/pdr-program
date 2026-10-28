@@ -10243,15 +10243,15 @@ function pdrKapaliP2Analizi({ sinavlar = {}, d2 = {}, gecmisYillar = {}, ilgiler
   if (PR !== null || TNE !== null || EY !== null) {
     const parcalar = [];
     if (PR !== null) {
-      const duz = PR >= 75 ? "ortalamanın üstünde" : PR >= 25 ? "ortalama düzeyde" : PR >= 10 ? "ortalamanın altında" : "belirgin biçimde düşük";
-      parcalar.push(`D2 dikkat testinde yüzdelik sıra ${PR}; genel dikkat performansı yaşıtlarına göre ${duz}`);
+      const duz = (d2PrBant(PR) || { ad: "" }).ad;
+      parcalar.push(`D2 dikkat testinde (TN-E) yüzdelik sıra ${PR}; genel dikkat performansı ${duz}${PR < 75 ? " (%75 üstü beklenir)" : ""}`);
     }
     if (EY !== null) parcalar.push(EY > 2.5 ? `hata yüzdesi (%${EY}) 2,5'in üstünde — dikkat problemi göstergesi; hız uğruna doğruluktan ödün veriyor olabilir` : EY > 1.5 ? `hata yüzdesi (%${EY}) 1,5–2,5 aralığında — dikkat edilmeli` : `hata yüzdesi (%${EY}) normal aralıkta (0–1,5)`);
     { const e1 = sayi(d2.E1), e2 = sayi(d2.E2); if (e1 !== null && e2 !== null && e1 + e2 > 0) parcalar.push(e1 >= e2 * 3 ? "hataların çoğu atlama (E1) — tarama sırasında hedefleri kaçırıyor" : e2 > e1 ? "hataların çoğu yanlış işaretleme (E2) — dürtüsellik ya da görsel ayırt etme güçlüğü araştırılabilir" : "atlama ve yanlış işaretleme dengeli"); }
     if (sayi(d2.CP) !== null && sayi(d2.CP) < 0) parcalar.push("CP negatif — rastgele işaretleme olabilir, sonuç geçerliliği şüpheli");
     if (FR !== null && FR >= 30) parcalar.push(`satırlar arası dalgalanma (FR ${FR}) yüksek — dikkatin süreklilik içinde iniş çıkış gösterdiğini düşündürüyor`);
     let yorum = parcalar.join("; ") + ".";
-    if (PR !== null && PR < 25) yorum += " Dikkat desteği önerilir: kısa ve bölünmüş çalışma blokları (25 dk çalışma + 5 dk mola), dikkat dağıtıcıların azaltılması, ön sıralarda oturma. Sınıf içi gözlemle birlikte belirtiler belirginse ve birden çok ortamda görülüyorsa uzman değerlendirmesi önerilebilir.";
+    if (PR !== null && PR < 60) yorum += " Dikkat eksikliği açısından risk grubunda; dikkat eğitimi ve desteği önerilir: kısa ve bölünmüş çalışma blokları (25 dk çalışma + 5 dk mola), dikkat dağıtıcıların azaltılması, ön sıralarda oturma. Sınıf içi gözlemle birlikte belirtiler belirginse ve birden çok ortamda görülüyorsa uzman değerlendirmesi önerilebilir.";
     if (PR !== null && PR < 25 && dersOrt.length && dersOrt.reduce((s, d) => s + d.ort, 0) / dersOrt.length < 60) yorum += " Düşük dikkat performansı ile akademik düşüklük birlikte görülüyor; akademik güçlükte dikkatin payı olabilir.";
     else if (PR !== null && PR >= 50 && dersOrt.length && dersOrt.reduce((s, d) => s + d.ort, 0) / dersOrt.length < 60) yorum += " Dikkat performansı yeterli olduğu hâlde akademik puanlar düşük; düşüklüğün nedeni dikkatten çok çalışma alışkanlığı, motivasyon ya da konu eksikleri olabilir.";
     dk = yorum;
@@ -11284,7 +11284,7 @@ function pdrKapaliSupervizyon(girdi) {
   if ((c.turPuan["Sağlık"] || 0) >= 2) zemin.push("sağlık sorunu");
   if ((c.turPuan["Ekonomik Güçlük"] || 0) >= 2) zemin.push("ekonomik güçlük");
   if (c.ozGecmisVar) zemin.push("geçmişte öz zarar öyküsü");
-  const d2 = X.profil2 && X.profil2.d2; if (d2 && parseFloat(d2.PR) < 25) zemin.push(`düşük dikkat performansı (D2 yüzdelik ${d2.PR})`);
+  const d2 = X.profil2 && X.profil2.d2; if (d2 && parseFloat(d2.PR) < 50) zemin.push(`düşük dikkat performansı (D2 yüzdelik ${d2.PR})`);
   if (X.profil1 && X.profil1.scores && X.profil1.scores.ozguven > 0 && X.profil1.scores.ozguven <= 2) zemin.push("düşük öz güven");
   if (r.islev.includes("devam") || (c.turPuan["Devamsızlık"] || 0) >= 2) surduren.push("kaçınma (okula gelmeme/devamsızlık) — kısa vadede rahatlatıp uzun vadede sorunu büyütür");
   if (c.ekranBelirti === "Var") surduren.push("ekran kullanımı ve uyku düzensizliği");
@@ -11442,7 +11442,7 @@ function pdrKapaliSoruYanitla(soruId, girdi) {
       const o = [];
       if (X.kaygi) o.push("Kaygı belirtileri için bir kaygı tarama ölçeği (örn. programdaki SCAS).");
       if (X.depresif) o.push("Depresif belirtiler için yaşa uygun bir depresyon tarama ölçeği.");
-      if ((c.turPuan["Özel Öğrenme Güçlüğü"] || 0) >= 1 || (X.profil2 && X.profil2.d2 && parseFloat(X.profil2.d2.PR) < 25)) o.push("Dikkat için D2 / Çeldiricili Dikkat Testi ve ÖÖG ön değerlendirme aracı.");
+      if ((c.turPuan["Özel Öğrenme Güçlüğü"] || 0) >= 1 || (X.profil2 && X.profil2.d2 && parseFloat(X.profil2.d2.PR) < 50)) o.push("Dikkat için D2 / Çeldiricili Dikkat Testi ve ÖÖG ön değerlendirme aracı.");
       if ((c.turPuan["Akran-Zorbalık"] || 0) >= 1) o.push("Sınıf içi konum için sosyometri.");
       if (X.r.tur === "Akademik" || (c.turPuan["Akademik"] || 0) >= 1) o.push("Akademik Benlik Kavramı Ölçeği ve Düzey Taraması (yapabiliyor/inanıyor karşılaştırması için).");
       if (X.kd !== "ilkokul") o.push("Kariyer planlaması için Mesleki Eğilim Testi.");
@@ -14120,7 +14120,7 @@ const KS_ALAN_BILGISI = {
 "testler.programdakiler": {
 "b": "Programdaki test ve ölçeklerin özellikleri",
 "k": "d2 dikkat frostig bender gestalt koppitz cattell metropolitan agte porteus frankfurter beck depresyon cdi çocuklar için depresyon ölçeği spence scas rosenberg conners 16pf kuder mesleki eğilim beier cümle tamamlama goodenough harris bir insan çiz düss hikayeleri moxo durumluk sürekli kaygı",
-"m": "PROGRAMDAKİ TEST VE ÖLÇEKLER — NE ÖLÇER, KİME, NASIL YORUMLANIR?\n(Puanlama ve kesme değerleri için programın kendi test ekranı ve ilgili el kitabı esas alınır. Hepsi tarama/değerlendirme yardımcısıdır, tek başına tanı koymaz.)\n\nDİKKAT VE ALGI\n• d2 Dikkat Testi (Brickenkamp): Seçici dikkat ve konsantrasyon. 14 satırlık harf-çizgi dizisinde hedef uyaranı (\"iki çizgili d\") işaretleme; her satır için sınırlı süre (20 sn). Puanlar: toplam işlenen (hız), atlama hataları (dikkatsizlik), yanlış işaretleme hataları (dürtüsellik), toplam−hata, konsantrasyon performansı, dalgalanma. Hız ile doğruluk birlikte yorumlanır; çok hızlı ama hatalı profil ile yavaş ama doğru profil farklı müdahale gerektirir.\n• Frankfurter Dikkat Testi: Küçük yaş grubuna yönelik, belirli bir şekli benzerleri arasından ayırt etmeye dayalı seçici dikkat ve konsantrasyon taraması.\n• Frostig Gelişimsel Görsel Algı Testi: 4-8 yaş; beş alt alan — göz-motor koordinasyonu, şekil-zemin ayırt etme, şekil sabitliği, mekânda konum, mekânsal ilişkiler. Okuma-yazmaya hazırbulunuşlukta görsel algı güçlüklerini fark etmeye yardım eder.\n• Bender-Gestalt Görsel Motor Algı Testi: Dokuz geometrik şeklin kopyalanması; görsel-motor bütünleştirme. Çocuklarda Koppitz gelişimsel puanlaması (yaklaşık 5-11 yaş) kullanılır. \"Duygusal göstergeler\" yorumu zayıf kanıtlıdır; nörolojik tanı için tek başına kullanılmaz.\n• Porteus Labirentleri: Sözel olmayan planlama, öngörü ve dürtü kontrolü. Labirentte geri dönme, çizgiden çıkma gibi hata türleri dürtüsellik hakkında ipucu verir.\n• MOXO ve benzeri sürekli performans testleri (CPT): Bilgisayarda dikkat, zamanlama, dürtüsellik ve hiper-reaktivite ölçümü; görsel/işitsel çeldiricilerle. DEHB değerlendirmesinde ek bilgi sağlar ama tek başına tanı koymaz; yanlış pozitif ve negatif oranı yüksektir.\n\nZEKÂ VE HAZIRBULUNUŞLUK\n• Cattell Kültürden Bağımsız Zekâ Testi (Ölçek 2: yaklaşık 8-14 yaş; Ölçek 3: lise ve üstü/yetişkin; A ve B formları): Sözel olmayan, akıcı zekâ (Gf) ağırlıklı grup testi; seriler, sınıflama, matrisler, koşullar alt testleri. Dil etkisi azdır. Bireysel zekâ testinin yerini tutmaz.\n• Metropolitan Okul Olgunluğu Testi: Okula başlama hazırbulunuşluğu (sözcük anlamı, cümleler, genel bilgi, eşleştirme, sayılar, kopya etme). Okula erken başlatma veya bekletme kararında tek ölçüt olmaz; sosyal-duygusal olgunluk ve gözlemle birlikte değerlendirilir.\n• Ankara Gelişim Tarama Envanteri (AGTE): 0-6 yaş; anne/bakım verenden bilgi alınarak dil-bilişsel, ince motor, kaba motor, sosyal beceri-öz bakım alanlarında gelişim taraması. Gecikme şüphesinde çocuk gelişim/pediatri ve RAM yönlendirmesi.\n\nDUYGUSAL DURUM VE KİŞİLİK\n• Çocuklar İçin Depresyon Ölçeği (CDI, Kovacs): 7-17 yaş, 27 madde, son iki haftayı sorgular. Türkiye'de yaygın kullanılan kesme puanı 19'dur. Yüksek puanda görüşme ve yönlendirme; madde 9 (kendine zarar/ölüm düşüncesi) puanı sıfırdan büyükse toplam puandan bağımsız olarak aynı gün değerlendirilir.\n• Beck Depresyon Envanteri: Ergen ve yetişkin (yaklaşık 13 yaş üstü), 21 madde. Toplam puan şiddet düzeyini gösterir (programdaki aralıklar). İntihar maddesi (madde 9) ayrıca değerlendirilir.\n• Spence Çocuk Kaygı Ölçeği (SCAS): 44 madde (38 kaygı + 6 olumlu dolgu madde); alt ölçekler: ayrılık kaygısı, sosyal fobi, obsesif-kompulsif, panik/agorafobi, fiziksel yaralanma korkuları, yaygın anksiyete. Alt ölçek profili hangi kaygı türüne odaklanılacağını gösterir.\n• Durumluk-Sürekli Kaygı Envanteri (Spielberger; çocuk formu ÇDSKE): Durumluk kaygı (şu anki, duruma bağlı) ve sürekli kaygı (genel eğilim) ayrımı. Sınav kaygısı çalışmalarında ön-son ölçüm için uygundur.\n• Rosenberg Benlik Saygısı Ölçeği: Genel benlik saygısı (10 maddelik çekirdek). Düşük benlik saygısı depresyon ve akran sorunları açısından dikkat gerektirir.\n• Conners Derecelendirme Ölçekleri: Öğretmen ve ebeveyn formları; DEHB belirtileri ve eşlik eden davranış/duygusal sorunlar. Öğretmen ve veli formları arasındaki fark (yalnız bir ortamda yüksek) önemli bir yorum bilgisidir — DEHB tanısı iki ortamda belirti gerektirir.\n• 16PF temelli kişilik ölçümü (Cattell'in 16 kişilik faktörü): Kişilik özelliklerini betimler; meslek yönlendirmede ilgi ve yetenekle birlikte, keşif amaçlı kullanılır. Kişilik \"iyi-kötü\" diye yorumlanmaz.\n\nİLGİ VE KARİYER\n• Kuder Mesleki İlgi Envanteri: On ilgi alanı (açık hava, mekanik, hesap, fen, ikna, sanat, edebiyat, müzik, sosyal hizmet, büro). En yüksek 2-3 alan meslek keşfi için başlangıç noktasıdır. İlgi yetenek demek değildir.\n• Mesleki eğilim testleri: Holland (RIASEC) mantığıyla yorumlanabilir; sonuç \"senin mesleğin\" değil, araştırılacak meslek grupları listesidir.\n\nPROJEKTİF\n• Cümle Tamamlama Testi (çocuk-ergen formu): Aile, okul, arkadaş, kendilik, korku ve gelecek temalarında yarım cümlelerin tamamlanması. Normatif puanı yoktur; tekrar eden temalar görüşmede açılacak konuları gösterir. Ölüm, kendine zarar veya istismar içerikli yanıtlar ayrıca ve hemen ele alınır.\n• Goodenough-Harris Bir İnsan Çiz Testi: Çizimdeki ayrıntıların puanlanmasıyla bilişsel olgunluğun kaba bir tahmini (yaklaşık 3-15 yaş). Duygusal yorum (Koppitz göstergeleri) zayıf kanıtlıdır; tek başına sonuç çıkarılmaz.\n• Louisa Düss Psikanalitik Hikâyeleri: Çocuğun tamamladığı on kısa yarım hikâye; psikanalitik kurama dayanır, bilimsel geçerliği sınırlıdır. Çocukla konuşmayı başlatan bir araç olarak kullanılır."
+"m": "PROGRAMDAKİ TEST VE ÖLÇEKLER — NE ÖLÇER, KİME, NASIL YORUMLANIR?\n(Puanlama ve kesme değerleri için programın kendi test ekranı ve ilgili el kitabı esas alınır. Hepsi tarama/değerlendirme yardımcısıdır, tek başına tanı koymaz.)\n\nDİKKAT VE ALGI\n• d2 Dikkat Testi (Brickenkamp; Türkçe Toker 1988): Seçici dikkat, psikomotor hız ve dikkat tipi. 14 satır × 47 harf, satır başına 20 sn; hedef: iki çizgili \"d\". Puanlar: TN = her satırda son işaretlenen harfe kadar işlenen toplam (psikomotor hız); E1 = atlanan hedef (seçici dikkat; yüksekliği seçici dikkatte düşüklük); E2 = yanlış işaretleme (normalde düşüktür; yüksekliği öğrenme güçlüğü/zihinsel yetersizlikte artar); E = E1+E2; TN-E = TN−(E1+E2) (test performansı); E% = (E1+E2)/TN×100; CP = doğru işaretlenen − E2; FR = en yüksek satır TN − en düşük satır TN (dikkat salınımı). Yorum: TN-E ham puanının yaşa ve cinsiyete göre norm tablosundaki yüzdeliğine (PR) bakılır: 50–60 averaj (risk grubu), 60–70 vasat, 70–85 normal, 85+ iyi; %75 üstü beklenir. E%: 0–1,5 normal, 1,5–2,5 dikkat edilmeli, 2,5 üstü dikkat problemi (norm tablosu yaşa göre E% sınırlarını da verir). FR 6'yı geçmemelidir; satırlar arası büyük farklar dikkat salınımını gösterir. Danışman el kitabının norm dosyasını D2 ekranından yüklediyse (9–59 yaş; İlkokul–Ortaokul, Ortaokul–Lise, Meslek lisesi tabloları) doğum tarihi ve cinsiyet girilince PR'ler kendiliğinden bulunur. Tarama aracıdır; tek başına tanı koydurmaz.\n• Frankfurter Dikkat Testi: Küçük yaş grubuna yönelik, belirli bir şekli benzerleri arasından ayırt etmeye dayalı seçici dikkat ve konsantrasyon taraması.\n• Frostig Gelişimsel Görsel Algı Testi: 4-8 yaş; beş alt alan — göz-motor koordinasyonu, şekil-zemin ayırt etme, şekil sabitliği, mekânda konum, mekânsal ilişkiler. Okuma-yazmaya hazırbulunuşlukta görsel algı güçlüklerini fark etmeye yardım eder.\n• Bender-Gestalt Görsel Motor Algı Testi: Dokuz geometrik şeklin kopyalanması; görsel-motor bütünleştirme. Çocuklarda Koppitz gelişimsel puanlaması (yaklaşık 5-11 yaş) kullanılır. \"Duygusal göstergeler\" yorumu zayıf kanıtlıdır; nörolojik tanı için tek başına kullanılmaz.\n• Porteus Labirentleri: Sözel olmayan planlama, öngörü ve dürtü kontrolü. Labirentte geri dönme, çizgiden çıkma gibi hata türleri dürtüsellik hakkında ipucu verir.\n• MOXO ve benzeri sürekli performans testleri (CPT): Bilgisayarda dikkat, zamanlama, dürtüsellik ve hiper-reaktivite ölçümü; görsel/işitsel çeldiricilerle. DEHB değerlendirmesinde ek bilgi sağlar ama tek başına tanı koymaz; yanlış pozitif ve negatif oranı yüksektir.\n\nZEKÂ VE HAZIRBULUNUŞLUK\n• Cattell Kültürden Bağımsız Zekâ Testi (Ölçek 2: yaklaşık 8-14 yaş; Ölçek 3: lise ve üstü/yetişkin; A ve B formları): Sözel olmayan, akıcı zekâ (Gf) ağırlıklı grup testi; seriler, sınıflama, matrisler, koşullar alt testleri. Dil etkisi azdır. Bireysel zekâ testinin yerini tutmaz.\n• Metropolitan Okul Olgunluğu Testi: Okula başlama hazırbulunuşluğu (sözcük anlamı, cümleler, genel bilgi, eşleştirme, sayılar, kopya etme). Okula erken başlatma veya bekletme kararında tek ölçüt olmaz; sosyal-duygusal olgunluk ve gözlemle birlikte değerlendirilir.\n• Ankara Gelişim Tarama Envanteri (AGTE): 0-6 yaş; anne/bakım verenden bilgi alınarak dil-bilişsel, ince motor, kaba motor, sosyal beceri-öz bakım alanlarında gelişim taraması. Gecikme şüphesinde çocuk gelişim/pediatri ve RAM yönlendirmesi.\n\nDUYGUSAL DURUM VE KİŞİLİK\n• Çocuklar İçin Depresyon Ölçeği (CDI, Kovacs): 7-17 yaş, 27 madde, son iki haftayı sorgular. Türkiye'de yaygın kullanılan kesme puanı 19'dur. Yüksek puanda görüşme ve yönlendirme; madde 9 (kendine zarar/ölüm düşüncesi) puanı sıfırdan büyükse toplam puandan bağımsız olarak aynı gün değerlendirilir.\n• Beck Depresyon Envanteri: Ergen ve yetişkin (yaklaşık 13 yaş üstü), 21 madde. Toplam puan şiddet düzeyini gösterir (programdaki aralıklar). İntihar maddesi (madde 9) ayrıca değerlendirilir.\n• Spence Çocuk Kaygı Ölçeği (SCAS): 44 madde (38 kaygı + 6 olumlu dolgu madde); alt ölçekler: ayrılık kaygısı, sosyal fobi, obsesif-kompulsif, panik/agorafobi, fiziksel yaralanma korkuları, yaygın anksiyete. Alt ölçek profili hangi kaygı türüne odaklanılacağını gösterir.\n• Durumluk-Sürekli Kaygı Envanteri (Spielberger; çocuk formu ÇDSKE): Durumluk kaygı (şu anki, duruma bağlı) ve sürekli kaygı (genel eğilim) ayrımı. Sınav kaygısı çalışmalarında ön-son ölçüm için uygundur.\n• Rosenberg Benlik Saygısı Ölçeği: Genel benlik saygısı (10 maddelik çekirdek). Düşük benlik saygısı depresyon ve akran sorunları açısından dikkat gerektirir.\n• Conners Derecelendirme Ölçekleri: Öğretmen ve ebeveyn formları; DEHB belirtileri ve eşlik eden davranış/duygusal sorunlar. Öğretmen ve veli formları arasındaki fark (yalnız bir ortamda yüksek) önemli bir yorum bilgisidir — DEHB tanısı iki ortamda belirti gerektirir.\n• 16PF temelli kişilik ölçümü (Cattell'in 16 kişilik faktörü): Kişilik özelliklerini betimler; meslek yönlendirmede ilgi ve yetenekle birlikte, keşif amaçlı kullanılır. Kişilik \"iyi-kötü\" diye yorumlanmaz.\n\nİLGİ VE KARİYER\n• Kuder Mesleki İlgi Envanteri: On ilgi alanı (açık hava, mekanik, hesap, fen, ikna, sanat, edebiyat, müzik, sosyal hizmet, büro). En yüksek 2-3 alan meslek keşfi için başlangıç noktasıdır. İlgi yetenek demek değildir.\n• Mesleki eğilim testleri: Holland (RIASEC) mantığıyla yorumlanabilir; sonuç \"senin mesleğin\" değil, araştırılacak meslek grupları listesidir.\n\nPROJEKTİF\n• Cümle Tamamlama Testi (çocuk-ergen formu): Aile, okul, arkadaş, kendilik, korku ve gelecek temalarında yarım cümlelerin tamamlanması. Normatif puanı yoktur; tekrar eden temalar görüşmede açılacak konuları gösterir. Ölüm, kendine zarar veya istismar içerikli yanıtlar ayrıca ve hemen ele alınır.\n• Goodenough-Harris Bir İnsan Çiz Testi: Çizimdeki ayrıntıların puanlanmasıyla bilişsel olgunluğun kaba bir tahmini (yaklaşık 3-15 yaş). Duygusal yorum (Koppitz göstergeleri) zayıf kanıtlıdır; tek başına sonuç çıkarılmaz.\n• Louisa Düss Psikanalitik Hikâyeleri: Çocuğun tamamladığı on kısa yarım hikâye; psikanalitik kurama dayanır, bilimsel geçerliği sınırlıdır. Çocukla konuşmayı başlatan bir araç olarak kullanılır."
 }
 };
 
@@ -21882,10 +21882,9 @@ function RaporModalIc({ rapor, onKapat }) {
                                 </div>
                                 <div style={{ height:10, background:"#eee", borderRadius:4, position:"relative", overflow:"hidden" }}>
                                   <div style={{ width:`${Math.min(pr,100)}%`, height:"100%", background:prRenk, borderRadius:4 }}/>
-                                  <div style={{ position:"absolute", top:0, left:"25%", width:1, height:"100%", background:"#1A1A2E", opacity:0.5 }}/>
                                   <div style={{ position:"absolute", top:0, left:"75%", width:1, height:"100%", background:"#1A1A2E", opacity:0.5 }}/>
                                 </div>
-                                <div style={{ fontSize:7, color:"#888", textAlign:"right" }}>Ortalama aralık: PR 25–75</div>
+                                <div style={{ fontSize:7, color:"#888", textAlign:"right" }}>Hedef ≥ %75 · 50–60 averaj · 60–70 vasat · 70–85 normal · 85+ iyi</div>
                               </div>
                             )}
                             {e > 0 && (
@@ -30016,14 +30015,107 @@ function d2Yarilar(d) {
   const dusus = Math.round((a.tn - b.tn) / a.tn * 100);
   return { ilk: a, son: b, dusus, metin: dusus >= 15 ? `İkinci yarıda hız %${dusus} düştü — dikkati sürdürmekte zorlanma / yorulma olabilir.` : dusus <= -10 ? `İkinci yarıda hızlandı (%${-dusus}) — başta temkinli başlamış ya da ısınma etkisi.` : "Hız test boyunca dengeli kaldı." };
 }
+// Norm tabloları telifli olduğu için program kodunda (herkese açık depoda) DURMAZ: danışman bir kez
+// "d2-norm-tablolari.json" dosyasını D2 ekranından yükler; dosya kendi hesabının bulut deposuna
+// ("pdr-d2-norm") yazılır ve tüm cihazlarında oradan okunur.
+let D2_NORM = null;
+function pdrD2NormDogrula(j) {
+  const t = j && j.tur === "pdr-d2-norm" && j.tablolar && typeof j.tablolar === "object" ? j.tablolar : null;
+  if (!t) return null;
+  const ok = Object.entries(t).every(([k, v]) => /^(io|ol|ml|yt)\|\d+-\d+\|[KE-]$/.test(k) && v && Array.isArray(v.e) && v.e.length === 5 && Array.isArray(v.fr) && v.fr.length === 5 &&
+    ((Array.isArray(v.tn) && v.tn.length === 61 && Array.isArray(v.tne) && v.tne.length === 61) || (Array.isArray(v.tnA) && v.tnA.length === 4 && Array.isArray(v.tneA) && v.tneA.length === 4)));
+  return ok && Object.keys(t).length ? t : null;
+}
+async function pdrD2NormYukle() {
+  try { const r = await window.storage.get("pdr-d2-norm"); const t = r && r.value ? pdrD2NormDogrula(JSON.parse(r.value)) : null; if (t) D2_NORM = t; } catch (e) {}
+  return D2_NORM;
+}
+async function pdrD2NormKaydet(j) {
+  const t = pdrD2NormDogrula(j); if (!t) throw new Error("Bu dosya D2 norm dosyası değil ya da bozuk.");
+  await window.storage.set("pdr-d2-norm", JSON.stringify(j)); D2_NORM = t; return Object.keys(t).length;
+}
+// d2 el kitabı norm tabloları (Brickenkamp & Zillmer 1998, s. 52–72; danışmanın paylaştığı belgeden).
+// Anahtar: okul türü | yaş | cinsiyet. io = İlkokul–Ortaokul ("Elementary to Middle School"),
+// ol = Ortaokul–Lise ("Junior High to High School"), ml = Meslek lisesi ("Vocational School"), yt = yetişkin.
+// tn / tne: standart puan 70…130 satırlarının alt sınırları (tam tablo); tnA / tneA: [SS70 alt, SS100 alt, SSx alt, x]
+// (bu tablolarda ara satırlar doğrusal hesaplanır, ±1 SS sapma olabilir). e / fr: PR 10, 25, 50, 75, 90 sınır değerleri.
+const D2_SS_PR = [0.1,0.2,0.3,0.4,0.5,0.6,0.8,1.1,1.4,1.8,2.3,2.9,3.5,4.5,5.5,6.7,8.1,9.7,11.5,13.6,15.9,18.4,21.2,24.2,27.4,30.9,34.5,38.2,42.1,46.0,50.0,54.0,57.9,61.8,65.5,69.2,72.6,75.8,78.8,81.6,84.1,86.4,88.5,90.3,91.9,93.3,94.5,95.5,96.4,97.1,97.7,98.2,98.6,98.9,99.2,99.4,99.5,99.6,99.7,99.8,99.9];
+const D2_TABLO_ADI = { io: "İlkokul–Ortaokul", ol: "Ortaokul–Lise", ml: "Meslek lisesi", yt: "Yetişkin" };
+function d2TarihMs(t) {
+  const m = String(t || "").trim().match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/) || null, m2 = String(t || "").trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return new Date(+m[3], +m[2] - 1, +m[1]).getTime(); if (m2) return new Date(+m2[1], +m2[2] - 1, +m2[3]).getTime(); return 0;
+}
+function d2Yas(dogum, uygulama) {
+  const a = d2TarihMs(dogum), b = d2TarihMs(uygulama) || Date.now();
+  if (!a || b <= a) return null;
+  const d1 = new Date(a), d2 = new Date(b);
+  let ay = (d2.getFullYear() - d1.getFullYear()) * 12 + (d2.getMonth() - d1.getMonth()); if (d2.getDate() < d1.getDate()) ay--;
+  return { yil: Math.floor(ay / 12), ay: ay % 12 };
+}
+function d2YasBandi(yil) {
+  if (yil == null) return null;
+  if (yil >= 9 && yil <= 10) return "9-10"; if (yil <= 12 && yil >= 11) return "11-12"; if (yil >= 13 && yil <= 14) return "13-14";
+  if (yil >= 15 && yil <= 16) return "15-16"; if (yil >= 17 && yil <= 18) return "17-18";
+  if (yil >= 19 && yil <= 39) return "19-39"; if (yil >= 40 && yil <= 49) return "40-49"; if (yil >= 50 && yil <= 59) return "50-59";
+  return null;
+}
+// Yaşa göre kullanılabilecek tablolar (ilk sıradaki varsayılandır)
+function d2TabloSecenekleri(yil) {
+  const b = d2YasBandi(yil); if (!b) return [];
+  if (b === "9-10") return ["io"]; if (b === "11-12" || b === "13-14") return ["io", "ol"];
+  if (b === "15-16" || b === "17-18") return ["ol", "ml"]; return ["yt"];
+}
+function d2NormAnahtar(yil, cinsiyet, tur) {
+  const b = d2YasBandi(yil); if (!b) return null;
+  const t = tur && d2TabloSecenekleri(yil).includes(tur) ? tur : d2TabloSecenekleri(yil)[0];
+  if (t === "yt") return `yt|${b}|-`;
+  const c = /^k/i.test(String(cinsiyet || "")) ? "K" : /^e/i.test(String(cinsiyet || "")) ? "E" : null;
+  return c ? `${t}|${b}|${c}` : null;
+}
+function d2SS(x, tam, capa) {
+  if (x == null || !isFinite(x)) return null;
+  let alt;
+  if (tam) alt = tam;
+  else if (capa) { const [a70, a100, ax, X] = capa; alt = Array.from({ length: 61 }, (_, i) => { const s = 70 + i; return Math.round(s <= 100 ? a70 + (a100 - a70) * (s - 70) / 30 : a100 + (ax - a100) * (s - 100) / (X - 100)); }); }
+  else return null;
+  if (x < alt[0]) return { ss: 69, pr: 0.1, metin: "SS<70, PR<0,1" };
+  let i = 0; while (i < 60 && alt[i + 1] <= x) i++;
+  const ust = i === 60 && x > alt[60] + (alt[60] - alt[59]) + 1;
+  return { ss: 70 + i, pr: D2_SS_PR[i], metin: ust ? "SS>130, PR>99,9" : `SS ${70 + i}, PR ${String(D2_SS_PR[i]).replace(".", ",")}` };
+}
+// E% ve FR: düşük değer iyi; tablo yalnız PR 10/25/50/75/90 sınırlarını verir
+function d2BantPR(x, sinir) {
+  if (x == null || !isFinite(x) || !sinir) return null;
+  const [p10, p25, p50, p75, p90] = sinir;
+  if (x >= p10) return { pr: 10, metin: "PR ≤10" }; if (x >= p25) return { pr: 17, metin: "PR 10–25" };
+  if (x >= p50) return { pr: 37, metin: "PR 25–50" }; if (x >= p75) return { pr: 62, metin: "PR 50–75" };
+  if (x >= p90) return { pr: 82, metin: "PR 75–90" }; return { pr: 95, metin: "PR >90" };
+}
+// Ham puanlardan norm sonuçları
+function d2Norm(d, dogum, cinsiyet, tur, tarih) {
+  const y = d2Yas(dogum, tarih); if (!y) return { hata: "Yaş için doğum tarihi gerekli." };
+  if (!D2_NORM) return { yas: y, normYok: true, hata: "Norm tablosu yüklü değil (yukarıdan norm dosyasını yükleyin)." };
+  const anahtar = d2NormAnahtar(y.yil, cinsiyet, tur);
+  if (!anahtar) return { yas: y, hata: d2YasBandi(y.yil) ? "Norm tablosu için cinsiyet seçin." : `${y.yil} yaş için norm tablosu yok (tablolar 9–59 yaş).` };
+  const n = D2_NORM[anahtar]; const S = d2Sayi;
+  const [t, b, c] = anahtar.split("|");
+  return {
+    yas: y, anahtar, tablo: `${D2_TABLO_ADI[t]} · ${b} yaş${c !== "-" ? " · " + (c === "K" ? "kız" : "erkek") : ""}`, yaklasik: !n.tn,
+    tn: d2SS(S(d.TN), n.tn, n.tnA), tne: d2SS(S(d.TN_E), n.tne, n.tneA), e: d2BantPR(S(d.E_yuzde), n.e), fr: d2BantPR(S(d.FR), n.fr),
+    eSinir: n.e, frSinir: n.fr,
+  };
+}
+// Belgedeki yorum ölçeği (TN-E yüzdeliği): 50–60 averaj (risk), 60–70 vasat, 70–85 normal, 85+ iyi; %75 üstü beklenir
 function d2PrBant(pr) {
   const p = d2Sayi(pr); if (p === null) return null;
-  if (p < 10) return { ad: "belirgin düşük", renk: "#B91C1C", bg: "#FDECEA" };
-  if (p < 25) return { ad: "ortalamanın altı", renk: "#B45309", bg: "#FDF6E3" };
-  if (p <= 75) return { ad: "ortalama", renk: "#0E7490", bg: "#E0F2FE" };
-  if (p <= 90) return { ad: "ortalamanın üstü", renk: "#15803D", bg: "#E6F5EE" };
-  return { ad: "belirgin yüksek", renk: "#15803D", bg: "#E6F5EE" };
+  if (p < 25) return { ad: "zayıf", renk: "#B91C1C", bg: "#FDECEA" };
+  if (p < 50) return { ad: "ortalamanın altı (risk)", renk: "#B91C1C", bg: "#FDECEA" };
+  if (p < 60) return { ad: "averaj (risk grubu)", renk: "#B45309", bg: "#FDF6E3" };
+  if (p < 70) return { ad: "vasat", renk: "#B45309", bg: "#FDF6E3" };
+  if (p < 85) return { ad: "normal", renk: "#15803D", bg: "#E6F5EE" };
+  return { ad: "iyi", renk: "#15803D", bg: "#E6F5EE" };
 }
+function d2PrYaz(p) { return String(p).replace(".", ","); }
 // E% yorumu: uygulamada kullanılan ölçüt (0–1,5 normal · 1,5–2,5 dikkat edilmeli · 2,5 üstü dikkat problemi)
 function d2HataBant(e) {
   const x = d2Sayi(e); if (x === null) return null;
@@ -30037,35 +30129,39 @@ function d2Uyarilar(d) {
   if (CP !== null && CP < 0) u.push("CP negatif: rastgele işaretleme ya da yönergenin anlaşılmaması olabilir — sonucu geçerli saymadan önce uygulamayı gözden geçirin.");
   if (E2 !== null && TN && E2 / TN > 0.1) u.push("E2 (yanlış işaretleme) çok yüksek: yönergeyi anlamama, görsel ayırt etme güçlüğü ya da dürtüsellik araştırılmalı.");
   if (E1 !== null && E2 !== null && E1 > 0 && E2 > E1) u.push("Yanlış işaretleme atlamadan fazla: dürtüsel/aceleci bir çalışma tarzına işaret edebilir.");
-  if (FR !== null && FR >= 30) u.push(`Satırlar arası dalgalanma yüksek (FR ${FR}): dikkatin süreklilik içinde iniş çıkış gösterdiğini düşündürür.`);
+  if (FR !== null && FR > 6) u.push(`FR ${FR}: belgedeki ölçüte göre 6'yı geçmemeli — dikkat salınımı (dikkatin satırdan satıra iniş çıkışı) var.`);
   return u;
 }
 function d2KisaOzet(v) {
-  const d = d2Hesapla(v || {});
+  const d = d2Hesapla(v || {}); const n = (v && v.norm) || {};
   const p = [];
-  if (d.TN) p.push(`TN ${d.TN}`); if (d.E1) p.push(`E1 ${d.E1}`); if (d.E2) p.push(`E2 ${d.E2}`); if (d.E) p.push(`E ${d.E}`);
-  if (d.TN_E) p.push(`TN-E ${d.TN_E}`); if (d.E_yuzde) p.push(`E% ${d.E_yuzde}`); if (d.CP) p.push(`CP ${d.CP}`); if (d.FR) p.push(`FR ${d.FR}`);
+  if (d.TN) p.push(`TN ${d.TN}${n.tnPR != null ? ` (PR ${d2PrYaz(n.tnPR)})` : ""}`); if (d.E1) p.push(`E1 ${d.E1}`); if (d.E2) p.push(`E2 ${d.E2}`); if (d.E) p.push(`E ${d.E}`);
+  if (d.TN_E) p.push(`TN-E ${d.TN_E}${n.tnePR != null ? ` (PR ${d2PrYaz(n.tnePR)}, SS ${n.tneSS})` : ""}`); if (d.E_yuzde) p.push(`E% ${d.E_yuzde}${n.eMetin ? ` (${n.eMetin})` : ""}`); if (d.CP) p.push(`CP ${d.CP}`); if (d.FR) p.push(`FR ${d.FR}${n.frMetin ? ` (${n.frMetin})` : ""}`);
   if (d.PR) { const b = d2PrBant(d.PR); p.push(`PR ${d.PR}${b ? ` (${b.ad})` : ""}`); }
+  if (n.tablo) p.push(`norm: ${n.tablo}`);
   return p.join(" · ");
 }
-// Kısa yorum (kapalı sistem; asistan, rapor ve panel ortak kullanır)
+// Kısa yorum (kapalı sistem; asistan, rapor ve panel ortak kullanır) — danışmanın belgesindeki ölçütlerle
 function d2Yorum(v) {
-  const d = d2Hesapla(v || {}); const b = [];
-  const pb = d2PrBant(d.PR); if (pb) b.push(`Yaşa göre yüzdelik ${d.PR}: genel dikkat performansı ${pb.ad}.`);
-  const hb = d2HataBant(d.E_yuzde); if (hb) b.push(`Hata oranı %${d.E_yuzde}: ${hb.ad}.`);
+  const d = d2Hesapla(v || {}); const n = (v && v.norm) || {}; const b = [];
+  const pb = d2PrBant(d.PR);
+  if (pb) b.push(`TN-E (test performansı) yüzdeliği ${d2PrYaz(d.PR)}: ${pb.ad}${d2Sayi(d.PR) < 75 ? " — %75'in üstünde olması beklenir" : ""}.`);
+  if (n.tnPR != null) b.push(`TN ${d.TN} (PR ${d2PrYaz(n.tnPR)}): psikomotor hız (algıladığını harekete dönüştürme) ${n.tnPR < 50 ? "zayıf" : n.tnPR < 75 ? "ortalama düzeyde" : "iyi"}.`);
   const E1 = d2Sayi(d.E1), E2 = d2Sayi(d.E2);
-  if (E1 !== null && E2 !== null && E1 + E2 > 0) b.push(E1 >= E2 * 3 ? "Hataların çoğu atlama (E1): seçici dikkat/tarama sırasında hedefleri kaçırma." : E2 > E1 ? "Hataların çoğu yanlış işaretleme (E2): dürtüsellik ya da görsel ayırt etme." : "Atlama ve yanlış işaretleme dengeli.");
+  if (E1 !== null) b.push(`E1 ${E1}: ${E1 > (E2 || 0) * 3 && E1 >= 20 ? "atlama yüksek — seçici dikkat düşük" : "atlanan hedef sayısı"}.`);
+  if (E2 !== null && E2 > 0 && E1 !== null && E2 >= E1) b.push(`E2 (${E2}) E1'den yüksek: normal öğrencilerde E2 genellikle düşüktür; öğrenme güçlüğü / dikkatsizlik açısından değerlendirilmeli.`);
+  const hb = d2HataBant(d.E_yuzde); if (hb) b.push(`E% ${d.E_yuzde}: ${hb.ad}${n.eMetin ? ` (yaş normunda ${n.eMetin})` : ""}.`);
+  if (d2Sayi(d.FR) !== null) b.push(`FR ${d.FR}${n.frMetin ? ` (yaş normunda ${n.frMetin})` : ""}: ${d2Sayi(d.FR) > 6 ? "6'yı geçtiği için dikkat salınımı var" : "dalgalanma normal sınırda (≤6)"}.`);
   const y = d2Yarilar(d); if (y) b.push(y.metin);
-  d2Uyarilar(d).forEach(x => b.push(x));
-  if (!d.PR) b.push("PR girilmemiş: yorum için TN-E (ya da CP) puanının yaşa göre norm tablosundaki yüzdeliğini girin.");
+  d2Uyarilar(d).filter(x => !/^FR /.test(x)).forEach(x => b.push(x));
+  if (!d.PR) b.push("PR yok: doğum tarihi ve cinsiyet girilirse program norm tablosundan bulur.");
   return b.join(" ");
 }
-
 // ── D2 Dikkat Testi Paneli (Testler sekmesi) ────────────────────────────────
 // Her uygulama Testler kaydı olarak saklanır (geçmiş ve önceki uygulamayla karşılaştırma için);
 // en son uygulama ayrıca Profil 2'nin d2 alanına yazılır (profil ekranı, PDF rapor ve AI analizi
 // eskisi gibi oradan okur).
-function D2Paneli({ seciliAd, seciliSinif, seciliNumara, profiles2, setProfiles2, testKayitlari, setTestKayitlari }) {
+function D2Paneli({ seciliAd, seciliSinif, seciliNumara, seciliOgr, profiles2, setProfiles2, testKayitlari, setTestKayitlari }) {
   const mevcutP2 = profiles2.find(p => pdrAyniOgrenci(p.studentName, p.className, seciliAd, seciliSinif, p.numara, seciliNumara));
   const tumKayitlar = (testKayitlari && pdrSozlukOku(testKayitlari, seciliAd, seciliSinif, seciliNumara)) || [];
   const d2Kayitlar = tumKayitlar.filter(k => k.tip === "d2" && k.testAdi === "D2 Dikkat Testi").sort((a, b) => (pdrTarihMs(b.tarih) || 0) - (pdrTarihMs(a.tarih) || 0));
@@ -30074,10 +30170,31 @@ function D2Paneli({ seciliAd, seciliSinif, seciliNumara, profiles2, setProfiles2
   const [tarih, setTarih] = useState(today());
   const [satirAcik, setSatirAcik] = useState(false);
   const [durum, setDurum] = useState("");
+  const sonD2 = d2Kayitlar.find(k => k.veri && (k.veri.dogum || k.veri.cinsiyet));
+  const [dogum, setDogum] = useState("");
+  const [cinsiyet, setCinsiyet] = useState("");
+  const [tablo, setTablo] = useState("");
+  const [prElle, setPrElle] = useState(false);
+  const [, setNormSurum] = useState(0);
+  const [normDurum, setNormDurum] = useState("");
+  useEffect(() => { if (!D2_NORM) pdrD2NormYukle().then(() => setNormSurum(x => x + 1)); }, []);
+  async function normDosyasi(e) {
+    const f = e.target.files && e.target.files[0]; e.target.value = ""; if (!f) return;
+    try { const n = await pdrD2NormKaydet(JSON.parse(await f.text())); setNormDurum(`✓ Norm tabloları yüklendi (${n} tablo). Hesabınızın bulutuna kaydedildi; diğer cihazlarınızda da çalışır.`); setNormSurum(x => x + 1); }
+    catch (err) { setNormDurum("⚠ " + ((err && err.message) || "Dosya okunamadı.")); }
+  }
   const inp = { width:"100%", padding:"9px 11px", borderRadius:9, border:`1px solid ${BORDER}`, fontSize:13, boxSizing:"border-box", background:CARD, color:TEXT };
   const lbl = { fontSize:10, fontWeight:700, color:MUTED, display:"block", marginBottom:3 };
-  useEffect(() => { setD2(bos()); setTarih(today()); setDurum(""); }, [seciliAd, seciliSinif, seciliNumara]);
-  const h = d2Hesapla(d2);
+  useEffect(() => {
+    setD2(bos()); setTarih(today()); setDurum(""); setPrElle(false); setTablo((sonD2 && sonD2.veri.tablo) || "");
+    setDogum((seciliOgr && (seciliOgr.dogumTarihi || seciliOgr.dogum)) || (sonD2 && sonD2.veri.dogum) || "");
+    setCinsiyet((seciliOgr && seciliOgr.cinsiyet) || (sonD2 && sonD2.veri.cinsiyet) || "");
+  }, [seciliAd, seciliSinif, seciliNumara]);
+  const h0 = d2Hesapla(d2);
+  const norm = d2Norm(h0, dogum, cinsiyet, tablo, tarih);
+  const h = (!prElle && norm.tne) ? { ...h0, PR: String(norm.tne.pr) } : h0;
+  const yasYil = norm.yas ? norm.yas.yil : null;
+  const tabloSec = d2TabloSecenekleri(yasYil);
   const satirlarDolu = (d2.satirlar || []).filter(s => s && d2Sayi(s.tn) !== null).length >= 2;
   const alan = (k, v) => setD2(x => ({ ...x, [k]: v }));
   const satirAlan = (i, k, v) => setD2(x => { const s = [...(x.satirlar || [])]; while (s.length < 14) s.push({ tn: "", e1: "", e2: "" }); s[i] = { ...s[i], [k]: v }; return { ...x, satirlar: s }; });
@@ -30085,7 +30202,9 @@ function D2Paneli({ seciliAd, seciliSinif, seciliNumara, profiles2, setProfiles2
   const eskiP2 = mevcutP2 && mevcutP2.d2 && (mevcutP2.d2.TN || mevcutP2.d2.TN_E || mevcutP2.d2.PR) && !d2Kayitlar.some(k => k.veri && k.veri.kaynak === "profil2" || (k.veri && String(k.veri.TN) === String(mevcutP2.d2.TN) && String(k.veri.PR) === String(mevcutP2.d2.PR))) ? mevcutP2.d2 : null;
   async function kaydet() {
     if (!d2Sayi(h.TN) && !d2Sayi(h.TN_E) && !d2Sayi(h.PR)) { setDurum("⚠ En az TN (ya da satır satır TN) girin."); return; }
-    const veri = { ...h, satirlar: satirlarDolu ? (h.satirlar || []).slice(0, 14) : [] };
+    const nOz = norm.anahtar ? { tablo: norm.tablo, anahtar: norm.anahtar, yas: `${norm.yas.yil} yaş ${norm.yas.ay} ay`, yaklasik: norm.yaklasik,
+      tnSS: norm.tn && norm.tn.ss, tnPR: norm.tn && norm.tn.pr, tneSS: norm.tne && norm.tne.ss, tnePR: norm.tne && norm.tne.pr, eMetin: norm.e && norm.e.metin, frMetin: norm.fr && norm.fr.metin } : null;
+    const veri = { ...h, satirlar: satirlarDolu ? (h.satirlar || []).slice(0, 14) : [], dogum, cinsiyet, tablo: norm.anahtar ? norm.anahtar.split("|")[0] : tablo, norm: nOz, prKaynak: (!prElle && norm.tne) ? "norm" : "elle" };
     const yeni = { id: uid(), kategori: "objektif", testAdi: "D2 Dikkat Testi", tip: "d2", tarih: tarih || today(), not: d2.yorum || "", veri };
     const ekler = [yeni];
     if (eskiP2) ekler.push({ id: uid(), kategori: "objektif", testAdi: "D2 Dikkat Testi", tip: "d2", tarih: mevcutP2.date || "", not: eskiP2.yorum || "", veri: { ...d2Hesapla({ ...eskiP2 }), kaynak: "profil2" } });
@@ -30110,15 +30229,27 @@ function D2Paneli({ seciliAd, seciliSinif, seciliNumara, profiles2, setProfiles2
     <div data-d2-panel="1">
       <div style={{background:CARD,border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)",borderRadius:12,padding:14,marginBottom:12}}>
         <div style={{fontSize:12,fontWeight:700,color:PURPLE,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>D2 Dikkat Testi — {seciliAd}</div>
-        <div style={{fontSize:11,color:MUTED,lineHeight:1.5,marginBottom:10}}>14 satır, satır başına 20 sn. Ham puanları girin; E, TN-E, E%, CP ve FR kendiliğinden hesaplanır. PR'yi el kitabındaki yaşa göre norm tablosundan girin.</div>
-        <label style={lbl}>UYGULAMA TARİHİ</label>
-        <input data-d2="tarih" value={tarih} onChange={e => setTarih(e.target.value)} placeholder="gg.aa.yyyy" style={{...inp, marginBottom:8}} />
+        <div style={{fontSize:11,color:MUTED,lineHeight:1.5,marginBottom:10}}>14 satır, satır başına 20 sn. Ham puanları girin; E, TN-E, E%, CP ve FR hesaplanır; doğum tarihi ve cinsiyetle yaşa göre norm tablosundan yüzdelikler (PR) bulunur.</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+          <div><label style={lbl}>UYGULAMA TARİHİ</label><input data-d2="tarih" value={tarih} onChange={e => setTarih(e.target.value)} placeholder="gg.aa.yyyy" style={inp} /></div>
+          <div><label style={lbl}>DOĞUM TARİHİ</label><input data-d2="dogum" value={dogum} onChange={e => setDogum(e.target.value)} placeholder="gg.aa.yyyy" style={inp} /></div>
+          <div><label style={lbl}>CİNSİYET</label><select data-d2="cinsiyet" value={cinsiyet} onChange={e => setCinsiyet(e.target.value)} style={inp}><option value="">Seçin</option><option value="Kız">Kız</option><option value="Erkek">Erkek</option></select></div>
+          <div><label style={lbl}>NORM TABLOSU</label><select data-d2="tablo" value={norm.anahtar ? norm.anahtar.split("|")[0] : tablo} onChange={e => setTablo(e.target.value)} style={inp} disabled={tabloSec.length < 2}>{(tabloSec.length ? tabloSec : ["io"]).map(t => <option key={t} value={t}>{D2_TABLO_ADI[t]}</option>)}</select></div>
+        </div>
+        {!D2_NORM && (
+          <div data-d2="norm-yok" style={{borderRadius:8,padding:"9px 10px",marginBottom:8,background:"#FFF7ED",border:"1px solid #FDBA74",fontSize:12,lineHeight:1.5}}>
+            <b>📥 Norm tablosu yüklü değil.</b> El kitabının norm tabloları telifli olduğu için programın içinde durmuyor. Size verilen <b>d2-norm-tablolari.json</b> dosyasını bir kez yükleyin; yalnızca sizin hesabınızın bulutuna kaydedilir.
+            <label style={{display:"block",marginTop:6,padding:"8px",borderRadius:8,background:PURPLE,color:"#fff",textAlign:"center",fontWeight:800,cursor:"pointer"}}>Norm dosyasını seç<input data-d2="norm-dosya" type="file" accept=".json,application/json" onChange={normDosyasi} style={{display:"none"}} /></label>
+          </div>
+        )}
+        {normDurum && <div style={{fontSize:11.5,fontWeight:700,color:normDurum.startsWith("✓")?"#15803D":"#B45309",marginBottom:6}}>{normDurum}</div>}
+        <div data-d2="yas" style={{fontSize:11.5,color:norm.hata?"#B45309":MUTED,marginBottom:8}}>{norm.yas ? `Yaş: ${norm.yas.yil} yıl ${norm.yas.ay} ay` : ""}{norm.tablo ? ` · Norm: ${norm.tablo}${norm.yaklasik ? " (yaklaşık)" : ""}` : ""}{norm.hata ? (norm.yas ? " · " : "") + norm.hata : ""}</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:8}}>
-          {[{ k: "TN", l: "TN (işlenen)" }, { k: "E1", l: "E1 (atlanan)" }, { k: "E2", l: "E2 (yanlış)" }, { k: "dogru", l: "Doğru işaretlenen" }, { k: "PR", l: "PR (norm)" }].map(f => (
+          {[{ k: "TN", l: "TN (işlenen)" }, { k: "E1", l: "E1 (atlanan)" }, { k: "E2", l: "E2 (yanlış)" }, { k: "dogru", l: "Doğru işaretlenen" }, { k: "PR", l: norm.tne && !prElle ? "PR (tablodan)" : "PR (elle)" }].map(f => (
             <div key={f.k}>
               <label style={{...lbl,color:PURPLE}}>{f.l}</label>
-              <input data-d2={f.k} type="number" inputMode="numeric" placeholder="—" value={satirlarDolu && ["TN","E1","E2"].includes(f.k) ? (h[f.k] || "") : (d2[f.k] || "")} disabled={satirlarDolu && ["TN","E1","E2"].includes(f.k)}
-                onChange={e => alan(f.k, e.target.value)} style={{...inp,borderColor:d2[f.k]?PURPLE:BORDER}} />
+              <input data-d2={f.k} type="number" inputMode="numeric" placeholder="—" value={f.k === "PR" ? (h.PR || "") : satirlarDolu && ["TN","E1","E2"].includes(f.k) ? (h[f.k] || "") : (d2[f.k] || "")} disabled={satirlarDolu && ["TN","E1","E2"].includes(f.k)}
+                onChange={e => { if (f.k === "PR") setPrElle(true); alan(f.k, e.target.value); }} style={{...inp,borderColor:d2[f.k]||(f.k==="PR"&&h.PR)?PURPLE:BORDER}} />
             </div>
           ))}
           <div>
@@ -30147,7 +30278,18 @@ function D2Paneli({ seciliAd, seciliSinif, seciliNumara, profiles2, setProfiles2
             </div>
           ))}
         </div>
-        {pb && <div style={{borderRadius:8,padding:"7px 10px",marginBottom:6,background:pb.bg,color:pb.renk,fontSize:12,fontWeight:700}}>PR {h.PR} → {pb.ad}</div>}
+        {norm.anahtar && (norm.tn || norm.tne || norm.e || norm.fr) && (
+          <div data-d2="norm" style={{borderRadius:8,padding:"8px 10px",marginBottom:6,background:"#F8F7FF",border:`1px solid ${PURPLE}33`,fontSize:12,lineHeight:1.6}}>
+            <b style={{color:PURPLE}}>📊 Norm tablosuna göre ({norm.tablo})</b>
+            {norm.tn && <div>TN {h.TN}: {norm.tn.metin}</div>}
+            {norm.tne && <div>TN-E {h.TN_E}: <b>{norm.tne.metin}</b> ← test başarısı</div>}
+            {norm.e && <div>E% {h.E_yuzde}: {norm.e.metin} <span style={{color:MUTED}}>(PR50 = %{norm.eSinir[2]}, PR75 = %{norm.eSinir[3]})</span></div>}
+            {norm.fr && <div>FR {h.FR}: {norm.fr.metin} <span style={{color:MUTED}}>(PR50 = {norm.frSinir[2]}, PR75 = {norm.frSinir[3]})</span></div>}
+            {norm.yaklasik && <div style={{fontSize:10.5,color:MUTED}}>Bu yaş grubunda ara satırlar hesaplanır; sınırda ±1 standart puan sapabilir.</div>}
+            {prElle && norm.tne && <button onClick={() => { setPrElle(false); alan("PR", ""); }} style={{marginTop:4,background:"none",border:"none",color:PURPLE,fontSize:11.5,fontWeight:700,cursor:"pointer",padding:0}}>↺ PR'yi tablodan al</button>}
+          </div>
+        )}
+        {pb && <div style={{borderRadius:8,padding:"7px 10px",marginBottom:6,background:pb.bg,color:pb.renk,fontSize:12,fontWeight:700}}>PR {h.PR} → {pb.ad}{d2Sayi(h.PR) < 75 ? " (beklenen: %75 üstü)" : ""}</div>}
         {hb && <div style={{borderRadius:8,padding:"7px 10px",marginBottom:6,background:hb.bg,color:hb.renk,fontSize:12,fontWeight:700}}>E% {h.E_yuzde} → {hb.ad}<div style={{fontSize:10,fontWeight:500,color:MUTED,marginTop:2}}>Ölçüt: 0–1,5 normal · 1,5–2,5 dikkat edilmeli · 2,5 üstü dikkat problemi</div></div>}
         {yar && <div style={{fontSize:11.5,color:TEXT,marginBottom:6}}>⏱ İlk 7 satır TN {yar.ilk.tn} · son 7 satır TN {yar.son.tn} — {yar.metin}</div>}
         {uy.map((x, i) => <div key={i} style={{fontSize:11.5,color:"#B45309",marginBottom:4}}>⚠ {x}</div>)}
@@ -30588,7 +30730,7 @@ KURALLAR:
               ) : kategori === "d2panel" ? (
                 <div>
                   <button onClick={()=>setKategori(null)} style={{ background:"none", border:"none", color:MUTED, fontSize:12, cursor:"pointer", marginBottom:8, padding:0 }}>← Kategoriyi değiştir</button>
-                  <D2Paneli seciliAd={seciliAd} seciliSinif={seciliSinif} seciliNumara={seciliNumara} profiles2={profiles2} setProfiles2={setProfiles2} testKayitlari={testKayitlari} setTestKayitlari={setTestKayitlari} />
+                  <D2Paneli seciliAd={seciliAd} seciliSinif={seciliSinif} seciliNumara={seciliNumara} seciliOgr={seciliOgr} profiles2={profiles2} setProfiles2={setProfiles2} testKayitlari={testKayitlari} setTestKayitlari={setTestKayitlari} />
                 </div>
               ) : kategori === "oog" ? (
                 <div>
@@ -42915,7 +43057,7 @@ function ProfilMerkez({
                     const pr = parseFloat(mevcutP2.d2.PR);
                     const e = parseFloat(mevcutP2.d2.E_yuzde)||0;
                     const bars = [
-                      { label:"PR (Yüzdelik)", val:pr, max:100, color:(d2PrBant(pr)||{renk:MUTED}).renk, hedef:25 },
+                      { label:"PR (Yüzdelik)", val:pr, max:100, color:(d2PrBant(pr)||{renk:MUTED}).renk, hedef:75 },
                       { label:"E% (Hata)", val:e, max:5, color:(d2HataBant(e)||{renk:MUTED}).renk, hedef:null, ters:true },
                     ];
                     return (
@@ -42930,7 +43072,7 @@ function ProfilMerkez({
                               <div style={{width:`${Math.min((b.val/b.max)*100,100)}%`,height:"100%",background:b.color,borderRadius:6,transition:"width .5s"}}/>
                               {b.hedef && <div style={{position:"absolute",top:0,left:`${b.hedef}%`,width:2,height:"100%",background:"#1A1A2E",opacity:0.5}}/>}
                             </div>
-                            {b.hedef && <div style={{fontSize:9,color:MUTED,textAlign:"right"}}>PR {b.hedef} altı ortalamanın altıdır</div>}
+                            {b.hedef && <div style={{fontSize:9,color:MUTED,textAlign:"right"}}>Hedef ≥{b.hedef} ({(d2PrBant(b.val)||{ad:""}).ad})</div>}
                           </div>
                         ))}
                       </div>
@@ -47317,6 +47459,7 @@ export default function App() {
     loadAsistanNotlari().then(setAsistanNotlari);
     loadSinavKaygisi().then(setSinavKaygisi);
     pdrDerslerBulutYukle();
+    pdrD2NormYukle();
   }, []);
 
   // ── Canlı Senkronizasyon ─────────────────────────────────────────────────
@@ -47378,6 +47521,7 @@ export default function App() {
       "pdr-bdt-analiz": () => loadBdtAnaliz().then(setBdtAnaliz),
       "pdr-asistan-notlari": () => loadAsistanNotlari().then(setAsistanNotlari),
       "pdr-asistan-dersler": () => pdrDerslerBulutYukle(),
+      "pdr-d2-norm": () => pdrD2NormYukle(),
       "pdr-sinav-kaygisi": () => loadSinavKaygisi().then(setSinavKaygisi),
       // "pdr-rehber-gorundu" bilerek dahil edilmedi — bu sadece "ilk açılışta
       // rehber gösterildi mi" bayrağı, cihazlar arası senkron olması gerekmiyor.

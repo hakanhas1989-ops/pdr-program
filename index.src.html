@@ -10251,6 +10251,7 @@ function pdrKapaliP2Analizi({ sinavlar = {}, d2 = {}, gecmisYillar = {}, ilgiler
     if (sayi(d2.CP) !== null && sayi(d2.CP) < 0) parcalar.push("CP negatif — rastgele işaretleme olabilir, sonuç geçerliliği şüpheli");
     if (FR !== null && FR >= 30) parcalar.push(`satırlar arası dalgalanma (FR ${FR}) yüksek — dikkatin süreklilik içinde iniş çıkış gösterdiğini düşündürüyor`);
     let yorum = parcalar.join("; ") + ".";
+    { const gs = d2GenelSonuc(d2); if (gs) yorum = "Genel sonuç: " + gs.metin + " " + yorum; }
     if (PR !== null && PR < 60) yorum += " Dikkat eksikliği açısından risk grubunda; dikkat eğitimi ve desteği önerilir: kısa ve bölünmüş çalışma blokları (25 dk çalışma + 5 dk mola), dikkat dağıtıcıların azaltılması, ön sıralarda oturma. Sınıf içi gözlemle birlikte belirtiler belirginse ve birden çok ortamda görülüyorsa uzman değerlendirmesi önerilebilir.";
     if (PR !== null && PR < 25 && dersOrt.length && dersOrt.reduce((s, d) => s + d.ort, 0) / dersOrt.length < 60) yorum += " Düşük dikkat performansı ile akademik düşüklük birlikte görülüyor; akademik güçlükte dikkatin payı olabilir.";
     else if (PR !== null && PR >= 50 && dersOrt.length && dersOrt.reduce((s, d) => s + d.ort, 0) / dersOrt.length < 60) yorum += " Dikkat performansı yeterli olduğu hâlde akademik puanlar düşük; düşüklüğün nedeni dikkatten çok çalışma alışkanlığı, motivasyon ya da konu eksikleri olabilir.";
@@ -30146,9 +30147,28 @@ function d2KisaOzet(v) {
   if (n.tablo) p.push(`norm: ${n.tablo}`);
   return p.join(" · ");
 }
+// TN-E yüzdeliği (performans) ile E% (yoğunlaşma) birlikte: genel sonuç
+function d2GenelSonuc(v) {
+  const d = d2Hesapla(v || {}); const pr = d2Sayi(d.PR), e = d2Sayi(d.E_yuzde), fr = d2Sayi(d.FR);
+  if (pr === null && e === null) return null;
+  const eD = e === null ? null : e <= 1.5 ? "n" : e <= 2.5 ? "s" : "y";
+  const pD = pr === null ? null : pr >= 75 ? "i" : "d";
+  let m, renk;
+  if (pD === "i" && eD === "n") { m = "Dikkat yeterli: hem hızlı hem özenli çalışıyor."; renk = "#15803D"; }
+  else if (pD === "i" && eD === "y") { m = "Hızlı ama özensiz: yoğunlaşma (odaklanma) problemi var; performansı iyi görünse de dikkat eğitimi önerilir."; renk = "#B91C1C"; }
+  else if (pD === "i" && eD === "s") { m = "Performans iyi, hata oranı sınırda: yoğunlaşma izlenmeli."; renk = "#B45309"; }
+  else if (pD === "d" && eD === "n") { m = `Yavaş ama dikkatli: hata az, ancak psikomotor hız / algıladığını harekete dönüştürme ${pr < 50 ? "belirgin biçimde " : ""}zayıf.`; renk = "#B45309"; }
+  else if (pD === "d" && eD === "y") { m = "Dikkat problemi belirgin: hem test performansı düşük hem hata oranı yüksek; uzmana yönlendirme ve dikkat eğitimi önerilir."; renk = "#B91C1C"; }
+  else if (pD === "d" && eD === "s") { m = "Performans beklenenin (%75) altında, hata oranı sınırda: dikkat desteği önerilir."; renk = "#B45309"; }
+  else if (pD === null) { m = eD === "y" ? "Hata oranı yüksek: yoğunlaşma problemi (performans için PR gerekli)." : eD === "s" ? "Hata oranı sınırda (performans için PR gerekli)." : "Hata oranı normal (performans için PR gerekli)."; renk = eD === "y" ? "#B91C1C" : eD === "s" ? "#B45309" : "#15803D"; }
+  else { m = pD === "i" ? "Test performansı iyi (hata oranı için E1, E2 gerekli)." : "Test performansı beklenenin altında (hata oranı için E1, E2 gerekli)."; renk = pD === "i" ? "#15803D" : "#B45309"; }
+  if (fr !== null && fr > 6) m += " Ayrıca dikkat salınımı var (FR " + fr + ").";
+  return { metin: m, renk };
+}
 // Kısa yorum (kapalı sistem; asistan, rapor ve panel ortak kullanır) — danışmanın belgesindeki ölçütlerle
 function d2Yorum(v) {
   const d = d2Hesapla(v || {}); const n = (v && v.norm) || {}; const b = [];
+  const gs = d2GenelSonuc(v); if (gs) b.push("GENEL SONUÇ: " + gs.metin);
   const pb = d2PrBant(d.PR);
   if (pb) b.push(`TN-E (test performansı) yüzdeliği ${d2PrYaz(d.PR)}: ${pb.ad}${d2Sayi(d.PR) < 75 ? " — %75'in üstünde olması beklenir" : ""}.`);
   if (n.tnPR != null) b.push(`TN ${d.TN} (PR ${d2PrYaz(n.tnPR)}): psikomotor hız (algıladığını harekete dönüştürme) ${n.tnPR < 50 ? "zayıf" : n.tnPR < 75 ? "ortalama düzeyde" : "iyi"}.`);
@@ -30283,6 +30303,7 @@ function D2Paneli({ seciliAd, seciliSinif, seciliNumara, seciliOgr, profiles2, s
             </div>
           ))}
         </div>
+        {(() => { const gs = d2GenelSonuc(h); return gs ? <div data-d2="genel" style={{borderRadius:8,padding:"8px 10px",marginBottom:6,background:gs.renk + "14",border:`2px solid ${gs.renk}`,color:gs.renk,fontSize:12.5,fontWeight:800,lineHeight:1.5}}>Genel sonuç: {gs.metin}<div style={{fontSize:10,fontWeight:500,color:MUTED}}>TN-E yüzdeliği (performans, beklenen %75 üstü) ile E% (yoğunlaşma, 0–1,5 normal · 2,5 üstü problem) birlikte</div></div> : null; })()}
         {norm.anahtar && (norm.tn || norm.tne || norm.e || norm.fr) && (
           <div data-d2="norm" style={{borderRadius:8,padding:"8px 10px",marginBottom:6,background:"#F8F7FF",border:`1px solid ${PURPLE}33`,fontSize:12,lineHeight:1.6}}>
             <b style={{color:PURPLE}}>📊 Norm tablosuna göre ({norm.tablo})</b>

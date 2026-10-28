@@ -10246,7 +10246,7 @@ function pdrKapaliP2Analizi({ sinavlar = {}, d2 = {}, gecmisYillar = {}, ilgiler
       const duz = PR >= 75 ? "ortalamanın üstünde" : PR >= 25 ? "ortalama düzeyde" : PR >= 10 ? "ortalamanın altında" : "belirgin biçimde düşük";
       parcalar.push(`D2 dikkat testinde yüzdelik sıra ${PR}; genel dikkat performansı yaşıtlarına göre ${duz}`);
     }
-    if (EY !== null) parcalar.push(EY > 15 ? `hata yüzdesi (%${EY}) yüksek — hız uğruna doğruluktan ödün veriyor olabilir, dikkatsizlik hatalarına eğilim var` : EY < 5 ? `hata yüzdesi (%${EY}) düşük — dikkatli ve özenli çalışıyor` : `hata yüzdesi (%${EY}) olağan aralıkta`);
+    if (EY !== null) parcalar.push(EY > 2.5 ? `hata yüzdesi (%${EY}) 2,5'in üstünde — dikkat problemi göstergesi; hız uğruna doğruluktan ödün veriyor olabilir` : EY > 1.5 ? `hata yüzdesi (%${EY}) 1,5–2,5 aralığında — dikkat edilmeli` : `hata yüzdesi (%${EY}) normal aralıkta (0–1,5)`);
     { const e1 = sayi(d2.E1), e2 = sayi(d2.E2); if (e1 !== null && e2 !== null && e1 + e2 > 0) parcalar.push(e1 >= e2 * 3 ? "hataların çoğu atlama (E1) — tarama sırasında hedefleri kaçırıyor" : e2 > e1 ? "hataların çoğu yanlış işaretleme (E2) — dürtüsellik ya da görsel ayırt etme güçlüğü araştırılabilir" : "atlama ve yanlış işaretleme dengeli"); }
     if (sayi(d2.CP) !== null && sayi(d2.CP) < 0) parcalar.push("CP negatif — rastgele işaretleme olabilir, sonuç geçerliliği şüpheli");
     if (FR !== null && FR >= 30) parcalar.push(`satırlar arası dalgalanma (FR ${FR}) yüksek — dikkatin süreklilik içinde iniş çıkış gösterdiğini düşündürüyor`);
@@ -16003,7 +16003,7 @@ bir akademik seyir tespit ederek yap - eger gecmis yil verisi yoksa bunu belirtm
 
 AKADEMIK DURUM: (yazili sinav puanlarina VE gecmis yil sonu ortalamalarina (varsa) gore guclu/zayif dersler,
 akademik seyrin yukselen mi dusen mi istikrarli mi oldugu, genel akademik profil)
-DIKKAT PROFİLİ: ${d2Metni ? "(D2 sonuclarini yorumla — TN islenen toplam/psikomotor hiz, E1 atlama (ihmal), E2 yanlis isaretleme (durtusellik/ayirt etme), E toplam hata, TN-E toplam performans, E% hata orani (cocuklarda %5-15 olagan; sabit kesme yok), CP konsantrasyon performansi, FR satirlar arasi dalgalanma, PR yasa gore yuzdelik (25-75 ortalama). Norm karari PR ile verilir. Dikkat destegi gerekip gerekmedigini belirt VE bu dikkat profilinin akademik durumla iliskisini degerlendir)" : "(D2 verisi girilmemis)"}
+DIKKAT PROFİLİ: ${d2Metni ? "(D2 sonuclarini yorumla — TN islenen toplam/psikomotor hiz, E1 atlama (ihmal), E2 yanlis isaretleme (durtusellik/ayirt etme), E toplam hata, TN-E toplam performans, E% hata orani (0-1,5 normal, 1,5-2,5 dikkat edilmeli, 2,5 ustu dikkat problemi), CP konsantrasyon performansi, FR satirlar arasi dalgalanma, PR yasa gore yuzdelik (25-75 ortalama). Norm karari PR ile verilir. Dikkat destegi gerekip gerekmedigini belirt VE bu dikkat profilinin akademik durumla iliskisini degerlendir)" : "(D2 verisi girilmemis)"}
 DENEME ANALİZİ: ${avg ? `(Deneme ortalamasi ${avg}/90 — LGS hedef okul araligini belirt, gidebilecegi liseleri soylet, trend varsa yorum yap)` : "(Deneme verisi yok)"}
 İLGİ-KARİYER UYUMU: (ilgi alanlari ile kariyer hedefi arasindaki uyum)
 LGS CALISMA ONERISI: (ders bazli somut calisma stratejisi, hangi derse ne kadar agirlik verilmeli)
@@ -21895,9 +21895,9 @@ function RaporModalIc({ rapor, onKapat }) {
                                   <span style={{ fontWeight:900, color:eRenk }}>%{e} — {hbB.ad.split(" —")[0].toLocaleUpperCase("tr")}</span>
                                 </div>
                                 <div style={{ height:10, background:"#eee", borderRadius:4, overflow:"hidden" }}>
-                                  <div style={{ width:`${Math.min((e/40)*100,100)}%`, height:"100%", background:eRenk, borderRadius:4 }}/>
+                                  <div style={{ width:`${Math.min((e/5)*100,100)}%`, height:"100%", background:eRenk, borderRadius:4 }}/>
                                 </div>
-                                <div style={{ fontSize:7, color:"#888", textAlign:"right" }}>Kaba ölçüt: %5 altı özenli · %5–15 olağan · %15–25 yüksekçe · %25+ yüksek (asıl karar PR ile)</div>
+                                <div style={{ fontSize:7, color:"#888", textAlign:"right" }}>Normal: 0–1,5 | Dikkat: 1,5–2,5 | Problem: 2,5+</div>
                               </div>
                             )}
                           </div>
@@ -30024,13 +30024,12 @@ function d2PrBant(pr) {
   if (p <= 90) return { ad: "ortalamanın üstü", renk: "#15803D", bg: "#E6F5EE" };
   return { ad: "belirgin yüksek", renk: "#15803D", bg: "#E6F5EE" };
 }
-// E% için norm yerine geçmeyen kaba ölçüt (4-5. sınıf örnekleminde ortalama ≈ %13, ortanca ≈ %8,5)
+// E% yorumu: uygulamada kullanılan ölçüt (0–1,5 normal · 1,5–2,5 dikkat edilmeli · 2,5 üstü dikkat problemi)
 function d2HataBant(e) {
   const x = d2Sayi(e); if (x === null) return null;
-  if (x < 5) return { ad: "düşük hata — özenli çalışıyor", renk: "#15803D", bg: "#E6F5EE" };
-  if (x <= 15) return { ad: "olağan aralık", renk: "#0E7490", bg: "#E0F2FE" };
-  if (x <= 25) return { ad: "yüksekçe — aceleye / dikkatsizliğe işaret edebilir", renk: "#B45309", bg: "#FDF6E3" };
-  return { ad: "yüksek — doğruluk belirgin biçimde düşük", renk: "#B91C1C", bg: "#FDECEA" };
+  if (x <= 1.5) return { ad: "normal (0–1,5)", renk: "#15803D", bg: "#E6F5EE" };
+  if (x <= 2.5) return { ad: "dikkat edilmeli (1,5–2,5)", renk: "#B45309", bg: "#FDF6E3" };
+  return { ad: "dikkat problemi (2,5 üstü)", renk: "#B91C1C", bg: "#FDECEA" };
 }
 function d2Uyarilar(d) {
   const u = []; const S = d2Sayi;
@@ -30149,7 +30148,7 @@ function D2Paneli({ seciliAd, seciliSinif, seciliNumara, profiles2, setProfiles2
           ))}
         </div>
         {pb && <div style={{borderRadius:8,padding:"7px 10px",marginBottom:6,background:pb.bg,color:pb.renk,fontSize:12,fontWeight:700}}>PR {h.PR} → {pb.ad}</div>}
-        {hb && <div style={{borderRadius:8,padding:"7px 10px",marginBottom:6,background:hb.bg,color:hb.renk,fontSize:12,fontWeight:700}}>E% {h.E_yuzde} → {hb.ad}<div style={{fontSize:10,fontWeight:500,color:MUTED,marginTop:2}}>Kaba ölçüttür; asıl karar yaşa göre norm (PR) ile verilir.</div></div>}
+        {hb && <div style={{borderRadius:8,padding:"7px 10px",marginBottom:6,background:hb.bg,color:hb.renk,fontSize:12,fontWeight:700}}>E% {h.E_yuzde} → {hb.ad}<div style={{fontSize:10,fontWeight:500,color:MUTED,marginTop:2}}>Ölçüt: 0–1,5 normal · 1,5–2,5 dikkat edilmeli · 2,5 üstü dikkat problemi</div></div>}
         {yar && <div style={{fontSize:11.5,color:TEXT,marginBottom:6}}>⏱ İlk 7 satır TN {yar.ilk.tn} · son 7 satır TN {yar.son.tn} — {yar.metin}</div>}
         {uy.map((x, i) => <div key={i} style={{fontSize:11.5,color:"#B45309",marginBottom:4}}>⚠ {x}</div>)}
         <label style={lbl}>DANIŞMAN YORUMU / GÖZLEM</label>
@@ -42917,7 +42916,7 @@ function ProfilMerkez({
                     const e = parseFloat(mevcutP2.d2.E_yuzde)||0;
                     const bars = [
                       { label:"PR (Yüzdelik)", val:pr, max:100, color:(d2PrBant(pr)||{renk:MUTED}).renk, hedef:25 },
-                      { label:"E% (Hata)", val:e, max:40, color:(d2HataBant(e)||{renk:MUTED}).renk, hedef:null, ters:true },
+                      { label:"E% (Hata)", val:e, max:5, color:(d2HataBant(e)||{renk:MUTED}).renk, hedef:null, ters:true },
                     ];
                     return (
                       <div style={{marginBottom:12}}>

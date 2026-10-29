@@ -20927,7 +20927,7 @@ function raporVerisiOlustur({ ozetAc, ogrenciProfilleri2, ogrenci, ogrenciSinif,
 const OZ_TEST_GRUP = {
   bilissel: ["wisc_r", "iq_esdeger", "alt_test", "gelisimsel_hata", "metropolitan", "okul_olgunlugu", "porteus"],
   dikkat: ["d2", "dikkat_cdt", "stroop_tbag", "dikkat_egitim", "frankfurter"],
-  okuma: ["okuma_degerlendirme", "okuma_programi", "kaynastirma_ed", "net_kontrol", "bender", "frostig", "gesell"],
+  okuma: ["okuma_degerlendirme", "okuma_programi", "kaynastirma_ed", "net_kontrol", "bender", "frostig", "gesell", "okuma_hizi"],
   duygusal: ["scas_cocuk", "toplam_duzey", "toplam_duzey_serbest", "insan_ciz", "louisa_duss", "beier_form_a"],
 };
 const OZ_KIRMIZI = "#B91C1C", OZ_SARI = "#B45309", OZ_YESIL = "#15803D", OZ_GRI = "#64748B";
@@ -20945,6 +20945,7 @@ function ozTestDurum(k) {
       case "frankfurter": { const r = frankHesapla(v, k.tarih); if (r.duzey) return { renk: r.duzey.ad === "Ortalamanın altı" ? OZ_KIRMIZI : OZ_YESIL }; break; }
       case "bender": { const r = benderHesapla(v, k.tarih); if (r.durum) return { renk: r.durum === "alti" ? OZ_KIRMIZI : r.durum === "sinir" ? OZ_SARI : OZ_YESIL }; break; }
       case "frostig": { const r = frostigHesapla(v, k.tarih); if (r.ts) return { renk: r.ts.p < 50 ? OZ_KIRMIZI : r.ts.p < 60 ? OZ_SARI : OZ_YESIL }; break; }
+      case "okuma_hizi": { const r = ohHesapla(v, k.tarih, false, k.id); if (r.ddk != null) { const y = r.hizDurum === "alti", h = r.dogruluk < 90; return { renk: y && h ? OZ_KIRMIZI : y || h ? OZ_SARI : OZ_YESIL }; } break; }
       case "gesell": { const r = gesellHesapla(v, k.tarih); if (r.yas && r.uygulanan.length) return { renk: r.eksik.length >= 2 ? OZ_KIRMIZI : r.eksik.length ? OZ_SARI : OZ_YESIL }; break; }
       case "porteus": { const r = porteusHesapla(v, k.tarih); if (r.sinif) return { renk: r.sinif.renk === "#B91C1C" ? OZ_KIRMIZI : r.sinif.renk === "#B45309" ? OZ_SARI : OZ_YESIL }; break; }
       case "metropolitan": { const r = metroHesapla(v); if (r.genelH) return { renk: r.genelH.harf === "E" ? OZ_KIRMIZI : r.genelH.harf === "D" ? OZ_SARI : OZ_YESIL }; break; }
@@ -23633,7 +23634,7 @@ function scasRaporHtmlOlustur(sonuc, bilgi) {
 
 
 // ===== EK TESTLER: Stroop TBAG · Metropolitan · Louisa Düss · WISC-R =====
-const EK_TESTLER = ["stroop_tbag", "metropolitan", "louisa_duss", "wisc_r", "frankfurter", "porteus", "bender", "frostig", "gesell"];
+const EK_TESTLER = ["stroop_tbag", "metropolitan", "louisa_duss", "wisc_r", "frankfurter", "porteus", "bender", "frostig", "gesell", "okuma_hizi"];
 const ekSayi = x => { if (x === null || x === undefined || String(x).trim() === "") return null; const n = parseFloat(String(x).replace(",", ".")); return isFinite(n) ? n : null; };
 const ekYaz = x => x == null ? "—" : String(Math.round(x * 100) / 100).replace(".", ",");
 
@@ -24114,6 +24115,144 @@ function gesellRapor(ek, tarih) {
   return { r, metin: L.join("\n") };
 }
 
+// ── Sesli Okuma Akıcılığı (1–8. sınıf) — kâğıttan okutma, süre ve hata girişi ──
+// Ölçüler: okuma hızı (kelime/dk), dakikada doğru okunan kelime (DDK), doğruluk yüzdesi, isteğe bağlı anlama.
+//  • Doğruluk: ≥%96 bağımsız, %90–95 öğretimsel, <%90 endişe (Rasinski; Türkçe uyarlama çalışmaları).
+//  • Anlama: ≥%90 bağımsız, %75–89 öğretimsel, <%75 endişe (Akyol).
+//  • Hız başvuru aralıkları: 1–5. sınıf Rasinski (2004) dönem aralıkları; 6–8. sınıf aynı ilerlemenin devamı
+//    (Türkçe ortaokul verisiyle uyumlu: 6. sınıf ort. ≈105 kelime/dk, Babayiğit 2019; 5. sınıf ≈110–118, Erden ve Çelik 2019).
+//  • Hata sayılanlar: yanlış okuma, atlama, ters çevirme, 3 sn'den uzun takılma. Ekleme, tekrar ve kendini
+//    düzeltme hata sayılmaz, nitel olarak kaydedilir.
+// Metinler bu programa özgüdür.
+const OH_METINLER = [
+  { id: "s1a", sinif: 1, form: "A", tur: "Öykü", baslik: "Pamuk ile Top", metin: "Ece'nin bir kedisi var. Kedinin adı Pamuk. Pamuk beyaz ve küçük. Ece kırmızı topu yere attı. Pamuk topa koştu. Top masanın altına kaçtı. Pamuk da masanın altına girdi. Ece güldü. Sonra Pamuk'u kucağına aldı. İkisi de yorulmuştu. Birlikte uyudular.",
+    sorular: [["Kedinin adı ne?", "Pamuk"], ["Top ne renkti?", "Kırmızı"], ["Top nereye kaçtı?", "Masanın altına"], ["Oyunun sonunda ne yaptılar?", "Birlikte uyudular"]] },
+  { id: "s1b", sinif: 1, form: "B", tur: "Bilgilendirici", baslik: "Arılar", metin: "Arılar küçük ve çalışkan böceklerdir. Çiçekten çiçeğe uçarlar. Çiçeklerin tatlı suyunu toplarlar. Bu suyu kovanlarına taşırlar. Kovanda bal yaparlar. Bal çok lezzetli bir besindir. Arılar çiçeklerin büyümesine de yardım eder. Arıları korumalıyız. Onlara zarar vermemeliyiz.",
+    sorular: [["Arılar nereden nereye uçar?", "Çiçekten çiçeğe"], ["Arılar kovanda ne yapar?", "Bal yapar"], ["Arılar çiçeklere nasıl yardım eder?", "Büyümelerine yardım eder"], ["Arılara karşı nasıl davranmalıyız?", "Korumalı, zarar vermemeliyiz"]] },
+  { id: "s2a", sinif: 2, form: "A", tur: "Öykü", baslik: "Kayıp Atkı", metin: "Kış gelmişti. Mert okula giderken annesinin ördüğü mavi atkıyı boynuna sardı. Teneffüste arkadaşlarıyla kartopu oynadı. Çok terlediği için atkısını çıkarıp banka bıraktı. Zil çalınca koşarak sınıfa girdi. Eve dönerken boynunun üşüdüğünü fark etti. Atkısı yoktu! Ertesi sabah erkenden okula gitti. Bankın yanına baktı ama atkı orada değildi. Üzgün üzgün sınıfa girdiğinde öğretmeni gülümsedi. Atkı, öğretmenin masasında katlanmış duruyordu. Mert sevinçle teşekkür etti.",
+    sorular: [["Atkıyı kim örmüştü?", "Mert'in annesi"], ["Mert atkısını neden çıkardı?", "Kartopu oynarken çok terlediği için"], ["Mert atkısının kaybolduğunu ne zaman fark etti?", "Eve dönerken boynu üşüyünce"], ["Atkıyı kim bulmuş olabilir? Neden öyle düşünüyorsun?", "Öğretmen; atkı onun masasındaydı"]] },
+  { id: "s2b", sinif: 2, form: "B", tur: "Bilgilendirici", baslik: "Kaplumbağalar", metin: "Kaplumbağalar çok uzun yaşayan hayvanlardır. Bazıları yüz yıldan fazla yaşayabilir. Sırtlarında sert bir kabuk vardır. Bu kabuk onları tehlikelerden korur. Kaplumbağa korktuğunda başını ve ayaklarını kabuğunun içine çeker. Kara kaplumbağaları yavaş yürür. Deniz kaplumbağaları ise suda çok hızlı yüzer. Deniz kaplumbağaları yumurtalarını kumsallara bırakır. Yavrular yumurtadan çıkınca hemen denize doğru koşar. Kumsallardaki çöpler onlara zarar verebilir.",
+    sorular: [["Kaplumbağaların kabuğu ne işe yarar?", "Onları tehlikelerden korur"], ["Kaplumbağa korkunca ne yapar?", "Başını ve ayaklarını kabuğuna çeker"], ["Deniz kaplumbağaları yumurtalarını nereye bırakır?", "Kumsallara"], ["Kumsalı temiz tutmak neden önemlidir?", "Çöpler yavrulara zarar verebilir"]] },
+  { id: "s3a", sinif: 3, form: "A", tur: "Öykü", baslik: "Bisiklet Yarışı", metin: "Mahallede her yaz bisiklet yarışı yapılırdı. Bu yıl Zeynep de katılmaya karar verdi. Haftalarca parkta antrenman yaptı. Yarış günü heyecandan elleri titriyordu. Başlama düdüğü çalınca bütün gücüyle pedal çevirdi. Yarışın ortasında önündeki çocuk dengesini kaybedip düştü. Zeynep hiç düşünmeden durdu ve ona yardım etti. Çocuğun dizi biraz kanamıştı ama iyiydi. Zeynep yeniden yola çıktığında herkes onu geçmişti. Yarışı sonuncu bitirdi. Yine de bitiş çizgisinde onu en çok alkışlayanlar arkadaşları oldu. Akşam babası ona sarıldı. Kızım, bugün yarışı kazanmadın ama hepimizin gönlünü kazandın, dedi. Zeynep o gece mutlu uyudu.",
+    sorular: [["Zeynep yarışa nasıl hazırlandı?", "Haftalarca parkta antrenman yaptı"], ["Yarışın ortasında ne oldu?", "Önündeki çocuk düştü, Zeynep ona yardım etti"], ["Zeynep yarışı kaçıncı bitirdi?", "Sonuncu"], ["Babasının 'gönlümüzü kazandın' sözüyle ne demek istediğini açıkla.", "Yardımseverliğiyle herkesin sevgisini kazandı"]] },
+  { id: "s3b", sinif: 3, form: "B", tur: "Bilgilendirici", baslik: "Ağaçların Faydaları", metin: "Ağaçlar yaşamımız için çok önemlidir. Yapraklarıyla havadaki karbondioksiti alır, bize temiz oksijen verirler. Kökleriyle toprağı tutarak yağmurda toprağın akıp gitmesini önlerler. Yaz günlerinde gölgeleri bizi serinletir. Kuşlar dallarına yuva yapar, sincaplar kovuklarında yaşar. Ağaçlardan meyve, odun ve kâğıt gibi pek çok ürün elde ederiz. Bir ağacın büyümesi uzun yıllar sürer. Bu yüzden ağaçları korumalı, kesilen her ağacın yerine yenisini dikmeliyiz. Okulumuzun bahçesine de her yıl birlikte fidan dikiyoruz. Diktiğimiz fidanları sulamayı unutmuyoruz.",
+    sorular: [["Ağaçlar havayı nasıl temizler?", "Karbondioksiti alıp oksijen verir"], ["Ağaçların kökleri ne işe yarar?", "Toprağı tutar, akmasını önler"], ["Ağaçlardan elde edilen iki ürün söyle.", "Meyve, odun, kâğıt (ikisi)"], ["Kesilen ağacın yerine neden hemen yenisi dikilmelidir?", "Ağacın büyümesi uzun yıllar sürer"]] },
+  { id: "s4a", sinif: 4, form: "A", tur: "Öykü", baslik: "Dedemin Bahçesi", metin: "Yaz tatilinde köydeki dedemin yanına gittim. Dedemin evinin arkasında küçük ama bakımlı bir bahçesi vardı. Sabahları erkenden kalkıp birlikte domatesleri, biberleri suluyorduk. Dedem her bitkinin ne kadar suya ihtiyacı olduğunu bilirdi. Bir gün ona bunları nereden öğrendiğini sordum. Gülümseyerek, yıllarca toprağı dinleyerek, dedi. İlk başta ne demek istediğini anlamadım. Sonra bana kuru toprakla nemli toprağın arasındaki farkı gösterdi. Yaprakların sararmasının, bitkinin susadığını anlattığını söyledi. Tatilin sonunda bahçenin bir köşesini bana ayırdı. Oraya fasulye ektim. Köyden ayrılırken fasulyeler filizlenmişti. Dedem onlara benim yerime bakacağına söz verdi. Şimdi her telefonda ilk önce fasulyelerimi soruyorum.",
+    sorular: [["Anlatıcı tatilde kimin yanına gitti?", "Köydeki dedesinin"], ["Dede bitkilerin bakımını nasıl öğrenmişti?", "Yıllarca toprağı dinleyerek, deneyimle"], ["Yaprakların sararması neyi gösterir?", "Bitkinin susadığını"], ["Anlatıcının telefonda ilk önce fasulyeleri sorması onun hakkında ne söyler?", "Emek verdiği şeye bağlandı, sorumluluk duyuyor"]] },
+  { id: "s4b", sinif: 4, form: "B", tur: "Bilgilendirici", baslik: "Depreme Hazırlık", metin: "Ülkemiz deprem kuşağı üzerinde yer alır. Depremi önlemek mümkün değildir ama hazırlıklı olarak zararlarını azaltabiliriz. Evimizdeki dolap ve kitaplık gibi ağır eşyaları duvara sabitlemeliyiz. Ailece bir deprem çantası hazırlamalıyız. Bu çantada su, dayanıklı yiyecek, el feneri, düdük, ilk yardım malzemeleri ve önemli belgelerin kopyaları bulunmalıdır. Deprem sırasında paniğe kapılmadan çök, kapan, tutun hareketini yapmalıyız. Pencerelerden ve devrilebilecek eşyalardan uzak durmalıyız. Sarsıntı bitince merdivenleri kullanarak binayı terk etmeli, asansöre kesinlikle binmemeliyiz. Dışarıda önceden belirlenen toplanma alanına gitmeliyiz. Hazırlıklı olmak hem kendimizi hem sevdiklerimizi korumanın en etkili yoludur.",
+    sorular: [["Ağır eşyalar için ne yapılmalıdır?", "Duvara sabitlenmeli"], ["Deprem çantasında neler bulunmalıdır? (üç tane)", "Su, yiyecek, el feneri, düdük, ilk yardım, belgeler"], ["Deprem sırasında hangi hareket yapılmalıdır?", "Çök, kapan, tutun"], ["Deprem sonrası asansöre neden binilmemelidir?", "Elektrik kesilebilir, asansör arızalanıp mahsur kalınabilir"]] },
+  { id: "s5a", sinif: 5, form: "A", tur: "Öykü", baslik: "Kütüphanedeki Not", metin: "Selin her cuma okul kütüphanesinden yeni bir kitap alırdı. O hafta raflarda dolaşırken eski, kapağı yıpranmış bir macera romanı dikkatini çekti. Kitabı açtığında sayfaların arasından katlanmış küçük bir kâğıt düştü. Kâğıtta yuvarlak bir el yazısıyla şöyle yazıyordu: Bu kitabı okuyan kişi, en sevdiğin bölümü bu notun arkasına yaz ve kitabı yerine bırak. Kâğıdın arkasında farklı yıllardan, farklı el yazılarıyla yazılmış onlarca cümle vardı. Kimisi kahramanın cesaretini, kimisi kitabın sonundaki sürprizi anlatmıştı. Selin kitabı bir haftada bitirdi. En çok, kahramanın korktuğu hâlde arkadaşını kurtarmak için mağaraya girdiği bölümü sevmişti. Bunu dikkatle notun arkasına yazdı. Kitabı rafa geri koyarken, yıllar sonra bu satırları okuyacak çocuğu düşündü ve gülümsedi. Artık kendisini görünmez bir okur zincirinin halkası gibi hissediyordu.",
+    sorular: [["Selin kitabın arasında ne buldu?", "Katlanmış küçük bir not/kâğıt"], ["Notta okurdan ne isteniyordu?", "En sevdiği bölümü notun arkasına yazıp kitabı yerine bırakması"], ["Selin en çok hangi bölümü sevdi?", "Kahramanın korkmasına rağmen arkadaşını kurtarmak için mağaraya girdiği bölümü"], ["'Görünmez bir okur zinciri' ifadesiyle ne anlatılmak isteniyor?", "Kitabı yıllar içinde okuyan, birbirini tanımayan ama notla bağlanan okurlar"]] },
+  { id: "s5b", sinif: 5, form: "B", tur: "Bilgilendirici", baslik: "Suyun Yolculuğu", metin: "Yeryüzündeki su hiçbir zaman yok olmaz; yalnızca biçim değiştirerek sürekli dolaşır. Güneş denizleri, gölleri ve nehirleri ısıttığında su buharlaşarak gökyüzüne yükselir. Yükseklerde hava soğuk olduğu için su buharı yoğunlaşır ve küçük damlacıklar hâline gelerek bulutları oluşturur. Damlacıklar birleşip ağırlaştığında yağmur, kar ya da dolu olarak yeniden yeryüzüne düşer. Bu suyun bir kısmı toprağa sızarak yer altı sularını besler, bir kısmı ise derelerle nehirlere, oradan da denizlere ulaşır. Bitkiler de kökleriyle aldıkları suyu yapraklarından buhar olarak havaya verir. Bu kesintisiz dolaşıma su döngüsü denir. Dünyadaki suyun yalnızca çok küçük bir bölümü içilebilir tatlı sudur. Bu nedenle musluğu açık bırakmamak ve suyu tasarruflu kullanmak hepimizin sorumluluğudur.",
+    sorular: [["Su buharı bulutlara nasıl dönüşür?", "Yükseklerde soğuyup yoğunlaşarak damlacık olur"], ["Yağış hangi biçimlerde yeryüzüne düşer?", "Yağmur, kar, dolu"], ["Bitkilerin su döngüsündeki rolü nedir?", "Kökleriyle aldığı suyu yapraklarından buhar olarak verir"], ["Su hiç yok olmuyorsa neden tasarruf etmeliyiz?", "İçilebilir tatlı su çok az"]] },
+  { id: "s6a", sinif: 6, form: "A", tur: "Öykü", baslik: "Sessiz Kahraman", metin: "Sınıfımıza dönem ortasında Kerem adında yeni bir öğrenci geldi. İlk günlerde neredeyse hiç konuşmuyor, teneffüslerde de bahçenin bir köşesinde tek başına defterine bir şeyler çiziyordu. Bazı arkadaşlarımız onun kibirli olduğunu düşündü ve yanına gitmeyi bıraktı. Bir gün resim öğretmenimiz okulun koridoru için büyük bir duvar resmi yapılacağını, ama kimsenin ortak bir tasarım çıkaramadığını söyledi. O sırada Kerem çekinerek defterini uzattı. Defterde okulumuzun bahçesini, çınar ağacını ve teneffüste oynayan öğrencileri anlatan, birbirine bağlanan muhteşem çizimler vardı. Öğretmen hayranlıkla sayfaları çevirdi ve tasarımın bu olacağını açıkladı. Sonraki haftalarda Kerem'le birlikte duvarı boyadık. Çalışırken onun aslında çok esprili biri olduğunu, sadece yeni bir okulda kendini güvende hissetmesinin zaman aldığını öğrendik. Duvar resmi bittiğinde en köşede, tek başına çizim yapan küçük bir çocuk figürü vardı. Kerem bize gülümseyerek artık o çocuğun yalnız olmadığını söyledi.",
+    sorular: [["Arkadaşlar Kerem hakkında başta ne düşündü?", "Kibirli olduğunu"], ["Duvar resmi için hangi sorun vardı?", "Kimse ortak bir tasarım çıkaramamıştı"], ["Kerem'in aslında neden az konuştuğu ortaya çıktı?", "Yeni okulda kendini güvende hissetmesi zaman almıştı"], ["Duvar resmindeki yalnız çocuk figürü ve Kerem'in son sözü neyi anlatıyor?", "Kendi yalnızlığını; artık arkadaşları olduğunu"]] },
+  { id: "s6b", sinif: 6, form: "B", tur: "Bilgilendirici", baslik: "Uykunun Gizli Gücü", metin: "Çoğumuz uykuyu yalnızca dinlenme zamanı olarak görürüz. Oysa uyurken beynimiz oldukça yoğun bir çalışma içindedir. Gün boyunca öğrendiğimiz bilgiler uyku sırasında düzenlenir ve kalıcı belleğe aktarılır. Bu nedenle sınavdan önceki gece uykusuz kalarak ders çalışmak, öğrenilenlerin unutulmasına yol açabilir. Araştırmalar, ergenlik çağındaki gençlerin her gece sekiz ila on saat uyuması gerektiğini göstermektedir. Yetersiz uyku dikkati dağıtır, tepki süresini uzatır ve kişinin daha çabuk sinirlenmesine neden olur. Uzun süren uykusuzluk bağışıklık sistemini de zayıflatır. Kaliteli bir uyku için yatmadan en az bir saat önce telefon, tablet gibi ekranlardan uzak durmak gerekir; çünkü bu cihazların yaydığı ışık, beynin uyku hormonu salgılamasını geciktirir. Her gün aynı saatte yatıp kalkmak, odayı karanlık ve serin tutmak da uykunun kalitesini artırır. Kısacası iyi bir uyku, başarılı bir günün en önemli hazırlığıdır.",
+    sorular: [["Uyku sırasında öğrenilen bilgilere ne olur?", "Düzenlenip kalıcı belleğe aktarılır"], ["Ergenlerin her gece kaç saat uyuması önerilir?", "Sekiz ila on saat"], ["Yatmadan önce ekranlardan neden uzak durulmalıdır?", "Işık uyku hormonunun salgılanmasını geciktirir"], ["Sınavdan önceki gece sabahlamak neden yanlış bir tercihtir?", "Öğrenilenler kalıcı belleğe aktarılamaz, unutulur; dikkat azalır"]] },
+  { id: "s7a", sinif: 7, form: "A", tur: "Öykü", baslik: "Saat Tamircisi", metin: "Eski çarşının en dar sokağında, camekânı tozlanmış küçük bir saat tamircisi vardı. Kapısının üstündeki tabelada yalnızca Usta Rıza yazıyordu. Babamın yıllar önce dedemden kalan cep saati durunca onu bu dükkâna götürdük. İçerisi yüzlerce saatin tıkırtısıyla dolu, zamanın ağır ağır aktığı bir dünyaya benziyordu. Usta Rıza saati avucuna aldı, büyüteçli gözlüğünü takıp uzun uzun inceledi. Bu saat bozuk değil, dedi, sadece uzun süredir kurulmadığı için küsmüş. Babam gülümsedi ama ustanın ciddi olduğu belliydi. Ona göre her saatin bir karakteri vardı; kimi aceleci, kimi tembel, kimi de sahibinin yokluğuna küsen türden. Usta, minicik vidaları cımbızla çıkarırken bize mesleğini nasıl öğrendiğini anlattı. Çıraklığa on iki yaşında başlamış, ilk yıllarda yalnızca dükkânı süpürüp ustasını izlemişti. Sabrın, ellerden önce öğrenilmesi gereken bir beceri olduğunu söyledi. Bir hafta sonra saati teslim aldığımızda, tıkırtısı dedemin sesini hatırlatır gibiydi. Babam her akşam yatmadan önce onu kurmayı alışkanlık hâline getirdi.",
+    sorular: [["Saat neden çalışmıyordu?", "Uzun süredir kurulmadığı için"], ["Usta Rıza mesleğe nasıl başlamıştı?", "On iki yaşında çırak olarak; önce dükkânı süpürüp ustasını izleyerek"], ["Ustaya göre ellerden önce öğrenilmesi gereken beceri nedir?", "Sabır"], ["Babanın saati her akşam kurmaya başlaması neyi gösteriyor?", "Saate ve dedenin hatırasına sahip çıkması, ustanın sözünden etkilenmesi"]] },
+  { id: "s7b", sinif: 7, form: "B", tur: "Bilgilendirici", baslik: "Dijital Ayak İzi", metin: "İnternette gezinirken bıraktığımız her iz, dijital ayak izimizi oluşturur. Paylaştığımız fotoğraflar, yaptığımız yorumlar, beğendiğimiz gönderiler ve ziyaret ettiğimiz siteler bu izin parçalarıdır. Gerçek hayattaki ayak izlerinin aksine dijital izler kolay kolay silinmez. Bir gönderiyi kaldırsak bile, o içerik başkaları tarafından kaydedilmiş ya da paylaşılmış olabilir. Bugün pek çok üniversite ve işveren, adayları değerlendirirken onların internetteki geçmişine de göz atmaktadır. Bu nedenle bir şeyi paylaşmadan önce kendimize birkaç soru sormalıyız: Bu paylaşımın yıllar sonra karşıma çıkması beni rahatsız eder mi? Paylaştığım içerik başka birinin özel hayatını ihlal ediyor mu? Ayrıca ev adresimiz, okulumuz ya da telefon numaramız gibi kişisel bilgileri herkese açık paylaşmak, kötü niyetli kişilerin bu bilgileri kullanmasına zemin hazırlar. Güçlü ve farklı şifreler kullanmak, uygulamaların gizlilik ayarlarını düzenli kontrol etmek dijital güvenliğimizin temelidir. Unutmamalıyız ki internette yaptığımız her şey, kim olduğumuzu anlatan kalıcı bir hikâyenin parçasıdır.",
+    sorular: [["Dijital ayak izi nelerden oluşur? (iki örnek)", "Paylaşılan fotoğraflar, yorumlar, beğeniler, ziyaret edilen siteler"], ["Silinen bir gönderi neden tamamen yok olmayabilir?", "Başkaları kaydetmiş ya da paylaşmış olabilir"], ["Paylaşmadan önce sorulması önerilen bir soru nedir?", "Yıllar sonra karşıma çıkması beni rahatsız eder mi? / Başkasının özel hayatını ihlal ediyor mu?"], ["Metindeki 'kalıcı bir hikâye' benzetmesini açıkla.", "İnternetteki izlerimiz silinmeden birikir ve bizi başkalarına tanıtır"]] },
+  { id: "s8a", sinif: 8, form: "A", tur: "Öykü", baslik: "Deniz Feneri", metin: "Ada halkı, fener bekçisi Nuri Amca'nın kırk yıl boyunca tek bir gece bile feneri yakmayı ihmal etmediğini anlatırdı. Fırtınalı kış gecelerinde, kayalıkların arasından geçen balıkçı tekneleri yollarını onun ışığıyla bulurdu. Bir sonbahar, adaya otomatik bir aydınlatma sisteminin kurulacağı haberi geldi. Artık fenerin bir bekçiye ihtiyacı olmayacaktı. Herkes Nuri Amca'nın bu habere çok üzüleceğini düşünüyordu. Oysa o, sistemi kurmaya gelen genç mühendisleri güler yüzle karşıladı, onlara fenerin her köşesini tek tek gezdirdi. Hangi rüzgârda dalgaların nereye vurduğunu, sisli sabahlarda ışığın neden daha uzun aralıklarla yakılması gerektiğini sabırla anlattı. Mühendislerden biri, yıllardır yaptığı işin bir makineye devredilmesinin onu kırıp kırmadığını sordu. Nuri Amca ufka bakarak, benim görevim feneri yakmak değil, denizdekilerin evlerine dönmesiydi, dedi; bu görev devam ettikçe kimin yaptığının önemi yok. Mühendis bu sözleri not defterine yazdı. Sistem kurulduktan sonra bile Nuri Amca her akşam fenerin merdivenlerini çıkıp ışığın yandığından emin olmayı sürdürdü. Ada halkı, fenerin artık iki bekçisi olduğunu söyleyerek gülümsüyordu.",
+    sorular: [["Fenere hangi değişiklik geliyordu?", "Otomatik aydınlatma sistemi kurulacaktı, bekçiye gerek kalmayacaktı"], ["Nuri Amca mühendislere neler anlattı?", "Rüzgâr ve dalgaların durumu, sisli sabahlarda ışığın aralıkları gibi deneyimlerini"], ["Nuri Amca'ya göre asıl görevi neydi?", "Denizdekilerin evlerine dönmesini sağlamak"], ["'Fenerin artık iki bekçisi var' sözüyle ne kastediliyor?", "Makine ile birlikte Nuri Amca'nın da hâlâ feneri gözetmesi; bağlılığı"]] },
+  { id: "s8b", sinif: 8, form: "B", tur: "Bilgilendirici", baslik: "İklim Değişikliği ve Biz", metin: "Dünyamızın ortalama sıcaklığı son yüzyılda belirgin biçimde arttı. Bilim insanları bu artışın temel nedeninin, fosil yakıtların yakılmasıyla atmosfere salınan karbondioksit ve diğer sera gazları olduğunu belirtiyor. Bu gazlar, güneşten gelen ısının bir kısmının uzaya geri dönmesini engelleyerek bir sera gibi dünyayı ısıtıyor. Sıcaklık artışının sonuçları şimdiden gözlemlenebiliyor: Buzullar eriyor, deniz seviyesi yükseliyor, kuraklık ve sel gibi aşırı hava olayları daha sık yaşanıyor. Bu değişimler tarım ürünlerinin verimini düşürüyor, pek çok canlı türünü de yaşam alanını kaybetme tehlikesiyle karşı karşıya bırakıyor. Sorunun çözümü hem devletlerin hem de bireylerin sorumluluğundadır. Ülkeler yenilenebilir enerji kaynaklarına yatırım yaparken, biz de gündelik alışkanlıklarımızı değiştirerek katkı sağlayabiliriz. Gereksiz yere yanan ışıkları kapatmak, kısa mesafelerde yürümeyi ya da bisikleti tercih etmek, atıkları ayrıştırarak geri dönüşüme göndermek ve suyu tasarruflu kullanmak küçük ama etkili adımlardır. Unutmayalım ki milyonlarca insanın küçük adımları bir araya geldiğinde büyük bir değişim yaratabilir.",
+    sorular: [["Sıcaklık artışının temel nedeni nedir?", "Fosil yakıtların yakılmasıyla salınan sera gazları"], ["Sera gazları dünyayı nasıl ısıtır?", "Isının uzaya geri dönmesini engeller"], ["İklim değişikliğinin iki sonucunu yaz.", "Buzulların erimesi, deniz seviyesi yükselmesi, kuraklık/sel, tarımda verim düşüşü, türlerin tehlikeye girmesi"], ["Yazara göre bireylerin küçük adımları neden önemlidir?", "Milyonlarca insanın adımları birleşince büyük değişim yaratır"]] },
+];
+
+const OH_NORM = {
+  1: { guz: null, kis: [10, 50], bahar: [30, 90] }, 2: { guz: [30, 80], kis: [50, 100], bahar: [70, 130] },
+  3: { guz: [50, 110], kis: [70, 120], bahar: [80, 140] }, 4: { guz: [70, 120], kis: [80, 130], bahar: [90, 140] },
+  5: { guz: [80, 130], kis: [90, 140], bahar: [100, 150] }, 6: { guz: [100, 140], kis: [110, 150], bahar: [120, 160] },
+  7: { guz: [110, 150], kis: [120, 160], bahar: [130, 170] }, 8: { guz: [120, 160], kis: [130, 170], bahar: [140, 180] },
+};
+const OH_HATA = [["yanlis", "Yanlış okuma", true], ["atlama", "Atlama", true], ["ters", "Ters çevirme (harf/hece yer değiştirme)", true], ["takilma", "3 sn'den uzun takılma", true], ["ekleme", "Ekleme", false], ["tekrar", "Tekrar", false], ["duzeltme", "Kendini düzeltme", false]];
+const OH_GOZLEM = ["Heceleyerek okuma", "Parmakla/kalemle takip", "Satır atlama", "Kelime tahmin etme", "Monoton okuma (vurgu-tonlama yok)", "Noktalamaya dikkat etmeme", "Kitabı çok yakın tutma", "Fısıltıyla/çok alçak sesle okuma"];
+function ohMetin(id) { return OH_METINLER.find(m => m.id === id) || null; }
+function ohKelimeSay(m) { return m ? m.metin.split(/\s+/).filter(Boolean).length : 0; }
+function ohDuzeyDogruluk(y) { return y == null ? null : y >= 96 ? { ad: "Bağımsız", renk: "#15803D" } : y >= 90 ? { ad: "Öğretimsel", renk: "#B45309" } : { ad: "Endişe (zorlanma)", renk: "#B91C1C" }; }
+function ohDuzeyAnlama(y) { return y == null ? null : y >= 90 ? { ad: "Bağımsız", renk: "#15803D" } : y >= 75 ? { ad: "Öğretimsel", renk: "#B45309" } : { ad: "Endişe", renk: "#B91C1C" }; }
+function ohDonem(tarih) { const ms = pdrTarihMs(tarih) || Date.now(); const ay = new Date(ms).getMonth() + 1; return ay >= 9 && ay <= 11 ? "guz" : (ay === 12 || ay <= 2) ? "kis" : "bahar"; }
+const OH_DONEM_AD = { guz: "güz (Eyl–Kas)", kis: "kış (Ara–Şub)", bahar: "bahar (Mar–Haz)" };
+// Okul içi karşılaştırma: aynı metin düzeyini okumuş öğrencilerin DDK dağılımı (en az 10 kişi)
+function ohOkulIci(sinif, ddk, haricId) {
+  try {
+    const T = (typeof PDR_EK_KAYNAK !== "undefined" && PDR_EK_KAYNAK.testKayitlari) || {};
+    const l = Object.values(T).flat().filter(k => k && k.tip === "okuma_hizi" && k.id !== haricId && k.veri && Number(k.veri.sinif) === Number(sinif)).map(k => ohHesapla(k.veri, k.tarih, true).ddk).filter(x => x != null);
+    if (l.length < 10 || ddk == null) return { n: l.length, esik: 10 };
+    const alt = l.filter(x => x < ddk).length, esit = l.filter(x => x === ddk).length;
+    return { n: l.length, esik: 10, yuzdelik: Math.round(100 * (alt + esit / 2) / l.length) };
+  } catch (e) { return null; }
+}
+function ohHesapla(ek, tarih, sade, kayitId) {
+  ek = ek || {}; const m = ohMetin(ek.metinId); const kelime = ohKelimeSay(m);
+  const dk = ekSayi(ek.dk) || 0, sn = ekSayi(ek.sn) || 0; const sure = dk * 60 + sn;
+  const hd = ek.hd || {}; const detayVar = OH_HATA.some(([k]) => ekSayi(hd[k]) != null);
+  const hata = detayVar ? OH_HATA.filter(x => x[2]).reduce((t, [k]) => t + (ekSayi(hd[k]) || 0), 0) : ekSayi(ek.hata);
+  const r = { m, kelime, sure, hata, detayVar, sinif: m ? m.sinif : ekSayi(ek.sinif) };
+  if (!m || !sure || hata == null) return r;
+  const dogru = Math.max(0, kelime - hata);
+  r.dogru = dogru; r.hiz = Math.round(kelime * 60 / sure); r.ddk = Math.round(dogru * 60 / sure);
+  r.dogruluk = Math.round(1000 * dogru / kelime) / 10; r.dDuzey = ohDuzeyDogruluk(r.dogruluk);
+  if (sade) return r;
+  const an = Array.isArray(ek.anlama) ? ek.anlama : [];
+  if (m.sorular && an.some(x => x === 0 || x === 1 || x === 2)) { r.anlama = Math.round(100 * an.reduce((t, x) => t + (x || 0), 0) / (m.sorular.length * 2)); r.aDuzey = ohDuzeyAnlama(r.anlama); }
+  r.donem = ohDonem(tarih); r.hedef = OH_NORM[m.sinif] ? OH_NORM[m.sinif][r.donem] : null;
+  r.hizDurum = !r.hedef ? null : r.ddk < r.hedef[0] ? "alti" : r.ddk > r.hedef[1] ? "ustu" : "uygun";
+  r.okulIci = ohOkulIci(m.sinif, r.ddk, kayitId);
+  return r;
+}
+function ohRapor(ek, tarih, ogrSinif, kayitId) {
+  const r = ohHesapla(ek, tarih, false, kayitId); ek = ek || {}; const L = ["SESLİ OKUMA AKICILIĞI — DEĞERLENDİRME"];
+  if (!r.m) return { r, metin: L.concat("Metin seçilmedi.").join("\n") };
+  const sureYaz = s => `${Math.floor(s / 60)} dk ${s % 60} sn`;
+  L.push(`Metin: ${r.m.sinif}. sınıf ${r.m.form} formu — "${r.m.baslik}" (${r.m.tur.toLocaleLowerCase("tr")}, ${r.kelime} kelime)${ogrSinif && Number(ogrSinif) !== r.m.sinif ? ` · öğrencinin sınıfı ${ogrSinif}` : ""}`);
+  if (r.sure) L.push(`Okuma süresi: ${sureYaz(r.sure)} · Hata: ${r.hata ?? "—"}${r.detayVar ? ` (${OH_HATA.filter(([k]) => ekSayi((ek.hd || {})[k])).map(([k, a, h]) => `${a.toLocaleLowerCase("tr").replace(/ \(.*\)/, "")} ${ek.hd[k]}${h ? "" : " — hata sayılmadı"}`).join(", ")})` : ""}`);
+  if (r.ddk == null) return { r, metin: L.concat("Süre ve hata sayısını girin.").join("\n") };
+  L.push(`Okuma hızı: ${r.hiz} kelime/dk · Dakikada doğru okunan kelime (DDK): ${r.ddk} · Doğruluk: %${String(r.dogruluk).replace(".", ",")} (${r.dDuzey.ad.toLocaleLowerCase("tr")})`);
+  if (r.hedef) L.push(`${r.m.sinif}. sınıf ${OH_DONEM_AD[r.donem]} başvuru aralığı: ${r.hedef[0]}–${r.hedef[1]} DDK → ${r.hizDurum === "alti" ? "aralığın altında" : r.hizDurum === "ustu" ? "aralığın üstünde" : "aralıkta"}`);
+  else L.push(`${r.m.sinif}. sınıf ${OH_DONEM_AD[r.donem]} döneminde akıcılık hedefi tanımlanmaz (okuma öğrenimi sürüyor).`);
+  if (r.anlama != null) L.push(`Okuduğunu anlama: %${r.anlama} (${r.aDuzey.ad.toLocaleLowerCase("tr")})`);
+  if (r.okulIci && r.okulIci.yuzdelik != null) L.push(`Okul içi karşılaştırma (aynı düzeyde metin okuyan ${r.okulIci.n} öğrenci): ${r.okulIci.yuzdelik}. yüzdelik`);
+  L.push("");
+  const yavas = r.hizDurum === "alti", hatali = r.dogruluk < 90, sinir = r.dogruluk >= 90 && r.dogruluk < 96;
+  if (yavas && hatali) L.push("Hem yavaş hem hatalı okuyor: kelime çözme (kod çözme) güçlüğü düşündürüyor. Okuma-yazma değerlendirmesi (harf-ses, hece, kelime okuma) yapılmalı; güçlük sürüyorsa ÖÖG açısından (BİLPRO, RAM) değerlendirme önerilir. Okuma, öğrencinin %90 doğrulukla okuyabildiği daha alt düzey metinlerle desteklenmeli.");
+  else if (yavas) L.push(`Doğru ama yavaş okuyor${sinir ? " (doğruluk sınırda)" : ""}: kelime tanıma henüz otomatikleşmemiş. Model okuma, eşli okuma ve aynı metni haftada birkaç kez tekrarlı okuma akıcılığı artırır; haftalık 1 dakikalık ölçümle ilerleme izlenmeli.`);
+  else if (hatali) L.push("Hızı yeterli ama çok hata yapıyor: aceleci/dikkatsiz okuma ya da tahmin ederek okuma olabilir. Hızdan çok doğruluğa odaklanılmalı; kelimeyi sonuna kadar okuma, hatayı fark edip düzeltme çalışmaları yapılmalı. Dikkat göstergeleri de gözden geçirilmeli.");
+  else if (sinir) L.push("Hız yeterli, doğruluk öğretimsel düzeyde: bu düzeydeki metinlerle rehberli okuma çalışmaları uygun.");
+  else L.push(r.hizDurum === "ustu" ? "Hız ve doğruluk açısından akıcı okuyor; hızı başvuru aralığının üstünde. Daha üst düzey metinlerle desteklenebilir." : "Hız ve doğruluk açısından akıcı okuyor; sınıf düzeyine uygun.");
+  if (r.anlama != null && r.anlama < 75) L.push(r.ddk != null && !yavas && !hatali ? "Akıcı okumasına rağmen anlama düşük: kelimeleri doğru okuyor ama anlamı kurmakta zorlanıyor (anlamadan okuma). Okuma öncesi tahmin, okuma sırasında soru sorma, ana fikir bulma ve hikâye haritası çalışmaları önerilir." : "Okuduğunu anlama da düşük: akıcılık güçlüğü anlamayı da etkiliyor olabilir; önce akıcılık desteklenmeli, anlama soruları kısa metinlerle çalışılmalı.");
+  const gz = (ek.gozlem || []).filter(Boolean); if (gz.length) L.push("Gözlem: " + gz.join(", ").toLocaleLowerCase("tr") + (gz.includes("Kitabı çok yakın tutma") ? " — göz muayenesi önerilir." : "."));
+  if (ek.not2) L.push("Not: " + ek.not2);
+  L.push("", "Ölçüm notu: Hız başvuru aralıkları 1–5. sınıfta Rasinski (2004) dönem aralıklarına, 6–8. sınıfta aynı ilerlemenin devamına dayanır; Türkçe ortaokul verisi sınırlı olduğundan okul içi karşılaştırma (en az 10 öğrenci) ve öğrencinin kendi ilerlemesi daha belirleyicidir. Tek ölçüm tanı koydurmaz.");
+  return { r, metin: L.join("\n") };
+}
+function ohOgrenciKopyasiHtml(m) {
+  const boyut = m.sinif <= 2 ? 28 : m.sinif <= 4 ? 23 : 19;
+  return `<div style="font-family:Arial,Helvetica,sans-serif;color:#111"><div style="font-size:12px;color:#555;margin-bottom:10px">${m.sinif}. sınıf · ${m.form} formu</div><div style="font-size:${boyut + 6}px;font-weight:700;text-align:center;margin-bottom:14px">${cdtEsc(m.baslik)}</div><div style="font-size:${boyut}px;line-height:${m.sinif <= 2 ? 2 : 1.75};text-align:left">${cdtEsc(m.metin)}</div></div>`;
+}
+function ohUygulayiciKopyasiHtml(m, bilgi) {
+  const b = bilgi || {}; const w = m.metin.split(/\s+/).filter(Boolean); let say = 0, sat = "";
+  for (let i = 0; i < w.length; i += 10) { const p = w.slice(i, i + 10); say += p.length; sat += `<tr><td style="border:1px solid #CBD5E1;padding:5px 8px;font-size:15px;line-height:1.8">${cdtEsc(p.join(" "))}</td><td style="border:1px solid #CBD5E1;padding:5px 8px;width:42px;text-align:right;color:#64748B;font-size:12px">${say}</td></tr>`; }
+  const hd = OH_HATA.map(([, a, h]) => `<td style="border:1px solid #CBD5E1;padding:4px 6px;font-size:10.5px;text-align:center">${a}${h ? "" : "<br><i style=\"color:#64748B\">(hata değil)</i>"}<br><br>____</td>`).join("");
+  return `<div style="font-family:Arial,Helvetica,sans-serif;color:#111;font-size:12px">
+  <div style="display:flex;justify-content:space-between;border-bottom:2px solid #0E7490;padding-bottom:6px;margin-bottom:8px"><div><b style="font-size:15px;color:#0E7490">Sesli Okuma Akıcılığı — uygulayıcı kopyası</b><br>${m.sinif}. sınıf ${m.form} formu · "${cdtEsc(m.baslik)}" · ${w.length} kelime</div><div style="text-align:right">Öğrenci: ${cdtEsc(b.ogrenci || "............................")}<br>Sınıf: ${cdtEsc(b.sinif || "........")} · Tarih: ..../..../........</div></div>
+  <div style="font-size:11px;margin-bottom:6px"><b>Yönerge:</b> "Bu metni sesli okumanı istiyorum. Elinden geldiğince doğru ve anlayarak oku; bitince sana birkaç soru soracağım." Öğrenci ilk kelimeye başlayınca süreyi başlatın, son kelimede durdurun. 3 saniyeden uzun takılırsa kelimeyi söyleyip hata olarak işaretleyin.</div>
+  <div style="font-size:11px;margin-bottom:6px"><b>İşaretler:</b> yanlış okuma — kelimenin üstünü çizip okunanı yazın · atlama — kelimeyi daire içine alın · ters çevirme — ~ · takılma — T · ekleme — ^ · tekrar — R · kendini düzeltme — D</div>
+  <table style="width:100%;border-collapse:collapse;margin:6px 0">${sat}</table>
+  <table style="width:100%;border-collapse:collapse;margin:8px 0"><tr>${hd}</tr></table>
+  <div style="font-size:13px;margin:8px 0">Süre: ...... dk ...... sn &nbsp;&nbsp; Toplam hata (yanlış + atlama + ters + takılma): ......</div>
+  <div style="font-size:12px;font-weight:700;color:#0E7490;margin-top:8px">Anlama soruları (2 = tam, 1 = kısmen, 0 = yanlış)</div>
+  <ol style="padding-left:18px;margin:4px 0;line-height:1.6">${m.sorular.map(s => `<li>${cdtEsc(s[0])} <span style="color:#64748B">— beklenen: ${cdtEsc(s[1])}</span> &nbsp; [ 2 · 1 · 0 ]</li>`).join("")}</ol>
+  <div style="font-size:11px;margin-top:6px">Gözlem: ☐ heceleyerek ☐ parmakla takip ☐ satır atlama ☐ tahmin ☐ monoton ☐ noktalamaya dikkat etmeme ☐ çok yakın tutma</div></div>`;
+}
+function ohYazdir(m, tur, bilgi) {
+  const id = "oh-yazdir-" + Date.now(); const tmp = document.createElement("div"); tmp.id = id;
+  Object.assign(tmp.style, { position: "absolute", left: "-9999px", top: "0", width: "800px", padding: "18px" });
+  tmp.innerHTML = tur === "ogrenci" ? ohOgrenciKopyasiHtml(m) : ohUygulayiciKopyasiHtml(m, bilgi); document.body.appendChild(tmp);
+  raporIndir(id, `Okuma_${m.sinif}_sinif_${m.form}_${tur === "ogrenci" ? "ogrenci" : "uygulayici"}`);
+  setTimeout(() => { const el = document.getElementById(id); if (el) el.remove(); }, 8000);
+}
+
 // Öğrencinin diğer testlerinden dikkat ve okuma göstergeleri (WISC yorumunu bağlama oturtmak için)
 function ekDigerBulgular(tum, haricId) {
   const son = tip => (tum || []).filter(k => k.tip === tip && k.id !== haricId && (tip !== "d2" || k.testAdi === "D2 Dikkat Testi")).sort((a, b) => (pdrTarihMs(b.tarih) || 0) - (pdrTarihMs(a.tarih) || 0))[0];
@@ -24122,6 +24261,7 @@ function ekDigerBulgular(tum, haricId) {
   try { const k = son("dikkat_cdt"); if (k) { const s = cdtPuanla(k.veri); if (s && s.tamam) { const dusuk = s.indeksler.filter(i => i.yuzdelik != null && i.yuzdelik < 16); dikkat.push({ ad: `ÇDT (${k.tarih})`, olumsuz: dusuk.length > 0, metin: dusuk.length ? `düşük indeks: ${dusuk.map(i => `${i.ad} (%${Math.round(i.yuzdelik)})`).join(", ")}` : "indeksler yaşıtlarıyla benzer" }); } } } catch (e) {}
   try { const k = son("frankfurter"); if (k) { const r = frankHesapla(k.veri, k.tarih); if (r.duzey) dikkat.push({ ad: `Frankfurter (${k.tarih})`, olumsuz: r.duzey.ad === "Ortalamanın altı", metin: `son değer ${r.son} (${r.duzey.ad.toLocaleLowerCase("tr")})` }); } } catch (e) {}
   try { const k = son("stroop_tbag"); if (k) { const r = stroopHesapla(k.veri); if (r.oran != null) dikkat.push({ ad: `Stroop (${k.tarih})`, olumsuz: r.oran >= 1.8, metin: `bozucu etki ${ekYaz(r.enterferans)} sn (${r.oranDuzey})` }); } } catch (e) {}
+  try { const k = son("okuma_hizi"); if (k) { const r = ohHesapla(k.veri, k.tarih, false, k.id); if (r.ddk != null) okuma.push({ ad: `Sesli okuma akıcılığı (${k.tarih})`, olumsuz: r.hizDurum === "alti" || r.dogruluk < 90, metin: `${r.m.sinif}. sınıf metni: ${r.ddk} DDK${r.hedef ? ` (aralık ${r.hedef[0]}–${r.hedef[1]})` : ""}, doğruluk %${String(r.dogruluk).replace(".", ",")}${r.anlama != null ? `, anlama %${r.anlama}` : ""}` }); } } catch (e) {}
   try { const k = son("bender"); if (k) { const r = benderHesapla(k.veri, k.tarih); if (r.durum) okuma.push({ ad: `Bender-Gestalt (${k.tarih})`, olumsuz: r.durum === "alti", metin: `hata puanı ${r.hata}${r.yuzdelik ? `, yüzdelik ${r.yuzdelik.metin}` : ""}${r.oog.length >= 3 ? `, ÖÖG açısından şüpheli ${r.oog.length} madde` : ""}` }); } } catch (e) {}
   try { const k = son("frostig"); if (k) { const r = frostigHesapla(k.veri, k.tarih); if (r.ts) okuma.push({ ad: `Frostig (${k.tarih})`, olumsuz: r.ts.p < 50, metin: `genel standart puan ${r.ts.alt ? "≤1" : r.ts.p} (${r.tDuzey.ad.toLocaleLowerCase("tr")})` }); } } catch (e) {}
   try { const k = son("okuma_degerlendirme"); if (k) { const p = oyProfil(k.veri, k.veri.sinifNo || 0, k.tarih); okuma.push({ ad: `Okuma-yazma değerlendirmesi (${k.tarih})`, olumsuz: p.moduller.length > 0, metin: p.moduller.length ? `destek gereken: ${p.moduller.map(m => OY_MODULLER[m.k].ad).join(", ")}` : "destek gereken alan yok" }); } } catch (e) {}
@@ -24134,6 +24274,7 @@ function ekTestRapor(k, tum) {
     if (k.tip === "louisa_duss") return dussRapor(v).metin; if (k.tip === "wisc_r") return wiscRapor(v, tum, k.id).metin;
     if (k.tip === "frankfurter") return frankRapor(v, k.tarih).metin; if (k.tip === "porteus") return porteusRapor(v, k.tarih).metin;
     if (k.tip === "bender") return benderRapor(v, k.tarih).metin; if (k.tip === "frostig") return frostigRapor(v, k.tarih).metin; if (k.tip === "gesell") return gesellRapor(v, k.tarih).metin;
+    if (k.tip === "okuma_hizi") return ohRapor(v, k.tarih, null, k.id).metin;
   } catch (e) {}
   return "";
 }
@@ -24146,6 +24287,7 @@ function ekTestOzet(k) {
   if (k.tip === "porteus") { const r = porteusHesapla(v, k.tarih); return r.zy != null ? `Zekâ yaşı ${String(r.zy).replace(".", ",")}${r.iq && r.iq.iq ? ` · ZB ${r.iq.alt ? "≤" : r.iq.ust ? "≥" : ""}${r.iq.iq} (${r.sinif.ad})` : ""}` : "Kart sonucu girilmedi"; }
   if (k.tip === "bender") { const r = benderHesapla(v, k.tarih); return r.hata != null ? `Hata puanı ${r.hata}${r.yasEsdeger ? ` · yaş eşdeğeri ${r.yasEsdeger}` : ""}${r.yuzdelik ? ` · yüzdelik ${r.yuzdelik.metin}` : ""}` : "Puan girilmedi"; }
   if (k.tip === "frostig") { const r = frostigHesapla(v, k.tarih); return r.toplam != null ? `Toplam ham ${r.toplam}${r.ts ? ` · standart puan ${r.ts.alt ? "≤1" : r.ts.p} (${r.tDuzey.ad})` : ""}` : r.alt.filter(x => x.ham != null).map(x => `${x.k}: ${x.ham}`).join(" · ") || "Puan girilmedi"; }
+  if (k.tip === "okuma_hizi") { const r = ohHesapla(v, k.tarih, false, k.id); return r.ddk != null ? `${r.m.sinif}. sınıf metni · ${r.hiz} kelime/dk · ${r.ddk} DDK · doğruluk %${String(r.dogruluk).replace(".", ",")} (${r.dDuzey.ad})${r.anlama != null ? ` · anlama %${r.anlama}` : ""}${r.hizDurum === "alti" ? " · hız aralığın altında" : ""}` : "Süre/hata girilmedi"; }
   if (k.tip === "gesell") { const r = gesellHesapla(v, k.tarih); return `${r.dogru.length}/${r.uygulanan.length || 10} şekil doğru${r.eksik.length ? ` · yaşına göre eksik: ${r.eksik.map(x => x.ad).join(", ")}` : r.yas && r.uygulanan.length ? " · yaşına uygun" : ""}`; }
   if (k.tip === "wisc_r") { const r = wiscHesapla(v); return [r.sz != null ? `Sözel ${r.sz}` : "", r.pf != null ? `Performans ${r.pf}` : "", r.tp != null ? `Toplam ${r.tp} (${wiscSinif(r.tp).ad})` : ""].filter(Boolean).join(" · ") || "Puan girilmedi"; }
   return "—";
@@ -24161,6 +24303,7 @@ function ekTestGecerli(tip, ek) {
   if (tip === "bender") return Object.values(ek.h || {}).some(Boolean) || ekSayi(ek.elleHata) != null || ek.hataYok === true;
   if (tip === "frostig") return ["a1", "a2", "a3", "d3", "a4", "a5"].some(k => ekSayi(ek[k]) != null);
   if (tip === "gesell") return Object.values(ek.s || {}).some(x => x === "0" || x === "1");
+  if (tip === "okuma_hizi") return !!ek.metinId && ((ekSayi(ek.dk) || 0) + (ekSayi(ek.sn) || 0)) > 0;
   return false;
 }
 async function dussAiYorum(ek, yas, cinsiyet) {
@@ -24173,7 +24316,7 @@ BÖLÜMLER (başlıkları aynen kullan): Genel izlenim: / Öne çıkan temalar: 
   return pdrKalinTemizle(metin).replace(/##+ ?/g, "").trim();
 }
 
-function EkTestFormu({ tip, ek, setEk, cinsiyet, yas, tarih, dogum }) {
+function EkTestFormu({ tip, ek, setEk, cinsiyet, yas, tarih, dogum, sinif }) {
   const e = ek || {};
   const inp = { width: "100%", padding: "8px 9px", border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 13, boxSizing: "border-box", background: "#fff" };
   const lbl = { fontSize: 10.5, fontWeight: 800, color: MUTED, display: "block", marginBottom: 3 };
@@ -24202,6 +24345,46 @@ function EkTestFormu({ tip, ek, setEk, cinsiyet, yas, tarih, dogum }) {
     {normDurum && <div style={{ fontSize: 11.5, color: MUTED, marginTop: 4 }}>{normDurum}</div>}
   </>);
   const ozetKart = (l) => <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>{l.map(([a, v, c]) => <div key={a} style={{ flex: "1 1 80px", textAlign: "center", border: `1px solid ${BORDER}`, borderRadius: 8, padding: "6px 4px" }}><div style={{ fontSize: 17, fontWeight: 900, color: c || "#334155" }}>{v}</div><div style={{ fontSize: 10, color: MUTED }}>{a}</div></div>)}</div>;
+  if (tip === "okuma_hizi") {
+    const ogrSinifNo = oySinifNo(sinif);
+    const sec = e.metinId ? ohMetin(e.metinId) : null; const duzey = sec ? sec.sinif : Math.min(8, Math.max(1, ogrSinifNo || 1)); const form = sec ? sec.form : "A";
+    const metinSec = (d, f) => { const m = OH_METINLER.find(x => x.sinif === d && x.form === f); setEk({ ...e, metinId: m ? m.id : "", sinif: d, anlama: [] }); };
+    const m = sec || OH_METINLER.find(x => x.sinif === duzey && x.form === form);
+    const r = ohHesapla(e, tarih); const hd = e.hd || {}; const an = e.anlama || []; const gz = e.gozlem || [];
+    return (<div data-ektest="okuma_hizi">
+      <div style={{ fontSize: 11.5, color: MUTED, marginBottom: 6, lineHeight: 1.5 }}>Metni yazdırıp öğrenciye kâğıttan sesli okutun; hataları uygulayıcı kopyasında işaretleyin, süreyi tutun. Ardından süreyi ve hata sayısını buraya girin. Okuyamayan öğrencide işlevsel düzeyi bulmak için bir alt sınıfın metnini de okutabilirsiniz.</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+        <div><label style={lbl}>Metin düzeyi (sınıf)</label><select data-oh-sinif="1" value={duzey} onChange={ev => metinSec(Number(ev.target.value), form)} style={inp}>{[1, 2, 3, 4, 5, 6, 7, 8].map(n => <option key={n} value={n}>{n}. sınıf{n === ogrSinifNo ? " (öğrencinin sınıfı)" : ""}</option>)}</select></div>
+        <div><label style={lbl}>Form</label><select data-oh-form="1" value={form} onChange={ev => metinSec(duzey, ev.target.value)} style={inp}><option value="A">A — öykü</option><option value="B">B — bilgilendirici</option></select></div>
+      </div>
+      {!sec && <button data-oh-metin-sec="1" onClick={() => metinSec(duzey, form)} style={{ marginTop: 6, padding: "7px 11px", borderRadius: 8, border: "none", background: "#0E7490", color: "#fff", fontWeight: 800, fontSize: 12, cursor: "pointer" }}>Bu metni seç</button>}
+      {m && <div style={{ marginTop: 6, background: "#ECFEFF", border: "1px solid #A5F3FC", borderRadius: 9, padding: "8px 10px" }}>
+        <div style={{ fontSize: 12.5, fontWeight: 800, color: "#155E75" }}>"{m.baslik}" · {m.tur} · {ohKelimeSay(m)} kelime</div>
+        <div style={{ fontSize: 11.5, color: TEXT, marginTop: 3, lineHeight: 1.5, maxHeight: 74, overflow: "hidden" }}>{m.metin}</div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+          <button data-oh-yazdir="ogrenci" onClick={() => ohYazdir(m, "ogrenci")} style={{ padding: "6px 10px", borderRadius: 8, border: "none", background: "#0E7490", color: "#fff", fontWeight: 800, fontSize: 11.5, cursor: "pointer" }}>🖨 Öğrenci kopyası</button>
+          <button data-oh-yazdir="uygulayici" onClick={() => ohYazdir(m, "uygulayici")} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #0E7490", background: "#fff", color: "#0E7490", fontWeight: 800, fontSize: 11.5, cursor: "pointer" }}>🖨 Uygulayıcı kopyası (işaretleme + sorular)</button>
+        </div></div>}
+      {sec && <>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1.2fr", gap: 6, marginTop: 8 }}>
+          <div><label style={lbl}>Süre — dakika</label><input data-oh-dk="1" type="number" min="0" value={e.dk || ""} onChange={ev => setEk({ ...e, dk: ev.target.value })} style={inp} /></div>
+          <div><label style={lbl}>saniye</label><input data-oh-sn="1" type="number" min="0" max="59" value={e.sn || ""} onChange={ev => setEk({ ...e, sn: ev.target.value })} style={inp} /></div>
+          <div><label style={lbl}>Toplam hata sayısı</label><input data-oh-hata="1" type="number" min="0" value={r.detayVar ? r.hata : (e.hata || "")} disabled={r.detayVar} onChange={ev => setEk({ ...e, hata: ev.target.value })} style={{ ...inp, background: r.detayVar ? "#F1F5F9" : "#fff" }} /></div>
+        </div>
+        <details style={{ marginTop: 6 }}><summary style={{ fontSize: 11.5, fontWeight: 700, color: "#0E7490", cursor: "pointer" }}>Hata türlerine göre gir (isteğe bağlı)</summary>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 5 }}>{OH_HATA.map(([k, a, h]) => <div key={k}><label style={lbl}>{a}{h ? "" : " — hata sayılmaz"}</label><input data-oh-hd={k} type="number" min="0" value={hd[k] || ""} onChange={ev => setEk({ ...e, hd: { ...hd, [k]: ev.target.value } })} style={inp} /></div>)}</div>
+        </details>
+        <div style={{ fontSize: 11.5, fontWeight: 800, margin: "8px 0 3px" }}>Anlama soruları (isteğe bağlı)</div>
+        {sec.sorular.map((q, i) => <div key={i} style={{ display: "flex", gap: 6, alignItems: "center", padding: "3px 0", borderTop: i ? `1px dashed ${BORDER}` : "none" }}>
+          <div style={{ flex: 1, fontSize: 11.5 }}>{i + 1}. {q[0]} <span style={{ color: MUTED }}>— {q[1]}</span></div>
+          <select data-oh-anlama={i} value={an[i] ?? ""} onChange={ev => { const l = [...an]; l[i] = ev.target.value === "" ? null : Number(ev.target.value); setEk({ ...e, anlama: l }); }} style={{ ...inp, width: 92, padding: "5px 6px" }}><option value="">—</option><option value="2">2 tam</option><option value="1">1 kısmen</option><option value="0">0 yanlış</option></select>
+        </div>)}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 10px", marginTop: 6 }}>{OH_GOZLEM.map(g => <label key={g} style={{ fontSize: 11, color: MUTED, display: "flex", gap: 3, alignItems: "center" }}><input type="checkbox" checked={gz.includes(g)} onChange={ev => setEk({ ...e, gozlem: ev.target.checked ? [...gz, g] : gz.filter(x => x !== g) })} />{g}</label>)}</div>
+        {r.ddk != null && ozetKart([["Okuma hızı", `${r.hiz} k/dk`], ["DDK", r.ddk, r.hizDurum === "alti" ? "#B91C1C" : r.hizDurum ? "#15803D" : null], ["Doğruluk", "%" + String(r.dogruluk).replace(".", ","), r.dDuzey.renk], ["Anlama", r.anlama != null ? "%" + r.anlama : "—", r.aDuzey ? r.aDuzey.renk : null]])}
+        {ekTestGecerli(tip, e) && <div data-ektest-sonuc="1" style={kutu}>{ohRapor(e, tarih, ogrSinifNo).metin}</div>}
+      </>}
+    </div>);
+  }
   if (tip === "bender") {
     const h = e.h || {}; const r = benderHesapla(e, tarih);
     return (<div data-ektest="bender">
@@ -24387,7 +24570,7 @@ function EkTestFormu({ tip, ek, setEk, cinsiyet, yas, tarih, dogum }) {
 // ── Ek testler için yazdırılabilir (PDF) rapor ──
 function ekTestRaporHtml(k, bilgi, tum) {
   const v = (k && k.veri) || {}; const e = cdtEsc; const b = bilgi || {};
-  const RENK = { d2: "#6D28D9", stroop_tbag: "#B45309", metropolitan: "#0E7490", louisa_duss: "#7C3AED", wisc_r: "#1D4ED8", frankfurter: "#BE185D", porteus: "#4D7C0F", bender: "#0369A1", frostig: "#9333EA", gesell: "#C2410C" }[k.tip] || "#334155";
+  const RENK = { d2: "#6D28D9", stroop_tbag: "#B45309", metropolitan: "#0E7490", louisa_duss: "#7C3AED", wisc_r: "#1D4ED8", frankfurter: "#BE185D", porteus: "#4D7C0F", bender: "#0369A1", frostig: "#9333EA", gesell: "#C2410C", okuma_hizi: "#0E7490" }[k.tip] || "#334155";
   const baslik = t => `<div style="background:${RENK};color:#fff;font-size:12.5px;font-weight:700;padding:6px 11px;border-radius:6px;margin:14px 0 7px;page-break-after:avoid">${t}</div>`;
   const th = t => `<th style="text-align:left;padding:5px 7px;background:#F8FAFC;color:#475569;font-size:10.5px;border-bottom:1px solid #E2E8F0">${t}</th>`;
   const td = (t, ek) => `<td style="padding:5px 7px;border-bottom:1px solid #EEF2F7;font-size:11px;${ek || ""}">${t}</td>`;
@@ -24419,6 +24602,13 @@ function ekTestRaporHtml(k, bilgi, tum) {
     const r = porteusHesapla(v, k.tarih);
     ust = `<div style="display:flex;gap:8px;flex-wrap:wrap">${[["Zekâ yaşı", r.zy == null ? "—" : String(r.zy).replace(".", ",")], ["Takvim yaşı", ekYasYaz(r.yas)], ["Zekâ bölümü", r.iq && r.iq.iq ? (r.iq.alt ? "≤" : r.iq.ust ? "≥" : "") + r.iq.iq : "—"]].map(([a, z]) => `<div style="flex:1 1 120px;border:1px solid ${a === "Zekâ bölümü" && r.sinif ? r.sinif.renk + "66" : "#E5E7EB"};border-radius:8px;padding:8px;text-align:center"><div style="font-size:20px;font-weight:700;color:${a === "Zekâ bölümü" && r.sinif ? r.sinif.renk : "#334155"}">${e(z)}</div><div style="font-size:10.5px;color:#555">${a}${a === "Zekâ bölümü" && r.sinif ? " · " + e(r.sinif.ad) : ""}</div></div>`).join("")}</div>`;
     olcum = tablo(["Kart", "Sonuç", "Puan"], r.satirlar.filter(x => x.durum !== "uygulanmadi").map(x => [td(`<b>${x.k}</b>${x.yas ? " (" + x.yas + " yaş)" : " (yetişkin)"}`), td(x.durum === "basarisiz" ? '<span style="color:#B91C1C">başaramadı</span>' : x.durum === "varsayilan" ? "uygulanmadı — tam puan" : x.deneme + ". denemede başardı"), td(`<b>${String(x.puan).replace(".", ",")}</b>`)]).concat([[td("<b>+ sabit</b>"), td(""), td("<b>2</b>")], [td("<b>Zekâ yaşı</b>"), td(""), td(`<b>${r.zy == null ? "—" : String(r.zy).replace(".", ",")}</b>`)]]));
+  } else if (k.tip === "okuma_hizi") {
+    const r = ohHesapla(v, k.tarih, false, k.id);
+    if (r.ddk != null) {
+      ust = `<div style="display:flex;gap:8px;flex-wrap:wrap">${[["Okuma hızı", r.hiz + " kelime/dk", "#334155"], ["DDK", r.ddk, r.hizDurum === "alti" ? "#B91C1C" : r.hizDurum ? "#15803D" : "#334155"], ["Doğruluk", "%" + String(r.dogruluk).replace(".", ",") + " · " + r.dDuzey.ad, r.dDuzey.renk], ["Anlama", r.anlama != null ? "%" + r.anlama + " · " + r.aDuzey.ad : "—", r.aDuzey ? r.aDuzey.renk : "#334155"]].map(([a, z, c]) => `<div style="flex:1 1 120px;border:1px solid #E5E7EB;border-radius:8px;padding:8px;text-align:center"><div style="font-size:17px;font-weight:700;color:${c}">${e(z)}</div><div style="font-size:10.5px;color:#555">${a}</div></div>`).join("")}</div>`;
+      const hk = r.hedef ? `<div style="position:relative;background:#E2E8F0;border-radius:4px;height:12px;margin-top:4px"><div style="position:absolute;left:${r.hedef[0] / 2}%;width:${(r.hedef[1] - r.hedef[0]) / 2}%;top:0;bottom:0;background:#BBF7D0;border-radius:4px"></div><div style="position:absolute;left:${Math.min(100, r.ddk / 2)}%;top:-3px;bottom:-3px;width:3px;background:#0E7490"></div></div><div style="font-size:9.5px;color:#555;margin-top:2px">Yeşil bant: ${r.m.sinif}. sınıf ${OH_DONEM_AD[r.donem]} başvuru aralığı ${r.hedef[0]}–${r.hedef[1]} DDK · çizgi: öğrencinin DDK'sı (${r.ddk}) · ölçek 0–200</div>` : "";
+      olcum = tablo(["Bilgi", "Değer"], [["Metin", `${r.m.sinif}. sınıf ${r.m.form} formu — ${r.m.baslik} (${r.kelime} kelime)`], ["Süre", `${Math.floor(r.sure / 60)} dk ${r.sure % 60} sn`], ["Hata", String(r.hata)], ["Doğru okunan kelime", String(r.dogru)]].map(([a, z]) => [td(e(a)), td(`<b>${e(z)}</b>`)])) + hk;
+    }
   } else if (k.tip === "bender") {
     const r = benderHesapla(v, k.tarih);
     ust = `<div style="display:flex;gap:8px;flex-wrap:wrap">${[["Hata puanı", r.hata ?? "—"], ["Yaş eşdeğeri", r.yasEsdeger || "—"], ["Yüzdelik", r.yuzdelik ? r.yuzdelik.metin : "—"], ["Takvim yaşı", ekYasYaz(r.yas)]].map(([a, z]) => `<div style="flex:1 1 110px;border:1px solid #E5E7EB;border-radius:8px;padding:8px;text-align:center"><div style="font-size:19px;font-weight:700;color:${a === "Yüzdelik" && r.durum ? (r.durum === "alti" ? "#B91C1C" : r.durum === "sinir" ? "#B45309" : "#15803D") : "#334155"}">${e(z)}</div><div style="font-size:10.5px;color:#555">${a}</div></div>`).join("")}</div>`;
@@ -24464,6 +24654,7 @@ const TEST_LISTESI = {
     { ad: "Frostig Gelişimsel Görsel Algı Testi", tip: "frostig" },
     { ad: "Bender Gestalt Görsel Motor Algı Testi", tip: "bender" },
     { ad: "Gesell Gelişim Figürleri Testi", tip: "gesell" },
+    { ad: "Sesli Okuma Akıcılığı (1–8. sınıf)", tip: "okuma_hizi" },
     { ad: "R.B Catell 2A-3A Zeka Testi", tip: "iq_esdeger" },
     { ad: "Metropolitan Okul Öncesi Olgunluk Testi", tip: "metropolitan" },
     { ad: "Stroop Testi TBAG Formu", tip: "stroop_tbag" },
@@ -31087,6 +31278,7 @@ function pdrTestOlcumleri(k, sinifNo) {
       case "bender": { const r = benderHesapla(v, k.tarih); ekle("Hata puanı", r.hata, "dusuk"); ekle("Yüzdelik", r.yuzdelik && r.yuzdelik.p, "yuksek"); Object.entries(BENDER_TUR).forEach(([t, a]) => { if (r.isaret.length) ekle(a, r.tur[t], "dusuk"); }); break; }
       case "frostig": { const r = frostigHesapla(v, k.tarih); r.alt.forEach(x => ekle(x.ad + " (ham)", x.ham, "yuksek", "/" + x.maks)); ekle("Toplam ham puan", r.toplam, "yuksek"); ekle("Genel standart puan", r.ts && r.ts.p, "yuksek"); break; }
       case "gesell": { const r = gesellHesapla(v, k.tarih); ekle("Doğru şekil", r.dogru.length, "yuksek", "/10"); break; }
+      case "okuma_hizi": { const r = ohHesapla(v, k.tarih, true); if (r.ddk != null) { ekle("Okuma hızı (kelime/dk)", r.hiz, "yuksek"); ekle("DDK (doğru kelime/dk)", r.ddk, "yuksek"); ekle("Doğruluk", r.dogruluk, "yuksek", "%"); ekle("Hata", r.hata, "dusuk"); } break; }
       case "louisa_duss": { const r = dussHesapla(v); ekle("Çatışma belirtisi olan öykü", r.sinyal.length, "dusuk", "/10"); break; }
       case "insan_ciz": { const s = iczPuanla(v); ekle("Gelişimsel ayrıntı", s.varOlanSayi, "yuksek", "/30"); ekle("Duygusal gösterge", (s.gecerli || []).length, "dusuk"); let z = null; try { z = iczZihinsel(v, k.tarih); } catch (e) {} if (z) { ekle(z.yontem === "goodenough" ? "Goodenough ham puan" : "Goodenough-Harris ham puan", z.ham, "yuksek", "/" + z.maks); if (z.sp != null && !String(z.spMetin).match(/[<>]/)) ekle("Goodenough-Harris standart puan", z.sp, "yuksek"); if (z.iq != null) ekle("Goodenough zekâ bölümü", z.iq, "yuksek"); } break; }
       default: break;
@@ -32318,7 +32510,7 @@ KURALLAR:
               </>)}
 
               {EK_TESTLER.includes(seciliTest.tip) && (
-                <EkTestFormu tip={seciliTest.tip} ek={form.ek} setEk={ek => setForm(f => ({ ...f, ek }))} cinsiyet={seciliOgr?.cinsiyet || ""} yas={cdtYasTahmin(seciliSinif)} tarih={form.tarih} dogum={seciliOgr?.dogumTarihi || seciliOgr?.dogum || ""} />
+                <EkTestFormu tip={seciliTest.tip} ek={form.ek} setEk={ek => setForm(f => ({ ...f, ek }))} cinsiyet={seciliOgr?.cinsiyet || ""} yas={cdtYasTahmin(seciliSinif)} tarih={form.tarih} dogum={seciliOgr?.dogumTarihi || seciliOgr?.dogum || ""} sinif={seciliSinif} />
               )}
               {seciliTest.tip === "alt_test" && (<>
                 {seciliTest.altTestler.map(alt => (

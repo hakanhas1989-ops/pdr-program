@@ -31318,6 +31318,7 @@ function D2Paneli({ seciliAd, seciliSinif, seciliNumara, seciliOgr, profiles2, s
   const [cinsiyet, setCinsiyet] = useState("");
   const [tablo, setTablo] = useState("");
   const [prElle, setPrElle] = useState(false);
+  const [acikD2, setAcikD2] = useState(null);
   const [, setNormSurum] = useState(0);
   const [normDurum, setNormDurum] = useState("");
   useEffect(() => { if (!D2_NORM) pdrD2NormYukle().then(() => setNormSurum(x => x + 1)); }, []);
@@ -31461,12 +31462,22 @@ function D2Paneli({ seciliAd, seciliSinif, seciliNumara, seciliOgr, profiles2, s
           <div style={{ fontSize: 11, fontWeight: 800, color: MUTED, marginBottom: 6 }}>GEÇMİŞ D2 UYGULAMALARI ({d2Kayitlar.length})</div>
           {d2Kayitlar.map(k => (
             <div key={k.id} data-d2-kayit="1" style={{ background:CARD, border:`1px solid ${BORDER}`, borderRadius:10, padding:"9px 11px", marginBottom:7 }}>
-              <div style={{ display:"flex", justifyContent:"space-between", gap:8 }}>
-                <b style={{ fontSize:12.5 }}>{k.tarih || "?"}</b>
-                <button onClick={() => sil(k)} style={{ background:"none", border:"none", color:"#C0392B", cursor:"pointer" }}>🗑</button>
+              <div onClick={() => setAcikD2(acikD2 === k.id ? null : k.id)} style={{ cursor:"pointer" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:8 }}>
+                  <b style={{ fontSize:12.5 }}>{k.tarih || "?"}</b>
+                  <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                    <span data-d2-ok="1" style={{ fontSize:11, color:PURPLE }}>{acikD2 === k.id ? "▲" : "▼"}</span>
+                    <button onClick={(e) => { e.stopPropagation(); sil(k); }} style={{ background:"none", border:"none", color:"#C0392B", cursor:"pointer" }}>🗑</button>
+                  </div>
+                </div>
+                <div style={{ fontSize:11.5, color:MUTED, marginTop:2 }}>{d2KisaOzet(k.veri)}</div>
+                {acikD2 !== k.id && (() => { const gs = d2GenelSonuc(k.veri); return gs ? <div style={{ fontSize:11.5, color:gs.renk, fontWeight:700, marginTop:3, lineHeight:1.45 }}>Genel sonuç: {gs.metin}</div> : null; })()}
               </div>
-              <div style={{ fontSize:11.5, color:MUTED, marginTop:2 }}>{d2KisaOzet(k.veri)}</div>
-              <div style={{ fontSize:11.5, color:TEXT, marginTop:3, lineHeight:1.45 }}>{d2Yorum(k.veri)}</div>
+              {acikD2 === k.id && (
+                <div data-d2-gecmis-detay="1" style={{ marginTop:8, borderTop:`1px solid ${BORDER}`, paddingTop:8 }}>
+                  <div style={{ overflowX:"auto" }} dangerouslySetInnerHTML={{ __html: ekTestRaporHtml(k, { ogrenci: seciliAd, sinif: seciliSinif }, tumKayitlar) }} />
+                </div>
+              )}
               <button data-d2-pdf="1" onClick={() => ekTestPdfIndir(k, seciliAd, seciliSinif, tumKayitlar)} style={{ marginTop:5, padding:"5px 9px", borderRadius:8, border:"none", background:PURPLE, color:"#fff", fontSize:11, fontWeight:800, cursor:"pointer" }}>📄 PDF Rapor</button>
               <TestDegisimKutusu kayit={k} tumKayitlar={tumKayitlar} />
             </div>

@@ -24228,7 +24228,7 @@ function ohRapor(ek, tarih, ogrSinif, kayitId) {
 }
 function ohOgrenciKopyasiHtml(m) {
   const boyut = m.sinif <= 2 ? 28 : m.sinif <= 4 ? 23 : 19;
-  return `<div style="font-family:Arial,Helvetica,sans-serif;color:#111"><div style="font-size:12px;color:#555;margin-bottom:10px">${m.sinif}. sınıf · ${m.form} formu</div><div style="font-size:${boyut + 6}px;font-weight:700;text-align:center;margin-bottom:14px">${cdtEsc(m.baslik)}</div><div style="font-size:${boyut}px;line-height:${m.sinif <= 2 ? 2 : 1.75};text-align:left">${cdtEsc(m.metin)}</div></div>`;
+  return `<div style="font-family:Arial,Helvetica,sans-serif;color:#111"><div style="font-size:12px;color:#555;margin-bottom:10px">${m.sinif}. sınıf · ${m.form} formu</div><div style="font-size:${boyut + 6}px;font-weight:700;text-align:center;margin-bottom:14px">${cdtEsc(m.baslik)}</div><div style="font-size:${boyut}px;line-height:${m.sinif <= 2 ? 2 : 1.75};text-align:justify;hyphens:manual">${cdtEsc(m.metin)}</div></div>`;
 }
 function ohUygulayiciKopyasiHtml(m, bilgi) {
   const b = bilgi || {}; const w = m.metin.split(/\s+/).filter(Boolean); let say = 0, sat = "";

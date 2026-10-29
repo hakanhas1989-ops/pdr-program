@@ -20872,7 +20872,7 @@ function raporVerisiOlustur({ ozetAc, ogrenciProfilleri2, ogrenci, ogrenciSinif,
 const OZ_TEST_GRUP = {
   bilissel: ["wisc_r", "iq_esdeger", "alt_test", "gelisimsel_hata", "metropolitan", "okul_olgunlugu", "porteus"],
   dikkat: ["d2", "dikkat_cdt", "stroop_tbag", "dikkat_egitim", "frankfurter"],
-  okuma: ["okuma_degerlendirme", "okuma_programi", "kaynastirma_ed", "net_kontrol"],
+  okuma: ["okuma_degerlendirme", "okuma_programi", "kaynastirma_ed", "net_kontrol", "bender", "frostig", "gesell"],
   duygusal: ["scas_cocuk", "toplam_duzey", "toplam_duzey_serbest", "insan_ciz", "louisa_duss", "beier_form_a"],
 };
 const OZ_KIRMIZI = "#B91C1C", OZ_SARI = "#B45309", OZ_YESIL = "#15803D", OZ_GRI = "#64748B";
@@ -20888,6 +20888,9 @@ function ozTestDurum(k) {
       case "dikkat_cdt": { const s = cdtPuanla(v); if (s && s.tamam && s.indeksler) { const y = s.indeksler.map(i => i.yuzdelik).filter(x => x != null); if (y.length) { const m = Math.min(...y); return { renk: m < 16 ? OZ_KIRMIZI : m < 25 ? OZ_SARI : OZ_YESIL }; } } break; }
       case "stroop_tbag": { const r = stroopHesapla(v); if (r.oran != null) return { renk: r.oran >= 2.3 ? OZ_KIRMIZI : r.oran >= 1.8 ? OZ_SARI : OZ_YESIL }; break; }
       case "frankfurter": { const r = frankHesapla(v, k.tarih); if (r.duzey) return { renk: r.duzey.ad === "Ortalamanın altı" ? OZ_KIRMIZI : OZ_YESIL }; break; }
+      case "bender": { const r = benderHesapla(v, k.tarih); if (r.durum) return { renk: r.durum === "alti" ? OZ_KIRMIZI : r.durum === "sinir" ? OZ_SARI : OZ_YESIL }; break; }
+      case "frostig": { const r = frostigHesapla(v, k.tarih); if (r.ts) return { renk: r.ts.p < 50 ? OZ_KIRMIZI : r.ts.p < 60 ? OZ_SARI : OZ_YESIL }; break; }
+      case "gesell": { const r = gesellHesapla(v, k.tarih); if (r.yas && r.uygulanan.length) return { renk: r.eksik.length >= 2 ? OZ_KIRMIZI : r.eksik.length ? OZ_SARI : OZ_YESIL }; break; }
       case "porteus": { const r = porteusHesapla(v, k.tarih); if (r.sinif) return { renk: r.sinif.renk === "#B91C1C" ? OZ_KIRMIZI : r.sinif.renk === "#B45309" ? OZ_SARI : OZ_YESIL }; break; }
       case "metropolitan": { const r = metroHesapla(v); if (r.genelH) return { renk: r.genelH.harf === "E" ? OZ_KIRMIZI : r.genelH.harf === "D" ? OZ_SARI : OZ_YESIL }; break; }
       case "wisc_r": { const r = wiscHesapla(v); const c = wiscSinif(r.tp != null ? r.tp : r.sz != null ? r.sz : r.pf); if (c) return { renk: c.renk === "#B91C1C" ? OZ_KIRMIZI : c.renk === "#B45309" ? OZ_SARI : OZ_YESIL }; break; }
@@ -23569,7 +23572,7 @@ function scasRaporHtmlOlustur(sonuc, bilgi) {
 
 
 // ===== EK TESTLER: Stroop TBAG · Metropolitan · Louisa Düss · WISC-R =====
-const EK_TESTLER = ["stroop_tbag", "metropolitan", "louisa_duss", "wisc_r", "frankfurter", "porteus"];
+const EK_TESTLER = ["stroop_tbag", "metropolitan", "louisa_duss", "wisc_r", "frankfurter", "porteus", "bender", "frostig", "gesell"];
 const ekSayi = x => { if (x === null || x === undefined || String(x).trim() === "") return null; const n = parseFloat(String(x).replace(",", ".")); return isFinite(n) ? n : null; };
 const ekYaz = x => x == null ? "—" : String(Math.round(x * 100) / 100).replace(".", ",");
 
@@ -23879,6 +23882,177 @@ function porteusRapor(ek, tarih) {
   return { r, metin: L.join("\n") };
 }
 
+// ── Görsel algı testleri: Bender-Gestalt (Koppitz), Frostig, Gesell ──
+// Norm tabloları telifli olduğundan kodda değil; danışmanın yüklediği veri dosyasında (pdr-gorsel-algi-norm).
+let GORSEL_NORM = null;
+function pdrGorselNormDogrula(j) {
+  if (!j || j.tur !== "pdr-gorsel-algi-norm" || !j.frostig || !j.bender) return null;
+  const f = j.frostig, b = j.bender;
+  const ok = Array.isArray(f.yaslar) && f.yaslar.length === 8 && ["1", "2", "3", "4", "5"].every(k => Array.isArray(f.alt[k]) && f.alt[k].length === 8) && Array.isArray(f.toplam) &&
+    b.yasEsdeger && b.yuzdelik && Array.isArray(b.yuzdelik.deger) && b.ortalama && Array.isArray(b.ortalama.ort);
+  return ok ? j : null;
+}
+async function pdrGorselNormYukle() {
+  try { const r = await window.storage.get("pdr-gorsel-algi-norm"); const t = r && r.value ? pdrGorselNormDogrula(JSON.parse(r.value)) : null; if (t) GORSEL_NORM = t; } catch (e) {}
+  return GORSEL_NORM;
+}
+async function pdrGorselNormKaydet(j) {
+  const t = pdrGorselNormDogrula(j); if (!t) throw new Error("Bu dosya görsel algı norm dosyası (gorsel-algi-norm.json) değil ya da bozuk.");
+  await window.storage.set("pdr-gorsel-algi-norm", JSON.stringify(j)); GORSEL_NORM = t; return true;
+}
+const ekAyYaz = a => `${Math.floor(a / 12)};${a % 12}`;
+
+// Bender-Gestalt — Koppitz gelişimsel puanlama (30 madde, her biri 1 hata puanı)
+const BENDER_MADDE = [
+  { k: "1a", s: "A", t: "b", ad: "Kare/daire çok yassılmış ya da açı fazla-eksik" }, { k: "1b", s: "A", t: "b", ad: "Kare ile daire oransız (biri diğerinin 2 katı)" }, { k: "2", s: "A", t: "d", ad: "Döndürme (45° ve üstü)" }, { k: "3", s: "A", t: "i", ad: "Kare-daire birleşmiyor ya da 3 mm'den fazla binişik" },
+  { k: "4", s: "1", t: "b", ad: "Beş ya da daha fazla nokta daire şeklinde" }, { k: "5", s: "1", t: "d", ad: "Döndürme (45° ve üstü)" }, { k: "6", s: "1", t: "p", ad: "Bir sırada 15'ten fazla nokta" },
+  { k: "7", s: "2", t: "d", ad: "Döndürme (45° ve üstü)" }, { k: "8", s: "2", t: "i", ad: "Bir-iki sıra daire eksik, 4+ daire sütunu ya da Şekil 1'in sırası kullanılmış" }, { k: "9", s: "2", t: "p", ad: "Bir sırada 14'ten fazla sütun" },
+  { k: "10", s: "3", t: "b", ad: "Beş ya da daha fazla nokta daire şeklinde" }, { k: "11", s: "3", t: "d", ad: "Döndürme (45° ve üstü)" }, { k: "12a", s: "3", t: "i", ad: "Desen bozuk: sıralarda nokta artmıyor, ok ucu yok ya da ters" }, { k: "12b", s: "3", t: "i", ad: "Noktalar yerine devamlı çizgi" },
+  { k: "13", s: "4", t: "d", ad: "Döndürme (45° ve üstü)" }, { k: "14", s: "4", t: "i", ad: "Eğri ile köşe 3 mm'den fazla ayrı/binişik ya da eğri iki köşeye de değiyor" },
+  { k: "15", s: "5", t: "b", ad: "Beş ya da daha fazla nokta daire şeklinde" }, { k: "16", s: "5", t: "d", ad: "Şekil, uzantı ya da yarım daire döndürülmüş" }, { k: "17a", s: "5", t: "i", ad: "Desen bozuk: uzantı yarım daireyi kesiyor, yarım daire yerine düz çizgi/daire" }, { k: "17b", s: "5", t: "i", ad: "Noktalar yerine devamlı çizgi" },
+  { k: "18a", s: "6", t: "b", ad: "Kavisler yerine 3 ya da daha fazla belirgin açı" }, { k: "18b", s: "6", t: "b", ad: "Bir ya da iki çizgide hiç kavis yok (düz çizgi)" }, { k: "19", s: "6", t: "i", ad: "Çizgiler kesişmiyor, uçta kesişiyor ya da iç içe" }, { k: "20", s: "6", t: "p", ad: "Altı ya da daha fazla tam dalga" },
+  { k: "21a", s: "7", t: "b", ad: "Altıgenlerin boyutları orantısız (biri 2 kat)" }, { k: "21b", s: "7", t: "b", ad: "Altıgenler çok bozuk, açı fazla ya da eksik" }, { k: "22", s: "7", t: "d", ad: "Döndürme (45° ve üstü)" }, { k: "23", s: "7", t: "i", ad: "Altıgenler birleşmiyor ya da biri diğerinin içine girmiş" },
+  { k: "24", s: "8", t: "b", ad: "Altıgen/eşkenar dörtgen aşırı bozuk ya da dörtgen çizilmemiş" }, { k: "25", s: "8", t: "d", ad: "Döndürme (45° ve üstü; kâğıdı ekonomik kullanmak için olan sayılmaz)" },
+];
+const BENDER_TUR = { b: "Şeklin bozulması", d: "Döndürme", i: "Birleştirememe", p: "Duramama" };
+const BENDER_OOG = ["3", "4", "7", "8", "10", "11", "12a", "13", "14", "15", "16", "18a", "20", "21a", "21b", "22", "24"];
+function benderHesapla(ek, tarih) {
+  ek = ek || {}; const h = ek.h || {}; const yas = ekYasHesapla(ek, tarih);
+  const isaret = BENDER_MADDE.filter(m => h[m.k]);
+  const hata = ek.elleHata !== undefined && ek.elleHata !== "" && !isaret.length ? ekSayi(ek.elleHata) : isaret.length;
+  const tur = {}; Object.keys(BENDER_TUR).forEach(t => { tur[t] = isaret.filter(m => m.t === t).length; });
+  const oog = isaret.filter(m => BENDER_OOG.includes(m.k));
+  const r = { yas, isaret, hata, tur, oog, sure: ekSayi(ek.sure) };
+  const N = GORSEL_NORM && GORSEL_NORM.bender;
+  if (N && hata != null) {
+    r.yasEsdeger = hata > 21 ? "4;0'ın altı" : N.yasEsdeger[String(hata)];
+    if (yas) {
+      const a = yas.toplamAy; const Y = N.yuzdelik; const gi = Y.gruplar.findIndex(([x, y]) => a >= x && a <= y);
+      if (gi >= 0) {
+        let p = null; for (let i = 0; i < Y.p.length; i++) if (hata <= Y.deger[i][gi]) { p = Y.p[i]; break; }
+        r.yuzdelik = p == null ? { alt: true, p: 5, metin: "%5'in altı" } : { p, metin: (i => i === 0 && hata < Y.deger[0][gi] ? "%95'in üstü" : "%" + p)(Y.p.indexOf(p)) };
+        r.grup = `${ekAyYaz(Y.gruplar[gi][0])}–${ekAyYaz(Y.gruplar[gi][1])}`;
+      } else r.normDisi = true;
+      const O = N.ortalama; const oi = O.gruplar.findIndex(([x, y]) => a >= x && a <= y);
+      if (oi >= 0) { r.ort = O.ort[oi]; r.ss = O.ss[oi]; r.ustSinir = Math.round((O.ort[oi] + O.ss[oi]) * 10) / 10; }
+      const S = (N.sure || []).filter(([ay]) => ay <= a).pop(); if (S) r.kritikSure = S[1];
+    }
+  }
+  r.durum = r.yuzdelik ? (r.yuzdelik.p >= 50 ? (r.ustSinir != null && hata > r.ort ? "sinir" : "uygun") : "alti") : r.ustSinir != null ? (hata > r.ustSinir ? "alti" : hata > r.ort ? "sinir" : "uygun") : null;
+  return r;
+}
+function benderRapor(ek, tarih) {
+  const r = benderHesapla(ek, tarih); ek = ek || {}; const L = ["BENDER GESTALT GÖRSEL-MOTOR ALGI TESTİ (KOPPITZ) — DEĞERLENDİRME"];
+  L.push(`Takvim yaşı: ${ekYasYaz(r.yas)}${r.sure != null ? ` · Tamamlama süresi: ${String(r.sure).replace(".", ",")} dk${r.kritikSure ? ` (kritik aralık ${r.kritikSure} dk)` : ""}` : ""}`);
+  L.push(`Toplam hata puanı: ${r.hata ?? "—"} / 30${r.isaret.length ? ` · Şeklin bozulması ${r.tur.b}, döndürme ${r.tur.d}, birleştirememe ${r.tur.i}, duramama ${r.tur.p}` : ""}`);
+  if (r.isaret.length) L.push("Hatalar: " + r.isaret.map(m => `${m.k} (Şekil ${m.s}: ${m.ad.toLocaleLowerCase("tr")})`).join("; "));
+  if (r.yasEsdeger) L.push(`Yaş eşdeğeri: ${r.yasEsdeger} yaş çocuklarının performansı`);
+  if (r.yuzdelik) L.push(`Yüzdelik (${r.grup} yaş grubu): ${r.yuzdelik.metin}`);
+  if (r.ustSinir != null) L.push(`Yaş grubunun ortalama hata puanı ${String(r.ort).replace(".", ",")} (ss ${String(r.ss).replace(".", ",")}); beklenen üst sınır ${String(r.ustSinir).replace(".", ",")}`);
+  if (!GORSEL_NORM) L.push("Yaş eşdeğeri ve yüzdelik için norm dosyası yüklenmeli (gorsel-algi-norm.json).");
+  else if (r.yas && r.normDisi) L.push("⚠ Yaş, norm tablosunun (5;0–11;11) dışında; yüzdelik hesaplanmadı.");
+  else if (!r.yas) L.push("Yüzdelik için doğum tarihi ya da yaş girin.");
+  L.push("");
+  if (r.durum === "alti") L.push(`Görsel-motor algı gelişimi yaşından beklenen düzeyin altında.${r.isaret.length ? ` En sık hata türü: ${Object.entries(r.tur).filter(([, n]) => n).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([t]) => BENDER_TUR[t].toLocaleLowerCase("tr")).join(" ve ")}.` : ""} Görme taraması ve ayrıntılı değerlendirme (gerekirse RAM / çocuk psikiyatrisi) önerilir; çizim-kopya etme, görsel ayrıntıya odaklanma, çizgi oyunları, benzerlik-fark bulma, iç içe şekilleri ayırma ve yön-konum çalışmaları yapılabilir.`);
+  else if (r.durum === "sinir") L.push("Hata puanı yaş grubunun beklenen aralığında ama ortalamanın üstünde (üst sınıra yakın): görsel-motor etkinlikler önerilir ve izlenmesi faydalı olur.");
+  else if (r.durum === "uygun") L.push("Görsel-motor algı ve koordinasyon yaşına uygun.");
+  if (r.oog.length >= 3) L.push(`Özel öğrenme güçlüğü açısından şüpheli sayılan maddelerden ${r.oog.length} tanesi işaretli (${r.oog.map(m => m.k).join(", ")}): okuma-yazma ve ÖÖG açısından ayrıca değerlendirilmelidir.`);
+  if (r.sure != null && r.kritikSure) { const [a, b] = r.kritikSure.split("–").map(Number); if (r.sure < a) L.push("Tamamlama süresi çok kısa: dürtüsel, aceleci çalışma olabilir."); else if (r.sure > b) L.push("Tamamlama süresi çok uzun: yavaş, aşırı titiz ya da zorlanarak çalışma olabilir."); }
+  if (ek.gozlem) L.push("Gözlem: " + ek.gozlem);
+  L.push("", "Not: Projektif göstergeler (yayılma, birden çok kâğıt, büyüyerek giden noktalar vb.) görsel-motor puanlamaya katılmaz. Test tek başına tanı koydurmaz.");
+  return { r, metin: L.join("\n") };
+}
+
+// Frostig Gelişimsel Görsel Algı Testi (4;0–7;11) — 5 alt test, yaşa göre standart puan (yüzdelik) tabloları
+const FROSTIG_ALT = [
+  { k: "1", ad: "El-göz koordinasyonu", maks: 30, beceri: "Resim yapma ve çizme için gerekli el-göz koordinasyonu, bilek hâkimiyeti, parmak kullanımı ve kalem tutma" },
+  { k: "2", ad: "Şekil-zemin ilişkisi", maks: 20, beceri: "Görsel dikkat gerektiren çalışmalarda bütünden uzaklaşmadan ayrıntıyı görme ve geometrik şekillerle işlem yapma" },
+  { k: "3", ad: "Şekil sabitliği", maks: 17, beceri: "Geometrik şekilleri büyüklük, renk ve konum değişse de karıştırmadan algılama" },
+  { k: "4", ad: "Şeklin mekândaki konumu", maks: 8, beceri: "Şeklin ve nesnelerin mekândaki konumunu yön kavramlarıyla karıştırmadan algılama" },
+  { k: "5", ad: "Şeklin mekânla ilişkisi", maks: 8, beceri: "Şekilleri benzerlik, boyut, simetri, parça-bütün ve konum ilişkisine göre karşılaştırma" },
+];
+function frostigBak(kolon, ham) {
+  if (!kolon || ham == null) return null;
+  const ilk = kolon.findIndex(x => x != null); let son = -1; kolon.forEach((x, i) => { if (x != null) son = i; });
+  if (ilk < 0) return null;
+  if (ham < kolon.length && kolon[ham] != null) return { p: kolon[ham] };
+  if (ham < ilk) return { p: 1, alt: true };
+  if (ham > son) return { p: 100, ust: true };
+  for (let i = ham; i >= 0; i--) if (kolon[i] != null) return { p: kolon[i] };
+  return null;
+}
+function frostigDuzey(p) { return p == null ? null : p < 40 ? { ad: "Gelişim düzeyinin oldukça altında", renk: "#B91C1C" } : p < 50 ? { ad: "Altında", renk: "#B91C1C" } : p < 60 ? { ad: "Averaj (sınır)", renk: "#B45309" } : p < 70 ? { ad: "Normal", renk: "#0E7490" } : p < 85 ? { ad: "İyi", renk: "#15803D" } : { ad: "Çok iyi", renk: "#15803D" }; }
+function frostigIbare(p) { return p == null ? "" : p >= 75 ? "yaşıtlarına uygun" : p >= 50 ? "gelişmekte" : "desteklenmeli"; }
+function frostigHesapla(ek, tarih) {
+  ek = ek || {}; const yas = ekYasHesapla(ek, tarih);
+  const ham = {};
+  FROSTIG_ALT.forEach(x => { if (x.k === "3") { const d = ekSayi(ek.d3), y = ekSayi(ek.y3); ham[x.k] = d != null ? Math.max(0, d - (y || 0)) : ekSayi(ek.a3); } else ham[x.k] = ekSayi(ek["a" + x.k]); });
+  const dolu = FROSTIG_ALT.filter(x => ham[x.k] != null);
+  const toplam = dolu.length === 5 ? dolu.reduce((t, x) => t + ham[x.k], 0) : null;
+  const uyari = FROSTIG_ALT.filter(x => ham[x.k] != null && (ham[x.k] > x.maks || ham[x.k] < 0)).map(x => `${x.ad} ham puanı 0–${x.maks} aralığında olmalı.`);
+  const N = GORSEL_NORM && GORSEL_NORM.frostig; let ki = -1;
+  if (N && yas) ki = N.yaslar.findIndex(([a, b]) => yas.toplamAy >= a && yas.toplamAy <= b);
+  const alt = FROSTIG_ALT.map(x => { const s = ki >= 0 ? frostigBak(N.alt[x.k][ki], ham[x.k]) : null; return { ...x, ham: ham[x.k], s, duzey: s ? frostigDuzey(s.p) : null }; });
+  const ts = ki >= 0 && toplam != null ? frostigBak(N.toplam[ki], toplam) : null;
+  return { yas, alt, toplam, ts, tDuzey: ts ? frostigDuzey(ts.p) : null, grup: ki >= 0 ? `${ekAyYaz(N.yaslar[ki][0])}–${ekAyYaz(N.yaslar[ki][1])}` : null, normDisi: N && yas && ki < 0, uyari, d3: ekSayi(ek.d3), y3: ekSayi(ek.y3) };
+}
+function frostigRapor(ek, tarih) {
+  const r = frostigHesapla(ek, tarih); ek = ek || {}; const L = ["FROSTİG GELİŞİMSEL GÖRSEL ALGI TESTİ — DEĞERLENDİRME"];
+  const pY = s => s ? (s.alt ? "≤1" : s.ust ? "100" : String(s.p)) : "—";
+  L.push(`Takvim yaşı: ${ekYasYaz(r.yas)}${r.grup ? ` · Norm grubu: ${r.grup}` : ""}`);
+  r.alt.forEach(x => L.push(`${x.k}. ${x.ad}: ham ${x.ham ?? "—"}/${x.maks}${x.k === "3" && r.d3 != null ? ` (doğru ${r.d3}, yanlış ${r.y3 || 0})` : ""}${x.s ? ` → standart puan ${pY(x.s)} (${x.duzey.ad.toLocaleLowerCase("tr")})` : ""}`));
+  if (r.toplam != null) L.push(`Toplam ham puan: ${r.toplam}${r.ts ? ` → genel standart puan ${pY(r.ts)} (${r.tDuzey.ad.toLocaleLowerCase("tr")})` : ""}`);
+  r.uyari.forEach(u => L.push("⚠ " + u));
+  if (!GORSEL_NORM) L.push("Standart puanlar için norm dosyası yüklenmeli (gorsel-algi-norm.json).");
+  else if (r.normDisi) L.push("⚠ Yaş, Frostig norm aralığının (4;0–7;11) dışında; standart puan hesaplanmadı.");
+  else if (!r.yas) L.push("Standart puan için doğum tarihi ya da yaş girin.");
+  L.push("");
+  if (r.ts) L.push(`Genel görsel algı: standart puan ${pY(r.ts)} (100 yaşıttan yaklaşık ${r.ts.p} çocuk bu puanın altında kalır). ${r.ts.p < 50 ? "Görsel algı gelişimi desteklenmelidir." : r.ts.p < 60 ? "Sınırda; izlenmeli ve desteklenmeli." : "Yaşına uygun."}`);
+  r.alt.filter(x => x.s).forEach(x => L.push(`• ${x.beceri}: ${frostigIbare(x.s.p)}.`));
+  const zayif = r.alt.filter(x => x.s && x.s.p < 50);
+  if (zayif.length) L.push(`%50'nin altında kalan alanlar (${zayif.map(x => x.ad.toLocaleLowerCase("tr")).join(", ")}) için destekleyici Frostig çalışmaları verilmelidir.`);
+  if (ek.gozlem) L.push("Gözlem: " + ek.gozlem);
+  L.push("", "Not: Standart puan, çocuğun kendi yaş grubundaki çocukların yüzde kaçından daha iyi performans gösterdiğini belirtir (ör. 67 → %67). Test tek başına tanı koydurmaz.");
+  return { r, metin: L.join("\n") };
+}
+
+// Gesell Gelişim Figürleri Testi — 10 şekil, her biri doğru 1 / yanlış 0; kopyalama yaşı normları (ay)
+const GESELL_SEKIL = [
+  { k: "daire", ad: "Daire", ay: 24, olcut: "Ucu kapalı, daireye benzeyen şekil" }, { k: "arti", ad: "Artı", ay: 48, not: "Binet'e göre 44 ay", olcut: "Birbirini kesen iki çizgi" },
+  { k: "kare", ad: "Kare", ay: 54, not: "Binet'e göre 60 ay", olcut: "Açılar 90°'ye yakın, köşeler kesin ve kulaksız" }, { k: "ucgen", ad: "Üçgen", ay: 60, olcut: "Açılar düzgün, kesişme yerinde kulak yok" },
+  { k: "bayrak", ad: "İngiliz bayrağı", ay: 66, olcut: "Ana şekil kare gibi, genel biçim doğru kavranmış" }, { k: "yildiz", ad: "Yıldız", ay: 66, olcut: "Birbirini kesen dört ana çizgi, bütünlük kavranmış" },
+  { k: "baklava", ad: "Baklava", ay: 72, not: "Binet'e göre 84 ay", olcut: "Kulak yok, yatay-dikey köşegenler farklı uzunlukta" }, { k: "silindir", ad: "Silindir", ay: 108, olcut: "Üç boyutlu ve kulaksız" },
+  { k: "prizma", ad: "Dikdörtgen prizma", ay: 108, olcut: "Üç boyutlu, kulaksız" }, { k: "hac", ad: "Gamalı haç", ay: 72, not: "1. sınıfa başlamış olmak", olcut: "Kulaksız, kenar uzunlukları eşit" },
+];
+const GESELL_HATA = [["bozma", "Şekli bozma"], ["birlestirme", "Bütünleştirememe/birleştirememe"], ["aralik", "Çizgilerin arasını açık bırakma"], ["dondurme", "Şekli döndürme"]];
+function gesellHesapla(ek, tarih) {
+  ek = ek || {}; const s = ek.s || {}; const yas = ekYasHesapla(ek, tarih);
+  const sat = GESELL_SEKIL.map(x => ({ ...x, d: s[x.k] === "1" ? 1 : s[x.k] === "0" ? 0 : null }));
+  const uygulanan = sat.filter(x => x.d != null); const dogru = sat.filter(x => x.d === 1);
+  const beklenen = yas ? sat.filter(x => x.ay <= yas.toplamAy) : [];
+  const eksik = beklenen.filter(x => x.d === 0);
+  const ileri = yas ? dogru.filter(x => x.ay > yas.toplamAy) : [];
+  const enIleri = dogru.reduce((m, x) => !m || x.ay > m.ay ? x : m, null);
+  return { yas, sat, uygulanan, dogru, beklenen, eksik, ileri, enIleri, hatalar: GESELL_HATA.filter(([k]) => (ek.hata || {})[k]).map(([, a]) => a) };
+}
+function gesellRapor(ek, tarih) {
+  const r = gesellHesapla(ek, tarih); ek = ek || {}; const L = ["GESELL GELİŞİM FİGÜRLERİ TESTİ — DEĞERLENDİRME"];
+  L.push(`Takvim yaşı: ${ekYasYaz(r.yas)}${r.yas ? ` (${r.yas.toplamAy} ay)` : ""}`);
+  L.push(`Doğru çizilen şekil: ${r.dogru.length} / ${r.uygulanan.length || 10}`);
+  L.push("Şekiller: " + r.sat.filter(x => x.d != null).map(x => `${x.ad} ${x.d ? "✓" : "✗"}`).join(" · "));
+  if (r.enIleri) L.push(`Doğru kopyaladığı en ileri şekil: ${r.enIleri.ad} (${r.enIleri.ay} aylık norm${r.enIleri.not ? "; " + r.enIleri.not : ""})`);
+  L.push("");
+  if (r.yas) {
+    if (r.eksik.length) L.push(`Yaşına göre kopyalayabilmesi beklenen ama çizemediği şekiller: ${r.eksik.map(x => `${x.ad} (${x.ay} ay)`).join(", ")}. Görsel-motor gelişim yaşının gerisinde olabilir; ince motor, görsel algı ve kopya etme çalışmaları önerilir, gerekirse ayrıntılı değerlendirme yapılmalıdır.`);
+    else if (r.beklenen.length) L.push(`Yaşına göre beklenen şekillerin (${r.beklenen.map(x => x.ad.toLocaleLowerCase("tr")).join(", ")}) tümünü kopyalayabildi: görsel-motor gelişim yaşına uygun.`);
+    if (r.ileri.length) L.push(`Yaşının ilerisindeki şekilleri de kopyalayabildi: ${r.ileri.map(x => x.ad.toLocaleLowerCase("tr")).join(", ")}.`);
+  } else L.push("Yaşa göre değerlendirme için doğum tarihi ya da yaş girin.");
+  if (r.hatalar.length) L.push("Gözlenen hata tipleri: " + r.hatalar.join(", ").toLocaleLowerCase("tr") + ".");
+  if (ek.gozlem) L.push("Gözlem: " + ek.gozlem);
+  L.push("", "Not: Her kart 5 saniye gösterilip kaldırılır, çocuk bellekten çizer. Test tek başına tanı koydurmaz.");
+  return { r, metin: L.join("\n") };
+}
+
 // Öğrencinin diğer testlerinden dikkat ve okuma göstergeleri (WISC yorumunu bağlama oturtmak için)
 function ekDigerBulgular(tum, haricId) {
   const son = tip => (tum || []).filter(k => k.tip === tip && k.id !== haricId && (tip !== "d2" || k.testAdi === "D2 Dikkat Testi")).sort((a, b) => (pdrTarihMs(b.tarih) || 0) - (pdrTarihMs(a.tarih) || 0))[0];
@@ -23887,6 +24061,8 @@ function ekDigerBulgular(tum, haricId) {
   try { const k = son("dikkat_cdt"); if (k) { const s = cdtPuanla(k.veri); if (s && s.tamam) { const dusuk = s.indeksler.filter(i => i.yuzdelik != null && i.yuzdelik < 16); dikkat.push({ ad: `ÇDT (${k.tarih})`, olumsuz: dusuk.length > 0, metin: dusuk.length ? `düşük indeks: ${dusuk.map(i => `${i.ad} (%${Math.round(i.yuzdelik)})`).join(", ")}` : "indeksler yaşıtlarıyla benzer" }); } } } catch (e) {}
   try { const k = son("frankfurter"); if (k) { const r = frankHesapla(k.veri, k.tarih); if (r.duzey) dikkat.push({ ad: `Frankfurter (${k.tarih})`, olumsuz: r.duzey.ad === "Ortalamanın altı", metin: `son değer ${r.son} (${r.duzey.ad.toLocaleLowerCase("tr")})` }); } } catch (e) {}
   try { const k = son("stroop_tbag"); if (k) { const r = stroopHesapla(k.veri); if (r.oran != null) dikkat.push({ ad: `Stroop (${k.tarih})`, olumsuz: r.oran >= 1.8, metin: `bozucu etki ${ekYaz(r.enterferans)} sn (${r.oranDuzey})` }); } } catch (e) {}
+  try { const k = son("bender"); if (k) { const r = benderHesapla(k.veri, k.tarih); if (r.durum) okuma.push({ ad: `Bender-Gestalt (${k.tarih})`, olumsuz: r.durum === "alti", metin: `hata puanı ${r.hata}${r.yuzdelik ? `, yüzdelik ${r.yuzdelik.metin}` : ""}${r.oog.length >= 3 ? `, ÖÖG açısından şüpheli ${r.oog.length} madde` : ""}` }); } } catch (e) {}
+  try { const k = son("frostig"); if (k) { const r = frostigHesapla(k.veri, k.tarih); if (r.ts) okuma.push({ ad: `Frostig (${k.tarih})`, olumsuz: r.ts.p < 50, metin: `genel standart puan ${r.ts.alt ? "≤1" : r.ts.p} (${r.tDuzey.ad.toLocaleLowerCase("tr")})` }); } } catch (e) {}
   try { const k = son("okuma_degerlendirme"); if (k) { const p = oyProfil(k.veri, k.veri.sinifNo || 0, k.tarih); okuma.push({ ad: `Okuma-yazma değerlendirmesi (${k.tarih})`, olumsuz: p.moduller.length > 0, metin: p.moduller.length ? `destek gereken: ${p.moduller.map(m => OY_MODULLER[m.k].ad).join(", ")}` : "destek gereken alan yok" }); } } catch (e) {}
   return { dikkat, okuma };
 }
@@ -23896,6 +24072,7 @@ function ekTestRapor(k, tum) {
     if (k.tip === "stroop_tbag") return stroopRapor(v).metin; if (k.tip === "metropolitan") return metroRapor(v).metin;
     if (k.tip === "louisa_duss") return dussRapor(v).metin; if (k.tip === "wisc_r") return wiscRapor(v, tum, k.id).metin;
     if (k.tip === "frankfurter") return frankRapor(v, k.tarih).metin; if (k.tip === "porteus") return porteusRapor(v, k.tarih).metin;
+    if (k.tip === "bender") return benderRapor(v, k.tarih).metin; if (k.tip === "frostig") return frostigRapor(v, k.tarih).metin; if (k.tip === "gesell") return gesellRapor(v, k.tarih).metin;
   } catch (e) {}
   return "";
 }
@@ -23906,6 +24083,9 @@ function ekTestOzet(k) {
   if (k.tip === "louisa_duss") { const r = dussHesapla(v); return `${r.yanitSay}/10 öykü yanıtlandı · ${r.sinyal.length} öyküde çatışma belirtisi${r.sinyal.length ? ": " + r.sinyal.map(x => x.o.ad).join(", ") : ""}`; }
   if (k.tip === "frankfurter") { const r = frankHesapla(v, k.tarih); return r.son != null ? `Ham puan ${r.ham} · son değer ${r.son} (${r.duzey.ad}, ${r.duzey.yuzde})` : r.ham != null ? `Ham puan ${r.ham}` : "Puan girilmedi"; }
   if (k.tip === "porteus") { const r = porteusHesapla(v, k.tarih); return r.zy != null ? `Zekâ yaşı ${String(r.zy).replace(".", ",")}${r.iq && r.iq.iq ? ` · ZB ${r.iq.alt ? "≤" : r.iq.ust ? "≥" : ""}${r.iq.iq} (${r.sinif.ad})` : ""}` : "Kart sonucu girilmedi"; }
+  if (k.tip === "bender") { const r = benderHesapla(v, k.tarih); return r.hata != null ? `Hata puanı ${r.hata}${r.yasEsdeger ? ` · yaş eşdeğeri ${r.yasEsdeger}` : ""}${r.yuzdelik ? ` · yüzdelik ${r.yuzdelik.metin}` : ""}` : "Puan girilmedi"; }
+  if (k.tip === "frostig") { const r = frostigHesapla(v, k.tarih); return r.toplam != null ? `Toplam ham ${r.toplam}${r.ts ? ` · standart puan ${r.ts.alt ? "≤1" : r.ts.p} (${r.tDuzey.ad})` : ""}` : r.alt.filter(x => x.ham != null).map(x => `${x.k}: ${x.ham}`).join(" · ") || "Puan girilmedi"; }
+  if (k.tip === "gesell") { const r = gesellHesapla(v, k.tarih); return `${r.dogru.length}/${r.uygulanan.length || 10} şekil doğru${r.eksik.length ? ` · yaşına göre eksik: ${r.eksik.map(x => x.ad).join(", ")}` : r.yas && r.uygulanan.length ? " · yaşına uygun" : ""}`; }
   if (k.tip === "wisc_r") { const r = wiscHesapla(v); return [r.sz != null ? `Sözel ${r.sz}` : "", r.pf != null ? `Performans ${r.pf}` : "", r.tp != null ? `Toplam ${r.tp} (${wiscSinif(r.tp).ad})` : ""].filter(Boolean).join(" · ") || "Puan girilmedi"; }
   return "—";
 }
@@ -23917,6 +24097,9 @@ function ekTestGecerli(tip, ek) {
   if (tip === "wisc_r") return [ek.sozel, ek.perf, ek.toplam, ...Object.values(ek.alt || {})].some(x => ekSayi(x) != null);
   if (tip === "frankfurter") return ekSayi(ek.armut) != null;
   if (tip === "porteus") return Object.values(ek.d || {}).some(x => x);
+  if (tip === "bender") return Object.values(ek.h || {}).some(Boolean) || ekSayi(ek.elleHata) != null || ek.hataYok === true;
+  if (tip === "frostig") return ["a1", "a2", "a3", "d3", "a4", "a5"].some(k => ekSayi(ek[k]) != null);
+  if (tip === "gesell") return Object.values(ek.s || {}).some(x => x === "0" || x === "1");
   return false;
 }
 async function dussAiYorum(ek, yas, cinsiyet) {
@@ -23937,16 +24120,88 @@ function EkTestFormu({ tip, ek, setEk, cinsiyet, yas, tarih, dogum }) {
   const [acik, setAcik] = useState(-1); const [aiDurum, setAiDurum] = useState("");
   const [, setNormSurum] = useState(0); const [normDurum, setNormDurum] = useState("");
   useEffect(() => {
-    if (tip !== "frankfurter" && tip !== "porteus") return;
+    if (!["frankfurter", "porteus", "bender", "frostig", "gesell"].includes(tip)) return;
     const ekle = {}; if (!e.cinsiyet && (cinsiyet === "Kız" || cinsiyet === "Erkek")) ekle.cinsiyet = cinsiyet; if (!e.dogum && !e.yasYil && dogum) ekle.dogum = dogum;
     if (Object.keys(ekle).length) setEk({ ...e, ...ekle });
     if (tip === "porteus" && !PORTEUS_NORM) pdrPorteusNormYukle().then(() => setNormSurum(x => x + 1));
+    if ((tip === "bender" || tip === "frostig") && !GORSEL_NORM) pdrGorselNormYukle().then(() => setNormSurum(x => x + 1));
   }, [tip]);
   const yasAlani = (<div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr", gap: 6, marginBottom: 6 }}>
     <div><label style={lbl}>Doğum tarihi (GG.AA.YYYY)</label><input data-ek-dogum="1" value={e.dogum || ""} onChange={ev => setEk({ ...e, dogum: ev.target.value })} placeholder="örn. 14.03.2021" style={inp} /></div>
     <div><label style={lbl}>ya da yaş (yıl)</label><input data-ek-yasyil="1" type="number" value={e.yasYil || ""} onChange={ev => setEk({ ...e, yasYil: ev.target.value })} style={inp} /></div>
     <div><label style={lbl}>ay</label><input type="number" min="0" max="11" value={e.yasAy || ""} onChange={ev => setEk({ ...e, yasAy: ev.target.value })} style={inp} /></div>
   </div>);
+  async function gorselNormDosyasi(ev) {
+    const f = ev.target.files && ev.target.files[0]; ev.target.value = ""; if (!f) return;
+    try { await pdrGorselNormKaydet(JSON.parse(await f.text())); setNormDurum("✓ Bender ve Frostig norm tabloları yüklendi. Hesabınızın bulutuna kaydedildi; diğer cihazlarınızda da çalışır."); setNormSurum(x => x + 1); }
+    catch (er) { setNormDurum("⚠ " + ((er && er.message) || "Dosya okunamadı.")); }
+  }
+  const gorselNormKutu = (<>
+    {!GORSEL_NORM && <div style={{ fontSize: 11.5, background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 8, padding: "7px 9px", marginTop: 8 }}>Yaşa göre standart puan / yüzdelik için norm tabloları gerekli (telifli olduğu için programın içinde değil). Size gönderilen <b>gorsel-algi-norm.json</b> dosyasını bir kez yükleyin (Bender ve Frostig için tek dosya): <label style={{ color: "#1D4ED8", fontWeight: 800, cursor: "pointer" }}>📂 Dosya seç<input data-gorsel-norm="1" type="file" accept=".json,application/json" onChange={gorselNormDosyasi} style={{ display: "none" }} /></label></div>}
+    {normDurum && <div style={{ fontSize: 11.5, color: MUTED, marginTop: 4 }}>{normDurum}</div>}
+  </>);
+  const ozetKart = (l) => <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>{l.map(([a, v, c]) => <div key={a} style={{ flex: "1 1 80px", textAlign: "center", border: `1px solid ${BORDER}`, borderRadius: 8, padding: "6px 4px" }}><div style={{ fontSize: 17, fontWeight: 900, color: c || "#334155" }}>{v}</div><div style={{ fontSize: 10, color: MUTED }}>{a}</div></div>)}</div>;
+  if (tip === "bender") {
+    const h = e.h || {}; const r = benderHesapla(e, tarih);
+    return (<div data-ektest="bender">
+      <div style={{ fontSize: 11.5, color: MUTED, marginBottom: 6, lineHeight: 1.5 }}>A kartından başlayıp 1–8 sırayla çizdirilir; süre sınırı yok. Yalnızca çok belirgin sapmaları işaretleyin — şüphe varsa puanlamayın. Her işaret 1 hata puanıdır.</div>
+      {yasAlani}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 6 }}>
+        <div><label style={lbl}>Tamamlama süresi (dk, isteğe bağlı)</label><input type="number" step="0.5" value={e.sure || ""} onChange={ev => setEk({ ...e, sure: ev.target.value })} style={inp} /></div>
+        <div><label style={lbl}>ya da yalnız toplam hata puanı</label><input data-bender-toplam="1" type="number" min="0" max="30" value={e.elleHata || ""} onChange={ev => setEk({ ...e, elleHata: ev.target.value })} placeholder="maddeleri işaretlemezseniz" style={inp} /></div>
+      </div>
+      {["A", "1", "2", "3", "4", "5", "6", "7", "8"].map(sk => (
+        <div key={sk} style={{ border: `1px solid ${BORDER}`, borderRadius: 8, padding: "5px 8px", marginBottom: 5 }}>
+          <div style={{ fontSize: 11.5, fontWeight: 800, marginBottom: 2 }}>Şekil {sk}</div>
+          {BENDER_MADDE.filter(m => m.s === sk).map(m => <label key={m.k} style={{ display: "flex", gap: 6, alignItems: "flex-start", fontSize: 11.5, padding: "2px 0" }}><input data-bender={m.k} type="checkbox" checked={!!h[m.k]} onChange={ev => setEk({ ...e, h: { ...h, [m.k]: ev.target.checked } })} /><span><b>{m.k}</b> {m.ad} <span style={{ color: MUTED }}>· {BENDER_TUR[m.t].toLocaleLowerCase("tr")}</span></span></label>)}
+        </div>))}
+      <label style={{ fontSize: 11.5, display: "flex", gap: 6, alignItems: "center", marginTop: 4 }}><input type="checkbox" checked={!!e.hataYok} onChange={ev => setEk({ ...e, hataYok: ev.target.checked })} />Hiç hata yok (0 puan)</label>
+      <label style={{ ...lbl, marginTop: 6 }}>Gözlem (baskın el, çalışma tarzı…)</label>
+      <input value={e.gozlem || ""} onChange={ev => setEk({ ...e, gozlem: ev.target.value })} style={inp} />
+      {ekTestGecerli(tip, e) && ozetKart([["Hata puanı", r.hata ?? "—"], ["Yaş eşdeğeri", r.yasEsdeger || "—"], ["Yüzdelik", r.yuzdelik ? r.yuzdelik.metin : "—", r.durum === "alti" ? "#B91C1C" : r.durum === "sinir" ? "#B45309" : r.durum ? "#15803D" : null]])}
+      {gorselNormKutu}
+      {ekTestGecerli(tip, e) && <div data-ektest-sonuc="1" style={kutu}>{benderRapor(e, tarih).metin}</div>}
+    </div>);
+  }
+  if (tip === "frostig") {
+    const r = frostigHesapla(e, tarih); const sayiInp = (k, max, ph) => <input data-frostig={k} type="number" min="0" max={max} value={e[k] || ""} onChange={ev => setEk({ ...e, [k]: ev.target.value })} placeholder={ph} style={inp} />;
+    return (<div data-ektest="frostig">
+      <div style={{ fontSize: 11.5, color: MUTED, marginBottom: 6, lineHeight: 1.5 }}>4;0–7;11 yaş. Her alt testin ham puanını girin. I. alt test: 0-1-2 puan (5. ve 9. madde 0-1), en fazla 30 · II: en fazla 20 · III: doğru − yanlış (eksiye düşmez), en fazla 17 · IV ve V: en fazla 8.</div>
+      {yasAlani}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+        <div><label style={lbl}>I. El-göz koordinasyonu (0–30)</label>{sayiInp("a1", 30)}</div>
+        <div><label style={lbl}>II. Şekil-zemin (0–20)</label>{sayiInp("a2", 20)}</div>
+        <div><label style={lbl}>III. Şekil sabitliği — doğru</label>{sayiInp("d3", 30)}</div>
+        <div><label style={lbl}>III. Şekil sabitliği — yanlış</label>{sayiInp("y3", 30)}</div>
+        <div><label style={lbl}>IV. Mekândaki konum (0–8)</label>{sayiInp("a4", 8)}</div>
+        <div><label style={lbl}>V. Mekânla ilişki (0–8)</label>{sayiInp("a5", 8)}</div>
+      </div>
+      <label style={{ ...lbl, marginTop: 6 }}>Gözlem</label>
+      <input value={e.gozlem || ""} onChange={ev => setEk({ ...e, gozlem: ev.target.value })} style={inp} />
+      {ekTestGecerli(tip, e) && ozetKart(r.alt.map(x => [`${x.k}. ${x.ad}`, x.s ? (x.s.alt ? "≤1" : x.s.p) : x.ham ?? "—", x.duzey ? x.duzey.renk : null]).concat([["Genel", r.ts ? (r.ts.alt ? "≤1" : r.ts.p) : r.toplam ?? "—", r.tDuzey ? r.tDuzey.renk : null]]))}
+      {gorselNormKutu}
+      {ekTestGecerli(tip, e) && <div data-ektest-sonuc="1" style={kutu}>{frostigRapor(e, tarih).metin}</div>}
+    </div>);
+  }
+  if (tip === "gesell") {
+    const sv = e.s || {}; const hv = e.hata || {}; const r = gesellHesapla(e, tarih);
+    return (<div data-ektest="gesell">
+      <div style={{ fontSize: 11.5, color: MUTED, marginBottom: 6, lineHeight: 1.5 }}>Her kart 5 saniye gösterilip kaldırılır; çocuk şeklin benzerini çizer. Doğru 1, yanlış 0. Şekli bozma, birleştirememe, aralık bırakma ve döndürme olan çizim doğru sayılmaz.</div>
+      {yasAlani}
+      <div style={{ border: `1px solid ${BORDER}`, borderRadius: 9, overflow: "hidden" }}>
+        {GESELL_SEKIL.map((x, i) => (
+          <div key={x.k} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 8px", borderTop: i ? `1px solid ${BORDER}` : "none", background: sv[x.k] === "1" ? "#F0FDF4" : sv[x.k] === "0" ? "#FEF2F2" : "#fff" }}>
+            <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 12, fontWeight: 800 }}>{i + 1}. {x.ad} <span style={{ fontWeight: 500, color: MUTED }}>({x.ay} ay)</span></div><div style={{ fontSize: 10, color: MUTED }}>{x.olcut}</div></div>
+            <select data-gesell={x.k} value={sv[x.k] || ""} onChange={ev => setEk({ ...e, s: { ...sv, [x.k]: ev.target.value } })} style={{ ...inp, width: 104, padding: "6px 8px" }}><option value="">—</option><option value="1">✓ Doğru</option><option value="0">✗ Yanlış</option></select>
+          </div>))}
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 10px", marginTop: 6 }}>{GESELL_HATA.map(([k, a]) => <label key={k} style={{ fontSize: 11, color: MUTED, display: "flex", gap: 3, alignItems: "center" }}><input type="checkbox" checked={!!hv[k]} onChange={ev => setEk({ ...e, hata: { ...hv, [k]: ev.target.checked } })} />{a}</label>)}</div>
+      <label style={{ ...lbl, marginTop: 6 }}>Gözlem</label>
+      <input value={e.gozlem || ""} onChange={ev => setEk({ ...e, gozlem: ev.target.value })} style={inp} />
+      {ekTestGecerli(tip, e) && ozetKart([["Doğru şekil", `${r.dogru.length}/${r.uygulanan.length}`], ["Yaşına göre eksik", r.yas ? r.eksik.length : "—", r.eksik.length ? "#B91C1C" : "#15803D"], ["En ileri şekil", r.enIleri ? r.enIleri.ad : "—"]])}
+      {ekTestGecerli(tip, e) && <div data-ektest-sonuc="1" style={kutu}>{gesellRapor(e, tarih).metin}</div>}
+    </div>);
+  }
   if (tip === "frankfurter") {
     const r = frankHesapla(e, tarih);
     return (<div data-ektest="frankfurter">
@@ -24071,7 +24326,7 @@ function EkTestFormu({ tip, ek, setEk, cinsiyet, yas, tarih, dogum }) {
 // ── Ek testler için yazdırılabilir (PDF) rapor ──
 function ekTestRaporHtml(k, bilgi, tum) {
   const v = (k && k.veri) || {}; const e = cdtEsc; const b = bilgi || {};
-  const RENK = { d2: "#6D28D9", stroop_tbag: "#B45309", metropolitan: "#0E7490", louisa_duss: "#7C3AED", wisc_r: "#1D4ED8", frankfurter: "#BE185D", porteus: "#4D7C0F" }[k.tip] || "#334155";
+  const RENK = { d2: "#6D28D9", stroop_tbag: "#B45309", metropolitan: "#0E7490", louisa_duss: "#7C3AED", wisc_r: "#1D4ED8", frankfurter: "#BE185D", porteus: "#4D7C0F", bender: "#0369A1", frostig: "#9333EA", gesell: "#C2410C" }[k.tip] || "#334155";
   const baslik = t => `<div style="background:${RENK};color:#fff;font-size:12.5px;font-weight:700;padding:6px 11px;border-radius:6px;margin:14px 0 7px;page-break-after:avoid">${t}</div>`;
   const th = t => `<th style="text-align:left;padding:5px 7px;background:#F8FAFC;color:#475569;font-size:10.5px;border-bottom:1px solid #E2E8F0">${t}</th>`;
   const td = (t, ek) => `<td style="padding:5px 7px;border-bottom:1px solid #EEF2F7;font-size:11px;${ek || ""}">${t}</td>`;
@@ -24103,6 +24358,18 @@ function ekTestRaporHtml(k, bilgi, tum) {
     const r = porteusHesapla(v, k.tarih);
     ust = `<div style="display:flex;gap:8px;flex-wrap:wrap">${[["Zekâ yaşı", r.zy == null ? "—" : String(r.zy).replace(".", ",")], ["Takvim yaşı", ekYasYaz(r.yas)], ["Zekâ bölümü", r.iq && r.iq.iq ? (r.iq.alt ? "≤" : r.iq.ust ? "≥" : "") + r.iq.iq : "—"]].map(([a, z]) => `<div style="flex:1 1 120px;border:1px solid ${a === "Zekâ bölümü" && r.sinif ? r.sinif.renk + "66" : "#E5E7EB"};border-radius:8px;padding:8px;text-align:center"><div style="font-size:20px;font-weight:700;color:${a === "Zekâ bölümü" && r.sinif ? r.sinif.renk : "#334155"}">${e(z)}</div><div style="font-size:10.5px;color:#555">${a}${a === "Zekâ bölümü" && r.sinif ? " · " + e(r.sinif.ad) : ""}</div></div>`).join("")}</div>`;
     olcum = tablo(["Kart", "Sonuç", "Puan"], r.satirlar.filter(x => x.durum !== "uygulanmadi").map(x => [td(`<b>${x.k}</b>${x.yas ? " (" + x.yas + " yaş)" : " (yetişkin)"}`), td(x.durum === "basarisiz" ? '<span style="color:#B91C1C">başaramadı</span>' : x.durum === "varsayilan" ? "uygulanmadı — tam puan" : x.deneme + ". denemede başardı"), td(`<b>${String(x.puan).replace(".", ",")}</b>`)]).concat([[td("<b>+ sabit</b>"), td(""), td("<b>2</b>")], [td("<b>Zekâ yaşı</b>"), td(""), td(`<b>${r.zy == null ? "—" : String(r.zy).replace(".", ",")}</b>`)]]));
+  } else if (k.tip === "bender") {
+    const r = benderHesapla(v, k.tarih);
+    ust = `<div style="display:flex;gap:8px;flex-wrap:wrap">${[["Hata puanı", r.hata ?? "—"], ["Yaş eşdeğeri", r.yasEsdeger || "—"], ["Yüzdelik", r.yuzdelik ? r.yuzdelik.metin : "—"], ["Takvim yaşı", ekYasYaz(r.yas)]].map(([a, z]) => `<div style="flex:1 1 110px;border:1px solid #E5E7EB;border-radius:8px;padding:8px;text-align:center"><div style="font-size:19px;font-weight:700;color:${a === "Yüzdelik" && r.durum ? (r.durum === "alti" ? "#B91C1C" : r.durum === "sinir" ? "#B45309" : "#15803D") : "#334155"}">${e(z)}</div><div style="font-size:10.5px;color:#555">${a}</div></div>`).join("")}</div>`;
+    olcum = tablo(["Şekil", "Madde", "Hata türü"], r.isaret.map(m => [td(`<b>${m.s}</b>`), td(`${m.k} — ${e(m.ad)}`), td(BENDER_TUR[m.t])])) + `<div style="margin-top:6px">` + tablo(["Hata türü", "Sayı"], Object.entries(BENDER_TUR).map(([t, a]) => [td(a), td(`<b>${r.tur[t]}</b>`)])) + `</div>`;
+  } else if (k.tip === "frostig") {
+    const r = frostigHesapla(v, k.tarih); const pY = s => s ? (s.alt ? "≤1" : s.p) : "—";
+    olcum = tablo(["Alt test", "Ham puan", "Standart puan", "Düzey"], r.alt.map(x => [td(`<b>${x.k}.</b> ${e(x.ad)}`), td(`${x.ham ?? "—"} / ${x.maks}`), td(`<b style="color:${x.duzey ? x.duzey.renk : "#334155"}">${pY(x.s)}</b>`), td(x.duzey ? e(x.duzey.ad) + " · " + frostigIbare(x.s.p) : "—")]).concat([[td("<b>Toplam / genel</b>"), td(`<b>${r.toplam ?? "—"}</b>`), td(`<b style="color:${r.tDuzey ? r.tDuzey.renk : "#334155"}">${pY(r.ts)}</b>`), td(r.tDuzey ? e(r.tDuzey.ad) : "—")]])) + `<div style="font-size:10px;color:#555;margin-top:4px">Ölçek: %40 altı oldukça altında · 40–50 altında · 50–60 averaj (sınır) · 60–70 normal · 70–85 iyi · 85 üstü çok iyi${r.grup ? ` · norm grubu ${r.grup}` : ""}</div>`;
+    ust = `<div style="display:flex;gap:8px;flex-wrap:wrap">${r.alt.map(x => `<div style="flex:1 1 90px;border:1px solid #E5E7EB;border-radius:8px;padding:6px;text-align:center"><div style="font-size:10px;color:#555">${x.k}. ${e(x.ad)}</div><div style="background:#E2E8F0;border-radius:4px;height:8px;margin-top:5px"><div style="background:${x.duzey ? x.duzey.renk : "#94A3B8"};height:8px;border-radius:4px;width:${x.s ? Math.max(3, x.s.p) : 0}%"></div></div><div style="font-size:15px;font-weight:700;margin-top:3px;color:${x.duzey ? x.duzey.renk : "#334155"}">${pY(x.s)}</div></div>`).join("")}</div>`;
+  } else if (k.tip === "gesell") {
+    const r = gesellHesapla(v, k.tarih);
+    olcum = tablo(["Şekil", "Norm (ay)", "Sonuç", "Yaşa göre"], r.sat.map(x => [td(`<b>${e(x.ad)}</b>`), td(`${x.ay}${x.not ? ` <span style="color:#64748B">(${e(x.not)})</span>` : ""}`), td(x.d == null ? "—" : x.d ? '<b style="color:#15803D">✓ doğru</b>' : '<b style="color:#B91C1C">✗ yanlış</b>'), td(!r.yas ? "—" : x.ay <= r.yas.toplamAy ? "beklenir" : "henüz beklenmez")]));
+    ust = `<div style="display:flex;gap:8px;flex-wrap:wrap">${[["Doğru şekil", `${r.dogru.length}/${r.uygulanan.length}`], ["Yaşına göre eksik", r.yas ? r.eksik.length : "—"], ["Takvim yaşı", r.yas ? `${ekYasYaz(r.yas)} (${r.yas.toplamAy} ay)` : "—"]].map(([a, z]) => `<div style="flex:1 1 120px;border:1px solid #E5E7EB;border-radius:8px;padding:8px;text-align:center"><div style="font-size:19px;font-weight:700;color:${a === "Yaşına göre eksik" && r.eksik.length ? "#B91C1C" : "#334155"}">${e(z)}</div><div style="font-size:10.5px;color:#555">${a}</div></div>`).join("")}</div>`;
   } else if (k.tip === "louisa_duss") {
     const r = dussHesapla(v);
     olcum = tablo(["Öykü", "Amaç", "Çocuğun yanıtı", "Gözlem"], r.tum.map(x => [td(`<b>${x.i + 1}. ${e(x.o.ad)}</b>`), td(e(x.o.amac), "color:#64748B;font-size:10px"), td(e(x.yanit || "—")), td(x.isaretler.length ? `<span style="color:#B91C1C">${e(x.isaretler.join(", "))}</span>` : "—")]));
@@ -24133,10 +24400,9 @@ function ekTestPdfIndir(k, ogrenci, sinif, tum) {
 const TEST_LISTESI = {
   objektif: [
     { ad: "D2 Dikkat Testi", tip: "d2" },
-    { ad: "Frostig Gelişimsel Görsel Algı Testi", tip: "alt_test",
-      altTestler: ["Göz-Motor Koordinasyonu","Şekil-Zemin Ayrımı","Şekil Sabitliği","Mekanda Konum","Mekansal İlişkiler"],
-      genelEtiket: "Algısal Bölüm (PQ)" },
-    { ad: "Bender Gestalt Görsel Motor Algı Testi", tip: "gelisimsel_hata" },
+    { ad: "Frostig Gelişimsel Görsel Algı Testi", tip: "frostig" },
+    { ad: "Bender Gestalt Görsel Motor Algı Testi", tip: "bender" },
+    { ad: "Gesell Gelişim Figürleri Testi", tip: "gesell" },
     { ad: "R.B Catell 2A-3A Zeka Testi", tip: "iq_esdeger" },
     { ad: "Metropolitan Okul Öncesi Olgunluk Testi", tip: "metropolitan" },
     { ad: "Stroop Testi TBAG Formu", tip: "stroop_tbag" },
@@ -30757,6 +31023,9 @@ function pdrTestOlcumleri(k, sinifNo) {
       case "wisc_r": { const r = wiscHesapla(v); ekle("Sözel ZB", r.sz, "yuksek"); ekle("Performans ZB", r.pf, "yuksek"); ekle("Toplam ZB", r.tp, "yuksek"); WISC_ALT.forEach(x => ekle(x.ad, r.p[x.k], "yuksek")); break; }
       case "frankfurter": { const r = frankHesapla(v, k.tarih); ekle("Ham puan", r.ham, "yuksek"); ekle("Son değer", r.son, "yuksek"); ekle("İşaretlenen elma", r.armut != null ? r.elma : null, "dusuk"); break; }
       case "porteus": { const r = porteusHesapla(v, k.tarih); ekle("Zekâ yaşı", r.zy, "yuksek"); ekle("Zekâ bölümü", r.iq && r.iq.iq, "yuksek"); break; }
+      case "bender": { const r = benderHesapla(v, k.tarih); ekle("Hata puanı", r.hata, "dusuk"); ekle("Yüzdelik", r.yuzdelik && r.yuzdelik.p, "yuksek"); Object.entries(BENDER_TUR).forEach(([t, a]) => { if (r.isaret.length) ekle(a, r.tur[t], "dusuk"); }); break; }
+      case "frostig": { const r = frostigHesapla(v, k.tarih); r.alt.forEach(x => ekle(x.ad + " (ham)", x.ham, "yuksek", "/" + x.maks)); ekle("Toplam ham puan", r.toplam, "yuksek"); ekle("Genel standart puan", r.ts && r.ts.p, "yuksek"); break; }
+      case "gesell": { const r = gesellHesapla(v, k.tarih); ekle("Doğru şekil", r.dogru.length, "yuksek", "/10"); break; }
       case "louisa_duss": { const r = dussHesapla(v); ekle("Çatışma belirtisi olan öykü", r.sinyal.length, "dusuk", "/10"); break; }
       case "insan_ciz": { const s = iczPuanla(v); ekle("Gelişimsel ayrıntı", s.varOlanSayi, "yuksek", "/30"); ekle("Duygusal gösterge", (s.gecerli || []).length, "dusuk"); let z = null; try { z = iczZihinsel(v, k.tarih); } catch (e) {} if (z) { ekle(z.yontem === "goodenough" ? "Goodenough ham puan" : "Goodenough-Harris ham puan", z.ham, "yuksek", "/" + z.maks); if (z.sp != null && !String(z.spMetin).match(/[<>]/)) ekle("Goodenough-Harris standart puan", z.sp, "yuksek"); if (z.iq != null) ekle("Goodenough zekâ bölümü", z.iq, "yuksek"); } break; }
       default: break;
@@ -48738,6 +49007,7 @@ export default function App() {
     pdrD2NormYukle();
     pdrIczVeriYukle();
     pdrPorteusNormYukle();
+    pdrGorselNormYukle();
   }, []);
 
   // ── Canlı Senkronizasyon ─────────────────────────────────────────────────
@@ -48802,6 +49072,7 @@ export default function App() {
       "pdr-d2-norm": () => pdrD2NormYukle(),
       "pdr-insan-ciz-veri": () => pdrIczVeriYukle(),
       "pdr-porteus-norm": () => pdrPorteusNormYukle(),
+      "pdr-gorsel-algi-norm": () => pdrGorselNormYukle(),
       "pdr-sinav-kaygisi": () => loadSinavKaygisi().then(setSinavKaygisi),
       // "pdr-rehber-gorundu" bilerek dahil edilmedi — bu sadece "ilk açılışta
       // rehber gösterildi mi" bayrağı, cihazlar arası senkron olması gerekmiyor.

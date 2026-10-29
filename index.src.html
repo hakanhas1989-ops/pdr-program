@@ -12466,6 +12466,56 @@ function ksMpEsle(liste) {
   });
   return { bulunan: bulunan.slice(0, 3), bulunamayan };
 }
+// ===== ASİSTAN İŞ DEFTERİ BAŞLANGIÇ =====
+// Uzun işler (bir sınıfın tamamı, çok öğrencili tarama…) için plan + ilerleme kaydı.
+// Asistan adım sınırına takılsa ya da ertesi gün devam edilse bile biten adımları tekrar yapmaz.
+// Diğer kayıtlar gibi window.storage (cihaz + hesap) üzerinden saklanır; modele giderken adlar kalkanla kodlanır.
+const PDR_IS_DEFTERI_ANAHTAR = "pdr-asistan-is-defteri", PDR_IS_SINIR = 10, PDR_IS_ADIM_SINIR = 60;
+let pdrIsDefteriBellek = null, pdrIsDefteriZaman = 0;
+async function pdrIsDefteriOku() {
+  // Başka cihazda ilerleme olmuş olabilir: bellek 60 sn'den eskiyse yeniden okunur
+  if (pdrIsDefteriBellek && Date.now() - pdrIsDefteriZaman < 60000) return pdrIsDefteriBellek;
+  pdrIsDefteriZaman = Date.now();
+  try { const r = await window.storage.get(PDR_IS_DEFTERI_ANAHTAR); const l = r && r.value ? JSON.parse(r.value) : []; pdrIsDefteriBellek = Array.isArray(l) ? l : []; }
+  catch (e) { pdrIsDefteriBellek = []; }
+  return pdrIsDefteriBellek;
+}
+async function pdrIsDefteriYaz(l) {
+  // Açık işler önce; en fazla PDR_IS_SINIR iş tutulur (eski bitmişler düşer)
+  const acik = l.filter(x => x.durum === "devam"), kapali = l.filter(x => x.durum !== "devam").sort((a, b) => (b.guncellemeMs || 0) - (a.guncellemeMs || 0));
+  pdrIsDefteriBellek = [...acik, ...kapali].slice(0, PDR_IS_SINIR); pdrIsDefteriZaman = Date.now();
+  try { await window.storage.set(PDR_IS_DEFTERI_ANAHTAR, JSON.stringify(pdrIsDefteriBellek)); } catch (e) {}
+  try { window.dispatchEvent(new CustomEvent("pdr-is-defteri")); } catch (e) {}
+  return pdrIsDefteriBellek;
+}
+function pdrIsSayac(is) {
+  const a = is.adimlar || [], bitti = a.filter(x => x.durum === "bitti").length, atlandi = a.filter(x => x.durum === "atlandi").length;
+  const sira = a.findIndex(x => x.durum === "bekliyor");
+  return { toplam: a.length, bitti, atlandi, kalan: a.length - bitti - atlandi, sira: sira >= 0 ? sira + 1 : 0 };
+}
+function pdrIsBul(l, id) {
+  const acik = l.filter(x => x.durum === "devam");
+  if (!id && acik.length === 1) return acik[0];
+  const t = String(id || "").trim(); if (!t) return null;
+  return l.find(x => x.id === t) || l.find(x => ksSade(x.baslik) === ksSade(t)) || l.find(x => ksSade(x.baslik).includes(ksSade(t))) || null;
+}
+function pdrIsMetni(is, ayrinti) {
+  const c = pdrIsSayac(is);
+  const b = [`İŞ [${is.id}] «${is.baslik}» — ${is.durum === "devam" ? "devam ediyor" : is.durum === "bitti" ? "bitti" : "iptal"} · ${c.bitti}/${c.toplam} adım bitti${c.atlandi ? `, ${c.atlandi} atlandı` : ""} · başlangıç ${is.olusturma}${is.guncelleme && is.guncelleme !== is.olusturma ? `, son güncelleme ${is.guncelleme}` : ""}`];
+  if (is.hedef) b.push(`Bitti sayılma ölçütü: ${is.hedef}`);
+  if (ayrinti) {
+    (is.adimlar || []).forEach((a, i) => b.push(`${i + 1}. ${a.durum === "bitti" ? "✓" : a.durum === "atlandi" ? "–" : "☐"} ${a.metin}${a.not ? ` → ${a.not}` : ""}`));
+    if (is.notlar) b.push(`Notlar: ${is.notlar}`);
+    if (is.durum === "devam") b.push(c.sira ? `SIRADAKİ: ${c.sira}. adım. Biten (✓) adımları tekrar yapma.` : "Tüm adımlar işaretli: sonucu toparla ve is_defteri_yaz bitir ile kapat.");
+  } else if (is.durum === "devam" && c.sira) b.push(`Sıradaki: ${c.sira}. ${(is.adimlar[c.sira - 1] || {}).metin || ""}`);
+  return b.join("\n");
+}
+// Sistem talimatına giren tek satır: yalnız iş açılıp kapandığında değişir (önbellek bozulmaz)
+function pdrIsDefteriSistemSatiri(l) {
+  const acik = (l || []).filter(x => x.durum === "devam");
+  return acik.length ? `\nAÇIK İŞLER (iş defterinde; danışman "devam et" derse is_defteri ile oku): ${acik.map(x => `[${x.id}] «${x.baslik}»`).join("; ")}` : "";
+}
+// ===== ASİSTAN İŞ DEFTERİ BİTİŞ =====
 const KS_ASISTAN_ARACLAR = {
   ogrenci_ara: {
     aciklama: "Ada, soyada ya da sınıfa göre kayıtlı öğrenci arar.", girdi: '{"sorgu": "ad ya da sınıf"}',
@@ -13098,6 +13148,51 @@ const KS_ASISTAN_ARACLAR = {
       const sonuc = [...kalan, ...kabul.map(metin => ({ id: "ders" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), metin, tarih: today() }))];
       pdrDerslerYaz(sonuc);
       return `${kabul.length} ders eklendi, ${eski.length - kalan.length} ders silindi; şu an ${Math.min(sonuc.length, PDR_DERS_SINIR)} ders var.${red.length ? ` ${red.length} ders kişisel bilgi içerdiği için kaydedilmedi; genel olarak yeniden yaz.` : ""}${sonuc.length > PDR_DERS_SINIR ? " Sınır aşıldığı için en eski dersler düştü." : ""}`;
+    },
+  },
+  is_defteri: {
+    aciklama: "İş defterini okur: uzun işlerin planı ve ilerlemesi. Girdi boşsa işlerin listesi; is (id ya da başlık) verirsen adım adım durum (✓ bitti, ☐ bekliyor) ve sıradaki adım. Danışman 'devam et', 'kaldığın yerden', 'dünkü işi bitir' dediğinde ya da AÇIK İŞLER varken ilgili bir istek geldiğinde önce bunu çağır.",
+    girdi: '{"is": "isteğe bağlı"}', yontem: "hepsi",
+    calistir: async (g) => {
+      const l = await pdrIsDefteriOku();
+      if (!l.length) return "İş defteri boş: kayıtlı uzun iş yok.";
+      const is = g && g.is ? pdrIsBul(l, g.is) : (l.filter(x => x.durum === "devam").length === 1 ? pdrIsBul(l) : null);
+      if (is) return pdrIsMetni(is, true);
+      if (g && g.is) return `"${g.is}" adlı iş bulunamadı. İşler:\n` + l.map(x => pdrIsMetni(x, false)).join("\n\n");
+      return "İŞ DEFTERİ:\n" + l.map(x => pdrIsMetni(x, false)).join("\n\n");
+    },
+  },
+  is_defteri_yaz: {
+    aciklama: "Uzun işin planını ve ilerlemesini iş defterine yazar (danışman onayı gerekmez; öğrenci kaydı değildir). islem: 'baslat' (baslik, hedef = bitti sayılma ölçütü, adimlar = kısa adım listesi; ör. her öğrenci bir adım), 'guncelle' (is, bitenler = biten adım numaraları, atlananlar, notlar = adım no → kısa sonuç, not = genel kısa not; yeni adım eklemek için ekle), 'bitir' (is, ozet), 'iptal' (is). Yalnız birden çok öğrenci/adım içeren ve tek seferde bitmeyebilecek işlerde kullan; her 2-3 adımda bir guncelle.",
+    girdi: '{"islem": "baslat|guncelle|bitir|iptal", "is": "id", "baslik": "", "hedef": "", "adimlar": ["…"], "bitenler": [1], "atlananlar": [], "notlar": {"1": "kısa sonuç"}, "not": "", "ekle": ["…"], "ozet": ""}', yontem: "hepsi",
+    calistir: async (g) => {
+      g = g || {};
+      const l = [...(await pdrIsDefteriOku())];
+      const kisalt = (t, n) => { t = String(t || "").replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n - 1) + "…" : t; };
+      const islem = String(g.islem || "").trim();
+      const simdi = today(), ms = Date.now();
+      if (islem === "baslat") {
+        const adimlar = (Array.isArray(g.adimlar) ? g.adimlar : []).map(x => kisalt(x, 160)).filter(Boolean).slice(0, PDR_IS_ADIM_SINIR);
+        if (!String(g.baslik || "").trim() || adimlar.length < 2) return "Başlatılamadı: baslik ve en az 2 adım gerekli. Tek adımlık işler için iş defteri gerekmez.";
+        const id = "is" + ms.toString(36).slice(-5);
+        const is = { id, baslik: kisalt(g.baslik, 100), hedef: kisalt(g.hedef, 200), durum: "devam", olusturma: simdi, guncelleme: simdi, guncellemeMs: ms, adimlar: adimlar.map(metin => ({ metin, durum: "bekliyor" })), notlar: "" };
+        await pdrIsDefteriYaz([is, ...l]);
+        return `İş defterine yazıldı.\n${pdrIsMetni(is, true)}`;
+      }
+      const is = pdrIsBul(l, g.is);
+      if (!is) return `İş bulunamadı${g.is ? ` ("${g.is}")` : ""}. Önce is_defteri ile listeye bak.`;
+      const y = { ...is, adimlar: (is.adimlar || []).map(a => ({ ...a })), guncelleme: simdi, guncellemeMs: ms };
+      if (islem === "guncelle") {
+        (Array.isArray(g.ekle) ? g.ekle : []).map(x => kisalt(x, 160)).filter(Boolean).forEach(metin => { if (y.adimlar.length < PDR_IS_ADIM_SINIR) y.adimlar.push({ metin, durum: "bekliyor" }); });
+        const isaretle = (liste, durum) => (Array.isArray(liste) ? liste : []).map(Number).forEach(n => { if (y.adimlar[n - 1]) y.adimlar[n - 1].durum = durum; });
+        isaretle(g.bitenler, "bitti"); isaretle(g.atlananlar, "atlandi");
+        if (g.notlar && typeof g.notlar === "object") Object.entries(g.notlar).forEach(([n, t]) => { const a = y.adimlar[Number(n) - 1]; if (a && t) a.not = kisalt(t, 200); });
+        if (g.not) y.notlar = kisalt((y.notlar ? y.notlar + " | " : "") + g.not, 600);
+      } else if (islem === "bitir") { y.durum = "bitti"; if (g.ozet) y.notlar = kisalt((y.notlar ? y.notlar + " | " : "") + "Sonuç: " + g.ozet, 800); }
+      else if (islem === "iptal") y.durum = "iptal";
+      else return "islem 'baslat', 'guncelle', 'bitir' ya da 'iptal' olmalı.";
+      await pdrIsDefteriYaz(l.map(x => x.id === is.id ? y : x));
+      return `İş defteri güncellendi.\n${pdrIsMetni(y, islem === "guncelle")}`;
     },
   },
   gorusme_duzelt: {
@@ -14685,6 +14780,7 @@ const KS_ARAC_GRUPLARI = {
   program: { re: /program|nerede|nasil yap|sekme|ekran|oturum|etkinlik|ozellik|ne yapabil/, araclar: ["program_rehberi", "program_ara", "program_oturumu"] },
   bilgi: { re: /nedir|ne demek|acikla|kuram|bilgi|kitap|kaynak|arastirma|teknik|yontem|ornek/, araclar: ["kutuphane_ara", "kutuphane_oku", "alan_bilgisi", "sinav_rehberi"] },
   deneyim: { re: /kendini|ogrendi|ders kaydet|dersler|deneyim|hata yap/, araclar: ["deneyim_gunlugu", "ders_kaydet"] },
+  isdefteri: { re: /devam et|devam edelim|kaldig|kaldıg|dunku|yarim kal|tum(u|unu)?\b|hepsi|butun|sinifin|listedeki|her ogrenci|toplu|teker teker|tek tek|is defter/, araclar: ["is_defteri", "is_defteri_yaz"] },
 };
 // Mesajda adı geçen tek öğrenci (ad ya da ad + sınıf); birden çok aday varsa null
 function ksAsistanMesajOgrencisi(metin, ctx) {
@@ -14740,7 +14836,7 @@ function ksAsistanAracSecimi(gecmis, ctx, ayar) {
   return { liste, harita, toplam: Object.keys(KS_ASISTAN_ARACLAR).filter(a => ksAsistanAracAcik(a, ayar)).length };
 }
 // ===== ASİSTAN ARAÇ SEÇİMİ BİTİŞ =====
-function ksAsistanSistem(ayar, ctx, secim, kutuphaneListe) {
+function ksAsistanSistem(ayar, ctx, secim, kutuphaneListe, isDefteri) {
   const gunler = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
   const araclar = Object.entries(KS_ASISTAN_ARACLAR).filter(([ad]) => ksAsistanAracAcik(ad, ayar) && (!secim || secim.liste.includes(ad))).map(([ad, a]) => `- ${ad}${a.yazma ? " [ONAY GEREKİR]" : a.ekranYazma ? " [EKRANDA DOLDURUR]" : ""}: ${a.aciklama} Girdi: ${a.girdi}`).join("\n");
   const ekranModu = (ayar.kayitYontemi || "ekran") !== "sohbet";
@@ -14810,6 +14906,10 @@ DEĞİŞTİRİLEMEZ KURALLAR
 6. Yanıtların kısa ve uygulanabilir olsun. Uzun araç çıktısını olduğu gibi kopyalama; özetle, önemli noktaları ve sonraki adımı belirt. Markdown başlığı ve tablo kullanma; gerekirse kısa maddeler kullan.
 
 DANIŞMANIN KURALLARI
+UZUN İŞLER (İŞ DEFTERİ)
+- İstek birden çok öğrenciyi ya da çok adımı kapsıyor ve tek seferde bitmeyebilecekse (ör. bir sınıfın tamamı, listedeki her öğrenci) önce is_defteri_yaz baslat ile kısa plan yaz (adımlar + bitti ölçütü), her 2-3 adımda guncelle, bitince bitir. Küçük, tek öğrencilik işlerde defter kullanma.
+- Danışman "devam et" derse ya da açık iş varken ilgili bir istek gelirse önce is_defteri ile oku; biten (✓) adımları tekrar yapma, sıradakinden sürdür.${pdrIsDefteriSistemSatiri(isDefteri)}
+
 ${ksKutuphaneBilgiBlogu(kutuphaneListe) ? ksKutuphaneBilgiBlogu(kutuphaneListe) + "\n\n" : ""}${ek}${pdrDersMetni()}
 
 Bugün: ${today()} ${gunler[new Date().getDay()]}.`;
@@ -15074,7 +15174,9 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
   // Kütüphane her istekte bilinsin: kaynak listesi sisteme girer, arama/okuma araçları hep seçili kalır
   let kutuphaneListe = []; try { kutuphaneListe = await ksKutuphaneListe(); } catch (e) { kutuphaneListe = []; }
   if (secim && kutuphaneListe.length) ["kutuphane_ara", "kutuphane_oku"].forEach(a => { if (!secim.liste.includes(a) && KS_ASISTAN_ARACLAR[a] && ksAsistanAracAcik(a, ayar)) secim.liste.push(a); });
-  const sistem = ksAsistanSistem(ayar, ctx, secim, kutuphaneListe);
+  let isDefteri = []; try { isDefteri = await pdrIsDefteriOku(); } catch (e) { isDefteri = []; }
+  if (secim && isDefteri.some(x => x.durum === "devam")) ["is_defteri", "is_defteri_yaz"].forEach(a => { if (!secim.liste.includes(a) && KS_ASISTAN_ARACLAR[a]) secim.liste.push(a); });
+  const sistem = ksAsistanSistem(ayar, ctx, secim, kutuphaneListe, isDefteri);
   ksAsistanGecmisDuzenle(gecmis);
   let toplamGiris = 0, toplamCikis = 0, toplamUcret = 0, toplamOnb = 0, sonGiden = "", model = "", yedek = false, kritik = false, ekranIsi = false;
   let birikmis = "", devamBas = -1, devamSay = 0;   // yarıda kesilen yanıtın parçaları
@@ -15273,6 +15375,12 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
       return bitir(yanit);
     }
   }
+  // Adım sınırı: açık iş varsa ilerleme defterde; danışmana nereden devam edileceği söylenir
+  try {
+    pdrIsDefteriBellek = null;
+    const acik = (await pdrIsDefteriOku()).filter(x => x.durum === "devam").sort((a, b) => (b.guncellemeMs || 0) - (a.guncellemeMs || 0))[0];
+    if (acik) { const c = pdrIsSayac(acik); return bitir(`⏸ Bu turdaki adım sınırına geldim. İlerleme iş defterinde kayıtlı: «${acik.baslik}» — ${c.bitti}/${c.toplam} adım bitti${c.sira ? `, sıradaki ${c.sira}. adım` : ""}. Devam etmem için "devam et" yazman yeterli; biten adımları tekrar yapmam.`); }
+  } catch (e) {}
   return bitir("İşlem çok fazla adım gerektirdi ve durduruldu. İsteği daha küçük parçalara bölerek tekrar deneyebilirsin.");
 }
 // Sonucu kendini anlatan araçlar için modelsiz kısa yanıt (yoksa null → model yorumlar)

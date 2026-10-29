@@ -7153,13 +7153,28 @@ function bilproGorselMotorBirlikte(s, tum) {
   try { const k = son("bender"); if (k) { const r = benderHesapla(k.veri, k.tarih); if (r.hata != null) { benderOog = r.oog.length; bul.push({ ad: `Bender-Gestalt (${k.tarih})`, olumsuz: r.durum === "alti", metin: `hata puanı ${r.hata}${r.yuzdelik ? `, yüzdelik ${r.yuzdelik.metin}` : ""}${r.yasEsdeger ? `, yaş eşdeğeri ${r.yasEsdeger}` : ""}${r.durum === "alti" ? " — yaşından beklenenin altında" : r.durum === "sinir" ? " — üst sınıra yakın" : r.durum ? " — yaşına uygun" : ""}` }); } } } catch (e) {}
   try { const k = son("frostig"); if (k) { const r = frostigHesapla(k.veri, k.tarih); if (r.ts || r.alt.some(x => x.s)) { const z = r.alt.filter(x => x.s && x.s.p < 50); const sz = r.alt.find(x => x.k === "2"); frostigSekilZemin = sz && sz.s ? sz.s.p : null; bul.push({ ad: `Frostig (${k.tarih})`, olumsuz: (r.ts && r.ts.p < 50) || z.length >= 2, metin: `${r.ts ? `genel standart puan ${r.ts.alt ? "≤1" : r.ts.p} (${r.tDuzey.ad.toLocaleLowerCase("tr")})` : "genel puan yok"}${z.length ? `; %50 altı: ${z.map(x => x.ad.toLocaleLowerCase("tr")).join(", ")}` : ""}` }); } } } catch (e) {}
   try { const k = son("gesell"); if (k) { const r = gesellHesapla(k.veri, k.tarih); if (r.yas && r.uygulanan.length) bul.push({ ad: `Gesell (${k.tarih})`, olumsuz: r.eksik.length >= 2, metin: r.eksik.length ? `yaşına göre çizemediği şekiller: ${r.eksik.map(x => x.ad.toLocaleLowerCase("tr")).join(", ")}` : "yaşına göre beklenen şekillerin tümünü kopyaladı" }); } } catch (e) {}
-  if (!bul.length) return null;
+  // Dikkat testleri (D2, ÇDT, Frankfurter, Stroop)
+  let dikkat = []; try { dikkat = ekDigerBulgular(tum).dikkat || []; } catch (e) {}
+  let cdtDurtu = null, cdtVar = false;
+  try { const k = son("dikkat_cdt"); if (k) { const r = cdtPuanla(k.veri); if (r && r.tamam && r.indeksler) { cdtVar = true; const d = r.indeksler.filter(i => (i.k === "I" || i.k === "H") && i.yuzdelik != null && i.yuzdelik < 16); if (d.length) cdtDurtu = d.map(i => `${i.ad.toLocaleLowerCase("tr")} %${Math.round(i.yuzdelik)}`).join(", "); } } } catch (e) {}
+  if (!bul.length && !dikkat.length) return null;
   const al = s.alanSonuclari || {}; const gv = al.gv && al.gv.yuzde != null ? al.gv.yuzde : null;
   const gvZayif = (s.zayif || []).includes("gv") || (gv != null && gv < 40);
   const or = ((s.klinik && s.klinik.oruntuler) || []).map(o => o.key);
   const olumsuz = bul.filter(x => x.olumsuz).length;
+  const dOlumsuz = dikkat.filter(x => x.olumsuz).length;
+  const bDikkat = ((s.klinik && s.klinik.oruntuler) || []).some(o => o.key === "dikkat") || ((s.dikkat && s.dikkat.gostergeler) || []).filter(x => x.durum === "zorlanma").length >= 2;
   const L = [];
-  if (gv != null) {
+  if (dikkat.length) {
+    if (bDikkat && dOlumsuz) L.push(`BİLPRO'daki dikkat bulgusu ile ${dOlumsuz} dikkat testindeki düşük sonuç aynı yönde: dikkat güçlüğü hipotezi güçleniyor. Öğretmen ve veli gözlemi (birden çok ortam) ile birlikte değerlendirilip gerekirse çocuk psikiyatrisine yönlendirme düşünülebilir.`);
+    else if (bDikkat && !dOlumsuz) L.push("BİLPRO'daki dikkat bulgusu dikkat testlerinde doğrulanmadı: düşüklük dikkatten çok çalışma belleği, işlem hızı ya da o günkü kaygı/motivasyondan kaynaklanıyor olabilir.");
+    else if (!bDikkat && dOlumsuz) L.push("Dikkat testlerinde düşük bulgu var ama BİLPRO'da dikkat örüntüsü çıkmadı: sonuçlar tutarsız, sınıf içi gözlemle netleştirilmeli (BİLPRO'nun kısa alt testleri dikkat yükünü az tutmuş olabilir).");
+    else L.push("BİLPRO ve dikkat testleri birlikte belirgin bir dikkat güçlüğüne işaret etmiyor.");
+  }
+  if (olumsuz && cdtDurtu) L.push(`Görsel-motor testlerdeki hatalar ÇDT'deki dürtüsellik bulgusuyla (${cdtDurtu}) birlikte görülüyor: hatalar motor güçlükten çok aceleci, özensiz çalışmadan kaynaklanabilir. Önce dürtü kontrolü ve öz denetim çalışmaları (dur-düşün-yap, işini kontrol etme), ardından görsel-motor becerilerin yeniden değerlendirilmesi önerilir.`);
+  else if (olumsuz && dOlumsuz) L.push("Görsel-motor düşüklüğe dikkat testlerindeki düşüklük eşlik ediyor: kopya hatalarının bir kısmı dikkatsizlikten kaynaklanabilir; görsel-motor sonuç, dikkat desteğinin ardından yeniden değerlendirilmeli.");
+  else if (olumsuz && cdtVar && !dOlumsuz) L.push("Dikkat testleri yeterli olduğundan görsel-motor testlerdeki düşüklük dikkat kaynaklı görünmüyor; güçlük görsel algı / görsel-motor alanda.");
+  if (gv != null && bul.length) {
     if (gvZayif && olumsuz) L.push(`BİLPRO'daki görsel-uzamsal işlemleme düşüklüğü (%${gv}) ile görsel algı / görsel-motor testlerindeki düşük bulgu aynı yönde: görsel-uzamsal ve görsel-motor güçlük hipotezi güçleniyor. Görme muayenesi, ince motor (ergoterapi) değerlendirmesi ve gerekirse RAM yönlendirmesi önerilir.`);
     else if (!gvZayif && olumsuz) L.push(`BİLPRO'da görsel-uzamsal akıl yürütme yeterli (%${gv}), ancak kopya etme / el-göz koordinasyonu testlerinde düşüklük var: güçlük görsel algıdan çok görsel-motor yürütmede (ince motor, kalem kontrolü) olabilir. İnce motor çalışmaları ve ergoterapi değerlendirmesi düşünülebilir.`);
     else if (gvZayif && !olumsuz) L.push(`BİLPRO'da görsel-uzamsal işlemleme düşük (%${gv}) ama temel görsel algı ve görsel-motor testleri yaşına uygun: güçlük daha üst düzey uzamsal akıl yürütmede (zihinde döndürme, parça-bütün ilişkisi) olabilir.`);
@@ -7167,9 +7182,10 @@ function bilproGorselMotorBirlikte(s, tum) {
   }
   if (or.includes("nvld") && olumsuz) L.push("Sözel olmayan öğrenme güçlüğü örüntüsü, görsel-motor testlerdeki düşüklükle destekleniyor; uzamsal ve görsel-motor beceriler için ayrıntılı değerlendirme önerilir.");
   if (or.includes("okuma") && (benderOog >= 3 || olumsuz)) L.push(`BİLPRO'daki okuma güçlüğü örüntüsü görsel algı bulgularıyla${benderOog >= 3 ? ` (Bender'de ÖÖG açısından şüpheli ${benderOog} madde)` : ""} birlikte değerlendirildiğinde özel öğrenme güçlüğü açısından RAM değerlendirmesi düşünülebilir.`);
+  if (or.includes("okuma") && dikkat.length) L.push(dOlumsuz ? "Okuma güçlüğü örüntüsüne dikkat testlerindeki düşüklük de eşlik ediyor: iki alan birlikte ele alınmalı; okuma akıcılığı değerlendirmesi ile dikkat gözlemi birlikte yapılmalı." : "Dikkat testleri yaşıtlarıyla benzer: okuma güçlüğü örüntüsü dikkat kaynaklı görünmüyor, okuma becerilerine odaklanılmalı.");
   if (or.includes("dikkat") && frostigSekilZemin != null && frostigSekilZemin < 50) L.push("Frostig şekil-zemin alt testindeki düşüklük, BİLPRO'daki dikkat örüntüsüyle uyumlu: görsel dikkat ve ayrıntıyı bütünden ayırma desteklenmeli.");
   if (or.includes("matematik") && olumsuz) L.push("Matematik güçlüğü örüntüsünde görsel-uzamsal/görsel-motor zayıflık eşlik ediyor: geometri, sayı doğrusu ve basamak hizalama gibi uzamsal yönü olan konularda somut materyal kullanılmalı.");
-  return { bulgular: bul, sonuclar: L };
+  return { bulgular: [...bul, ...dikkat.map(x => ({ ad: x.ad, olumsuz: x.olumsuz, metin: x.metin }))], sonuclar: L };
 }
 function bilproKlinikAnaliz(sonuc) {
   const at = sonuc.altTestSonuclari || {}, al = sonuc.alanSonuclari || {};
@@ -7488,7 +7504,7 @@ function bilproRaporHtml(kayit, bilgi, normOzet) {
   ${(s.alanYorumlari || []).length ? `<h3>Güçlü ve zayıf alanlar</h3>${(s.alanYorumlari || []).map(y => `<div class="kutu" style="border-color:${y.tip === "guclu" ? "#1A8C5B" : "#C0392B"}"><b>${E(y.alan.ad)}</b> — ${E(y.metin)}${y.oneri ? `<div class="kucuk" style="margin-top:3px"><b>Sınıf içi öneri:</b> ${E(y.oneri)}</div>` : ""}</div>`).join("")}` : ""}
   <h2>3. Klinik yorum — öğrenme güçlüğü ve diğer örüntüler</h2>
   ${k.oruntuler.length ? `<table><tr><th>Örüntü</th><th style="width:12%">Güç</th><th>Dayanak</th><th>Ne yapılmalı</th></tr>${k.oruntuler.map(o => `<tr><td><b>${E(o.ad)}</b><div class="kucuk">${E(o.metin)}</div></td><td style="color:${o.guc === "belirgin" ? "#C0392B" : "#B07D1A"};font-weight:700">${o.guc === "belirgin" ? "Belirgin" : "Olası"}</td><td class="kucuk">${E(o.kanit.join("; "))}</td><td class="kucuk">${E(o.oneri)}</td></tr>`).join("")}</table>` : `<div class="kutu">Alt ölçeklerde öğrenme güçlüğü ya da başka bir klinik örüntüyü düşündüren belirgin bir dağılım görünmüyor.</div>`}
-  ${(() => { const gm = bilproGorselMotorBirlikte(s, bilproTestleri((kayit && kayit.studentName) || (bilgi && bilgi.ogrenci), (kayit && kayit.className) || (bilgi && bilgi.sinif), (kayit && kayit.numara) || (bilgi && bilgi.numara))); return gm ? `<div class="kutu"><b>Görsel algı ve görsel-motor testlerle birlikte</b>${ul(gm.bulgular.map(x => x.ad + ": " + x.metin))}${gm.sonuclar.map(x => `<div style="margin-top:4px;font-weight:700">→ ${E(x)}</div>`).join("")}</div>` : ""; })()}
+  ${(() => { const gm = bilproGorselMotorBirlikte(s, bilproTestleri((kayit && kayit.studentName) || (bilgi && bilgi.ogrenci), (kayit && kayit.className) || (bilgi && bilgi.sinif), (kayit && kayit.numara) || (bilgi && bilgi.numara))); return gm ? `<div class="kutu"><b>Diğer testlerle birlikte (görsel algı, görsel-motor, dikkat)</b>${ul(gm.bulgular.map(x => x.ad + ": " + x.metin))}${gm.sonuclar.map(x => `<div style="margin-top:4px;font-weight:700">→ ${E(x)}</div>`).join("")}</div>` : ""; })()}
   ${k.ayirici ? `<div class="kutu uyari"><b>Ayırıcı değerlendirme:</b> ${E(k.ayirici)}</div>` : ""}
   ${dk ? `<h2>4. Dikkat göstergeleri</h2><div class="kutu">${E(dk.ozet)}</div>
   <div class="iki"><div><table><tr><th>Gösterge</th><th style="width:16%">Durum</th><th>Açıklama</th></tr>${dk.gostergeler.map(x => `<tr><td><b>${E(x.baslik)}</b></td><td style="color:${renkD[x.durum]};font-weight:700">${ikonD[x.durum]} ${x.durum === "zorlanma" ? "Zorlanma" : x.durum === "izle" ? "İzle" : "Olağan"}</td><td class="kucuk">${E(x.metin)}</td></tr>`).join("")}</table></div><div style="flex:0 1 360px">${bilproYariSvg(c)}</div></div>
@@ -8190,7 +8206,7 @@ function BILPROPaneli({ seciliAd, seciliSinif, seciliNumara, bilproDegerlendirme
                 ))}
                 {(() => { const gm = bilproGorselMotorBirlikte(sonuc, bilproTestleri(seciliAd, seciliSinif, seciliNumara)); return gm ? (
                   <div data-testid="bilpro-gorsel" style={{marginBottom:8, fontSize:10.5, background:"#EFF6FF", border:"1px solid #BFDBFE", borderRadius:8, padding:"6px 9px"}}>
-                    <b>👁️ Görsel algı ve görsel-motor testlerle birlikte:</b>
+                    <b>🔗 Diğer testlerle birlikte (görsel algı, görsel-motor, dikkat):</b>
                     {gm.bulgular.map((x, i) => <div key={i} style={{marginTop:3}}>• {x.ad}: {x.metin}</div>)}
                     {gm.sonuclar.map((x, i) => <div key={"s" + i} style={{marginTop:4, fontWeight:700, color:"#1E3A8A"}}>→ {x}</div>)}
                   </div>) : null; })()}
@@ -13255,7 +13271,7 @@ function ksAsistanTaramaSonuclari(ctx, o, sec) {
         b.push(`Klinik örüntüler (hipotez, tanı değil): ${kl.oruntuler.map(x => `${x.ad} [${x.guc === "belirgin" ? "belirgin" : "olası"}] — dayanak: ${K((x.kanit || []).join("; "), ayrintili ? 300 : 160)}${ayrintili && x.oneri ? " → " + K(x.oneri, 200) : ""}`).join(" | ")}`);
         if (kl.ayirici) b.push(`Ayırıcı değerlendirme: ${K(kl.ayirici, ayrintili ? 400 : 200)}`);
       } else if (kl) b.push("Klinik örüntü: belirgin bir öğrenme güçlüğü/dikkat örüntüsü çıkmadı.");
-      try { const gm = bilproGorselMotorBirlikte(s, bilproTestleri(ad, sinif, no, ctx.testKayitlari)); if (gm) b.push(`Görsel algı/görsel-motor testlerle birlikte: ${gm.bulgular.map(x => x.ad + ": " + x.metin).join("; ")}. ${gm.sonuclar.join(" ")}`); } catch (e) {}
+      try { const gm = bilproGorselMotorBirlikte(s, bilproTestleri(ad, sinif, no, ctx.testKayitlari)); if (gm) b.push(`Diğer testlerle birlikte (görsel algı, görsel-motor, dikkat): ${gm.bulgular.map(x => x.ad + ": " + x.metin).join("; ")}. ${gm.sonuclar.join(" ")}`); } catch (e) {}
       if (ayrintili && kl) {
         if (kl.kanal) b.push(K(kl.kanal, 250));
         if ((kl.gecerlilik || []).length) b.push(`Geçerlilik notları: ${K(kl.gecerlilik.join(" "), 400)}`);
@@ -21856,7 +21872,7 @@ function RaporModalIc({ rapor, onKapat }) {
                     )}
                     {(() => { const gm = bilproGorselMotorBirlikte(s, pdrSozlukOku(rapor.testKayitlari, ogrenci, ogrenciSinif, ogrNo) || []); return gm ? (
                       <div style={{ marginTop:8, paddingTop:6, borderTop:"1px dashed #ddd" }}>
-                        <div style={{ fontSize:9.5, fontWeight:800, color:"#1D4ED8", marginBottom:3 }}>Görsel Algı ve Görsel-Motor Testlerle Birlikte</div>
+                        <div style={{ fontSize:9.5, fontWeight:800, color:"#1D4ED8", marginBottom:3 }}>Diğer Testlerle Birlikte (Görsel Algı, Görsel-Motor, Dikkat)</div>
                         {gm.bulgular.map((x, i) => <div key={i} style={{ fontSize:9.5, color:"#555", lineHeight:1.5 }}>• {x.ad}: {x.metin}</div>)}
                         {gm.sonuclar.map((x, i) => <div key={"s" + i} style={{ fontSize:9.5, color:"#1E3A8A", fontWeight:700, lineHeight:1.5, marginTop:2 }}>→ {x}</div>)}
                       </div>) : null; })()}

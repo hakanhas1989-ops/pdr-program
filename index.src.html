@@ -31796,7 +31796,6 @@ KURALLAR:
                     <button onClick={()=>setKategori("projektif")} style={{ flex:1, padding:"14px 8px", borderRadius:12, border:`2px solid #9B87F0`, background:"#F3EEFB", color:"#9B87F0", fontSize:13, fontWeight:800, cursor:"pointer" }}>🟣 Projektif Testler</button>
                   </div>
                   <div style={{ display:"flex", gap:8 }}>
-                    <button onClick={()=>setKategori("d2panel")} style={{ flex:1, padding:"14px 8px", borderRadius:12, border:`2px solid ${PURPLE}`, background:"#F3F0FF", color:PURPLE, fontSize:13, fontWeight:800, cursor:"pointer" }}>🎯 D2 Dikkat Testi</button>
                     <button onClick={()=>setKategori("oog")} style={{ flex:1, padding:"14px 8px", borderRadius:12, border:`2px solid #8B5A00`, background:"#FFF4E5", color:"#8B5A00", fontSize:13, fontWeight:800, cursor:"pointer" }}>🧩 ÖÖG Ön-Tarama</button>
                   </div>
                   <div style={{ display:"flex", gap:8, marginTop:8 }}>
@@ -31945,7 +31944,7 @@ KURALLAR:
                   <button onClick={()=>setKategori(null)} style={{ background:"none", border:"none", color:MUTED, fontSize:12, cursor:"pointer", marginBottom:8, padding:0 }}>← Kategoriyi değiştir</button>
                   <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
                     {TEST_LISTESI[kategori].map(t => (
-                      <button key={t.ad} onClick={()=>{ setSeciliTest(t); setForm({ ...TEST_FORM_BOS }); }} style={{
+                      <button key={t.ad} onClick={()=>{ if (t.tip === "d2" && t.ad === "D2 Dikkat Testi") { setSeciliTest(null); setKategori("d2panel"); return; } setSeciliTest(t); setForm({ ...TEST_FORM_BOS }); }} style={{
                         textAlign:"left", padding:"10px 12px", borderRadius:10, border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", background:CARD, color:TEXT, fontSize:13, fontWeight:600, cursor:"pointer"
                       }}>{t.ad}</button>
                     ))}

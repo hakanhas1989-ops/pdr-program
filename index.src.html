@@ -12257,6 +12257,24 @@ function ksKutuphaneBul(liste, q) {
   if (String(n) === s && liste[n - 1]) return liste[n - 1];
   return liste.find(k => ksSade(k.baslik) === s) || liste.find(k => ksSade(k.baslik).includes(s)) || liste.find(k => s.split(/\s+/).filter(w => w.length >= 3).every(w => ksSade(k.baslik + " " + (k.dosyaAdi || "")).includes(w))) || null;
 }
+// Asistanın her istekte bildiği kütüphane özeti: kaynak listesi + kısa özetler + kullanım kuralı
+function ksKutuphaneBilgiBlogu(liste) {
+  if (!Array.isArray(liste) || !liste.length) return "";
+  const enFazla = 15, satirlar = [];
+  let uzunluk = 0;
+  liste.slice(0, enFazla).forEach((k, i) => {
+    const oz = String(k.ozet || "").replace(/\s+/g, " ").trim();
+    const kisa = oz.length > 220 ? oz.slice(0, 220).replace(/\s+\S*$/, "") + "…" : oz;
+    const s = `${i + 1}. ${k.baslik || k.dosyaAdi || "Adsız kaynak"}${k.tur === "yonetmelik" ? " (yönetmelik/mevzuat)" : ""}${kisa && uzunluk < 2600 ? ` — ${kisa}` : ""}`;
+    uzunluk += s.length; satirlar.push(s);
+  });
+  if (liste.length > enFazla) satirlar.push(`… ve ${liste.length - enFazla} kaynak daha (tam liste: kutuphane_ara sorgu boş).`);
+  return `KÜTÜPHANEN (danışmanın yüklediği kaynaklar — bunlar senin kalıcı bilgi birikimindir, her soruda geçerlidir)
+${satirlar.join("\n")}
+- Soru bu kaynakların konusuna giriyorsa (mevzuat, etik, gizlilik, süre/madde, kuram, teknik, yöntem) danışman "kütüphane" demese de önce kutuphane_ara ile ilgili bölümü bul, gerekirse kutuphane_oku ile oku; yanıtını ona dayandır ve kaynağın adını (ve bölümünü) belirt.
+- Kaynak ile genel bilgin çelişirse kaynağı esas al ve farkı belirt. Kaynakta olmayanı kaynaktaymış gibi söyleme.
+- Konu bu kaynaklarla ilgisizse genel bilginle yanıt ver; kütüphaneyi zorla araya sokma.`;
+}
 async function ksAsistanKutuphaneAra(g) {
   const q = String(g.sorgu || "").trim();
   const liste = await ksKutuphaneListe();
@@ -14722,7 +14740,7 @@ function ksAsistanAracSecimi(gecmis, ctx, ayar) {
   return { liste, harita, toplam: Object.keys(KS_ASISTAN_ARACLAR).filter(a => ksAsistanAracAcik(a, ayar)).length };
 }
 // ===== ASİSTAN ARAÇ SEÇİMİ BİTİŞ =====
-function ksAsistanSistem(ayar, ctx, secim) {
+function ksAsistanSistem(ayar, ctx, secim, kutuphaneListe) {
   const gunler = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
   const araclar = Object.entries(KS_ASISTAN_ARACLAR).filter(([ad]) => ksAsistanAracAcik(ad, ayar) && (!secim || secim.liste.includes(ad))).map(([ad, a]) => `- ${ad}${a.yazma ? " [ONAY GEREKİR]" : a.ekranYazma ? " [EKRANDA DOLDURUR]" : ""}: ${a.aciklama} Girdi: ${a.girdi}`).join("\n");
   const ekranModu = (ayar.kayitYontemi || "ekran") !== "sohbet";
@@ -14792,7 +14810,7 @@ DEĞİŞTİRİLEMEZ KURALLAR
 6. Yanıtların kısa ve uygulanabilir olsun. Uzun araç çıktısını olduğu gibi kopyalama; özetle, önemli noktaları ve sonraki adımı belirt. Markdown başlığı ve tablo kullanma; gerekirse kısa maddeler kullan.
 
 DANIŞMANIN KURALLARI
-${ek}${pdrDersMetni()}
+${ksKutuphaneBilgiBlogu(kutuphaneListe) ? ksKutuphaneBilgiBlogu(kutuphaneListe) + "\n\n" : ""}${ek}${pdrDersMetni()}
 
 Bugün: ${today()} ${gunler[new Date().getDay()]}.`;
 }
@@ -15053,7 +15071,10 @@ async function ksSupKaydet(ctx, liste, yanit, talep) {
 async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTur = 8, iptal = null }) {
   // Ücretsiz modelde (günlük kota) yalnız soruyla ilgili araçlar; Claude'da önbellek için tam liste
   let secim = null; try { if (ayar && ayar.saglayici === "ucretsiz" && ayar.aracSecimi !== false) secim = ksAsistanAracSecimi(gecmis, ctx, ayar); } catch (e) { secim = null; }
-  const sistem = ksAsistanSistem(ayar, ctx, secim);
+  // Kütüphane her istekte bilinsin: kaynak listesi sisteme girer, arama/okuma araçları hep seçili kalır
+  let kutuphaneListe = []; try { kutuphaneListe = await ksKutuphaneListe(); } catch (e) { kutuphaneListe = []; }
+  if (secim && kutuphaneListe.length) ["kutuphane_ara", "kutuphane_oku"].forEach(a => { if (!secim.liste.includes(a) && KS_ASISTAN_ARACLAR[a] && ksAsistanAracAcik(a, ayar)) secim.liste.push(a); });
+  const sistem = ksAsistanSistem(ayar, ctx, secim, kutuphaneListe);
   ksAsistanGecmisDuzenle(gecmis);
   let toplamGiris = 0, toplamCikis = 0, toplamUcret = 0, toplamOnb = 0, sonGiden = "", model = "", yedek = false, kritik = false, ekranIsi = false;
   let birikmis = "", devamBas = -1, devamSay = 0;   // yarıda kesilen yanıtın parçaları

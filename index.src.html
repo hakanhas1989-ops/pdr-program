@@ -52132,13 +52132,13 @@ function pdrBaslangicSekmesi() {
             ) : kutuphane.map(k => (
               <div key={k.id} style={{ background: CARD, border: `1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius: 12, marginBottom: 10, overflow: "hidden" }}>
                 <div style={{ padding: "12px 16px", borderBottom: `1px solid ${BORDER}` }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 700, fontSize: 14, color: TEXT, marginBottom: 2 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: TEXT, marginBottom: 2, overflowWrap: "anywhere" }}>
                         {k.tur === "yonetmelik" ? "📜" : "📄"} {k.baslik}
                         {k.tur === "yonetmelik" && <span style={{ marginLeft:6, background:"#EEF2FF", color:BLUE, borderRadius:8, padding:"1px 6px", fontSize:9, fontWeight:800 }}>YÖNETMELİK</span>}
                       </div>
-                      <div style={{ fontSize: 11, color: MUTED }}>{k.tarih} · {k.dosyaAdi}</div>
+                      <div style={{ fontSize: 11, color: MUTED, overflowWrap: "anywhere" }}>{k.tarih} · {k.dosyaAdi}</div>
                       <div data-testid="kutuphane-rozet" style={{ fontSize: 10.5, fontWeight: 700, marginTop: 3, color: k.tamMetin ? "#166534" : "#92400E" }}>
                         {k.tamMetin ? `📖 Tamamı öğrenildi${k.sayfa ? ` · ${k.sayfa} sayfa` : ""} · ≈${Math.round((k.karakter || 0) / 7).toLocaleString("tr-TR")} kelime${k.bolumSayisi > 1 ? ` · ${k.bolumSayisi} bölüm` : ""}` : "Yalnız özet biliniyor — tamamı öğrenilsin istersen kaynağı yeniden yükle"}
                       </div>

@@ -32286,7 +32286,8 @@ KURALLAR:
                   const cdtMi = k.tip === "dikkat_cdt";
                   const iczMi = k.tip === "insan_ciz";
                   const ekMi = EK_TESTLER.includes(k.tip);
-                  const genisletilebilir = mesEgilimMi || beierMi || scasMi || cdtMi || iczMi || ekMi;
+                  const d2Mi = k.tip === "d2" && k.testAdi !== "Frankfurter Dikkat Testi" && !!k.veri && !!(k.veri.TN || k.veri.TN_E || k.veri.E1 || k.veri.PR || (k.veri.satirlar && k.veri.satirlar.length));
+                  const genisletilebilir = mesEgilimMi || beierMi || scasMi || cdtMi || iczMi || ekMi || d2Mi;
                   const detayAcik = acikTestId === k.id;
                   return (
                   <div key={k.id} style={{ background:CARD, border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius:10, padding:"10px 12px" }}>
@@ -32307,6 +32308,15 @@ KURALLAR:
                         <button onClick={(e)=>{e.stopPropagation(); handleSil(k.id);}} style={{ background:"none", border:"none", color:"#C0392B", fontSize:14, cursor:"pointer" }}>🗑</button>
                       </div>
                     </div>
+                    {d2Mi && detayAcik && (
+                      <div data-d2-detay="1" onClick={(e)=>e.stopPropagation()} style={{ marginTop:10, borderTop:`1px solid ${BORDER}`, paddingTop:10 }}>
+                        <div style={{ overflowX:"auto" }} dangerouslySetInnerHTML={{ __html: ekTestRaporHtml(k, { ogrenci: seciliAd, sinif: seciliSinif }, kayitlar) }} />
+                        <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:8 }}>
+                          <button data-d2-liste-pdf="1" onClick={(e)=>{ e.stopPropagation(); ekTestPdfIndir(k, seciliAd, seciliSinif, kayitlar); }} style={{ padding:"6px 10px", borderRadius:8, border:"none", background:"#6D28D9", color:"#fff", fontSize:11.5, fontWeight:800, cursor:"pointer" }}>📄 PDF Rapor</button>
+                          <button onClick={(e)=>{ e.stopPropagation(); try { navigator.clipboard.writeText(d2KisaOzet(k.veri) + "\n" + d2Yorum(k.veri)); } catch (er) {} }} style={{ padding:"6px 10px", borderRadius:8, border:`1px solid ${BORDER}`, background:"#fff", fontSize:11.5, fontWeight:700, cursor:"pointer" }}>📋 Raporu kopyala</button>
+                        </div>
+                      </div>
+                    )}
                     {ekMi && detayAcik && (() => { const t = ekTestRapor(k, kayitlar); return (
                       <div data-ektest-rapor="1" style={{ marginTop:10, borderTop:`1px solid ${BORDER}`, paddingTop:10 }}>
                         <div style={{ fontSize:12, lineHeight:1.6, whiteSpace:"pre-wrap", color:TEXT }}>{t}</div>

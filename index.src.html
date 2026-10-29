@@ -45287,7 +45287,12 @@ function AylikGorusmeGrafigi({ records }) {
         {seriler.map(s => <span key={s.k} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: 14, height: 3, background: s.renk, borderRadius: 2, display: "inline-block" }} />{s.ad}</span>)}
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
-        {[0, 1, 2, 3, 4].map(i => { const v = ust * i / 4, py = y(v); return <g key={i}><line x1={sl} y1={py} x2={W - sg} y2={py} stroke="#E5E7EB" strokeWidth="0.8" /><text x={sl - 4} y={py + 3} fontSize="8" fill="#94A3B8" textAnchor="end">{Math.round(v)}</text></g>; })}
+        <defs><pattern id="aylikGorKare" width="8" height="8" patternUnits="userSpaceOnUse"><path d="M 8 0 L 0 0 0 8" fill="none" stroke="#DDE8E2" strokeWidth="0.5" /></pattern></defs>
+        <rect x={sl} y={us} width={W - sl - sg} height={H - us - al} fill="#FCFDFC" />
+        <rect x={sl} y={us} width={W - sl - sg} height={H - us - al} fill="url(#aylikGorKare)" />
+        {veri.map((v, i) => <line key={"d" + i} x1={x(i)} y1={us} x2={x(i)} y2={H - al} stroke="#BBD3C6" strokeWidth="0.9" />)}
+        {[0, 1, 2, 3, 4].map(i => { const v = ust * i / 4, py = y(v); return <g key={i}><line x1={sl} y1={py} x2={W - sg} y2={py} stroke="#BBD3C6" strokeWidth="0.9" /><text x={sl - 4} y={py + 3} fontSize="8" fill="#7D9188" fontWeight="600" textAnchor="end">{Math.round(v)}</text></g>; })}
+        <rect x={sl} y={us} width={W - sl - sg} height={H - us - al} fill="none" stroke="#B9CFBE" strokeWidth="1.1" />
         {seriler.map(s => <path key={s.k} d={veri.map((v, i) => (i ? "L" : "M") + x(i).toFixed(1) + " " + y(v[s.k]).toFixed(1)).join(" ")} fill="none" stroke={s.renk} strokeWidth={s.k === "top" ? 2.6 : 1.8} strokeLinejoin="round" strokeLinecap="round" />)}
         {seriler.map(s => veri.map((v, i) => <circle key={s.k + i} cx={x(i)} cy={y(v[s.k])} r={s.k === "top" ? 3 : 2.3} fill="#fff" stroke={s.renk} strokeWidth="1.6" />))}
         {veri.map((v, i) => <text key={"t" + i} x={x(i)} y={y(v.top) - 6} fontSize="8.5" fontWeight="700" fill="#127C56" textAnchor="middle">{v.top}</text>)}

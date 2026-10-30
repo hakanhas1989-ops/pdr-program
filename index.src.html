@@ -3073,6 +3073,435 @@ function OmpButunculKart({ ogr, b, plan }) {
   );
 }
 // ===== ÖÖG BÜTÜNCÜL DEĞERLENDİRME BİTİŞ =====
+// ===== ÖÖG TABLET ETKİNLİKLERİ BAŞLANGIÇ =====
+// Tablette çocukla birlikte çalışılan etkinlikler. Her şey cihazda; internet ve yapay zekâ kullanılmaz.
+// Uygulayıcı (danışman) yanındadır: kart ve okuma etkinliklerinde doğru/yanlışı o işaretler.
+const OMP_TB_KELIME = {
+  i1: ["el-ma", "ka-lem", "ma-sa", "ke-di", "o-kul", "ki-tap", "ba-lık", "a-ra-ba", "çi-çek", "kar-puz", "pen-ce-re", "bar-dak", "ay-na", "ye-şil", "kır-mı-zı", "şap-ka", "ör-dek", "ta-vuk", "si-mit", "li-mon"],
+  i2: ["o-kul-lar", "ki-tap-lık", "göz-lük-çü", "ar-ka-daş-lar", "ça-lış-kan", "bah-çe-de", "sı-nıf-lar-da", "öğ-ret-men", "pen-ce-re-den", "se-vinç-li", "kar-de-şim", "de-niz-ci", "yol-cu-luk", "a-ğaç-lar", "o-yun-cak-lar"],
+  o1: ["bi-lim-sel", "dü-zen-li-lik", "so-rum-lu-luk", "öğ-ren-ci-le-ri-miz", "ge-liş-tir-mek", "ar-ka-daş-lık-la-rı", "bağ-lan-tı-lar", "de-ğer-len-dir-me", "sı-nıf-lan-dır-ma", "ta-rım-sal", "bil-gi-sa-yar-lar", "ka-rar-sız-lık", "ü-re-ti-ci-ler"],
+  o2: ["fo-to-sen-tez", "de-mok-ra-si", "sa-na-yi-leş-me", "sür-dü-rü-le-bi-lir", "ba-ğım-sız-lık", "e-ko-sis-tem", "kü-re-sel-leş-me", "yo-ğun-laş-ma", "sin-di-rim", "ye-ni-le-ne-bi-lir", "iz-le-nim-ler", "cum-hu-ri-yet", "ant-laş-ma"],
+};
+// Harf yeri (yer değiştirme) hatasına açık gerçek kelime çiftleri (Güven & Friedmann 2019 örneklerinden esinle)
+const OMP_TB_YER_CIFT = [["altı", "atlı"], ["sarı", "sıra"], ["kalem", "kelam"], ["kart", "krat"], ["çanta", "çatna"], ["kitap", "kipat"], ["portakal", "protakal"], ["bardak", "badrak"], ["kardeş", "kadreş"], ["toprak", "topark"]];
+const OMP_TB_METIN = {
+  i1: [
+    { ad: "Parkta", metin: "Ali ile Ela parka gitti. Parkta salıncak vardı. Ela salıncağa bindi. Ali onu itti. Sonra kaydıraktan kaydılar. Annem bize simit aldı. Simitler çok sıcaktı. Akşam eve döndük. Çok güzel bir gündü." },
+    { ad: "Pamuk", metin: "Bizim bir kedimiz var. Adı Pamuk. Pamuk beyaz ve yumuşak. Sabahları mama yer. Öğlen güneşte uyur. Akşam topla oynar. Topu kapıya kadar iter. Sonra koltuğa zıplar. Pamuk'u çok seviyoruz." },
+    { ad: "Yağmur", metin: "Bugün yağmur yağdı. Can botlarını giydi. Şemsiyesini aldı. Yolda su birikintileri vardı. Can suya bastı. Su her yere sıçradı. Can güldü. Okula vardığında çantası ıslanmıştı. Öğretmeni ona havlu verdi." },
+    { ad: "Domates", metin: "Dedem bahçeye domates ekti. Ben de ona yardım ettim. Toprağı kazdık. Fideleri diktik. Her gün su verdik. Fideler büyüdü. Kırmızı domatesler çıktı. Domatesleri topladık. Annem salata yaptı." },
+  ],
+  i2: [
+    { ad: "Otobüs durağı", metin: "Selin her sabah otobüsle okula gider. Otobüs durağı evlerinin hemen karşısındadır. Bir gün otobüs gecikti. Selin saate baktı ve endişelendi. Yanında bekleyen yaşlı bir teyze ona gülümsedi. \"Merak etme, birazdan gelir,\" dedi. Gerçekten de birkaç dakika sonra otobüs geldi. Selin teyzeye teşekkür etti. Okula vaktinde vardı." },
+    { ad: "Arılar", metin: "Arılar çok çalışkan böceklerdir. Bir kovanda binlerce arı birlikte yaşar. Her arının bir görevi vardır. Bazıları çiçeklerden nektar toplar. Bazıları kovanı temizler. Kraliçe arı ise yumurta bırakır. Arılar topladıkları nektardan bal yapar. Çiçekler arasında dolaşırken onların tozlaşmasına da yardım ederler." },
+    { ad: "Maç", metin: "Mert'in en sevdiği oyun futboldur. Teneffüslerde arkadaşlarıyla bahçede top oynar. Bir gün maçta takımı yenildi. Mert çok üzüldü ve kimseyle konuşmadı. Öğretmeni yanına gelip neden üzgün olduğunu sordu. Öğretmeni, her maçtan bir şey öğrenebileceğini anlattı. Ertesi gün Mert takımıyla birlikte pas çalıştı." },
+    { ad: "Kış uykusu", metin: "Kışın bazı hayvanlar uzun bir uykuya dalar. Buna kış uykusu denir. Ayılar, kirpiler ve kurbağalar kış uykusuna yatan hayvanlardandır. Bu hayvanlar sonbaharda bol bol yiyerek yağ biriktirir. Kış boyunca bu yağı kullanarak yaşarlar. Havalar ısınınca uyanır ve yeniden yiyecek aramaya başlarlar." },
+  ],
+  o1: [
+    { ad: "Su döngüsü", metin: "Su döngüsü, suyun doğada sürekli yer değiştirmesidir. Güneş denizleri, gölleri ve nehirleri ısıtır. Isınan su buharlaşarak gökyüzüne yükselir. Yükseklerde hava soğuk olduğu için su buharı yoğunlaşır ve küçük damlacıklara dönüşür. Bu damlacıklar bir araya gelerek bulutları oluşturur. Damlacıklar ağırlaşınca yağmur, kar ya da dolu olarak yeryüzüne düşer. Yağışların bir kısmı toprağa süzülür, bir kısmı ise derelerle denizlere ulaşır. Böylece döngü yeniden başlar." },
+    { ad: "Kütüphane", metin: "Elif, okulun kütüphanesinde gönüllü olarak çalışmaya karar verdi. İlk gün kitapları raflara yerleştirirken kitapların bir düzene göre dizildiğini fark etti. Kütüphane görevlisi, kitapların konularına göre numaralandırıldığını açıkladı. Böylece aranan kitap kısa sürede bulunabiliyordu. Elif birkaç hafta içinde bu sistemi öğrendi. Artık arkadaşları bir kitap aradığında onlara yardım edebiliyordu." },
+    { ad: "Takastan paraya", metin: "Eski çağlarda insanlar ihtiyaçlarını takas yoluyla karşılardı. Buğday yetiştiren bir çiftçi, buğdayının bir kısmını çömlekçinin yaptığı kaplarla değiştirirdi. Ancak takasın bazı zorlukları vardı. Çiftçinin kaba ihtiyacı olduğunda çömlekçinin buğdaya ihtiyacı olmayabilirdi. Bu sorunlar zamanla paranın ortaya çıkmasına yol açtı. Para, alışverişi kolaylaştırdı ve ticaretin gelişmesini sağladı." },
+    { ad: "Bilim şenliği", metin: "Deniz, bilim şenliği için bitkilerin ışığa doğru büyüdüğünü denemeye karar verdi. İki saksıya fasulye ekti. Saksılardan birini pencerenin önüne, diğerini karanlık bir dolaba koydu. Her gün ikisine de aynı miktarda su verdi ve fidelerin boyunu ölçüp bir tabloya yazdı. İki hafta sonra pencere önündeki fidelerin daha uzun ve yeşil olduğunu gördü. Dolaptaki fideler ise sararmış ve cılız kalmıştı." },
+  ],
+  o2: [
+    { ad: "Yenilenebilir enerji", metin: "Yenilenebilir enerji kaynakları, doğada kendiliğinden yenilenen ve tükenmeyen kaynaklardır. Güneş, rüzgâr, su ve jeotermal enerji bu kaynakların en bilinenleridir. Kömür ve petrol gibi fosil yakıtlar ise milyonlarca yılda oluşur ve kullanıldıkça azalır. Fosil yakıtların yakılması havaya karbondioksit salınmasına neden olur. Bu gaz, atmosferde ısıyı tutarak küresel ısınmaya katkıda bulunur. Ancak yenilenebilir kaynakların da sınırlılıkları vardır; güneş enerjisi geceleri, rüzgâr enerjisi ise rüzgârsız havalarda üretilemez." },
+    { ad: "Çalışma planı", metin: "Kaan, sınav haftası yaklaştıkça kaygılanmaya başlamıştı. Masasına oturduğunda hangi dersten başlayacağını bilemiyordu. Rehber öğretmeni ona önce bir çalışma planı yapmasını önerdi. Kaan, her dersin konularını listeledi ve zor bulduklarını işaretledi. Ardından günlerini kısa çalışma bloklarına ayırdı. Her bloğun sonunda kendine küçük molalar verdi ve öğrendiklerini bir kâğıda özetledi. Bir hafta sonra konuların gözünde büyümediğini fark etti." },
+    { ad: "Bağışıklık", metin: "Bağışıklık sistemi, vücudumuzu hastalık yapıcı mikroplara karşı koruyan bir savunma ağıdır. Deri ve mukoza zarları ilk savunma hattını oluşturur. Bu engeli aşan mikroplar, kandaki akyuvarlar tarafından fark edilir. Bazı akyuvarlar mikropları yutarak yok eder, bazıları ise antikor adı verilen özel proteinler üretir. Vücut, karşılaştığı mikrobu hafızasında tutar. Aşılar da bu ilkeye dayanır." },
+    { ad: "Matbaa", metin: "Matbaanın yaygınlaşmasından önce kitaplar elle yazılarak çoğaltılırdı. Bir kitabın kopyalanması aylar sürebilirdi ve bu yüzden kitaplar oldukça pahalıydı. On beşinci yüzyılda hareketli harflerle baskı yapan matbaanın Avrupa'da yaygınlaşmasıyla kitaplar çok daha hızlı ve ucuz basılmaya başlandı. Bilgi, daha önce hiç olmadığı kadar geniş kitlelere ulaştı. Bilim insanları buluşlarını kısa sürede paylaşabildi." },
+  ],
+};
+const OMP_TB_HARFLER = "a b c ç d e f g ğ h ı i j k l m n o ö p r s ş t u ü v y z".split(" ");
+const ompTbKar = (l) => { const a = [...l]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const ompTbRas = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+const ompTbTr = (s) => String(s || "").toLocaleLowerCase("tr").trim();
+// Çeldiriciler: ortadaki iki harfin yer değiştirmesi + bir ünlü değişikliği
+function ompTbCeldirici(k) {
+  const s = new Set(); const h = [...k];
+  for (let i = 1; i < h.length - 2 && s.size < 2; i++) { if (h[i] !== h[i + 1]) { const c = [...h]; [c[i], c[i + 1]] = [c[i + 1], c[i]]; const y = c.join(""); if (y !== k) s.add(y); } }
+  const unlu = { a: "e", e: "a", ı: "i", i: "ı", o: "u", u: "o", ö: "ü", ü: "ö" };
+  for (let i = h.length - 1; i >= 0 && s.size < 3; i--) if (unlu[h[i]]) { const c = [...h]; c[i] = unlu[h[i]]; s.add(c.join("")); break; }
+  return [...s].slice(0, 2);
+}
+function ompTbHeceler(n) {
+  const u = ["b", "c", "ç", "d", "f", "g", "k", "l", "m", "n", "p", "r", "s", "ş", "t", "v", "y", "z"], v = ["a", "e", "ı", "i", "o", "ö", "u", "ü"];
+  return Array.from({ length: n }, () => Math.random() < 0.7 ? u[ompTbRas(0, u.length - 1)] + v[ompTbRas(0, 7)] : v[ompTbRas(0, 7)] + ["l", "r", "n", "s", "t", "k", "m"][ompTbRas(0, 6)]);
+}
+// İşlem üreteçleri: { soru, cevap }
+const OMP_TB_ISLEM = {
+  topla10: () => { const a = ompTbRas(0, 9), b = ompTbRas(0, 10 - a); return { soru: `${a} + ${b}`, cevap: a + b }; },
+  cikar10: () => { const a = ompTbRas(1, 10), b = ompTbRas(0, a); return { soru: `${a} − ${b}`, cevap: a - b }; },
+  tamamla10: () => { const a = ompTbRas(1, 9); return { soru: `${a} + ? = 10`, cevap: 10 - a }; },
+  toplacikar20: () => Math.random() < 0.5 ? (() => { const a = ompTbRas(2, 15), b = ompTbRas(1, 20 - a); return { soru: `${a} + ${b}`, cevap: a + b }; })() : (() => { const a = ompTbRas(5, 20), b = ompTbRas(1, a); return { soru: `${a} − ${b}`, cevap: a - b }; })(),
+  onluk: () => { const n = ompTbRas(11, 99); return Math.random() < 0.5 ? { soru: `${n} sayısında kaç onluk var?`, cevap: Math.floor(n / 10) } : { soru: `${Math.floor(n / 10)} onluk ${n % 10} birlik kaç eder?`, cevap: n }; },
+  carp: () => { const a = ompTbRas(2, 9), b = ompTbRas(2, 9); return { soru: `${a} × ${b}`, cevap: a * b }; },
+  bol: () => { const a = ompTbRas(2, 9), b = ompTbRas(2, 9); return { soru: `${a * b} ÷ ${a}`, cevap: b }; },
+  carpbol: () => Math.random() < 0.6 ? OMP_TB_ISLEM.carp() : OMP_TB_ISLEM.bol(),
+  kare: () => Math.random() < 0.75 ? (() => { const n = ompTbRas(1, 15); return { soru: `${n}²`, cevap: n * n }; })() : (() => { const n = ompTbRas(1, 5); return { soru: `${n}³`, cevap: n * n * n }; })(),
+  yuzde: () => { const y = [10, 20, 25, 50][ompTbRas(0, 3)], b = (y === 25 ? 4 : y === 50 ? 2 : 10) * ompTbRas(1, 12); return { soru: `${b} sayısının %${y}'i`, cevap: b * y / 100 }; },
+  denklem: () => Math.random() < 0.5 ? (() => { const x = ompTbRas(1, 15), a = ompTbRas(1, 15); return { soru: `x + ${a} = ${x + a}   x = ?`, cevap: x }; })() : (() => { const x = ompTbRas(1, 12), a = ompTbRas(2, 9); return { soru: `${a}x = ${a * x}   x = ?`, cevap: x }; })(),
+  oncelik: () => { const a = ompTbRas(1, 9), b = ompTbRas(2, 6), c = ompTbRas(2, 6); return Math.random() < 0.5 ? { soru: `${a} + ${b} × ${c}`, cevap: a + b * c } : { soru: `(${a} + ${b}) × ${c}`, cevap: (a + b) * c }; },
+};
+// Sayı doğrusu: { min, max, uret() → { etiket, deger } }
+const ompTbKesir = (p, q) => ({ etiket: `${p}/${q}`, deger: p / q });
+const OMP_TB_DOGRU = {
+  tam100: { min: 0, max: 100, uret: () => { const n = ompTbRas(1, 99); return { etiket: String(n), deger: n }; } },
+  tam1000: { min: 0, max: 1000, uret: () => { const n = ompTbRas(1, 99) * 10; return { etiket: String(n), deger: n }; } },
+  kesir1: { min: 0, max: 1, uret: () => { const q = [2, 3, 4, 5, 8][ompTbRas(0, 4)]; return ompTbKesir(ompTbRas(1, q - 1), q); } },
+  kesir2: { min: 0, max: 2, uret: () => { const q = [2, 3, 4, 5][ompTbRas(0, 3)]; return ompTbKesir(ompTbRas(1, 2 * q - 1), q); } },
+  ondalik: { min: 0, max: 1, uret: () => { const n = ompTbRas(1, 19) * 5; return { etiket: (n / 100).toFixed(n % 10 === 0 ? 1 : 2).replace(".", ","), deger: n / 100 }; } },
+  negatif: { min: -5, max: 5, uret: () => { const n = ompTbRas(-9, 9) / 2; return { etiket: (n < 0 ? "−" : "") + String(Math.abs(n)).replace(".", ","), deger: n }; } },
+};
+// Ünite → tablet etkinlikleri
+const OMP_TB_UNITE = {
+  "i1-ok-1": [{ tur: "kartlar", ad: "Ses birleştirme kartları", kaynak: "ses", adet: 10, olcum: "ses10" }],
+  "i1-ok-2": [{ tur: "kartlar", ad: "1 dakikada harf sesi", kaynak: "harf", sure: 60, olcum: "harfses" }],
+  "i1-ok-3": [{ tur: "hece", ad: "Hece birleştirme" }, { tur: "kartlar", ad: "1 dakikada hece okuma", kaynak: "hece", sure: 60, olcum: "hece" }],
+  "i1-ok-4": [{ tur: "ikili", ad: "Doğru kelimeyi bul", yerCift: true }, { tur: "kartlar", ad: "20 kelimelik çözümleme", kaynak: "kelime", adet: 20, olcum: "kelime20" }],
+  "i1-ok-5": [{ tur: "okuma", ad: "Tekrarlı okuma" }],
+  "i1-ok-6": [{ tur: "dikte", ad: "Dikte", olcum: "dikte10" }],
+  "i2-ok-1": [{ tur: "hece", ad: "Uzun kelimeyi hecele" }, { tur: "kartlar", ad: "20 uzun kelime", kaynak: "kelime", adet: 20, olcum: "kelime20" }],
+  "i2-ok-2": [{ tur: "okuma", ad: "Tekrarlı okuma" }], "i2-ok-3": [{ tur: "okuma", ad: "Okuma metni" }], "i2-ok-4": [{ tur: "okuma", ad: "Okuma metni" }], "i2-ok-5": [{ tur: "okuma", ad: "Okuma metni" }],
+  "i2-ok-6": [{ tur: "dikte", ad: "Dikte" }],
+  "o1-ok-1": [{ tur: "hece", ad: "Uzun kelimeyi hecele" }, { tur: "ikili", ad: "Doğru kelimeyi bul" }, { tur: "kartlar", ad: "20 uzun kelime", kaynak: "kelime", adet: 20, olcum: "kelime20" }],
+  "o1-ok-2": [{ tur: "okuma", ad: "Tekrarlı okuma" }], "o1-ok-3": [{ tur: "okuma", ad: "Okuma metni" }], "o1-ok-4": [{ tur: "okuma", ad: "Okuma metni" }], "o1-ok-5": [{ tur: "okuma", ad: "Okuma metni" }],
+  "o1-ok-6": [{ tur: "dikte", ad: "Dikte (yazım)" }],
+  "o2-ok-1": [{ tur: "hece", ad: "Kavramı hecele" }, { tur: "ikili", ad: "Doğru kelimeyi bul" }, { tur: "kartlar", ad: "20 kavram", kaynak: "kelime", adet: 20, olcum: "kelime20" }],
+  "o2-ok-2": [{ tur: "okuma", ad: "Tekrarlı okuma" }], "o2-ok-3": [{ tur: "okuma", ad: "Okuma metni" }], "o2-ok-4": [{ tur: "okuma", ad: "Okuma metni" }], "o2-ok-5": [{ tur: "okuma", ad: "Okuma metni" }],
+  "o2-ok-6": [{ tur: "dikte", ad: "Dikte (yazım)" }],
+  "i1-mt-1": [{ tur: "hizlibakis", ad: "Hızlı bakış (onluk çerçeve)" }, { tur: "islem", ad: "10'u tamamla", islem: "tamamla10", olcum: "mat1dk" }],
+  "i1-mt-2": [{ tur: "dogru", ad: "Sayı doğrusu 0–100", dogru: "tam100", olcum: "sd10" }],
+  "i1-mt-3": [{ tur: "islem", ad: "10'a kadar toplama", islem: "topla10", olcum: "mat1dk" }, { tur: "islem", ad: "10'a kadar çıkarma", islem: "cikar10" }],
+  "i1-mt-4": [{ tur: "islem", ad: "20'ye kadar toplama-çıkarma", islem: "toplacikar20", olcum: "mat1dk" }],
+  "i1-mt-5": [{ tur: "islem", ad: "Onluk ve birlik", islem: "onluk" }, { tur: "dogru", ad: "Sayı doğrusu 0–100", dogru: "tam100", olcum: "sd10" }],
+  "i1-mt-6": [{ tur: "islem", ad: "20'ye kadar toplama-çıkarma", islem: "toplacikar20" }],
+  "i2-mt-1": [{ tur: "dogru", ad: "Sayı doğrusu 0–1000", dogru: "tam1000", olcum: "sd10" }],
+  "i2-mt-2": [{ tur: "islem", ad: "Çarpım tablosu", islem: "carp", olcum: "mat1dk" }], "i2-mt-3": [{ tur: "islem", ad: "Çarpım tablosu", islem: "carp", olcum: "mat1dk" }],
+  "i2-mt-4": [{ tur: "islem", ad: "Bölme", islem: "bol", olcum: "mat1dk" }],
+  "i2-mt-5": [{ tur: "dogru", ad: "Kesirler 0–1", dogru: "kesir1", olcum: "sd10" }],
+  "i2-mt-6": [{ tur: "islem", ad: "Çarpma-bölme", islem: "carpbol" }],
+  "o1-mt-1": [{ tur: "dogru", ad: "Kesirler 0–2", dogru: "kesir2", olcum: "sd10" }], "o1-mt-2": [{ tur: "dogru", ad: "Ondalık 0–1", dogru: "ondalik", olcum: "sd10" }],
+  "o1-mt-3": [{ tur: "islem", ad: "Çarpma-bölme", islem: "carpbol", olcum: "mat1dk" }], "o1-mt-4": [{ tur: "islem", ad: "Çarpma-bölme", islem: "carpbol" }],
+  "o1-mt-5": [{ tur: "islem", ad: "Yüzde", islem: "yuzde" }], "o1-mt-6": [{ tur: "islem", ad: "İşlem önceliği", islem: "oncelik" }],
+  "o2-mt-1": [{ tur: "dogru", ad: "Rasyonel sayılar −5…5", dogru: "negatif", olcum: "sd10" }], "o2-mt-2": [{ tur: "islem", ad: "Yüzde", islem: "yuzde" }],
+  "o2-mt-3": [{ tur: "islem", ad: "İşlem önceliği", islem: "oncelik" }], "o2-mt-4": [{ tur: "islem", ad: "Denklem", islem: "denklem" }],
+  "o2-mt-5": [{ tur: "islem", ad: "Kare ve küp", islem: "kare", olcum: "mat1dk" }], "o2-mt-6": [{ tur: "islem", ad: "İşlem önceliği", islem: "oncelik" }],
+};
+function ompTbSeviye(u, plan) { return u && u.seviye !== "ek" ? u.seviye : (plan && plan.seviye) || "o1"; }
+function ompTbKelimeler(sev) { return (OMP_TB_KELIME[sev] || OMP_TB_KELIME.i1).map(k => k.replace(/-/g, "")); }
+// Sesli okuma (tabletin Türkçe sesi varsa)
+function ompTbSesVar() { try { return !!(window.speechSynthesis && window.speechSynthesis.getVoices().some(v => /^tr/i.test(v.lang))); } catch (e) { return false; } }
+function ompTbSoyle(t) { try { if (!window.speechSynthesis) return; if (!window.SpeechSynthesisUtterance) return; window.speechSynthesis.cancel(); const u = new window.SpeechSynthesisUtterance(t); u.lang = "tr-TR"; u.rate = 0.8; const v = window.speechSynthesis.getVoices().find(x => /^tr/i.test(x.lang)); if (v) u.voice = v; window.speechSynthesis.speak(u); } catch (e) {} }
+
+const OMP_TB = { zemin: "#FFFDF7", metin: "#1C2B24", yesil: "#16A34A", turuncu: "#EA580C", mavi: "#2563EB", gri: "#94A3B8" };
+const ompTbDugme = (renk, buyuk) => ({ padding: buyuk ? "18px 28px" : "12px 18px", borderRadius: 18, border: "none", background: renk, color: "#fff", fontSize: buyuk ? 26 : 19, fontWeight: 800, cursor: "pointer", touchAction: "manipulation", minWidth: buyuk ? 140 : 90 });
+
+function OmpTbSonuc({ r, onTekrar, onDevam }) {
+  return (
+    <div style={{ textAlign: "center", padding: 20 }}>
+      <div style={{ fontSize: 64 }}>{r.yuzde >= 80 ? "🌟" : r.yuzde >= 50 ? "👍" : "💪"}</div>
+      <div data-testid="omp-tb-sonuc" style={{ fontSize: 34, fontWeight: 900, color: OMP_TB.metin, margin: "8px 0" }}>{r.metin}</div>
+      {r.ek && <div style={{ fontSize: 18, color: "#475569", marginBottom: 10 }}>{r.ek}</div>}
+      <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap", marginTop: 14 }}>
+        <button onClick={onTekrar} style={ompTbDugme(OMP_TB.mavi)}>↻ Yeniden</button>
+        <button data-testid="omp-tb-devam" onClick={onDevam} style={ompTbDugme(OMP_TB.yesil)}>✓ Bitti</button>
+      </div>
+    </div>
+  );
+}
+// 1) Kartlar — uygulayıcı doğru/yanlış işaretler (süreli ya da adetli)
+function OmpTbKartlar({ e, sev, onBitir }) {
+  const uret = () => {
+    if (e.kaynak === "harf") return ompTbKar([...OMP_TB_HARFLER, ...OMP_TB_HARFLER, ...OMP_TB_HARFLER]);
+    if (e.kaynak === "hece") return ompTbHeceler(120);
+    if (e.kaynak === "ses") return ompTbKar(ompTbKelimeler("i1")).slice(0, e.adet).map(k => ({ goster: [...k].join(" - "), cevap: k }));
+    const l = sev === "i1" ? [...ompTbKelimeler("i1"), ...OMP_TB_YER_CIFT.map(c => c[0]), "atlı", "sıra"] : ompTbKelimeler(sev);
+    const k = ompTbKar(l); while (k.length < (e.adet || 20)) k.push(...ompTbKar(l)); return k.slice(0, e.adet || 20);
+  };
+  const [liste, setListe] = useState(uret); const [i, setI] = useState(0); const [d, setD] = useState(0); const [y, setY] = useState(0);
+  const [basladi, setBasladi] = useState(!e.sure); const [kalan, setKalan] = useState(e.sure || 0); const [bitti, setBitti] = useState(false);
+  useEffect(() => { if (!e.sure || !basladi || bitti) return; const t = setInterval(() => setKalan(k => { if (k <= 1) { clearInterval(t); setBitti(true); return 0; } return k - 1; }), 1000); return () => clearInterval(t); }, [basladi, bitti]);
+  const isaretle = (ok) => { if (bitti) return; ok ? setD(d + 1) : setY(y + 1); const n = i + 1; if (!e.sure && n >= liste.length) setBitti(true); else setI(n % liste.length); };
+  if (bitti) { const top = d + y; return <OmpTbSonuc r={{ metin: e.sure ? `${d} doğru / ${e.sure} sn` : `${d} / ${liste.length} doğru`, yuzde: top ? 100 * d / top : 0, ek: y ? `${y} yanlış` : "" }} onTekrar={() => { setListe(uret()); setI(0); setD(0); setY(0); setBitti(false); setKalan(e.sure || 0); setBasladi(!e.sure); }} onDevam={() => onBitir({ puan: d, enCok: e.sure ? null : liste.length })} />; }
+  const it = liste[i]; const goster = typeof it === "object" ? it.goster : it;
+  return (
+    <div style={{ textAlign: "center" }}>
+      <div style={{ fontSize: 16, color: "#64748B" }}>{e.sure ? (basladi ? `⏱ ${kalan} sn` : `${e.sure} saniye`) : `${i + 1} / ${liste.length}`} · ✓ {d} · ✗ {y}</div>
+      {typeof it === "object" && <div style={{ fontSize: 13, color: OMP_TB.gri }}>Uygulayıcı: sesleri ayrı ayrı söyle, çocuk kelimeyi bulsun ({it.cevap})</div>}
+      <div data-testid="omp-tb-kart" style={{ fontSize: goster.length > 12 ? 52 : 96, fontWeight: 900, color: OMP_TB.metin, margin: "28px 0", minHeight: 120, wordBreak: "break-word" }}>{basladi ? goster : "Hazır mısın?"}</div>
+      {!basladi ? <button data-testid="omp-tb-basla" onClick={() => setBasladi(true)} style={ompTbDugme(OMP_TB.mavi, true)}>▶ Başla</button> : (
+        <div style={{ display: "flex", gap: 18, justifyContent: "center" }}>
+          <button data-testid="omp-tb-yanlis" onClick={() => isaretle(false)} style={ompTbDugme(OMP_TB.turuncu, true)}>✗</button>
+          <button data-testid="omp-tb-dogru" onClick={() => isaretle(true)} style={ompTbDugme(OMP_TB.yesil, true)}>✓</button>
+        </div>
+      )}
+      <div style={{ fontSize: 12.5, color: OMP_TB.gri, marginTop: 14 }}>Çocuk sesli söyler; doğru/yanlışı uygulayıcı işaretler.</div>
+    </div>
+  );
+}
+// 2) Hece birleştirme — karışık heceleri sırayla dokun
+function OmpTbHece({ sev, onBitir }) {
+  const uret = () => ompTbKar(OMP_TB_KELIME[sev] || OMP_TB_KELIME.i1).slice(0, 10);
+  const [liste, setListe] = useState(uret); const [i, setI] = useState(0); const [secilen, setSecilen] = useState([]); const [puan, setPuan] = useState(0); const [hata, setHata] = useState(false); const [ilk, setIlk] = useState(true); const [bitti, setBitti] = useState(false);
+  const heceler = liste[i] ? liste[i].split("-") : [];
+  const [karisik, setKarisik] = useState(() => ompTbKar(heceler.map((h, j) => ({ h, j }))));
+  useEffect(() => { if (liste[i]) setKarisik(ompTbKar(liste[i].split("-").map((h, j) => ({ h, j })))); setSecilen([]); setIlk(true); }, [i, liste]);
+  const sec = (x) => {
+    if (secilen.some(s => s.j === x.j)) return;
+    const yeni = [...secilen, x];
+    if (heceler[yeni.length - 1] !== x.h) { setHata(true); setIlk(false); setTimeout(() => { setHata(false); setSecilen([]); }, 650); return; }
+    setSecilen(yeni);
+    if (yeni.length === heceler.length) { ompTbSoyle(heceler.join("")); const p = puan + (ilk ? 1 : 0); setPuan(p); setTimeout(() => { if (i + 1 >= liste.length) setBitti(true); else setI(i + 1); }, 900); }
+  };
+  if (bitti) return <OmpTbSonuc r={{ metin: `${puan} / ${liste.length} ilk denemede`, yuzde: 100 * puan / liste.length }} onTekrar={() => { setListe(uret()); setI(0); setPuan(0); setBitti(false); }} onDevam={() => onBitir({ puan, enCok: liste.length })} />;
+  return (
+    <div style={{ textAlign: "center" }}>
+      <div style={{ fontSize: 16, color: "#64748B" }}>{i + 1} / {liste.length} · ⭐ {puan}</div>
+      <button onClick={() => ompTbSoyle(heceler.join(""))} style={{ ...ompTbDugme(OMP_TB.mavi), margin: "10px 0" }}>🔊 Dinle</button>
+      <div data-testid="omp-tb-hece-hedef" style={{ display: "flex", gap: 10, justifyContent: "center", margin: "18px 0", minHeight: 84 }}>
+        {heceler.map((_, j) => <div key={j} style={{ minWidth: 90, height: 80, borderRadius: 16, border: `3px dashed ${hata ? OMP_TB.turuncu : "#CBD5E1"}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40, fontWeight: 900, color: OMP_TB.yesil, background: secilen[j] ? "#DCFCE7" : "#fff" }}>{secilen[j] ? secilen[j].h : ""}</div>)}
+      </div>
+      <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+        {karisik.map(x => <button key={x.j} data-omp-hece={x.h} onClick={() => sec(x)} disabled={secilen.some(s => s.j === x.j)} style={{ ...ompTbDugme(secilen.some(s => s.j === x.j) ? "#CBD5E1" : "#7C3AED", true), fontSize: 40 }}>{x.h}</button>)}
+      </div>
+      <div style={{ fontSize: 13, color: OMP_TB.gri, marginTop: 14 }}>Uygulayıcı: kelime “{heceler.join("")}”. Ses yoksa sen söyle.</div>
+    </div>
+  );
+}
+// 3) Doğru kelimeyi bul — dinlenen/söylenen kelimeyi seçenekler arasından seç
+function OmpTbIkili({ e, sev, onBitir }) {
+  const uret = () => {
+    const tabani = e.yerCift || sev === "i1" ? [...OMP_TB_YER_CIFT.map(c => c[0]), ...ompTbKelimeler("i1")] : ompTbKelimeler(sev);
+    return ompTbKar(tabani).slice(0, 10).map(k => { const cift = OMP_TB_YER_CIFT.find(c => c[0] === k); const cel = cift ? [cift[1], ...ompTbCeldirici(k)].slice(0, 2) : ompTbCeldirici(k); return { k, secenek: ompTbKar([k, ...cel]) }; });
+  };
+  const [liste, setListe] = useState(uret); const [i, setI] = useState(0); const [puan, setPuan] = useState(0); const [sonuc, setSonuc] = useState(null); const [bitti, setBitti] = useState(false);
+  useEffect(() => { if (liste[i]) setTimeout(() => ompTbSoyle(liste[i].k), 300); }, [i, liste]);
+  const sec = (s) => { if (sonuc) return; const ok = s === liste[i].k; setSonuc({ s, ok }); const p = puan + (ok ? 1 : 0); setPuan(p); setTimeout(() => { setSonuc(null); if (i + 1 >= liste.length) setBitti(true); else setI(i + 1); }, ok ? 700 : 1400); };
+  if (bitti) return <OmpTbSonuc r={{ metin: `${puan} / ${liste.length} doğru`, yuzde: 100 * puan / liste.length }} onTekrar={() => { setListe(uret()); setI(0); setPuan(0); setBitti(false); }} onDevam={() => onBitir({ puan, enCok: liste.length })} />;
+  const it = liste[i];
+  return (
+    <div style={{ textAlign: "center" }}>
+      <div style={{ fontSize: 16, color: "#64748B" }}>{i + 1} / {liste.length} · ⭐ {puan}</div>
+      <button onClick={() => ompTbSoyle(it.k)} style={{ ...ompTbDugme(OMP_TB.mavi, true), margin: "14px 0" }}>🔊 Dinle</button>
+      <div style={{ fontSize: 13, color: OMP_TB.gri }}>Uygulayıcı: “{it.k}” — ses yoksa sen söyle.</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 14, alignItems: "center", marginTop: 18 }}>
+        {it.secenek.map(s => <button key={s} data-omp-ikili={s} onClick={() => sec(s)} style={{ ...ompTbDugme(sonuc && sonuc.s === s ? (sonuc.ok ? OMP_TB.yesil : OMP_TB.turuncu) : sonuc && !sonuc.ok && s === it.k ? OMP_TB.yesil : "#334155", true), fontSize: 40, minWidth: 260 }}>{s}</button>)}
+      </div>
+    </div>
+  );
+}
+// 4) Dikte — tablet söyler, çocuk ekrandaki klavyeyle yazar
+function OmpTbDikte({ sev, onBitir }) {
+  const uret = () => ompTbKar(ompTbKelimeler(sev)).slice(0, 10);
+  const [liste, setListe] = useState(uret); const [i, setI] = useState(0); const [yazi, setYazi] = useState(""); const [puan, setPuan] = useState(0); const [sonuc, setSonuc] = useState(null); const [bitti, setBitti] = useState(false); const [goster, setGoster] = useState(false);
+  useEffect(() => { if (liste[i]) setTimeout(() => ompTbSoyle(liste[i]), 300); setYazi(""); setGoster(false); }, [i, liste]);
+  const kontrol = () => { if (sonuc) return; const ok = ompTbTr(yazi) === ompTbTr(liste[i]); setSonuc(ok); const p = puan + (ok ? 1 : 0); setPuan(p); setTimeout(() => { setSonuc(null); if (i + 1 >= liste.length) setBitti(true); else setI(i + 1); }, ok ? 800 : 1800); };
+  if (bitti) return <OmpTbSonuc r={{ metin: `${puan} / ${liste.length} doğru`, yuzde: 100 * puan / liste.length }} onTekrar={() => { setListe(uret()); setI(0); setPuan(0); setBitti(false); }} onDevam={() => onBitir({ puan, enCok: liste.length })} />;
+  const satirlar = ["e r t y u ı o p ğ ü", "a s d f g h j k l ş i", "z c v b n m ö ç"];
+  return (
+    <div style={{ textAlign: "center" }}>
+      <div style={{ fontSize: 16, color: "#64748B" }}>{i + 1} / {liste.length} · ⭐ {puan}</div>
+      <div style={{ display: "flex", gap: 10, justifyContent: "center", margin: "10px 0" }}>
+        <button onClick={() => ompTbSoyle(liste[i])} style={ompTbDugme(OMP_TB.mavi)}>🔊 Dinle</button>
+        <button onPointerDown={() => setGoster(true)} onPointerUp={() => setGoster(false)} onPointerLeave={() => setGoster(false)} style={{ ...ompTbDugme("#64748B"), fontSize: 14 }}>👤 Uygulayıcı (basılı tut)</button>
+      </div>
+      {goster && <div style={{ fontSize: 15, color: OMP_TB.gri }}>{liste[i]}</div>}
+      <div data-testid="omp-tb-dikte-yazi" style={{ fontSize: 48, fontWeight: 900, minHeight: 70, borderBottom: `4px solid ${sonuc === true ? OMP_TB.yesil : sonuc === false ? OMP_TB.turuncu : "#CBD5E1"}`, margin: "10px auto 6px", maxWidth: 560, letterSpacing: 2 }}>{yazi || " "}</div>
+      {sonuc === false && <div style={{ fontSize: 26, color: OMP_TB.yesil, fontWeight: 800 }}>{liste[i]}</div>}
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "center", marginTop: 10 }}>
+        {satirlar.map(s => <div key={s} style={{ display: "flex", gap: 5 }}>{s.split(" ").map(h => <button key={h} data-omp-tus={h} onClick={() => !sonuc && setYazi(yazi + h)} style={{ width: "min(52px, 8.2vw)", height: 56, borderRadius: 10, padding: 0, border: "1px solid #CBD5E1", background: "#fff", fontSize: 26, fontWeight: 700, touchAction: "manipulation" }}>{h}</button>)}</div>)}
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => setYazi(yazi.slice(0, -1))} style={ompTbDugme("#64748B")}>⌫</button>
+          <button data-testid="omp-tb-dikte-kontrol" onClick={kontrol} disabled={!yazi} style={ompTbDugme(OMP_TB.yesil)}>Kontrol et</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+// 5) İşlem kartları — 1 dakika, ekran tuş takımı
+function OmpTbIslem({ e, onBitir }) {
+  const g = OMP_TB_ISLEM[e.islem] || OMP_TB_ISLEM.topla10;
+  const [s, setS] = useState(g); const [yazi, setYazi] = useState(""); const [d, setD] = useState(0); const [y, setY] = useState(0); const [yanlislar, setYanlislar] = useState([]);
+  const [basladi, setBasladi] = useState(false); const [kalan, setKalan] = useState(60); const [bitti, setBitti] = useState(false); const [flas, setFlas] = useState(null);
+  useEffect(() => { if (!basladi || bitti) return; const t = setInterval(() => setKalan(k => { if (k <= 1) { clearInterval(t); setBitti(true); return 0; } return k - 1; }), 1000); return () => clearInterval(t); }, [basladi, bitti]);
+  const gonder = () => { if (!yazi || bitti) return; const ok = Number(yazi.replace(",", ".")) === s.cevap; if (ok) setD(d + 1); else { setY(y + 1); setYanlislar([...yanlislar, `${s.soru} = ${String(s.cevap).replace(".", ",")}`]); } setFlas(ok ? "ok" : "no"); setTimeout(() => setFlas(null), 250); setYazi(""); setS(g()); };
+  if (bitti) return <OmpTbSonuc r={{ metin: `${d} doğru / 1 dakika`, yuzde: d + y ? 100 * d / (d + y) : 0, ek: yanlislar.length ? `Tekrar et: ${yanlislar.slice(0, 6).join(" · ")}` : "" }} onTekrar={() => { setS(g()); setD(0); setY(0); setYanlislar([]); setKalan(60); setBitti(false); setBasladi(false); }} onDevam={() => onBitir({ puan: d, enCok: null })} />;
+  const tus = (t) => { if (!basladi) return; if (t === "⌫") setYazi(yazi.slice(0, -1)); else if (t === "−") setYazi(yazi.startsWith("-") ? yazi.slice(1) : "-" + yazi); else setYazi((yazi + t).slice(0, 6)); };
+  return (
+    <div style={{ textAlign: "center" }}>
+      <div style={{ fontSize: 18, color: "#64748B" }}>{basladi ? `⏱ ${kalan} sn` : "1 dakika"} · ✓ {d}</div>
+      <div data-testid="omp-tb-islem-soru" style={{ fontSize: s.soru.length > 14 ? 40 : 72, fontWeight: 900, margin: "18px 0 6px", color: flas === "ok" ? OMP_TB.yesil : flas === "no" ? OMP_TB.turuncu : OMP_TB.metin }}>{basladi ? s.soru : "Hazır mısın?"}</div>
+      <div data-testid="omp-tb-islem-yazi" style={{ fontSize: 54, fontWeight: 900, minHeight: 70, color: OMP_TB.mavi }}>{yazi || (basladi ? "?" : "")}</div>
+      {!basladi ? <button data-testid="omp-tb-basla" onClick={() => setBasladi(true)} style={ompTbDugme(OMP_TB.mavi, true)}>▶ Başla</button> : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 92px)", gap: 10, justifyContent: "center", marginTop: 8 }}>
+          {["7", "8", "9", "4", "5", "6", "1", "2", "3", "−", "0", "⌫"].map(t => <button key={t} data-omp-tus={t} onClick={() => tus(t)} style={{ height: 76, borderRadius: 16, border: "1px solid #CBD5E1", background: "#fff", fontSize: 34, fontWeight: 800, touchAction: "manipulation" }}>{t}</button>)}
+          <button data-testid="omp-tb-islem-gonder" onClick={gonder} style={{ ...ompTbDugme(OMP_TB.yesil, true), gridColumn: "1 / span 3" }}>Tamam</button>
+        </div>
+      )}
+    </div>
+  );
+}
+// 6) Hızlı bakış — onluk çerçevede noktaları 2 saniye göster, kaç tane?
+function OmpTbHizliBakis({ onBitir }) {
+  const [i, setI] = useState(0); const [n, setN] = useState(() => ompTbRas(1, 10)); const [gizli, setGizli] = useState(false); const [yazi, setYazi] = useState(""); const [puan, setPuan] = useState(0); const [bitti, setBitti] = useState(false); const [sonuc, setSonuc] = useState(null);
+  useEffect(() => { setGizli(false); const t = setTimeout(() => setGizli(true), 2000); return () => clearTimeout(t); }, [i]);
+  const gonder = () => { if (!yazi) return; const ok = Number(yazi) === n; setSonuc(ok); const p = puan + (ok ? 1 : 0); setPuan(p); setTimeout(() => { setSonuc(null); setYazi(""); if (i + 1 >= 10) setBitti(true); else { setN(ompTbRas(1, i >= 4 ? 20 : 10)); setI(i + 1); } }, 900); };
+  if (bitti) return <OmpTbSonuc r={{ metin: `${puan} / 10 doğru`, yuzde: puan * 10 }} onTekrar={() => { setI(0); setPuan(0); setBitti(false); setN(ompTbRas(1, 10)); }} onDevam={() => onBitir({ puan, enCok: 10 })} />;
+  const cerceve = (dolu) => <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 54px)", gap: 4, background: "#334155", padding: 4, borderRadius: 8 }}>{Array.from({ length: 10 }, (_, j) => <div key={j} style={{ height: 54, background: "#fff", borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center" }}>{j < dolu && <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#DC2626" }} />}</div>)}</div>;
+  return (
+    <div style={{ textAlign: "center" }}>
+      <div style={{ fontSize: 16, color: "#64748B" }}>{i + 1} / 10 · ⭐ {puan}</div>
+      <div style={{ display: "flex", gap: 14, justifyContent: "center", margin: "18px 0", minHeight: 130, flexWrap: "wrap" }}>
+        {gizli ? <div style={{ fontSize: 30, color: "#64748B", alignSelf: "center" }}>Kaç tane gördün?</div> : <>{cerceve(Math.min(10, n))}{n > 10 && cerceve(n - 10)}</>}
+      </div>
+      <div style={{ fontSize: 54, fontWeight: 900, minHeight: 66, color: sonuc === true ? OMP_TB.yesil : sonuc === false ? OMP_TB.turuncu : OMP_TB.mavi }}>{sonuc === false ? n : yazi || "?"}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 70px)", gap: 8, justifyContent: "center" }}>
+        {["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"].map(t => <button key={t} onClick={() => gizli && setYazi((yazi + t).slice(0, 2))} style={{ height: 64, borderRadius: 14, border: "1px solid #CBD5E1", background: "#fff", fontSize: 30, fontWeight: 800 }}>{t}</button>)}
+      </div>
+      <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 10 }}>
+        <button onClick={() => setYazi(yazi.slice(0, -1))} style={ompTbDugme("#64748B")}>⌫</button>
+        <button onClick={gonder} disabled={!gizli} style={ompTbDugme(OMP_TB.yesil)}>Tamam</button>
+      </div>
+    </div>
+  );
+}
+// 7) Sayı doğrusu — doğruya dokun, sonra Tamam (kabul: aralığın %5'i)
+function OmpTbDogru({ e, onBitir }) {
+  const D = OMP_TB_DOGRU[e.dogru] || OMP_TB_DOGRU.tam100;
+  const uret = () => Array.from({ length: 10 }, () => D.uret());
+  const [liste, setListe] = useState(uret); const [i, setI] = useState(0); const [konum, setKonum] = useState(null); const [puan, setPuan] = useState(0); const [geri, setGeri] = useState(null); const [bitti, setBitti] = useState(false);
+  const ref = useRef(null);
+  const W = 1000, sol = 50, sag = 950;
+  const xDeger = (v) => sol + (sag - sol) * (v - D.min) / (D.max - D.min);
+  const dokun = (ev) => { if (geri) return; const r = ref.current.getBoundingClientRect(); const x = (ev.clientX - r.left) / r.width * W; const v = D.min + (Math.min(sag, Math.max(sol, x)) - sol) / (sag - sol) * (D.max - D.min); setKonum(v); };
+  const tamam = () => { if (konum == null) return; const ok = Math.abs(konum - liste[i].deger) <= 0.05 * (D.max - D.min); setGeri(ok); const p = puan + (ok ? 1 : 0); setPuan(p); setTimeout(() => { setGeri(null); setKonum(null); if (i + 1 >= liste.length) setBitti(true); else setI(i + 1); }, 1300); };
+  if (bitti) return <OmpTbSonuc r={{ metin: `${puan} / 10 doğru`, yuzde: puan * 10 }} onTekrar={() => { setListe(uret()); setI(0); setPuan(0); setBitti(false); }} onDevam={() => onBitir({ puan, enCok: 10 })} />;
+  const fmt = (v) => (v < 0 ? "−" : "") + String(Math.abs(v)).replace(".", ",");
+  const ara = D.max - D.min; const adim = ara === 1 ? 0.1 : ara === 2 ? 0.25 : ara === 10 ? 1 : ara / 10;
+  const isaretler = []; for (let v = D.min; v <= D.max + 1e-9; v += adim) isaretler.push(Math.round(v * 1000) / 1000);
+  return (
+    <div style={{ textAlign: "center" }}>
+      <div style={{ fontSize: 16, color: "#64748B" }}>{i + 1} / 10 · ⭐ {puan}</div>
+      <div style={{ fontSize: 22, color: "#475569", marginTop: 8 }}>Bu sayı doğrunun neresinde?</div>
+      <div data-testid="omp-tb-dogru-hedef" style={{ fontSize: 72, fontWeight: 900, color: OMP_TB.metin, margin: "6px 0 10px" }}>{liste[i].etiket}</div>
+      <svg ref={ref} data-testid="omp-tb-dogru" viewBox={`0 0 ${W} 200`} onPointerDown={dokun} style={{ width: "100%", maxWidth: 900, touchAction: "none", cursor: "pointer" }}>
+        <rect x="0" y="0" width={W} height="200" fill="transparent" />
+        <line x1={sol} x2={sag} y1="110" y2="110" stroke="#334155" strokeWidth="6" />
+        {isaretler.map((v, j) => { const uc = j === 0 || j === isaretler.length - 1 || (D.min < 0 && v === 0); return <g key={j}><line x1={xDeger(v)} x2={xDeger(v)} y1={uc ? 88 : 98} y2={uc ? 132 : 122} stroke="#334155" strokeWidth={uc ? 5 : 3} />{(uc || (ara === 100 || ara === 1000) && j % 5 === 0) && <text x={xDeger(v)} y="168" fontSize="34" textAnchor="middle" fill="#334155" fontWeight="700">{fmt(v)}</text>}</g>; })}
+        {konum != null && <g><line x1={xDeger(konum)} x2={xDeger(konum)} y1="50" y2="110" stroke={OMP_TB.mavi} strokeWidth="6" /><circle cx={xDeger(konum)} cy="44" r="16" fill={OMP_TB.mavi} /></g>}
+        {geri != null && <g><line x1={xDeger(liste[i].deger)} x2={xDeger(liste[i].deger)} y1="70" y2="150" stroke={OMP_TB.yesil} strokeWidth="6" /><text x={xDeger(liste[i].deger)} y="64" fontSize="30" textAnchor="middle" fill={OMP_TB.yesil} fontWeight="800">{liste[i].etiket}</text></g>}
+      </svg>
+      <div style={{ fontSize: 26, fontWeight: 800, minHeight: 34, color: geri === true ? OMP_TB.yesil : OMP_TB.turuncu }}>{geri === true ? "Harika!" : geri === false ? "Yeşil çizgiye bak" : ""}</div>
+      <button data-testid="omp-tb-dogru-tamam" onClick={tamam} disabled={konum == null || geri != null} style={{ ...ompTbDugme(konum == null ? "#CBD5E1" : OMP_TB.yesil, true), marginTop: 8 }}>Tamam</button>
+    </div>
+  );
+}
+// 8) Tekrarlı okuma — uygulayıcı hatalı kelimeye dokunur; süre ve DDK hesaplanır; 3 okuma
+function OmpTbOkuma({ sev, onBitir }) {
+  const metinler = OMP_TB_METIN[sev] || OMP_TB_METIN.i1;
+  const [mi, setMi] = useState(0); const kelimeler = metinler[mi].metin.split(/\s+/);
+  const [hatalar, setHatalar] = useState(new Set()); const [bas, setBas] = useState(null); const [sn, setSn] = useState(0); const [okumalar, setOkumalar] = useState([]); const [bitti, setBitti] = useState(false); const [uyari, setUyari] = useState("");
+  useEffect(() => { if (!bas) return; const t = setInterval(() => setSn(Math.round((Date.now() - bas) / 1000)), 500); return () => clearInterval(t); }, [bas]);
+  useEffect(() => { setOkumalar([]); setHatalar(new Set()); setBas(null); setSn(0); }, [mi]);
+  const dur = () => { const sure = Math.max(1, (Date.now() - bas) / 1000);
+    if (sure < 5) { setBas(null); setHatalar(new Set()); setUyari("Okuma 5 saniyeden kısa sürdü, kaydedilmedi. Yeniden başlat."); return; }
+    setUyari(""); const dogru = Math.max(0, kelimeler.length - hatalar.size); const ddk = Math.round(dogru * 60 / sure); const yeni = [...okumalar, { sure: Math.round(sure), hata: hatalar.size, ddk }]; setOkumalar(yeni); setBas(null); setHatalar(new Set()); if (yeni.length >= 3) setBitti(true); };
+  const hataDegistir = (j) => { if (!bas) return; const h = new Set(hatalar); h.has(j) ? h.delete(j) : h.add(j); setHatalar(h); };
+  const enCok = Math.max(1, ...okumalar.map(o => o.ddk));
+  const grafik = okumalar.length > 0 && (
+    <div style={{ display: "flex", gap: 14, justifyContent: "center", alignItems: "flex-end", height: 130, margin: "10px 0" }}>
+      {okumalar.map((o, j) => <div key={j} style={{ textAlign: "center" }}><div style={{ fontSize: 18, fontWeight: 800 }}>{o.ddk}</div><div style={{ width: 54, height: 90 * o.ddk / enCok, background: j === okumalar.length - 1 ? OMP_TB.yesil : "#86EFAC", borderRadius: 8 }} /><div style={{ fontSize: 13, color: "#64748B" }}>{j + 1}. okuma</div></div>)}
+    </div>
+  );
+  if (bitti) return (
+    <div>
+      {grafik}
+      <OmpTbSonuc r={{ metin: `İlk okuma ${okumalar[0].ddk} → son ${okumalar[okumalar.length - 1].ddk} DDK`, yuzde: 100, ek: okumalar.map((o, j) => `${j + 1}. okuma: ${o.sure} sn, ${o.hata} hata`).join(" · ") }} onTekrar={() => { setOkumalar([]); setBitti(false); }} onDevam={() => onBitir({ puan: okumalar[0].ddk, ddk: okumalar[0].ddk, son: okumalar[okumalar.length - 1].ddk, metin: metinler[mi].ad })} />
+    </div>
+  );
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap", marginBottom: 8 }}>
+        {metinler.map((m, j) => <button key={j} onClick={() => !bas && setMi(j)} style={{ ...ompTbDugme(j === mi ? "#7C3AED" : "#CBD5E1"), fontSize: 15, padding: "8px 12px", color: j === mi ? "#fff" : "#334155" }}>{m.ad}</button>)}
+      </div>
+      <div style={{ textAlign: "center", fontSize: 16, color: "#64748B" }}>{okumalar.length + 1}. okuma {bas ? `· ⏱ ${sn} sn · hata ${hatalar.size}` : ""}</div>
+      {grafik}
+      {uyari && <div style={{ textAlign: "center", color: OMP_TB.turuncu, fontWeight: 700, fontSize: 16 }}>{uyari}</div>}
+      <div data-testid="omp-tb-metin" style={{ fontSize: sev === "i1" ? 34 : sev === "i2" ? 30 : 26, lineHeight: 1.75, color: OMP_TB.metin, maxWidth: 900, margin: "12px auto", textAlign: "justify", hyphens: "none" }}>
+        {kelimeler.map((k, j) => <span key={j} data-omp-kelime={j} onClick={() => hataDegistir(j)} style={{ padding: "0 3px", borderRadius: 6, background: hatalar.has(j) ? "#FED7AA" : "transparent", textDecoration: hatalar.has(j) ? "underline wavy #EA580C" : "none", cursor: bas ? "pointer" : "default" }}>{k} </span>)}
+      </div>
+      <div style={{ textAlign: "center" }}>
+        {!bas ? <button data-testid="omp-tb-okuma-basla" onClick={() => { setBas(Date.now()); setSn(0); }} style={ompTbDugme(OMP_TB.mavi, true)}>▶ Okumaya başla</button>
+          : <button data-testid="omp-tb-okuma-bitti" onClick={dur} style={ompTbDugme(OMP_TB.yesil, true)}>■ Bitti</button>}
+      </div>
+      <div style={{ fontSize: 12.5, color: OMP_TB.gri, textAlign: "center", marginTop: 10 }}>Uygulayıcı: çocuk okurken hatalı okunan kelimeye dokun (tekrar dokununca kalkar). Aynı metin 3 kez okunur; ilk okumanın DDK'sı ölçüm olarak kaydedilir.</div>
+    </div>
+  );
+}
+// Tam ekran tablet çalışma alanı
+function OmpTablet({ plan, oturum, ogr, onKapat }) {
+  const u = ompUnite(oturum.uniteId); const sev = ompTbSeviye(u, plan);
+  const etkinlikler = OMP_TB_UNITE[oturum.uniteId] || [];
+  const [secili, setSecili] = useState(etkinlikler.length === 1 ? 0 : null);
+  const [sonuclar, setSonuclar] = useState([]);
+  const [sesVar, setSesVar] = useState(ompTbSesVar());
+  useEffect(() => {
+    let kilit = null; try { if (navigator.wakeLock) navigator.wakeLock.request("screen").then(k => { kilit = k; }).catch(() => {}); } catch (e) {}
+    try { if (window.speechSynthesis) window.speechSynthesis.onvoiceschanged = () => setSesVar(ompTbSesVar()); } catch (e) {}
+    const eski = document.body.style.overflow; document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = eski; try { kilit && kilit.release(); } catch (e) {} try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {} };
+  }, []);
+  const bitir = (e) => (r) => { setSonuclar(l => [...l, { tur: e.tur, ad: e.ad, olcum: e.olcum || (e.tur === "okuma" ? "ddk" : null), puan: r.puan, enCok: r.enCok ?? null, ddk: r.ddk ?? null, son: r.son ?? null, metin: r.metin || "", tarih: today() }]); setSecili(null); };
+  const e = secili != null ? etkinlikler[secili] : null;
+  return (
+    <div data-testid="omp-tablet" style={{ position: "fixed", inset: 0, zIndex: 2147483000, background: OMP_TB.zemin, overflowY: "auto", paddingTop: "env(safe-area-inset-top, 0px)", paddingBottom: "env(safe-area-inset-bottom, 0px)", fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderBottom: "1px solid #E2E8F0", background: "#fff", position: "sticky", top: 0, zIndex: 2 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 13, color: "#64748B" }}>Oturum {oturum.no} · {ogr.name}</div>
+          <div style={{ fontSize: 18, fontWeight: 800, color: OMP_TB.metin }}>{e ? e.ad : u ? u.ad : ""}</div>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          {e && <button onClick={() => setSecili(null)} style={{ ...ompTbDugme("#64748B"), fontSize: 15, padding: "10px 14px" }}>← Etkinlikler</button>}
+          <button data-testid="omp-tablet-kapat" onClick={() => onKapat(sonuclar)} style={{ ...ompTbDugme("#0F172A"), fontSize: 15, padding: "10px 14px" }}>✕ Kapat{sonuclar.length ? ` (${sonuclar.length})` : ""}</button>
+        </div>
+      </div>
+      <div style={{ padding: "18px 16px 40px", maxWidth: 1000, margin: "0 auto" }}>
+        {!e && (
+          <div>
+            {!sesVar && <div style={{ background: "#FEF3C7", borderRadius: 12, padding: "10px 14px", fontSize: 14, color: "#92400E", marginBottom: 12 }}>Bu cihazda Türkçe ses bulunamadı; “Dinle” düğmesi çalışmazsa kelimeyi sen söyle (ekrandaki küçük gri yazı sana yardım eder).</div>}
+            {etkinlikler.length === 0 && <div style={{ fontSize: 20, color: "#475569", textAlign: "center", padding: 30 }}>Bu ünite masa başında (kâğıt-kalemle) çalışılır. Oturum kâğıdındaki adımları uygula.</div>}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
+              {etkinlikler.map((x, j) => {
+                const yapildi = sonuclar.filter(r => r.ad === x.ad);
+                return <button key={j} data-omp-etkinlik={j} onClick={() => setSecili(j)} style={{ textAlign: "left", padding: 20, borderRadius: 20, border: `2px solid ${yapildi.length ? OMP_TB.yesil : "#E2E8F0"}`, background: "#fff", cursor: "pointer", minHeight: 120 }}>
+                  <div style={{ fontSize: 34 }}>{{ kartlar: "🃏", hece: "🧩", ikili: "👂", dikte: "✏️", islem: "➕", hizlibakis: "👀", dogru: "📏", okuma: "📖" }[x.tur]}</div>
+                  <div style={{ fontSize: 21, fontWeight: 800, color: OMP_TB.metin }}>{x.ad}</div>
+                  {x.olcum && <div style={{ fontSize: 13, color: "#7C3AED", fontWeight: 700 }}>Ünite ölçümü</div>}
+                  {yapildi.length > 0 && <div style={{ fontSize: 14, color: OMP_TB.yesil, fontWeight: 700 }}>✓ {yapildi.map(r => r.ddk != null ? `${r.ddk} DDK` : `${r.puan}${r.enCok ? "/" + r.enCok : ""}`).join(", ")}</div>}
+                </button>;
+              })}
+            </div>
+          </div>
+        )}
+        {e && e.tur === "kartlar" && <OmpTbKartlar e={e} sev={sev} onBitir={bitir(e)} />}
+        {e && e.tur === "hece" && <OmpTbHece sev={sev} onBitir={bitir(e)} />}
+        {e && e.tur === "ikili" && <OmpTbIkili e={e} sev={sev} onBitir={bitir(e)} />}
+        {e && e.tur === "dikte" && <OmpTbDikte sev={sev} onBitir={bitir(e)} />}
+        {e && e.tur === "islem" && <OmpTbIslem e={e} onBitir={bitir(e)} />}
+        {e && e.tur === "hizlibakis" && <OmpTbHizliBakis onBitir={bitir(e)} />}
+        {e && e.tur === "dogru" && <OmpTbDogru e={e} onBitir={bitir(e)} />}
+        {e && e.tur === "okuma" && <OmpTbOkuma sev={sev} onBitir={bitir(e)} />}
+      </div>
+    </div>
+  );
+}
+// Tablet sonuçlarından oturum kaydı önerisi: ünite ölçümüyle eşleşen sonuç ölçüme, okuma DDK'sı DDK alanına
+function ompTabletKayitOnerisi(u, sonuclar) {
+  const es = [...sonuclar].reverse().find(r => u && r.olcum && r.olcum === u.olcum);
+  const ok = [...sonuclar].reverse().find(r => r.ddk != null);
+  const not = "Tablet: " + sonuclar.map(r => `${r.ad} ${r.ddk != null ? `${r.ddk}→${r.son} DDK` : `${r.puan}${r.enCok ? "/" + r.enCok : ""}`}`).join("; ");
+  return { olcum: es ? (u.olcum === "ddk" ? "" : String(es.puan)) : "", ddk: ok ? String(ok.ddk) : "", not };
+}
+// ===== ÖÖG TABLET ETKİNLİKLERİ BİTİŞ =====
 function OmpGrafik({ plan }) {
   const { N, b, h, noktalar, cizgi } = ompIlerleme(plan);
   if (b == null) return null;
@@ -3107,6 +3536,7 @@ function OogMudahaleEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, oogM
   const [kayitForm, setKayitForm] = useState(null);  // { no, tarih, olcum, ddk, ev, not, gecti }
   const [onay, setOnay] = useState(null);            // "bitir" | "yeni"
   const [form, setForm] = useState(null);
+  const [tablet, setTablet] = useState(null);       // tablette açık oturum
   const [passMesaj, setPassMesaj] = useState("");
   useEffect(() => { setSeciliAd(aktifOgrenci?.name || ""); setPassMesaj(""); }, [aktifOgrenci?.name]);
   const ogr = pdrSeciliOgr(kayitliListesi, seciliAd, aktifOgrenci);
@@ -3155,7 +3585,9 @@ function OogMudahaleEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, oogM
   const kayitKaydet = async () => {
     const f = kayitForm; const p = aktifPlan; if (!f || !p) return;
     const num = (v) => v === "" || v == null ? null : Number(String(v).replace(",", "."));
-    let yeni = { ...p, kayitlar: { ...(p.kayitlar || {}), [f.no]: { tarih: f.tarih || today(), olcum: num(f.olcum), ddk: num(f.ddk), ev: num(f.ev), not: String(f.not || "").trim().slice(0, 400), ...(f.gecti != null ? { gecti: f.gecti } : {}) } } };
+    const eskiTablet = (p.kayitlar && p.kayitlar[f.no] && p.kayitlar[f.no].tablet) || [];
+    const tabletL = [...eskiTablet, ...(f.tablet || [])].slice(-20);
+    let yeni = { ...p, kayitlar: { ...(p.kayitlar || {}), [f.no]: { tarih: f.tarih || today(), olcum: num(f.olcum), ddk: num(f.ddk), ev: num(f.ev), not: String(f.not || "").trim().slice(0, 400), ...(f.gecti != null ? { gecti: f.gecti } : {}), ...(tabletL.length ? { tablet: tabletL } : {}) } } };
     if (f.gecti === false && f.uzat) yeni = ompUzat(yeni, f.no);
     await planGuncelle(yeni); setKayitForm(null);
   };
@@ -3173,6 +3605,14 @@ function OogMudahaleEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, oogM
 
   return (
     <div data-testid="omp-ekran" style={{ padding: "4px 2px 40px" }}>
+      {tablet && aktifPlan && ogr && <OmpTablet plan={aktifPlan} oturum={tablet} ogr={ogrBilgi} onKapat={(sonuclar) => {
+        const o = tablet; setTablet(null);
+        if (sonuclar && sonuclar.length) {
+          const u = ompUnite(o.uniteId), k = (aktifPlan.kayitlar || {})[o.no], on = ompTabletKayitOnerisi(u, sonuclar);
+          setAcik(o.no);
+          setKayitForm({ no: o.no, tarih: k?.tarih || today(), olcum: on.olcum !== "" ? on.olcum : (k?.olcum ?? ""), ddk: on.ddk !== "" ? on.ddk : (k?.ddk ?? ""), ev: k?.ev ?? "", not: [k?.not, on.not].filter(Boolean).join(" | ").slice(0, 400), gecti: o.sira === 4 ? (k?.gecti ?? null) : null, uzat: false, tablet: sonuclar });
+        }
+      }} />}
       <div style={{ ...kutu, background: "#F3EEFB", borderColor: PURPLE }}>
         <div style={{ fontSize: 16, fontWeight: 800, color: TEXT }}>🧩 ÖÖG Müdahale Programı</div>
         <div style={{ fontSize: 12.5, color: TEXT, lineHeight: 1.6, marginTop: 4 }}>
@@ -3325,11 +3765,13 @@ function OogMudahaleEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, oogM
                         <div data-testid="omp-meb" style={{ fontSize: 10.5, color: MUTED, marginTop: 4 }}><b>MEB destek eğitim programı karşılığı:</b> {ompMebMetni(u.id)}</div>
                         <div style={{ fontSize: 10.5, color: MUTED, marginTop: 2 }}>Kanıt temeli: {u.kanit}</div>
                         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                          <button data-omp-tablet={o.no} onClick={() => setTablet(o)} style={dugme(PURPLE, true)}>📱 Tablette çalış</button>
                           <button data-omp-kagit={o.no} onClick={() => ompYazdir(ompOturumHtml(aktifPlan, o, ogrBilgi), `OOG_oturum_${o.no}_${ogr.name}`)} style={dugme(BLUE, false)}>📄 Oturum kâğıdı</button>
                           <button data-omp-kaydet-ac={o.no} onClick={() => setKayitForm({ no: o.no, tarih: k?.tarih || today(), olcum: k?.olcum ?? "", ddk: k?.ddk ?? "", ev: k?.ev ?? "", not: k?.not || "", gecti: o.sira === 4 ? (k?.gecti ?? null) : null, uzat: false })} style={dugme(ACCENT, true)}>{k ? "✎ Kaydı düzenle" : "✓ Uygulandı olarak kaydet"}</button>
                           {k && <button onClick={() => kayitSil(o.no)} style={dugme("#C5221F", false)}>Kaydı sil</button>}
                         </div>
                         {k && k.not && <div style={{ marginTop: 6, fontSize: 11.5, color: MUTED }}>Not: {k.not}</div>}
+                        {k && k.tablet && k.tablet.length > 0 && <div data-testid="omp-tablet-gecmis" style={{ marginTop: 4, fontSize: 11.5, color: PURPLE }}>📱 {k.tablet.map(r => `${r.ad}: ${r.ddk != null ? `${r.ddk}→${r.son} DDK` : `${r.puan}${r.enCok ? "/" + r.enCok : ""}`}`).join(" · ")}</div>}
                         {kayitForm && kayitForm.no === o.no && (
                           <div data-testid="omp-kayit-form" style={{ marginTop: 10, background: "#F7FAF8", border: `1px solid ${BORDER}`, borderRadius: 10, padding: 10 }}>
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>

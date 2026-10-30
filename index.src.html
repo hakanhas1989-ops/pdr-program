@@ -2215,7 +2215,9 @@ const OMP_GENEL_ILKELER = [
   "Bir oturumda tek yeni beceri. Yeni beceri hep önce gösterilir (model), sonra birlikte, sonra tek başına yapılır.",
   "Hata anında, kısa ve suçlamadan düzeltilir; oturum mutlaka başarılı bir maddeyle biter.",
   "Övgü çabaya ve stratejiye yapılır (\"Heceleri ayırınca doğru okudun\").",
-  "Öğrenci kendi ilerleme grafiğini görür ve işaretler (öz düzenleme ve motivasyon).",
+  "Öğrenci kendi ilerleme grafiğini görür ve işaretler (MEB programındaki kendini izleme ve hedef belirleme).",
+  "Kümülatif tekrar: yeni bölüm, öncekilerle birlikte tekrar edilir; haftalık ve aylık gözden geçirme yapılır (MEB doğrudan öğretim aşamaları).",
+  "Okul dışında RAM raporuyla destek eğitim alan öğrencide, plan BEP hedefleriyle uyumlu tutulur; her ünitede MEB hedef kodları gösterilir.",
   "Sınıf öğretmeniyle kısa iş birliği: öğrencinin çalıştığı becerinin sınıfta da fark edilip desteklenmesi.",
 ];
 const OMP_VELI_KURALLAR = [
@@ -2678,6 +2680,7 @@ const OMP_UNITELER = [
 ];
 // Kaynaklar (uygulamada görünen kısa liste)
 const OMP_KAYNAKLAR = [
+  "MEB (2021). Öğrenme Güçlüğü Olan Bireyler İçin Destek Eğitim Programı. Özel Eğitim ve Rehberlik Hizmetleri Genel Müdürlüğü.",
   "Foorman, B. vd. (2016). Foundational Skills to Support Reading for Understanding in Kindergarten Through 3rd Grade. IES/WWC.",
   "Vaughn, S. vd. (2022). Providing Reading Interventions for Students in Grades 4–9. IES/WWC.",
   "Fuchs, L. S. vd. (2021). Assisting Students Struggling with Mathematics: Intervention in the Elementary Grades. IES/WWC.",
@@ -2686,11 +2689,44 @@ const OMP_KAYNAKLAR = [
   "Yılmaz, Ş. S. & Sarı, K. R. (2020). Disleksili olan ve olmayan öğrencilerin sözel dil becerileri. Kastamonu Eğitim Dergisi, 28(4).",
   "Dinç, R. (2017). Disleksili öğrencinin okuma-yazma becerilerinin geliştirilmesi: eylem araştırması. Kuramsal Eğitimbilim, 10(2).",
 ];
+// MEB "Öğrenme Güçlüğü Olan Bireyler İçin Destek Eğitim Programı" (2021) hedef karşılıkları — BEP yazarken kullanılır
+const OMP_MEB_HEDEF = {
+  "1.5": "Kendini düzenleme/yönetme (Öğrenmeye Destek Modülü)",
+  "3.1.1": "Sözcüklerin ses özelliklerini ayırt eder.", "3.1.2": "Sözcüklerin hece özelliklerini ayırt eder.", "3.1.3": "Sözcüklerin sesbirim özelliklerini ayırt eder.",
+  "3.1.5": "Harflerin isimlerini ve seslerini söyler.", "3.2.1": "Tanıtılan sesi ayırt eder.", "3.2.2": "Tanıtılan sesi okur.", "3.2.3": "Tanıtılan sesi diğer harfler arasından gösterir.",
+  "3.2.5": "Tanıtılan sesi, hece ve sözcük içinde okur.", "3.2.6": "Tanıtılan sesi, hece ve sözcük içinde dik temel harflerle yazar.", "3.2.7": "Sesi, cümle ve metin içinde okur.",
+  "3.2.8": "Sesi, cümle içinde dik temel harflerle yazar.", "3.2.9": "Düzenli yazar.", "3.2.10": "Tanıtılan sesin bulunduğu cümle ve metin hakkında sorulan sorulara cevap verir.",
+  "3.3.1": "Metni doğru ve akıcı olarak sesli okur.", "3.3.2": "Metin yapılarındaki ögeleri belirler.", "3.3.3": "Okuma öncesi metin anlama stratejilerini uygular.",
+  "3.3.4": "Okuma sırası metin anlama stratejilerini uygular.", "3.3.5": "Okuma sonrası metin anlama stratejilerini uygular.", "3.3.7": "Metnin ana fikrini ve konusunu söyler.",
+  "3.3.8": "Metinde yeni öğrendiği sözcük ve sözcük gruplarını anlamına uygun olarak kullanır.",
+  "3.5.3": "Metni yazma öncesi planlar.", "3.5.4": "Yazacağı metinle ilgili taslak oluşturur.", "3.5.5": "Metni yazar.", "3.5.6": "Yazdığı metni düzeltir.", "3.5.8": "Çeşitli türde metinler yazar.",
+  "3.6.4": "Hece özelliklerini ayırt eder.", "3.6.6": "Sözcüklerdeki ekleri ayırt eder.", "3.6.7": "Sözcükleri yapısına göre ayırt eder.",
+  "5.1.1": "Ritmik sayar.", "5.1.2": "Nesneleri/nesne resimlerini sayar.", "5.1.3": "100'e kadar bir sayıya karşılık gelen çokluğu gösterir.", "5.1.5": "Doğal sayıların basamak ve basamak değerlerini yazar.",
+  "5.1.6": "Doğal sayıları sıralar.", "5.1.8": "Doğal sayıları karşılaştırır.", "5.1.10": "Belli bir kurala göre artan/azalan sayı örüntüsü oluşturur.", "5.1.11": "Doğal sayıları en yakın onluğa/yüzlüğe/binliğe yuvarlar.",
+  "5.1.14": "Doğal sayılarla toplama işlemi yapar.", "5.1.15": "Toplama işlemi gerektiren problemleri çözer.", "5.1.16": "Doğal sayılarla çıkarma işlemi yapar.", "5.1.17": "Çıkarma işlemi gerektiren problemleri çözer.",
+  "5.1.18": "Doğal sayılarla çarpma işlemi yapar.", "5.1.19": "Çarpma ile ilgili problemleri çözer.", "5.1.20": "Doğal sayılarla bölme işlemi yapar.", "5.1.21": "Bölme işlemi gerektiren problemleri çözer.",
+  "5.1.22": "Bütün, yarım ve çeyrek modellerini ilişkilendirerek kesirleri ifade eder.", "5.1.23": "Birim kesirlerini ayırt eder.", "5.1.24": "Bileşik ve tam sayılı kesri ayırt eder.",
+  "5.1.26": "Kesirleri karşılaştırır.", "5.1.27": "Paydaları eşit kesirlerle toplama ve çıkarma işlemlerini yapar.", "5.4.3": "Grafik ve tablolardaki bilgileri kullanarak problem çözer.",
+};
+const OMP_MEB = {
+  "i1-ok-1": ["3.1.1", "3.1.2", "3.1.3"], "i1-ok-2": ["3.1.5", "3.2.1", "3.2.2", "3.2.3"], "i1-ok-3": ["3.2.5", "3.6.4"], "i1-ok-4": ["3.2.5", "3.3.1"], "i1-ok-5": ["3.2.7", "3.3.1"], "i1-ok-6": ["3.2.6", "3.2.8", "3.2.9"],
+  "i2-ok-1": ["3.6.6", "3.6.7"], "i2-ok-2": ["3.3.1"], "i2-ok-3": ["3.3.8"], "i2-ok-4": ["3.3.5", "3.2.10"], "i2-ok-5": ["3.3.7"], "i2-ok-6": ["3.5.3", "3.5.4", "3.5.5", "3.5.6"],
+  "o1-ok-1": ["3.6.6", "3.6.7", "3.3.8"], "o1-ok-2": ["3.3.1"], "o1-ok-3": ["3.3.8", "3.3.3"], "o1-ok-4": ["3.3.4", "3.3.5"], "o1-ok-5": ["3.3.7", "3.3.5"], "o1-ok-6": ["3.5.3", "3.5.4", "3.5.5", "3.5.6", "3.5.8"],
+  "o2-ok-1": ["3.3.8", "3.6.7"], "o2-ok-2": ["3.3.1"], "o2-ok-3": ["3.3.4", "3.3.5"], "o2-ok-4": ["3.3.2", "3.3.5"], "o2-ok-5": ["3.3.3", "3.3.4", "1.5"], "o2-ok-6": ["3.5.3", "3.5.4", "3.5.5", "3.5.6", "3.5.8"],
+  "i1-mt-1": ["5.1.2", "5.1.3", "5.1.8"], "i1-mt-2": ["5.1.1", "5.1.6", "5.1.10"], "i1-mt-3": ["5.1.14", "5.1.16"], "i1-mt-4": ["5.1.14", "5.1.16"], "i1-mt-5": ["5.1.5"], "i1-mt-6": ["5.1.15", "5.1.17"],
+  "i2-mt-1": ["5.1.5", "5.1.6", "5.1.11"], "i2-mt-2": ["5.1.18"], "i2-mt-3": ["5.1.18"], "i2-mt-4": ["5.1.20", "5.1.21"], "i2-mt-5": ["5.1.22", "5.1.23", "5.1.26"], "i2-mt-6": ["5.1.15", "5.1.17", "5.1.19", "5.1.21"],
+  "o1-mt-1": ["5.1.24", "5.1.26", "5.1.27"], "o1-mt-3": ["5.1.18", "5.1.20"], "o1-mt-4": ["5.1.15", "5.1.17", "5.1.19", "5.1.21"], "o1-mt-6": ["5.1.15", "5.1.19", "5.1.21", "5.4.3"],
+};
+function ompMebMetni(uniteId) {
+  const l = OMP_MEB[uniteId];
+  if (!l || !l.length) return "MEB destek eğitim programının matematik modülü bu düzeyi kapsamıyor; ünite sınıf düzeyi matematik dersi kazanımlarına dayanır.";
+  return l.map(k => `${k} ${OMP_MEB_HEDEF[k] || ""}`.trim()).join(" · ");
+}
 // ===== ÖÖG MÜDAHALE PROGRAMI — İÇERİK BİTİŞ =====
 
 // ===== ÖÖG MÜDAHALE PROGRAMI — MANTIK BAŞLANGIÇ =====
-// Haftalık DDK artış varsayımı (yaklaşık; İngilizce akıcılık araştırmalarından uyarlanmıştır, Türkçe için kesin değildir — danışman değiştirebilir)
-const OMP_HAFTALIK_ARTIS = { i1: 1.5, i2: 1.0, o1: 0.7, o2: 0.5 };
+// Hedef: MEB ÖÖG destek eğitim programı hedef belirlemede dönem için %10–%30 artış önerir; varsayılan %20 (danışman değiştirebilir)
+const OMP_HEDEF_ORAN = 0.2;
 function ompUnite(id) { return OMP_UNITELER.find(u => u.id === id) || null; }
 function ompUniteler(seviye, alan) { return OMP_UNITELER.filter(u => u.seviye === seviye && u.alan === alan); }
 function ompSeviyeAd(k) { const s = OMP_SEVIYELER.find(x => x.key === k); return s ? s.ad : k; }
@@ -2733,12 +2769,9 @@ function ompOkumaBaslangic(testKayitlari, o) {
   } catch (e) {}
   return null;
 }
-function ompVarsayilanHedef(baslangic, seviye, oturumSay, aralik) {
+function ompVarsayilanHedef(baslangic) {
   const b = Number(baslangic); if (!b) return "";
-  const hafta = Math.ceil(oturumSay / 2);
-  const artis = Math.round(b + (OMP_HAFTALIK_ARTIS[seviye] || 1) * hafta);
-  // Öğrenci sınıf aralığının altındaysa ve artış aralığı aşıyorsa: hedef önce aralığın alt sınırı
-  return aralik && aralik[0] && b < aralik[0] ? Math.min(artis, aralik[0]) : artis;
+  return Math.round(b * (1 + OMP_HEDEF_ORAN));
 }
 // DDK ilerlemesi + karar kuralı (son 4 ölçüm hedef çizgisinin altında/üstünde)
 function ompIlerleme(plan) {
@@ -2780,7 +2813,8 @@ function ompOturumHtml(plan, o, ogr) {
   ${blok(OMP_AKIS[2][0], OMP_AKIS[2][1], K(u.uygulama))}
   ${blok(OMP_AKIS[3][0], OMP_AKIS[3][1], `Öğrenciyle grafiğe işle, ev kartını ver, başarılı bir maddeyle bitir.${o.sira === 4 ? `<br><b>Ölçüm (${K(olcum.ad)}):</b> ${K(olcum.nasil)}<br><b>Geçiş ölçütü:</b> ${K(u.gecis)}<br>Sonuç: __________ ${K(olcum.birim)} &nbsp; Ölçüt sağlandı mı? ☐ Evet ☐ Hayır (üniteyi 2 oturum uzat)` : ""}`)}
   <div style="margin-top:8px"><b>Gözlem notu:</b><div style="border-bottom:1px dotted #999;height:22px"></div><div style="border-bottom:1px dotted #999;height:22px"></div></div>
-  <div style="margin-top:8px;font-size:10.5px;color:#6E8579">Kanıt temeli: ${K(u.kanit)}</div>
+  <div style="margin-top:8px;font-size:10.5px;color:#6E8579"><b>MEB destek eğitim programı karşılığı (BEP):</b> ${K(ompMebMetni(u.id))}</div>
+  <div style="margin-top:2px;font-size:10.5px;color:#6E8579">Kanıt temeli: ${K(u.kanit)}</div>
 </div>`;
 }
 function ompHaftaEtkinlikleri(plan, hafta) {
@@ -2815,6 +2849,34 @@ function ompYazdir(html, dosyaAdi) {
 }
 // ===== ÖÖG MÜDAHALE PROGRAMI — MANTIK BİTİŞ =====
 
+// Asistan için ÖÖG planı özeti (adlar kalkanla kodlanarak gider)
+function ompAsistanMetni(o) {
+  const planlar = pdrSozlukOku((typeof PDR_EK_KAYNAK !== "undefined" && PDR_EK_KAYNAK.oogMudahale) || {}, o.name, o.className, o.numara) || [];
+  if (!planlar.length) return "Bu öğrenci için ÖÖG Müdahale Programı planı yok. Plan, 🎯 Müdahale → 🧩 ÖÖG Programı ekranından oluşturulur (seviye grubu, alan, başlangıç DDK).";
+  const p = [...planlar].reverse().find(x => x.durum === "devam") || planlar[planlar.length - 1];
+  const N = p.oturumlar.length, K = p.kayitlar || {}, uyg = Object.keys(K).length;
+  const b = [`ÖÖG MÜDAHALE PROGRAMI — ${ompSeviyeAd(p.seviye)} · ${p.alan === "ikisi" ? "Okuma-Yazma + Matematik" : OMP_ALANLAR[p.alan]} · başlangıç ${p.olusturma} · ${uyg}/${N} oturum uygulandı · ${p.durum === "devam" ? "devam ediyor" : p.durum === "bitti" ? "tamamlandı" : "kapatıldı"}${planlar.length > 1 ? ` (toplam ${planlar.length} plan)` : ""}`];
+  if (p.baslangic) {
+    const il = ompIlerleme(p);
+    b.push(`Okuma akıcılığı: başlangıç ${p.baslangic.ddk} DDK${p.baslangic.dogruluk != null ? ` (doğruluk %${p.baslangic.dogruluk})` : ""}, hedef ${p.hedefDdk ?? "—"}. Ölçümler: ${il.noktalar.length ? il.noktalar.map(x => `oturum ${x.no}: ${x.ddk}`).join(", ") : "henüz yok"}.`);
+    if (il.karar) b.push(`Karar kuralı: ${il.karar.metin}`);
+  }
+  const uniteler = [...new Set(p.oturumlar.map(x => x.uniteId))];
+  b.push("ÜNİTELER:");
+  uniteler.forEach(id => {
+    const u = ompUnite(id); if (!u) return;
+    const ots = p.oturumlar.filter(x => x.uniteId === id);
+    const olc = ots.filter(x => x.sira === 4 && K[x.no] && K[x.no].olcum != null).map(x => `${K[x.no].olcum} ${OMP_OLCUMLER[u.olcum].birim}${K[x.no].gecti === true ? " (ölçüt sağlandı)" : K[x.no].gecti === false ? " (ölçüt sağlanmadı)" : ""}`);
+    b.push(`• ${OMP_ALANLAR[u.alan]} — ${u.ad}: ${ots.map(x => (K[x.no] ? "✓" : "☐")).join("")} (${ots.filter(x => K[x.no]).length}/${ots.length})${olc.length ? ` · ölçüm: ${olc.join("; ")}` : ""} · geçiş ölçütü: ${u.gecis} · MEB: ${(OMP_MEB[id] || []).join(", ") || "kapsam dışı (ders kazanımı)"}`);
+  });
+  const sira = p.oturumlar.find(x => !K[x.no]);
+  if (sira && p.durum === "devam") { const bi = ompOturumBilgi(p, sira); b.push(`SIRADAKİ: oturum ${sira.no} (hafta ${bi.hafta}) — ${bi.u.ad}, ${sira.sira}/4 ${bi.rol.ad}: ${bi.adim}.`); }
+  const ev = Object.values(K).map(k => k.ev).filter(x => x != null);
+  if (ev.length) b.push(`Ev çalışması: haftada ortalama ${(ev.reduce((t, x) => t + x, 0) / ev.length).toFixed(1).replace(".", ",")} gün (5 üzerinden).`);
+  const notlar = p.oturumlar.filter(x => K[x.no] && K[x.no].not).slice(-3).map(x => `oturum ${x.no} (${K[x.no].tarih}): ${K[x.no].not}`);
+  if (notlar.length) b.push("Son gözlem notları: " + notlar.join(" | "));
+  return b.join("\n");
+}
 function OmpGrafik({ plan }) {
   const { N, b, h, noktalar, cizgi } = ompIlerleme(plan);
   if (b == null) return null;
@@ -2871,7 +2933,7 @@ function OogMudahaleEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, oogM
   const planGuncelle = async (p) => planlariYaz(planlar.map(x => x.id === p.id ? p : x));
 
   const formOturum = form ? ompOturumlarOlustur(form.seviye, form.alan, form.bas) : [];
-  const formHedef = form && form.hedef !== "" ? form.hedef : (form ? ompVarsayilanHedef(form.ddk, form.seviye, formOturum.length, okBas && okBas.hedef) : "");
+  const formHedef = form && form.hedef !== "" ? form.hedef : (form ? ompVarsayilanHedef(form.ddk) : "");
   const planOlustur = async () => {
     if (!formOturum.length) return;
     const okumaVar = form.alan !== "matematik";
@@ -2980,7 +3042,7 @@ function OogMudahaleEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, oogM
           {form.alan !== "matematik" && (
             <div style={{ fontSize: 11, color: MUTED, marginBottom: 10, lineHeight: 1.5 }}>
               {okBas ? <>Başlangıç, <b>Sesli Okuma Akıcılığı</b> testinden alındı ({okBas.tarih}: {okBas.ddk} DDK{okBas.hedef ? `, sınıf aralığı ${okBas.hedef[0]}–${okBas.hedef[1]}` : ""}). </> : <>Başlangıç için önce Testler → <b>Sesli Okuma Akıcılığı</b> uygulayabilir ya da 1 dakikalık okumayla elle girebilirsin. </>}
-              Hedef, haftalık yaklaşık {String(OMP_HAFTALIK_ARTIS[form.seviye]).replace(".", ",")} DDK artışla önerilir (İngilizce araştırmalardan uyarlanmış yaklaşık değer); istediğin gibi değiştir.
+              Hedef, MEB ÖÖG Destek Eğitim Programı'nın önerdiği %10–%30 artış aralığının ortasından (%20) önerilir; istediğin gibi değiştir.
             </div>
           )}
           <div style={{ background: ACCENT_LIGHT, borderRadius: 8, padding: "8px 10px", fontSize: 12, color: ACCENT, fontWeight: 700, marginBottom: 10 }}>
@@ -3037,7 +3099,8 @@ function OogMudahaleEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, oogM
                             <div key={ad} style={{ borderLeft: `3px solid ${ACCENT}`, paddingLeft: 8, margin: "5px 0" }}><b>{ad}</b> <span style={{ color: MUTED }}>({dk} dk)</span><div>{ic}</div></div>
                           ))}
                         </div>
-                        <div style={{ fontSize: 10.5, color: MUTED, marginTop: 4 }}>Kanıt temeli: {u.kanit}</div>
+                        <div data-testid="omp-meb" style={{ fontSize: 10.5, color: MUTED, marginTop: 4 }}><b>MEB destek eğitim programı karşılığı:</b> {ompMebMetni(u.id)}</div>
+                        <div style={{ fontSize: 10.5, color: MUTED, marginTop: 2 }}>Kanıt temeli: {u.kanit}</div>
                         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
                           <button data-omp-kagit={o.no} onClick={() => ompYazdir(ompOturumHtml(aktifPlan, o, ogrBilgi), `OOG_oturum_${o.no}_${ogr.name}`)} style={dugme(BLUE, false)}>📄 Oturum kâğıdı</button>
                           <button data-omp-kaydet-ac={o.no} onClick={() => setKayitForm({ no: o.no, tarih: k?.tarih || today(), olcum: k?.olcum ?? "", ddk: k?.ddk ?? "", ev: k?.ev ?? "", not: k?.not || "", gecti: o.sira === 4 ? (k?.gecti ?? null) : null, uzat: false })} style={dugme(ACCENT, true)}>{k ? "✎ Kaydı düzenle" : "✓ Uygulandı olarak kaydet"}</button>
@@ -14175,6 +14238,11 @@ const KS_ASISTAN_ARACLAR = {
       return `${ekNot ? `Görüşmeye ek yapıldı (${r.date}${ekHedef.length > 1 ? `; grup görüşmesinin ${ekHedef.length} kaydına` : ""}); eski not aynen duruyor.` : `Görüşme düzeltildi (${r.date}${yt ? " → " + yt : ""}).`}${tasimaNotu}${r.grupKatilimcilari && r.grupKatilimcilari.length && !(ekNot && ekHedef.length > 1) ? ` Bu bir grup görüşmesi; diğer öğrencilerin (${r.grupKatilimcilari.join(", ")}) kayıtları ayrı, gerekirse onları da düzeltmeyi öner.` : ""} Bu nota dayanan risk/müdahale kaydı varsa yeniden değerlendirme gerekebilir.`;
     },
   },
+  oog_programi: {
+    aciklama: "Öğrencinin ÖÖG Müdahale Programı planını getirir (🎯 Müdahale → 🧩 ÖÖG Programı): seviye grubu, alan, uygulanan oturumlar, ünite ölçümleri ve geçiş durumu, DDK (okuma akıcılığı) ilerlemesi ve karar kuralı, sıradaki oturum, ev çalışması, MEB destek eğitim programı hedef karşılıkları. 'ÖÖG planı ne durumda', 'okuma hızı ilerliyor mu', 'sıradaki oturum ne', 'öğrenme güçlüğü çalışması' sorularında kullan.",
+    girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true, yontem: "hepsi",
+    calistir: (g, ctx, o) => ompAsistanMetni(o),
+  },
   olcum_takibi: {
     aciklama: "Öğrencinin görüşmelerde kendi verdiği 0-10 puanların (iyi oluş, seans uyumu) seyrini ve 'yolunda gitmiyor' uyarılarını getirir (ölçüme dayalı takip; cihazda hesaplanır). 'Nasıl gidiyor', 'ilerleme var mı', 'müdahale işe yarıyor mu' sorularında ve müdahale planını gözden geçirirken kullan.",
     girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true, yontem: "hepsi",
@@ -15691,7 +15759,7 @@ const KS_ARAC_GRUPLARI = {
   gorusme: { re: /gorus|not(u|unu|lari|larini)?\b|kaydet|yaz\b|yazar|ekle|duzelt|guncelle|grup|veli|ogretmen|form|bireyi tan|bdt|carpitma|olcum|iyi olus|seans/,
     araclar: ["gorusme_kaydet", "ekranda_gorusme", "gorusme_duzelt", "gorusme_analizi", "form_sablonu", "form_analizi", "ekranda_form_doldur", "bireyi_tanima_ekle", "bdt_ekle", "asistan_notu_kaydet", "olcum_takibi"] },
   degerlendirme: { re: /degerlendir|analiz|durum|nasil|yorum|incele|profil|supervizyon|vaka|formulasyon|oneri|ne yapmali|test|tarama|olcek|bilpro|oog|otizm|duzey|kaynastir|tani|sosyometri|aile|kardes|ilerle|gelisme|gelisim|degisim|onceki test|ilk test/,
-    araclar: ["risk_analizi", "seans_hazirlik", "mudahale_plani", "profil_analizi", "supervizyon", "gorusme_analizi", "olcum_takibi", "test_sonucu", "duzey_taramasi", "mudahale_programi_ara", "form_analizi", "deneme_analizi"] },
+    araclar: ["risk_analizi", "seans_hazirlik", "mudahale_plani", "profil_analizi", "supervizyon", "gorusme_analizi", "olcum_takibi", "test_sonucu", "duzey_taramasi", "mudahale_programi_ara", "form_analizi", "deneme_analizi", "oog_programi"] },
   risk: { re: /risk|kriz|zarar|intihar|olum|istismar|siddet|zorba|tehlike|guvenlik|sevk|ram\b|rapor/,
     araclar: ["risk_analizi", "risk_kaydet", "ekranda_risk", "risk_kapat", "sevk_kaydet", "sevk_sonuc"] },
   mudahale: { re: /mudahale|plan|program|hedef|uyum|izlem|takip/,
@@ -15708,6 +15776,7 @@ const KS_ARAC_GRUPLARI = {
   program: { re: /program|nerede|nasil yap|sekme|ekran|oturum|etkinlik|ozellik|ne yapabil/, araclar: ["program_rehberi", "program_ara", "program_oturumu"] },
   bilgi: { re: /nedir|ne demek|acikla|kuram|bilgi|kitap|kaynak|arastirma|teknik|yontem|ornek/, araclar: ["kutuphane_ara", "kutuphane_oku", "alan_bilgisi", "sinav_rehberi"] },
   deneyim: { re: /kendini|ogrendi|ders kaydet|dersler|deneyim|hata yap/, araclar: ["deneyim_gunlugu", "ders_kaydet"] },
+  oog: { re: /oog|ogrenme guclu|disleksi|diskalkuli|okuma hiz|akicilik|ddk|oturum|unite/, araclar: ["oog_programi", "test_sonucu"] },
   isdefteri: { re: /devam et|devam edelim|kaldig|kaldıg|dunku|yarim kal|tum(u|unu)?\b|hepsi|butun|sinifin|listedeki|her ogrenci|toplu|teker teker|tek tek|is defter/, araclar: ["is_defteri", "is_defteri_yaz"] },
 };
 // Mesajda adı geçen tek öğrenci (ad ya da ad + sınıf); birden çok aday varsa null
@@ -51192,7 +51261,7 @@ export default function App() {
   // PDR Asistanı ekran sürücüsü sekme değiştirebilsin ve öğrenci seçebilsin
   useEffect(() => { PDR_EKRAN.setTab = setTab; PDR_EKRAN.setAktifOgrenci = setAktifOgrenci; PDR_EKRAN.tab = tab; PDR_EKRAN.sekmeAciklama = SEKME_ACIKLAMALARI; });
   // Kapalı sistemin görüşme dışı veri kaynağı (BDT, bireyi tanıma, testler, yıl sonu ortalamaları, denemeler, devamsızlık)
-  useEffect(() => { Object.assign(PDR_EK_KAYNAK, { bdtAnaliz, bireyiTanima, testKayitlari, profiles2, denemeler, ogrenciler, sinavTuru, netHaritasiKayitlari, konuHaritasiVerisi, kademe }); });
+  useEffect(() => { Object.assign(PDR_EK_KAYNAK, { bdtAnaliz, bireyiTanima, testKayitlari, profiles2, denemeler, ogrenciler, sinavTuru, netHaritasiKayitlari, konuHaritasiVerisi, kademe, oogMudahale }); });
 
   // Deneme/Net Haritası/Konu Haritası sekmeleri LGS/YKS tarzı sınav takibi
   // içindir — ilkokul kademesinde anlamı yok, o yüzden kademe "ilkokul" iken

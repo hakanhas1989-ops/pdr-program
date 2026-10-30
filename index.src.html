@@ -2861,6 +2861,11 @@ function ompAsistanMetni(o) {
     b.push(`Okuma akıcılığı: başlangıç ${p.baslangic.ddk} DDK${p.baslangic.dogruluk != null ? ` (doğruluk %${p.baslangic.dogruluk})` : ""}, hedef ${p.hedefDdk ?? "—"}. Ölçümler: ${il.noktalar.length ? il.noktalar.map(x => `oturum ${x.no}: ${x.ddk}`).join(", ") : "henüz yok"}.`);
     if (il.karar) b.push(`Karar kuralı: ${il.karar.metin}`);
   }
+  try {
+    const PK = PDR_EK_KAYNAK, pb = ompPassBulgular(o, PK.pasPerformanslar, PK.pasDegerlendirmeler, PK.mudahalePlan);
+    if (pb.alanlar.length) b.push(`Bilişsel süreç (PASS/CAS) bulguları: ${pb.alanlar.map(k => OMP_PASS[k].ad).join(", ")}${pb.perf ? ` (performans testi ${pb.perf.tarih})` : ""}${pb.gozlem ? ` (gözlem taraması ${pb.gozlem.tarih})` : ""}. İlişkili planlı üniteler: ${[...new Set(p.oturumlar.map(x => x.uniteId))].filter(id => ompPassIliskili(id, pb.alanlar).length).map(id => ompUnite(id).ad).join(", ") || "yok"}. PASS destek çalışması Müdahale Planı'nda ${pb.casPlanVar ? "var" : "yok"}.`);
+    else if (pb.perf || pb.gozlem) b.push("Bilişsel süreç (PASS/CAS) bulguları: zayıf süreç alanı yok.");
+  } catch (e) {}
   const uniteler = [...new Set(p.oturumlar.map(x => x.uniteId))];
   b.push("ÜNİTELER:");
   uniteler.forEach(id => {
@@ -2876,6 +2881,70 @@ function ompAsistanMetni(o) {
   const notlar = p.oturumlar.filter(x => K[x.no] && K[x.no].not).slice(-3).map(x => `oturum ${x.no} (${K[x.no].tarih}): ${K[x.no].not}`);
   if (notlar.length) b.push("Son gözlem notları: " + notlar.join(" | "));
   return b.join("\n");
+}
+// PASS (CAS) bulguları ↔ ÖÖG üniteleri: Das'ın PASS kuramına göre ilişki (ünite önerisi; etkililik kanıtı değildir)
+const OMP_PASS = {
+  ardisik: { ad: "Ardışık İşlemleme", neden: "Ses ve harfleri doğru sırada tutma: kod çözme, heceleme ve harf sırası (yer değiştirme) hatalarıyla ilişkilendirilir.",
+    uniteler: ["i1-ok-1", "i1-ok-2", "i1-ok-3", "i1-ok-4", "i1-ok-6", "i2-ok-1", "o1-ok-1", "o2-ok-1", "i1-mt-4", "i2-mt-3", "o1-mt-3", "o2-mt-5"] },
+  eszamanli: { ad: "Eşzamanlı İşlemleme", neden: "Parçaları bir bütün hâlinde birleştirme: okuduğunu anlama, ana fikir, metin yapısı ve sayı doğrusu, kesir gibi ilişkisel görevlerle ilişkilendirilir.",
+    uniteler: ["i2-ok-3", "i2-ok-4", "i2-ok-5", "o1-ok-3", "o1-ok-5", "o2-ok-3", "o2-ok-4", "i1-mt-2", "i1-mt-5", "i2-mt-1", "i2-mt-5", "i2-mt-6", "o1-mt-1", "o1-mt-2", "o1-mt-4", "o1-mt-5", "o2-mt-1", "o2-mt-2"] },
+  planlama: { ad: "Planlama", neden: "Strateji seçme, kendini izleme ve düzeltme: planlı yazma, anlamayı izleme ve çok adımlı problem çözmeyle ilişkilendirilir.",
+    uniteler: ["i2-ok-6", "o1-ok-4", "o1-ok-6", "o2-ok-5", "o2-ok-6", "i1-mt-6", "i2-mt-6", "o1-mt-6", "o2-mt-4", "o2-mt-6"] },
+  dikkat: { ad: "Dikkat", neden: "Seçici ve sürdürülen dikkat: kısa, zamanlı ve kendini izlemeli akıcılık çalışmaları ile hata kontrolü öne çıkar.",
+    uniteler: ["i1-ok-5", "i2-ok-2", "o1-ok-2", "o2-ok-2", "i1-mt-4", "i2-mt-3", "o1-mt-3", "o2-mt-5"] },
+};
+const OMP_PASS_GOZLEM_ANAHTAR = { planlama: "planlama", dikkat: "dikkat", esz_islemleme: "eszamanli", ardisik_islemleme: "ardisik" };
+// Öğrencinin son CAS performans testi (skor < 60 zayıf) ve CAS gözlem taraması (güçlük ≥ %41) bulguları
+function ompPassBulgular(o, pasPerformanslar, pasDegerlendirmeler, mudahalePlan) {
+  const ayni = (x) => x && pdrAyniOgrenci(x.studentName, x.className, o.name, o.className, x.numara, o.numara);
+  const sirala = (l) => [...l].sort((a, b) => (pdrTarihMs(b.date) || 0) - (pdrTarihMs(a.date) || 0));
+  const r = { perf: null, gozlem: null, alanlar: [], casPlanVar: false };
+  const pf = sirala((pasPerformanslar || []).filter(ayni))[0];
+  if (pf && pf.sonuc && Array.isArray(pf.sonuc.alanlar)) {
+    r.perf = { tarih: pf.date, zayif: pf.sonuc.alanlar.filter(a => a.skor < 60).map(a => ({ key: a.key, ad: a.ad, skor: a.skor })), zayifAlanlar: pf.sonuc.zayifAlanlar || [], kademe: pf.kademe };
+  }
+  const gz = sirala((pasDegerlendirmeler || []).filter(ayni))[0];
+  if (gz && gz.kategoriPuan) {
+    r.gozlem = { tarih: gz.date, zayif: Object.entries(gz.kategoriPuan).filter(([k, v]) => OMP_PASS_GOZLEM_ANAHTAR[k] && v != null && v >= 41).map(([k, v]) => ({ key: OMP_PASS_GOZLEM_ANAHTAR[k], ad: OMP_PASS[OMP_PASS_GOZLEM_ANAHTAR[k]].ad, puan: v })) };
+  }
+  r.alanlar = [...new Set([...(r.perf ? r.perf.zayif.map(z => z.key) : []), ...(r.gozlem ? r.gozlem.zayif.map(z => z.key) : [])])].filter(k => OMP_PASS[k]);
+  try { r.casPlanVar = (pdrSozlukOku(mudahalePlan || {}, o.name, o.className, o.numara) || []).some(p => p && p.kaynak === "cas-performans"); } catch (e) {}
+  return r;
+}
+function ompPassIliskili(uniteId, alanlar) { return (alanlar || []).filter(k => OMP_PASS[k] && OMP_PASS[k].uniteler.includes(uniteId)); }
+function OmpPassKutusu({ bulgu, seviye, alanSecimi, planUniteleri, onPassPlan, mesaj }) {
+  if (!bulgu) return null;
+  const veriYok = !bulgu.perf && !bulgu.gozlem;
+  const kutu = { background: "#EEF2FF", border: `1px solid ${BLUE}`, borderRadius: 12, padding: 12, marginBottom: 12, fontSize: 12, color: TEXT, lineHeight: 1.55 };
+  if (veriYok) return <div data-testid="omp-pass" style={kutu}><b>🧠 Bilişsel süreçler (PASS):</b> Bu öğrenciye CAS taraması ya da CAS performans testi uygulanmamış. Uygulanırsa (Testler → CAS) ÖÖG planı bilişsel süreç bulgularıyla eşleştirilir.</div>;
+  const alanlar = ["okuma", "matematik"].filter(a => alanSecimi === "ikisi" || alanSecimi === a);
+  return (
+    <div data-testid="omp-pass" style={kutu}>
+      <div style={{ fontWeight: 800, marginBottom: 4 }}>🧠 Bilişsel süreç bulguları (PASS / CAS)</div>
+      {bulgu.perf && <div>• CAS performans testi ({bulgu.perf.tarih}): {bulgu.perf.zayif.length ? bulgu.perf.zayif.map(z => `${z.ad} %${z.skor}`).join(", ") + " — desteklenmesi önerilir" : "zayıf alan yok"}</div>}
+      {bulgu.gozlem && <div>• CAS gözlem taraması ({bulgu.gozlem.tarih}): {bulgu.gozlem.zayif.length ? bulgu.gozlem.zayif.map(z => `${z.ad} (güçlük %${z.puan})`).join(", ") : "belirgin güçlük yok"}</div>}
+      {bulgu.alanlar.map(k => {
+        const ilgili = OMP_PASS[k].uniteler.map(ompUnite).filter(u => u && u.seviye === seviye && alanlar.includes(u.alan));
+        return (
+          <div key={k} style={{ marginTop: 6 }}>
+            <b>{OMP_PASS[k].ad}:</b> {OMP_PASS[k].neden}
+            {ilgili.length > 0 && <div style={{ color: BLUE, fontWeight: 700 }}>⭐ Bu seviyede ilişkili üniteler: {ilgili.map(u => `${u.ad}${planUniteleri && planUniteleri.includes(u.id) ? " (planda)" : ""}`).join(" · ")}</div>}
+          </div>
+        );
+      })}
+      {bulgu.alanlar.length > 0 && (
+        <div style={{ marginTop: 8, borderTop: `1px dashed ${BLUE}`, paddingTop: 6 }}>
+          {bulgu.casPlanVar
+            ? <span>✓ CAS sonucundan oluşturulmuş <b>PASS destek çalışması</b> Müdahale Planı'nda var. Önerilen düzen: haftada 2 ÖÖG oturumu + 1 PASS oturumu.</span>
+            : bulgu.perf && bulgu.perf.zayifAlanlar.length && onPassPlan
+              ? <><span>Zayıf süreç için hazır <b>PASS destek çalışması</b> (oturum oturum) Müdahale Planı'na eklenebilir; ÖÖG oturumlarıyla birlikte haftada 1 oturum önerilir. </span><button data-testid="omp-pass-plan" onClick={onPassPlan} style={{ marginTop: 4, padding: "6px 10px", borderRadius: 8, border: `1px solid ${BLUE}`, background: BLUE, color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>PASS destek çalışmasını Müdahale Planı'na ekle</button></>
+              : <span>PASS destek çalışması, CAS <b>performans testi</b> sonucuna göre oluşturulur; gözlem taraması tek başına yeterli değildir.</span>}
+          {mesaj && <div style={{ marginTop: 4, color: ACCENT, fontWeight: 700 }}>{mesaj}</div>}
+        </div>
+      )}
+      <div style={{ fontSize: 10.5, color: MUTED, marginTop: 6 }}>Eşleştirme Das'ın PASS kuramına dayanır; ünite önerisidir, tanı ya da etkililik kanıtı değildir.</div>
+    </div>
+  );
 }
 function OmpGrafik({ plan }) {
   const { N, b, h, noktalar, cizgi } = ompIlerleme(plan);
@@ -2903,7 +2972,7 @@ function OmpGrafik({ plan }) {
   );
 }
 
-function OogMudahaleEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, oogMudahale, kaydet, testKayitlari }) {
+function OogMudahaleEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, oogMudahale, kaydet, testKayitlari, pasPerformanslar, pasDegerlendirmeler, mudahalePlan, mudahalePlanKaydet, kademe }) {
   const [seciliAd, setSeciliAd] = useState(aktifOgrenci?.name || "");
   const [arama, setArama] = useState("");
   const [bilgiAcik, setBilgiAcik] = useState(false);
@@ -2911,12 +2980,23 @@ function OogMudahaleEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, oogM
   const [kayitForm, setKayitForm] = useState(null);  // { no, tarih, olcum, ddk, ev, not, gecti }
   const [onay, setOnay] = useState(null);            // "bitir" | "yeni"
   const [form, setForm] = useState(null);
-  useEffect(() => { setSeciliAd(aktifOgrenci?.name || ""); }, [aktifOgrenci?.name]);
+  const [passMesaj, setPassMesaj] = useState("");
+  useEffect(() => { setSeciliAd(aktifOgrenci?.name || ""); setPassMesaj(""); }, [aktifOgrenci?.name]);
   const ogr = pdrSeciliOgr(kayitliListesi, seciliAd, aktifOgrenci);
   const planlar = ogr ? (pdrSozlukOku(oogMudahale || {}, ogr.name, ogr.className, ogr.numara) || []) : [];
   const aktifPlan = [...planlar].reverse().find(p => p && p.durum === "devam") || null;
   const sonPlan = planlar[planlar.length - 1] || null;
   const okBas = ogr ? ompOkumaBaslangic(testKayitlari, ogr) : null;
+  const passBulgu = ogr ? ompPassBulgular(ogr, pasPerformanslar, pasDegerlendirmeler, mudahalePlan) : null;
+  const passPlanEkle = mudahalePlanKaydet && passBulgu && passBulgu.perf ? async () => {
+    const uretilen = pasperfMudahalePlaniOlustur(passBulgu.perf.zayifAlanlar, passBulgu.perf.kademe || (kademe === "ilkokul" || kademe === "lise" ? kademe : "ortaokul"));
+    if (!uretilen.oturumlar.length) return;
+    const yeniPlan = { id: uid(), tarih: today(), ogrenci: ogr.name, ogrenciSinif: ogr.className, hedef: uretilen.hedef, adimlar: "", sorumlu: "pdr", sure: uretilen.sure, oncelik: "Orta", durum: "Devam Ediyor",
+      kaynak: "cas-performans", oturumlar: uretilen.oturumlar, genelAmac: uretilen.genelAmac || "", genelKazanimlar: uretilen.genelKazanimlar || [], veliOgretmenKilavuzu: uretilen.veliOgretmenKilavuzu || "" };
+    const mevcut = pdrSozlukOku(mudahalePlan || {}, ogr.name, ogr.className, ogr.numara) || [];
+    await mudahalePlanKaydet(pdrSozlukYaz(mudahalePlan || {}, ogr.name, ogr.className, [yeniPlan, ...mevcut], ogr.numara));
+    setPassMesaj(`✓ ${uretilen.oturumlar.length} oturumluk PASS destek çalışması eklendi (🎯 Müdahale → Müdahale Planı).`);
+  } : null;
 
   // Yeni plan formu: öğrenci değişince varsayılanlarla dolar
   useEffect(() => {
@@ -3013,6 +3093,7 @@ function OogMudahaleEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, oogM
       {ogr && !aktifPlan && form && (
         <div data-testid="omp-yeni" style={kutu}>
           <div style={{ fontSize: 14, fontWeight: 800, color: TEXT, marginBottom: 8 }}>Yeni plan oluştur{sonPlan ? <span style={{ fontSize: 11, color: MUTED, fontWeight: 600 }}> · önceki plan {sonPlan.olusturma} ({sonPlan.durum === "bitti" ? "tamamlandı" : "kapatıldı"})</span> : null}</div>
+          <OmpPassKutusu bulgu={passBulgu} seviye={form.seviye} alanSecimi={form.alan} planUniteleri={formOturum.map(o => o.uniteId)} onPassPlan={passPlanEkle} mesaj={passMesaj} />
           <label style={etiket}>Seviye grubu (öğrencinin beceri düzeyine göre)</label>
           <select data-testid="omp-seviye" value={form.seviye} onChange={e => setForm({ ...form, seviye: e.target.value, hedef: "" })} style={giris}>
             {OMP_SEVIYELER.map(s => <option key={s.key} value={s.key}>{s.ad}</option>)}
@@ -3028,7 +3109,7 @@ function OogMudahaleEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, oogM
             <div key={a} style={{ marginBottom: 10 }}>
               <label style={etiket}>{OMP_ALANLAR[a]} · başlangıç ünitesi</label>
               <select data-omp-bas={a} value={form.bas[a]} onChange={e => setForm({ ...form, bas: { ...form.bas, [a]: Number(e.target.value) }, hedef: "" })} style={giris}>
-                {ompUniteler(form.seviye, a).map((u, i) => <option key={u.id} value={i + 1}>{i + 1}. {u.ad}</option>)}
+                {ompUniteler(form.seviye, a).map((u, i) => <option key={u.id} value={i + 1}>{i + 1}. {u.ad}{passBulgu && ompPassIliskili(u.id, passBulgu.alanlar).length ? " ⭐" : ""}</option>)}
               </select>
             </div>
           ))}
@@ -3065,6 +3146,7 @@ function OogMudahaleEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, oogM
             </div>
             <div style={{ height: 8, background: "#E3ECE6", borderRadius: 6, marginTop: 8, overflow: "hidden" }}><div style={{ width: `${Math.round(100 * uygulanan / Math.max(1, aktifPlan.oturumlar.length))}%`, height: "100%", background: ACCENT }} /></div>
           </div>
+          <OmpPassKutusu bulgu={passBulgu} seviye={aktifPlan.seviye} alanSecimi={aktifPlan.alan} planUniteleri={aktifPlan.oturumlar.map(o => o.uniteId)} onPassPlan={passPlanEkle} mesaj={passMesaj} />
           {ilerleme && ilerleme.b != null && (
             <div style={kutu}>
               <OmpGrafik plan={aktifPlan} />
@@ -3084,7 +3166,7 @@ function OogMudahaleEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, oogM
                   <div key={o.no} data-omp-oturum={o.no} style={{ border: `1px solid ${k ? ACCENT : BORDER}`, borderRadius: 10, marginBottom: 8, background: k ? "#F2FAF5" : "#fff" }}>
                     <div onClick={() => setAcik(ac ? null : o.no)} style={{ padding: "9px 11px", cursor: "pointer", display: "flex", justifyContent: "space-between", gap: 8 }}>
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 12.5, fontWeight: 800, color: TEXT }}>{k ? "✓ " : ""}Oturum {o.no} · {u.alan === "okuma" ? "📖" : "🔢"} {u.ad}{o.ek ? " · ek" : ""}</div>
+                        <div style={{ fontSize: 12.5, fontWeight: 800, color: TEXT }}>{k ? "✓ " : ""}Oturum {o.no} · {u.alan === "okuma" ? "📖" : "🔢"} {u.ad}{o.ek ? " · ek" : ""}{passBulgu && ompPassIliskili(u.id, passBulgu.alanlar).length ? <span title="PASS bulgusuyla ilişkili" style={{ color: BLUE }}> ⭐</span> : null}</div>
                         <div style={{ fontSize: 11, color: MUTED }}>{o.sira}/4 {rol.ad} — {adim}{k ? ` · ${k.tarih}${k.olcum != null ? ` · ölçüm ${k.olcum}` : ""}${k.ddk != null ? ` · ${k.ddk} DDK` : ""}` : ""}</div>
                       </div>
                       <span style={{ color: MUTED, fontSize: 12, flexShrink: 0 }}>{ac ? "▲" : "▼"}</span>
@@ -51261,7 +51343,7 @@ export default function App() {
   // PDR Asistanı ekran sürücüsü sekme değiştirebilsin ve öğrenci seçebilsin
   useEffect(() => { PDR_EKRAN.setTab = setTab; PDR_EKRAN.setAktifOgrenci = setAktifOgrenci; PDR_EKRAN.tab = tab; PDR_EKRAN.sekmeAciklama = SEKME_ACIKLAMALARI; });
   // Kapalı sistemin görüşme dışı veri kaynağı (BDT, bireyi tanıma, testler, yıl sonu ortalamaları, denemeler, devamsızlık)
-  useEffect(() => { Object.assign(PDR_EK_KAYNAK, { bdtAnaliz, bireyiTanima, testKayitlari, profiles2, denemeler, ogrenciler, sinavTuru, netHaritasiKayitlari, konuHaritasiVerisi, kademe, oogMudahale }); });
+  useEffect(() => { Object.assign(PDR_EK_KAYNAK, { bdtAnaliz, bireyiTanima, testKayitlari, profiles2, denemeler, ogrenciler, sinavTuru, netHaritasiKayitlari, konuHaritasiVerisi, kademe, oogMudahale, pasPerformanslar, pasDegerlendirmeler, mudahalePlan }); });
 
   // Deneme/Net Haritası/Konu Haritası sekmeleri LGS/YKS tarzı sınav takibi
   // içindir — ilkokul kademesinde anlamı yok, o yüzden kademe "ilkokul" iken
@@ -53313,7 +53395,9 @@ function pdrBaslangicSekmesi() {
         {/* ── MÜDAHALE PROGRAMLARI KÜTÜPHANESİ ────────────────────────── */}
         {tab === "oog_mudahale" && (
           <OogMudahaleEkrani kayitliListesi={kayitliListesi} aktifOgrenci={aktifOgrenci} setAktifOgrenci={setAktifOgrenci} oogMudahale={oogMudahale} testKayitlari={testKayitlari}
-            kaydet={async (v) => { setOogMudahale(v); await saveOogMudahale(v); }} />
+            kaydet={async (v) => { setOogMudahale(v); await saveOogMudahale(v); }}
+            pasPerformanslar={pasPerformanslar} pasDegerlendirmeler={pasDegerlendirmeler} mudahalePlan={mudahalePlan} kademe={kademe}
+            mudahalePlanKaydet={async (v) => { setMudahalePlan(v); await saveMudahalePlan(v); }} />
         )}
 
         {tab === "mudahale_kutuphane" && (

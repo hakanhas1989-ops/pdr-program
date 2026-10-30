@@ -3599,6 +3599,7 @@ function OmpTbOkuma({ sev, onBitir }) {
   const metinler = OMP_TB_METIN[sev] || OMP_TB_METIN.i1;
   const [mi, setMi] = useState(0); const kelimeler = metinler[mi].metin.split(/\s+/);
   const [hatalar, setHatalar] = useState(new Set()); const [bas, setBas] = useState(null); const [sn, setSn] = useState(0); const [okumalar, setOkumalar] = useState([]); const [bitti, setBitti] = useState(false); const [uyari, setUyari] = useState("");
+  const dar = typeof window !== "undefined" && window.innerWidth < 700;
   useEffect(() => { if (!bas) return; const t = setInterval(() => setSn(Math.round((Date.now() - bas) / 1000)), 500); return () => clearInterval(t); }, [bas]);
   useEffect(() => { setOkumalar([]); setHatalar(new Set()); setBas(null); setSn(0); }, [mi]);
   const dur = () => { const sure = Math.max(1, (Date.now() - bas) / 1000);
@@ -3606,10 +3607,11 @@ function OmpTbOkuma({ sev, onBitir }) {
     setUyari(""); const dogru = Math.max(0, kelimeler.length - hatalar.size); const ddk = Math.round(dogru * 60 / sure); const yeni = [...okumalar, { sure: Math.round(sure), hata: hatalar.size, ddk }]; setOkumalar(yeni); setBas(null); setHatalar(new Set()); if (yeni.length >= 3) setBitti(true); };
   const hataDegistir = (j) => { if (!bas) return; const h = new Set(hatalar); h.has(j) ? h.delete(j) : h.add(j); setHatalar(h); };
   const enCok = Math.max(1, ...okumalar.map(o => o.ddk));
-  const grafik = okumalar.length > 0 && (
+  const grafik = okumalar.length > 0 && (<div>
+    <div style={{ textAlign: "center", fontSize: 13, color: "#64748B" }}>DDK = dakikada doğru okunan kelime sayısı · {okumalar.map((o, j) => `${j + 1}. okuma ${o.sure} sn, ${o.hata} hata`).join(" · ")}</div>
     <div style={{ display: "flex", gap: 14, justifyContent: "center", alignItems: "flex-end", height: 130, margin: "10px 0" }}>
-      {okumalar.map((o, j) => <div key={j} style={{ textAlign: "center" }}><div style={{ fontSize: 18, fontWeight: 800 }}>{o.ddk}</div><div style={{ width: 54, height: 90 * o.ddk / enCok, background: j === okumalar.length - 1 ? OMP_TB.yesil : "#86EFAC", borderRadius: 8 }} /><div style={{ fontSize: 13, color: "#64748B" }}>{j + 1}. okuma</div></div>)}
-    </div>
+      {okumalar.map((o, j) => <div key={j} style={{ textAlign: "center" }}><div style={{ fontSize: 18, fontWeight: 800 }}>{o.ddk} <span style={{ fontSize: 12, fontWeight: 600, color: "#64748B" }}>DDK</span></div><div style={{ width: 54, height: 90 * o.ddk / enCok, background: j === okumalar.length - 1 ? OMP_TB.yesil : "#86EFAC", borderRadius: 8 }} /><div style={{ fontSize: 13, color: "#64748B" }}>{j + 1}. okuma</div></div>)}
+    </div></div>
   );
   if (bitti) return (
     <div>
@@ -3625,7 +3627,7 @@ function OmpTbOkuma({ sev, onBitir }) {
       <div style={{ textAlign: "center", fontSize: 16, color: "#64748B" }}>{okumalar.length + 1}. okuma {bas ? `· ⏱ ${sn} sn · hata ${hatalar.size}` : ""}</div>
       {grafik}
       {uyari && <div style={{ textAlign: "center", color: OMP_TB.turuncu, fontWeight: 700, fontSize: 16 }}>{uyari}</div>}
-      <div data-testid="omp-tb-metin" style={{ fontSize: sev === "i1" ? 34 : sev === "i2" ? 30 : 26, lineHeight: 1.75, color: OMP_TB.metin, maxWidth: 900, margin: "12px auto", textAlign: "justify", hyphens: "none" }}>
+      <div data-testid="omp-tb-metin" style={{ fontSize: dar ? (sev === "i1" ? 26 : 22) : (sev === "i1" ? 34 : sev === "i2" ? 30 : 26), lineHeight: 1.75, color: OMP_TB.metin, maxWidth: 900, margin: "12px auto", textAlign: dar ? "left" : "justify", hyphens: "none" }}>
         {kelimeler.map((k, j) => <span key={j} data-omp-kelime={j} onClick={() => hataDegistir(j)} style={{ padding: "0 3px", borderRadius: 6, background: hatalar.has(j) ? "#FED7AA" : "transparent", textDecoration: hatalar.has(j) ? "underline wavy #EA580C" : "none", cursor: bas ? "pointer" : "default" }}>{k} </span>)}
       </div>
       <div style={{ textAlign: "center" }}>

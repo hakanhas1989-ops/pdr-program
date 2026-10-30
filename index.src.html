@@ -2169,6 +2169,934 @@ function ogrenciEtkinlikHavuzu(ogrenciSinif, kademeTahmin) {
 // Rehberlik Etkinlikleri ile aynı iki yol: ücretsiz kelime arama ve AI'ın
 // görüşme notlarına göre önerisi. AI'ın önerisi, gerçek oturum kütüphanesiyle
 // (başlık eşleşmesi) doğrulanır — uydurma bir oturum asla gösterilmez.
+// ===== ÖÖG MÜDAHALE PROGRAMI (ÖMP) — İÇERİK BAŞLANGIÇ =====
+// Özel öğrenme güçlüğü olan öğrenciler için seviye gruplu, 12 haftalık (haftada 2 × 30 dk okulda + her gün 15 dk evde)
+// beceri destek programı. Kanıt temeli: WWC uygulama kılavuzları (Foorman vd. 2016 — K-3 temel okuma becerileri;
+// Vaughn vd. 2022 — 4-9. sınıf okuma müdahaleleri; Fuchs vd. 2021 — matematikte zorlanan öğrenciler),
+// SRSD yazma modeli (Graham & Harris), Türkçeye özgü bulgular (Güven & Friedmann 2019 harf yeri disleksisi;
+// Yılmaz & Sarı 2020 sözel dil). Program tanı koymaz, ÖÖG'yi "tedavi etmez"; becerileri geliştirir, RAM destek eğitiminin yerine geçmez.
+const OMP_SEVIYELER = [
+  { key: "i1", ad: "İlkokul 1–2 düzeyi", kisa: "İ1", siniflar: [1, 2], aciklama: "Ses-harf, hece ve ilk akıcılık; sayı hissi ve toplama-çıkarmanın anlamı" },
+  { key: "i2", ad: "İlkokul 3–4 düzeyi", kisa: "İ2", siniflar: [3, 4], aciklama: "Çok heceli kelime, akıcılık, ana fikir; çarpma-bölme, kesre giriş, problem şemaları" },
+  { key: "o1", ad: "Ortaokul 5–6 düzeyi", kisa: "O1", siniflar: [5, 6], aciklama: "Kök-ek çözümleme, ders metni akıcılığı, öz bulma, planlı yazma; kesir-ondalık, oran, problem şemaları" },
+  { key: "o2", ad: "Ortaokul 7–8 düzeyi", kisa: "O2", siniflar: [7, 8], aciklama: "Kavram yükü yüksek metinler, çıkarım, özetleme, sınav okuması; rasyonel sayılar, cebir, çok adımlı problemler" },
+];
+const OMP_ALANLAR = { okuma: "📖 Okuma-Yazma", matematik: "🔢 Matematik" };
+
+// Ölçümler: her ünitenin 4. oturumunda (ve istenirse her oturumda) yapılan kısa prob
+const OMP_OLCUMLER = {
+  ddk: { ad: "Dakikada doğru kelime (DDK)", birim: "DDK", enCok: 250, nasil: "Öğrencinin sınıf düzeyindeki (ya da çalışılan düzeydeki) yeni bir metni 1 dakika sesli okut; okunan kelimelerden hatalıları çıkar." },
+  ses10: { ad: "Sözlü ses görevi", birim: "/10", enCok: 10, nasil: "10 kelimede ses birleştirme/ayırma iste (ör. /k/-/e/-/d/-/i/ → kedi). Doğru sayısını yaz." },
+  harfses: { ad: "1 dakikada harf sesi", birim: "ses/dk", enCok: 120, nasil: "Karışık harf kartlarını 1 dakika boyunca seslendirt (harf adı değil sesi). Doğru sayısını yaz." },
+  hece: { ad: "1 dakikada hece okuma", birim: "hece/dk", enCok: 150, nasil: "Açık ve kapalı hecelerden oluşan karışık listeyi 1 dakika okut. Doğru sayısını yaz." },
+  kelime20: { ad: "20 kelimelik çözümleme listesi", birim: "/20", enCok: 20, nasil: "Çalışılan türden 20 yeni kelime (yer değiştirmeye açık kelimeler dahil) okut. Doğru sayısını yaz." },
+  dikte10: { ad: "10 kelimelik dikte", birim: "/10", enCok: 10, nasil: "Çalışılan türden 10 yeni kelimeyi tek tek söyle, öğrenci yazsın. Tamamen doğru yazılanları say." },
+  anlama5: { ad: "5 soruluk anlama", birim: "/5", enCok: 5, nasil: "Yeni bir kısa metin okut (gerekirse sen oku), 5 soru sor: 2 metinde açık, 2 çıkarım, 1 kelime anlamı." },
+  oz4: { ad: "Öz cümle puanı", birim: "/4", enCok: 4, nasil: "Yeni bir paragrafın özünü 10–15 kelimeyle yazdır. 1 puan: kim/ne doğru; 1: en önemli bilgi; 1: ayrıntı yok; 1: kendi cümlesi." },
+  yazi6: { ad: "Plan ve yazı öğeleri", birim: "/6", enCok: 6, nasil: "10 dakikada kısa yazı yazdır. Var olan öğeleri say: konu cümlesi, 3 gerekçe/olay, açıklama, bitiş cümlesi." },
+  mat1dk: { ad: "1 dakikalık işlem kartı", birim: "doğru/dk", enCok: 80, nasil: "Çalışılan olgulardan oluşan karışık işlem kâğıdını 1 dakikada çözdür. Doğru sayısını yaz." },
+  sd10: { ad: "Sayı doğrusu görevi", birim: "/10", enCok: 10, nasil: "Boş sayı doğrusunda 10 sayıyı yerleştirt (ör. 0–100 ya da 0–1). Kabul: aralığın %5'i kadar sapma." },
+  problem4: { ad: "Problem çözme puanı", birim: "/4", enCok: 4, nasil: "Yeni bir sözel problem ver. 1: şemayı doğru tanıdı; 1: doğru çizdi/tabloladı; 1: doğru işlem; 1: sonucu kontrol edip birimle yazdı." },
+};
+
+// Her ünite 4 oturum: aynı rutin, giderek azalan destek (açık öğretim: ben yaparım → birlikte → sen yap → pekiştir)
+const OMP_ROLLER = [
+  { ad: "Tanıtım — ben yaparım", ne: "Beceriyi sesli düşünerek göster (2–3 örnek). Öğrenci izler, sonra bir örneği birlikte yapın. Kısa, net, tek beceri." },
+  { ad: "Rehberli uygulama — birlikte", ne: "Öğrenci yapar, sen ipucu verirsin. Hata olursa hemen düzelt: dur → doğrusunu göster → öğrenci tekrar etsin → az sonra aynı maddeye dön." },
+  { ad: "Bağımsız uygulama — sen yap", ne: "İpuçlarını azalt. Öğrenci kendi yapar, sen gözler ve kaydedersin. Takıldığı yeri not et; ev kartına ekle." },
+  { ad: "Pekiştirme ve ölçüm", ne: "Karışık kısa tekrar, ardından ünitenin ölçümünü yap ve öğrenciyle grafiğe işle. Geçiş ölçütü sağlandıysa yeni üniteye geç; sağlanmadıysa üniteyi 2 oturum uzat." },
+];
+// 30 dakikalık sabit oturum akışı
+const OMP_AKIS = [
+  ["Isınma ve tekrar", 5], ["Yeni beceri (açık öğretim)", 10], ["Uygulama / metin", 10], ["Grafik, ev kartı, kapanış", 5],
+];
+const OMP_GENEL_ILKELER = [
+  "Her oturum aynı sırayla ilerler; öğrenci ne olacağını bilir (kaygıyı azaltır).",
+  "Bir oturumda tek yeni beceri. Yeni beceri hep önce gösterilir (model), sonra birlikte, sonra tek başına yapılır.",
+  "Hata anında, kısa ve suçlamadan düzeltilir; oturum mutlaka başarılı bir maddeyle biter.",
+  "Övgü çabaya ve stratejiye yapılır (\"Heceleri ayırınca doğru okudun\").",
+  "Öğrenci kendi ilerleme grafiğini görür ve işaretler (öz düzenleme ve motivasyon).",
+  "Sınıf öğretmeniyle kısa iş birliği: öğrencinin çalıştığı becerinin sınıfta da fark edilip desteklenmesi.",
+];
+const OMP_VELI_KURALLAR = [
+  "Her gün aynı saatte, en fazla 15 dakika. Süre bitince bırakın, uzatmayın.",
+  "Sakin bir ortam: TV kapalı, telefon uzakta.",
+  "Hata yaptığında kızmayın; doğrusunu söyleyin, o tekrar etsin, devam edin.",
+  "Mutlaka başarabildiği bir şeyle bitirin ve çabasını övün.",
+  "Kartın altındaki kutucuğu her gün birlikte işaretleyin; hafta sonunda kartı okula geri gönderin.",
+];
+
+// Üniteler: seviye × alan × 6. Her ünitenin 4 oturumu OMP_ROLLER'e göre ilerler; "adimlar" o ünitede 4 oturumda nelerin değiştiğini söyler.
+const OMP_UNITELER = [
+  // ─────────── İLKOKUL 1–2 · OKUMA-YAZMA ───────────
+  { id: "i1-ok-1", seviye: "i1", alan: "okuma", ad: "Sesleri duyuyorum", hedef: "Kelimeyi hecelere ve seslere ayırır, sesleri birleştirerek kelime söyler (sözlü, harfsiz).",
+    kanit: "Fonolojik farkındalığı harflerle bağlantılı geliştirmek (Foorman vd. 2016, Öneri 2).",
+    materyal: ["Resim kartları (kedi, elma, masa…)", "5 adet jeton ya da düğme", "Ayna (isteğe bağlı)"],
+    isinma: "Önceki oturumdan 3 kelimeyi alkışlayarak heceleyin.",
+    ogretim: "Resmi göster, kelimeyi söyle, her hecede bir jeton it (ma-sa). Sonra sesler: her seste bir jeton (/m/-/a/-/s/-/a/).",
+    uygulama: "Ses birleştirme oyunu: sen sesleri ayrı söyle (/k/…/e/…/d/…/i/), öğrenci kelimeyi bulsun. Ardından tersini yapsın.",
+    adimlar: ["Hece sayma ve ilk sesi bulma", "Son sesi bulma, 2–3 sesli kelimeleri birleştirme", "4–5 sesli kelimeleri birleştirme ve ayırma", "Karışık tekrar + ölçüm"],
+    ev: ["Akşam yemeğinde 5 kelimeyi alkışla heceleyin.", "\"Hangi kelime /s/ sesiyle başlıyor?\" oyunu (evdeki eşyalar).", "Siz sesleri ayrı söyleyin, o kelimeyi bulsun (5 kelime).", "O sesleri ayırsın, siz bulun (5 kelime).", "Kafiye bulma: kedi–dedi, masa–kasa."],
+    olcum: "ses10", gecis: "10 maddenin en az 8'i doğru." },
+  { id: "i1-ok-2", seviye: "i1", alan: "okuma", ad: "Harf ve ses eşleme", hedef: "Harfleri görünce sesini hızlı ve doğru söyler; karışan harfleri (b-d, m-n, ı-i) ayırt eder.",
+    kanit: "Harf-ses ilişkisinin açık ve sistematik öğretimi (Foorman vd. 2016, Öneri 3); çok duyulu çalışma.",
+    materyal: ["Harf kartları", "Kum ya da tuz tepsisi / kabartma harfler", "Kronometre"],
+    isinma: "Bildiği 5 harfin sesini hızlıca söyletin.",
+    ogretim: "Gör–söyle–yaz–dokun: harfi göster, sesini söyle, öğrenci parmağıyla tepsiye yazarken sesi söylesin. Karışan çift için ipucu resmi kullan (b: bebek karnı sağda).",
+    uygulama: "Karışık kartlarla seslendirme; bilinenler ve yeni harf 3'e 1 oranında karıştırılır.",
+    adimlar: ["2 yeni harf + karışan çiftin tanıtımı", "Karışık kartlarla seslendirme", "Kart oyunu: hızlı seslendirme, kendi rekoru", "Karışık tekrar + 1 dk ölçüm"],
+    ev: ["Haftanın harflerini kartlardan seslendirin (2 dk).", "Harfi tuz tepsisine yazarken sesini söylesin.", "Evde o sesle başlayan 3 eşya bulun.", "Karışan iki harfle \"hangisi?\" oyunu.", "1 dakikada kaç ses söyledi? Rekorunu kartına yazın."],
+    olcum: "harfses", gecis: "Çalışılan harflerde %90 doğruluk ve başlangıca göre artış." },
+  { id: "i1-ok-3", seviye: "i1", alan: "okuma", ad: "Heceden kelimeye", hedef: "Açık (ba, ke) ve kapalı (al, el, kal) heceleri okur, heceleri birleştirerek kelime okur.",
+    kanit: "Kelimeleri çözümleme ve analiz etme öğretimi (Foorman vd. 2016, Öneri 3); Türkçede hece temelli okuma.",
+    materyal: ["Hece kartları", "Hece kaydırma şeridi (ba-be-bı-bi…)", "Kronometre"],
+    isinma: "Hece kartlarından 10 heceyi okutun.",
+    ogretim: "İki hece kartını yan yana getir (el + ma), önce ayrı sonra birleşik oku. Bir harfi değiştirerek yeni hece yap (kal → kel → kol).",
+    uygulama: "Hece kaydırma şeridi ve iki-üç heceli kelime listesi (araba, kalem, salı).",
+    adimlar: ["Açık heceler ve iki heceli kelimeler", "Kapalı heceler (al, kal, sor)", "Üç heceli kelimeler, hece kaydırma", "Karışık tekrar + 1 dk hece ölçümü"],
+    ev: ["Hece kartlarından 10'unu okusun.", "İki kartı birleştirip kelime yapsın, siz okuyun.", "Listedeki 5 kelimeyi heceleyerek okusun.", "Bir harfi değiştirme oyunu (kal–kol–kel).", "1 dakikada hece okuma rekoru."],
+    olcum: "hece", gecis: "Başlangıca göre %25 artış ve hece doğruluğu %90." },
+  { id: "i1-ok-4", seviye: "i1", alan: "okuma", ad: "Kelimeyi doğru çözme", hedef: "Kelimeyi soldan sağa, harf atlamadan ve yer değiştirmeden okur (altı/atlı, kalem/kelam).",
+    kanit: "Türkçede harf yeri (yer değiştirme) ve ünlü hatalarını içeren disleksi türleri (Güven & Friedmann 2019); kelime çözümleme (Foorman vd. 2016).",
+    materyal: ["Benzer kelime çiftleri listesi (altı–atlı, sarı–sıra, kalem–kelam, kitap–kipat gibi uydurma çeldiriciler)", "Okuma cetveli / parmak", "Renkli kalem"],
+    isinma: "5 kelimeyi parmakla izleyerek okutun.",
+    ogretim: "Parmak her harfin altında durur, ses söylenir, sonra hızlıca kelime söylenir. Ortadaki harflere dikkat: ortadaki iki ünsüzün altını farklı renkle çiz.",
+    uygulama: "Yer değiştirmeye açık kelime çiftleri: hangisi resimdeki? Ardından kısa cümlelerde bu kelimeler.",
+    adimlar: ["Parmakla izleme ve iki heceli çiftler", "Ortadaki harfleri renkle işaretleme", "Renksiz, cümle içinde okuma", "Karışık tekrar + 20 kelime ölçümü"],
+    ev: ["5 kelime çiftini parmakla izleyerek okusun.", "\"Hangisi doğru?\" resim-kelime eşleme.", "Cümlede yanlış okunan kelimeyi birlikte bulun.", "Kelimeyi okuyup sonra ters sırayla harflerini söylesin.", "Haftanın kelimelerini tekrar okusun."],
+    olcum: "kelime20", gecis: "20 kelimenin en az 17'si doğru." },
+  { id: "i1-ok-5", seviye: "i1", alan: "okuma", ad: "Akıcılığa ilk adım", hedef: "Kısa metni giderek daha hızlı ve doğru okur; noktada durur.",
+    kanit: "Her öğrencinin her gün bağlamlı metin okuması (Foorman vd. 2016, Öneri 4); tekrarlı ve model okuma.",
+    materyal: ["Düzeyine uygun 40–60 kelimelik 4 kısa metin", "Kronometre", "Öğrencinin akıcılık grafiği"],
+    isinma: "Önceki metni bir kez okusun.",
+    ogretim: "Model okuma: önce sen akıcı oku, sonra birlikte (koro) okuyun, sonra öğrenci tek başına okusun.",
+    uygulama: "Aynı metni 3 kez oku, her seferinde süreyi grafiğe işle (tekrarlı okuma). Hatalı kelimeleri sonda birlikte çalış.",
+    adimlar: ["Model + koro okuma", "Eşli okuma (sen bir cümle, o bir cümle)", "Tekrarlı okuma ve süre grafiği", "Yeni metinle 1 dk DDK ölçümü"],
+    ev: ["Okuldaki metni bir kez siz okuyun, sonra o okusun.", "Aynı metni 3 kez okusun, en iyi süreyi kartına yazın.", "Bir cümle siz, bir cümle o (eşli okuma).", "Sevdiği bir kitaptan 1 sayfa birlikte okuyun.", "Haftanın metnini size 'sunsun'."],
+    olcum: "ddk", gecis: "Yeni metinde DDK başlangıca göre artmış ve doğruluk en az %90." },
+  { id: "i1-ok-6", seviye: "i1", alan: "okuma", ad: "Sesleyerek yazma ve dikte", hedef: "Kelimeyi seslerine ayırarak yazar; cümleye büyük harfle başlar, noktayla bitirir.",
+    kanit: "Heceleme (yazım) öğretiminin kod çözme ile birlikte yürütülmesi; açık öğretim (Foorman vd. 2016).",
+    materyal: ["Çizgili defter", "Ses kutucukları (her ses bir kutu)", "Dikte listesi"],
+    isinma: "3 kelimeyi heceleyerek söyletin.",
+    ogretim: "Kelimeyi söyle, öğrenci her sesi söylerken bir kutuya harfi yazsın. Sonra kelimeyi bütün olarak oku.",
+    uygulama: "5 kelime + 1 kısa cümle dikte; yanlış yazılanı kendisi okuyup düzeltsin.",
+    adimlar: ["Ses kutucuklarıyla iki heceli kelimeler", "Kapalı heceli ve üç heceli kelimeler", "Kısa cümle dikte, büyük harf ve nokta", "Karışık tekrar + 10 kelime dikte"],
+    ev: ["Haftanın 5 kelimesini siz söyleyin, o yazsın.", "Yazdığını kendi okusun ve düzeltsin.", "Bir kısa cümle yazsın (büyük harf, nokta).", "Alışveriş listesi yazdırın (3 kelime).", "Günün en güzel olayını 1 cümleyle yazsın."],
+    olcum: "dikte10", gecis: "10 kelimenin en az 8'i doğru." },
+
+  // ─────────── İLKOKUL 1–2 · MATEMATİK ───────────
+  { id: "i1-mt-1", seviye: "i1", alan: "matematik", ad: "Sayı hissi (0–20)", hedef: "Nesneleri doğru sayar, iki sayıdan büyüğünü hemen söyler, beşlik/onluk çerçevede sayıyı görür.",
+    kanit: "Sistematik öğretim ve iyi seçilmiş somut/yarı somut gösterimler (Fuchs vd. 2021, Öneri 1 ve 3).",
+    materyal: ["Onluk çerçeve (kâğıda çizilebilir)", "20 adet sayma pulu", "Sayı kartları 0–20"],
+    isinma: "1'den 20'ye ileri, 10'dan geriye sayın.",
+    ogretim: "Onluk çerçeveye pulları koy, \"kaç tane? 10'a kaç kaldı?\" sor. İki kartı göster, büyüğünü açıklat (\"7, 5'ten büyük çünkü…\").",
+    uygulama: "Hızlı bakış: çerçeveyi 2 saniye göster, kaç pul olduğunu söylesin. Kart karşılaştırma oyunu.",
+    adimlar: ["0–10 çerçeve ve sayma", "Hızlı bakış ve 10'u tamamlama", "11–20 iki çerçeveyle", "Karışık tekrar + ölçüm"],
+    ev: ["Evdeki eşyaları sayın (çatal, ayakkabı).", "İki kartla büyük-küçük oyunu.", "\"10'a kaç kaldı?\" sorusu (5 kez).", "Merdiven çıkarken ileri-geri sayma.", "Zar atıp kim büyük oyunu."],
+    olcum: "mat1dk", gecis: "1 dakikada sayı karşılaştırma/10'u tamamlama doğrusu başlangıca göre artmış, doğruluk %90." },
+  { id: "i1-mt-2", seviye: "i1", alan: "matematik", ad: "Sayı doğrusu (0–100)", hedef: "Sayıyı sayı doğrusunda yaklaşık yerine koyar; önce-sonra, onar onar ilerleme yapar.",
+    kanit: "Sayı doğrusunun kavram ve işlem öğretiminde kullanılması (Fuchs vd. 2021, Öneri 4).",
+    materyal: ["Yerde ya da kâğıtta 0–100 sayı doğrusu", "Mandal/işaret", "Yüzlük tablo"],
+    isinma: "Onar onar 100'e kadar sayın.",
+    ogretim: "0, 50 ve 100'ü işaretle; 30'un nereye geleceğini sesli düşünerek göster (\"0 ile 50'nin arasında, 50'ye daha yakın değil…\").",
+    uygulama: "Boş doğruda 5 sayı yerleştirme; ardından \"bir önceki/bir sonraki\" ve \"10 fazlası\" soruları.",
+    adimlar: ["0–20 doğrusu, önce-sonra", "0–100, onluk işaretler", "Boş doğruda tahmin ve yerleştirme", "Karışık tekrar + sayı doğrusu ölçümü"],
+    ev: ["Cetvel/metre üzerinde sayı bulma.", "\"34'ten sonra ne gelir?\" (5 soru).", "Onar onar sayma, sonra 5'er.", "Kâğıda çizgi çekip 50'yi tahmin ettirin.", "Yüzlük tabloda saklanan sayıyı bulma."],
+    olcum: "sd10", gecis: "10 maddenin en az 8'i kabul aralığında." },
+  { id: "i1-mt-3", seviye: "i1", alan: "matematik", ad: "Toplama ve çıkarmanın anlamı", hedef: "Toplamayı birleştirme, çıkarmayı ayırma/eksiltme olarak gösterir; parça-bütün ilişkisini anlatır.",
+    kanit: "Somut → resim → sembol (CRA) sırası ve açık matematik dili (Fuchs vd. 2021, Öneri 2 ve 3).",
+    materyal: ["Sayma pulları", "Parça-bütün şeması (kâğıtta iki parça bir bütün kutusu)", "İşlem kartları"],
+    isinma: "5'in ve 10'un ikilileri (4+1, 3+2…).",
+    ogretim: "Pullarla göster → resmini çiz → sembolle yaz. \"Bütün\", \"parça\", \"toplam\", \"fark\" kelimelerini her seferinde kullan.",
+    uygulama: "Aynı işlemi üç biçimde (pul, çizim, sembol) yaptırma; parça-bütün şemasına sayı yerleştirme.",
+    adimlar: ["Pullarla birleştirme/ayırma", "Çizimle gösterme", "Sembol ve parça-bütün şeması", "Karışık tekrar + ölçüm"],
+    ev: ["Meyvelerle toplama-çıkarma hikâyesi kurun.", "Çizimle gösterip işlemi yazsın.", "\"Bütün 8, bir parça 3, öbür parça?\" (5 soru).", "Ev eşyalarıyla ayırma oyunu.", "Kendisi bir toplama hikâyesi uydursun."],
+    olcum: "mat1dk", gecis: "10'a kadar toplama-çıkarmada doğruluk %90 ve hızda artış." },
+  { id: "i1-mt-4", seviye: "i1", alan: "matematik", ad: "Toplama-çıkarma olgularında akıcılık", hedef: "20'ye kadar toplama-çıkarma olgularını strateji kullanarak hızlı ve doğru yapar.",
+    kanit: "Akıcılık için düzenli zamanlı etkinlikler (Fuchs vd. 2021, Öneri 6); strateji öğretimi.",
+    materyal: ["İşlem kartları", "Kronometre", "Kendi rekor grafiği"],
+    isinma: "Bildiği 5 olguyu hızlıca söylesin.",
+    ogretim: "Stratejiler: büyük sayının üstüne say (8+3 → 9,10,11), 10'u tamamla (8+5 = 8+2+3), ikizler (6+6, 6+7).",
+    uygulama: "1 dakikalık kart turu; yanlış kartlar ayrı desteye, stratejiyle tekrar. Rekor grafiği.",
+    adimlar: ["Üstüne sayma ve +1/+2", "10'u tamamlama", "İkizler ve çıkarma ilişkisi", "Karışık 1 dk ölçüm"],
+    ev: ["Kart destesiyle 2 dakika çalışma.", "Yanlış kartları stratejiyle tekrar.", "Arabada \"8 artı 5?\" oyunu.", "Zar-toplam oyunu.", "1 dakika rekor denemesi, karta yazın."],
+    olcum: "mat1dk", gecis: "Başlangıca göre %30 artış, doğruluk %95." },
+  { id: "i1-mt-5", seviye: "i1", alan: "matematik", ad: "Onluk ve birlik", hedef: "İki basamaklı sayıyı onluk ve birliklere ayırır; destelerle gösterir.",
+    kanit: "Somut ve yarı somut gösterimler, sistematik öğretim (Fuchs vd. 2021, Öneri 1 ve 3).",
+    materyal: ["Çöp şiş ya da pipet desteleri (10'luk lastikle)", "Basamak tablosu"],
+    isinma: "Onar onar ve 5'er sayma.",
+    ogretim: "34 = 3 deste + 4 tek. Desteyi aç, 10 tek olduğunu göster. Basamak tablosuna yaz.",
+    uygulama: "Sayıyı destelerle kur, tabloya yaz, sayı doğrusunda göster.",
+    adimlar: ["Destelerle sayı kurma", "Basamak tablosu", "Sayı doğrusu ile ilişkilendirme", "Karışık tekrar + ölçüm"],
+    ev: ["Makarna/pipet destesiyle sayı kurun.", "\"47'de kaç onluk var?\" (5 soru).", "Paralarla (10'luk, 1'lik) ödeme oyunu.", "Sayıyı okuyup basamaklarına ayırsın.", "Saklanan sayıyı ipucuyla bulma."],
+    olcum: "sd10", gecis: "10 maddenin en az 8'i doğru (basamak ve yerleştirme)." },
+  { id: "i1-mt-6", seviye: "i1", alan: "matematik", ad: "Sözel problem: birleştirme ve ayırma", hedef: "Problemin türünü (birleştirme/ayırma) tanır, şemayla çizer, çözer ve cevabı kontrol eder.",
+    kanit: "Sözel problemlerin şema temelli, açık öğretimi (Fuchs vd. 2021, Öneri 5).",
+    materyal: ["Parça-bütün ve değişim şeması kartları", "Kısa problemler (problemi sen oku)"],
+    isinma: "Bir parça-bütün sorusu.",
+    ogretim: "Oku (sen okursun) → anlat (kendi sözleriyle) → şemayı seç → sayıları yerleştir → çöz → kontrol et.",
+    uygulama: "3 problem: şema seçimi ve çözüm. Okuma yükünü azaltmak için problemleri sesli okuyun.",
+    adimlar: ["Birleştirme problemleri", "Ayırma/eksiltme problemleri", "İki türün karışımı", "Karışık tekrar + problem puanı"],
+    ev: ["Günlük bir olaydan problem kurun, o çizsin.", "Siz okuyun, o şemaya yerleştirsin.", "Kendisi bir problem uydursun.", "Cevabı kontrol etme: \"mantıklı mı?\"", "Haftanın en sevdiği problemini anlatsın."],
+    olcum: "problem4", gecis: "İki ardışık problemde en az 3/4." },
+
+  // ─────────── İLKOKUL 3–4 · OKUMA-YAZMA ───────────
+  { id: "i2-ok-1", seviye: "i2", alan: "okuma", ad: "Çok heceli kelimeler ve ekler", hedef: "Uzun kelimeyi kök ve eklerine ayırarak doğru okur (okul-lar-ımız-da).",
+    kanit: "Çok heceli kelime çözümleme (Vaughn vd. 2022, Öneri 1); Türkçenin eklemeli yapısı.",
+    materyal: ["Kök-ek kartları", "Uzun kelime listesi", "Renkli kalem"],
+    isinma: "5 iki heceli kelimeyi hızlı okusun.",
+    ogretim: "Kökün altını bir renkle, ekleri ayrı renkle çiz; önce kök, sonra ekler eklenerek oku (göz → gözlük → gözlükçü → gözlükçüler).",
+    uygulama: "Kelime merdiveni: köke ek ekleyerek büyütme; cümlede uzun kelimeleri bulup okuma.",
+    adimlar: ["Çekim ekleri (-ler, -de, -den)", "Yapım ekleri (-lik, -ci, -siz)", "Üç ve daha fazla ekli kelimeler", "Karışık tekrar + 20 kelime ölçümü"],
+    ev: ["Kelime merdiveni: 'göz'den başlayıp büyütün.", "Gazete/kitapta en uzun kelimeyi bulup okusun.", "Kökü bulma yarışı (5 kelime).", "Ek kartlarıyla yeni kelime yapma.", "Haftanın uzun kelimelerini tekrar okusun."],
+    olcum: "kelime20", gecis: "20 uzun kelimenin en az 17'si doğru." },
+  { id: "i2-ok-2", seviye: "i2", alan: "okuma", ad: "Akıcı ve anlamlı okuma", hedef: "Metni uygun hızda, doğru ve anlam öbekleriyle (vurgu, noktalama) okur.",
+    kanit: "Amaçlı akıcılık etkinlikleri (Vaughn vd. 2022, Öneri 2); tekrarlı ve öbekleyerek okuma (Rasinski).",
+    materyal: ["100–150 kelimelik 4 metin", "Öbeklere bölünmüş metin (/ ile)", "Akıcılık grafiği"],
+    isinma: "Önceki metni bir kez okusun.",
+    ogretim: "Öbekleme: metindeki anlam öbeklerini / ile göster, öbekleri tek nefeste okumayı modelle. Noktalama: soru ve ünlemde ses tonu.",
+    uygulama: "Tekrarlı okuma (3 kez), her okumada süre ve hata grafiği. Son okumada öbek işaretleri olmadan.",
+    adimlar: ["Model ve öbekli okuma", "Eşli tekrarlı okuma", "İşaretsiz metinde tekrarlı okuma", "Yeni metinle 1 dk DDK"],
+    ev: ["Okul metnini 3 kez okusun, en iyi süreyi yazın.", "Bir cümle siz, bir cümle o.", "Diyalogları tiyatro gibi okuyun.", "Sevdiği bir şiiri ifadeli okusun.", "Haftanın metnini aileye okusun."],
+    olcum: "ddk", gecis: "Yeni metinde DDK artmış, doğruluk %95." },
+  { id: "i2-ok-3", seviye: "i2", alan: "okuma", ad: "Kelime ve konu bilgisi", hedef: "Okumadan önce metnin anahtar kelimelerini öğrenir, metni ön bilgisiyle ilişkilendirir.",
+    kanit: "Kelime ve dünya bilgisini geliştirme (Vaughn vd. 2022, Öneri 3A); ÖÖG'li öğrencilerde sözel dil desteği (Yılmaz & Sarı 2020).",
+    materyal: ["Kısa bilgilendirici metinler", "Kelime haritası (kelime–anlamı–örnek cümle–resim)"],
+    isinma: "Geçen haftanın 3 kelimesini cümlede kullansın.",
+    ogretim: "Metinden 3 anahtar kelime seç; öğrenci-dostu tanım ver, örnek ve karşı örnek göster, kelime haritası doldurun.",
+    uygulama: "Metni oku; kelimeler geçtiğinde dur, anlamını hatırlat. Okuma sonrası kelimeyle kendi cümlesini kursun.",
+    adimlar: ["Kelime haritası tanıtımı", "Metin öncesi kelime, okurken kontrol", "Kendi cümlesi ve eş/zıt anlam", "Yeni metinle 5 soruluk anlama"],
+    ev: ["Haftanın 3 kelimesini gün içinde kullanın.", "Kelimeyle ilgili resim çizsin.", "Siz tanımı söyleyin, o kelimeyi bulsun.", "Bir belgesel/kitap hakkında 3 cümle konuşun.", "Kelime defterine yeni kelime eklesin."],
+    olcum: "anlama5", gecis: "5 sorunun en az 4'ü doğru." },
+  { id: "i2-ok-4", seviye: "i2", alan: "okuma", ad: "Soru sorarak okuma", hedef: "Okurken 5N1K soruları sorar ve cevabı metinde ya da kendi bilgisinde arar.",
+    kanit: "Metin hakkında soru sorma ve cevaplama fırsatları (Vaughn vd. 2022, Öneri 3B).",
+    materyal: ["Soru kartları (Kim? Ne? Nerede? Ne zaman? Neden? Nasıl?)", "Kısa öyküler"],
+    isinma: "Bir resim göster, 3 soru sorsun.",
+    ogretim: "Soru türleri: \"metinde yazan\" ve \"düşünmem gereken\" sorular. Paragraf sonunda dur, sesli düşünerek soru sor ve cevabı metinde göster.",
+    uygulama: "Paragraf paragraf oku; her paragrafta öğrenci bir soru kartı seçip soru sorar, sen cevaplarsın, sonra yer değiştirin.",
+    adimlar: ["Metinde yazan sorular", "Düşünmeyi gerektiren (neden/nasıl) sorular", "Öğrencinin kendi soruları", "Yeni metinle 5 soruluk anlama"],
+    ev: ["Okuduğu sayfa hakkında size 2 soru sorsun.", "Siz soru sorun, cevabı metinde göstersin.", "Bir çizgi film hakkında 5N1K.", "\"Sence neden böyle yaptı?\" sohbeti.", "Haftanın öyküsünü kendi sözleriyle anlatsın."],
+    olcum: "anlama5", gecis: "5 sorunun en az 4'ü doğru, en az 1 çıkarım sorusu doğru." },
+  { id: "i2-ok-5", seviye: "i2", alan: "okuma", ad: "Ana fikir (öz) bulma", hedef: "Kısa paragrafın özünü kendi cümlesiyle 10–15 kelimede söyler.",
+    kanit: "Kısa metnin özünü bulma rutini (Vaughn vd. 2022, Öneri 3C).",
+    materyal: ["Kısa paragraflar", "Öz kartı: 1) Kim/ne hakkında? 2) En önemli bilgi ne? 3) 10–15 kelimede söyle"],
+    isinma: "Bildiği bir masalı 2 cümlede anlatsın.",
+    ogretim: "Öz kartının üç adımını bir paragrafta sesli düşünerek uygula; ayrıntı ile önemli bilgiyi ayırmayı göster.",
+    uygulama: "Her paragraf için öz kartıyla öz cümlesi; kelime sayısını parmakla sayın.",
+    adimlar: ["Öz kartını birlikte uygulama", "İpucuyla öz cümlesi", "Bağımsız öz cümlesi", "Yeni paragrafla öz puanı"],
+    ev: ["Okuduğu sayfayı 1 cümlede anlatsın.", "Haberden bir olayı 10 kelimede söyleyin.", "Önemli–ayrıntı ayırma oyunu.", "Bir film sahnesinin özünü söylesin.", "Haftanın öz cümlelerini size okusun."],
+    olcum: "oz4", gecis: "İki ardışık paragrafta en az 3/4." },
+  { id: "i2-ok-6", seviye: "i2", alan: "okuma", ad: "Planlayarak yazma", hedef: "Yazmadan önce plan yapar (başlangıç–olay–son) ve planına göre kısa bir paragraf yazar.",
+    kanit: "Öz düzenlemeli strateji gelişimi (SRSD; Graham & Harris) — ÖÖG'li öğrencilerde yazma kalitesinde güçlü etkiler.",
+    materyal: ["Plan şablonu (Başlangıç / Olay / Son)", "Strateji kartı: DÜŞÜN – PLANLA – YAZ – KONTROL ET", "Dikte listesi"],
+    isinma: "Haftanın 5 kelimesini dikte.",
+    ogretim: "Stratejiyi tanıt ve bir yazıyı sesli düşünerek planla-yaz (model). Kendine konuşma cümleleri: \"Önce planımı yapacağım.\"",
+    uygulama: "Birlikte plan, sonra öğrenci yazar; kontrol listesiyle kendi yazısını denetler.",
+    adimlar: ["Stratejiyi tanıma, model yazı", "Birlikte plan ve yazma", "Bağımsız plan ve yazma, kendini denetleme", "Yeni konuyla yazı öğeleri ölçümü"],
+    ev: ["Günün olayını Başlangıç–Olay–Son ile anlatsın.", "Plan şablonunu birlikte doldurun.", "3–4 cümlelik paragraf yazsın.", "Kontrol listesiyle kendi yazısını kontrol etsin.", "Yazısını size okusun, siz övün."],
+    olcum: "yazi6", gecis: "Planı kullanarak yazdığı yazıda en az 4/6 öğe." },
+
+  // ─────────── İLKOKUL 3–4 · MATEMATİK ───────────
+  { id: "i2-mt-1", seviye: "i2", alan: "matematik", ad: "Basamak değeri ve sayı doğrusu (1000)", hedef: "Üç basamaklı sayıları basamaklarına ayırır, sayı doğrusunda yaklaşık yerine koyar, yuvarlar.",
+    kanit: "Sayı doğrusu ve somut gösterimler (Fuchs vd. 2021, Öneri 3 ve 4).",
+    materyal: ["Onluk taban blokları (kâğıttan kesilebilir)", "0–1000 boş sayı doğrusu"],
+    isinma: "100'er, 10'ar sayma.",
+    ogretim: "Sayıyı bloklarla kur (yüzlük-onluk-birlik), sayı doğrusunda yerini sesli düşünerek bul, en yakın onluğa/yüzlüğe yuvarla.",
+    uygulama: "5 sayı: bloklarla kur, doğruya yerleştir, yuvarla.",
+    adimlar: ["Bloklarla sayı kurma", "Sayı doğrusunda yerleştirme", "Yuvarlama ve karşılaştırma", "Karışık tekrar + sayı doğrusu ölçümü"],
+    ev: ["Fiyat etiketlerini basamaklarına ayırın.", "\"Hangisi büyük?\" kart oyunu.", "Boş doğruya 500'ü tahmin ettirin.", "Yuvarlama: 348 kaça yakın?", "Saklanan sayıyı ipucuyla bulma."],
+    olcum: "sd10", gecis: "10 maddenin en az 8'i doğru." },
+  { id: "i2-mt-2", seviye: "i2", alan: "matematik", ad: "Çarpmanın anlamı", hedef: "Çarpmayı eşit gruplar ve dizi (satır-sütun) olarak gösterir ve açıklar.",
+    kanit: "CRA ve açık matematik dili (Fuchs vd. 2021, Öneri 2 ve 3).",
+    materyal: ["Pullar, tabaklar", "Kareli kâğıt (dizi modeli)"],
+    isinma: "2'şer, 5'er, 10'ar sayma.",
+    ogretim: "3 tabakta 4'er pul → çizim → 3 × 4. \"Grup sayısı\" ve \"gruptaki sayı\" kelimelerini kullan. Diziyi döndürerek değişme özelliğini göster.",
+    uygulama: "Aynı çarpmayı gruplarla, diziyle ve sembolle göster; sözel bir hikâye kur.",
+    adimlar: ["Eşit gruplar", "Dizi modeli", "Değişme özelliği ve hikâye kurma", "Karışık tekrar + ölçüm"],
+    ev: ["Yumurta kolisi, kurabiye tepsisi: kaç sıra kaç tane?", "Kareli kâğıda dizi çizin.", "\"4 çocuğa 3'er elma\" hikâyesi.", "Çarpma hikâyesi uydursun.", "2'şer, 5'er ritmik sayma."],
+    olcum: "mat1dk", gecis: "Gösterim–sembol eşleştirmede %90 doğruluk." },
+  { id: "i2-mt-3", seviye: "i2", alan: "matematik", ad: "Çarpım olgularında akıcılık", hedef: "Çarpım tablosu olgularını strateji kullanarak hızlı ve doğru söyler.",
+    kanit: "Düzenli zamanlı etkinlikler (Fuchs vd. 2021, Öneri 6); bilinenden bilinmeyene strateji.",
+    materyal: ["Çarpım kartları", "Kronometre", "Kendi rekor grafiği", "Çarpım tablosu (eksikleri boyamak için)"],
+    isinma: "Bildiği 5 olgu.",
+    ogretim: "Stratejiler: ×2 ikiye katla, ×4 iki kez ikiye katla, ×5 = ×10'un yarısı, ×9 = ×10 eksi bir kat. Bildiklerini tabloda boya, kalanlara odaklan.",
+    uygulama: "Kart turu (bilinen–yeni 3'e 1), yanlışlar stratejiyle tekrar; 1 dakika rekor.",
+    adimlar: ["×2, ×5, ×10", "×4, ×9 stratejileri", "×3, ×6, ×7, ×8 kalanlar", "Karışık 1 dk ölçüm"],
+    ev: ["Kart destesiyle 3 dakika.", "Yanlış kartları stratejiyle tekrar.", "Arabada çarpım soruları.", "Tablodaki bildiklerini boyasın.", "1 dakika rekor, karta yazın."],
+    olcum: "mat1dk", gecis: "Başlangıca göre %30 artış, doğruluk %95." },
+  { id: "i2-mt-4", seviye: "i2", alan: "matematik", ad: "Bölme ve çarpma ilişkisi", hedef: "Bölmeyi paylaştırma ve gruplama olarak gösterir; olgu ailelerini kullanır (3 × 4 = 12 → 12 ÷ 3 = 4).",
+    kanit: "Sistematik öğretim ve gösterimler (Fuchs vd. 2021, Öneri 1 ve 3).",
+    materyal: ["Pullar, tabaklar", "Olgu ailesi üçgen kartları"],
+    isinma: "5 çarpım olgusu.",
+    ogretim: "12 pulu 3 tabağa paylaştır → her tabakta 4. Üçgen kartla aileyi göster (12 tepede, 3 ve 4 altta).",
+    uygulama: "Üçgen kartlarla çarpma ve bölme cümleleri yazma; paylaştırma hikâyeleri.",
+    adimlar: ["Paylaştırma", "Gruplama", "Olgu aileleri", "Karışık tekrar + ölçüm"],
+    ev: ["Şekerleri kardeşlere eşit paylaştırın.", "Üçgen kartla 4 işlem yazsın.", "\"20 sayfa, günde 5 sayfa\" hikâyesi.", "Bölme hikâyesi uydursun.", "Karışık kart turu."],
+    olcum: "mat1dk", gecis: "Olgu ailelerinde %90 doğruluk." },
+  { id: "i2-mt-5", seviye: "i2", alan: "matematik", ad: "Kesirlere giriş", hedef: "Bütünün eş parçalarını kesirle gösterir; 1/2, 1/4, 3/4 gibi kesirleri sayı doğrusunda yerleştirir ve karşılaştırır.",
+    kanit: "Kesirlerin sayı doğrusuyla öğretimi (Fuchs vd. 2021, Öneri 4).",
+    materyal: ["Kâğıt şeritler (katlamak için)", "Kesir çubukları", "0–1 sayı doğrusu"],
+    isinma: "Bir şeyi eşit ikiye bölme örnekleri.",
+    ogretim: "Şeridi ikiye, dörde katla; parçaları say, kesri adlandır. Aynı uzunluktaki doğruda 1/2 ve 1/4'ün yerini göster.",
+    uygulama: "Şerit → doğru → sembol; iki kesri doğru üzerinde karşılaştırma.",
+    adimlar: ["Eş parça ve birim kesir", "Şeritten sayı doğrusuna", "Karşılaştırma", "Karışık tekrar + sayı doğrusu ölçümü"],
+    ev: ["Pizza/ekmek paylaşırken kesir adlandırın.", "Kâğıt katlayarak 1/4 gösterin.", "\"Hangisi büyük: 1/2 mi 1/4 mü?\"", "Ölçü kaplarıyla yarım, çeyrek.", "Doğruya kesir yerleştirme."],
+    olcum: "sd10", gecis: "10 maddenin en az 8'i doğru." },
+  { id: "i2-mt-6", seviye: "i2", alan: "matematik", ad: "Problem şemaları", hedef: "Toplam, fark (karşılaştırma) ve eşit grup problemlerini şemayla tanır, çizer ve çözer.",
+    kanit: "Sözel problemlerin şema temelli açık öğretimi (Fuchs vd. 2021, Öneri 5).",
+    materyal: ["Şema kartları (toplam, fark, eşit grup)", "Problem kartları", "Kontrol listesi"],
+    isinma: "Bir toplam problemi.",
+    ogretim: "Oku → anlat → şemayı tanı (\"daha fazla/az\" = fark, \"her birinde\" = eşit grup) → çiz → çöz → kontrol et. Problem okumasında destek ver.",
+    uygulama: "Karışık 3 problem; öğrenci önce yalnız şemayı söyler, sonra çözer.",
+    adimlar: ["Toplam ve fark şemaları", "Eşit grup şeması", "Karışık şema tanıma", "Karışık tekrar + problem puanı"],
+    ev: ["Market fişinden problem kurun.", "\"Bu hangi şema?\" oyunu.", "Problemi çizerek çözsün.", "Kendi problemini yazsın.", "Cevabın mantıklı olup olmadığını konuşun."],
+    olcum: "problem4", gecis: "İki ardışık problemde en az 3/4." },
+
+  // ─────────── ORTAOKUL 5–6 · OKUMA-YAZMA ───────────
+  { id: "o1-ok-1", seviye: "o1", alan: "okuma", ad: "Uzun ve türemiş kelimeleri çözme", hedef: "Ders metinlerindeki uzun kelimeleri kök–yapım eki–çekim eki olarak ayırıp doğru okur ve anlamını tahmin eder.",
+    kanit: "Çok heceli kelime çözümleme rutini (Vaughn vd. 2022, Öneri 1).",
+    materyal: ["Ders kitabından uzun kelime listesi (bilimsellik, düzensizlikler…)", "Kök-ek tablosu"],
+    isinma: "5 uzun kelimeyi heceleyerek okusun.",
+    ogretim: "Rutin: 1) Kökü bul, 2) ekleri ayır, 3) hecele, 4) bütün oku, 5) anlamını eklerden tahmin et (sev-gi-siz-lik).",
+    uygulama: "Fen/sosyal metinden 10 uzun kelime: rutinle okuma ve anlam tahmini.",
+    adimlar: ["Rutini tanıma", "Yapım ekleriyle anlam tahmini", "Metin içinde uzun kelimeler", "Karışık tekrar + 20 kelime ölçümü"],
+    ev: ["Ders kitabında 5 uzun kelimeyi rutinle okusun.", "Kökü bulma yarışı.", "Eklerden anlam tahmini oyunu.", "Haberde geçen uzun kelimeleri ayırsın.", "Kelime defterine 3 kelime."],
+    olcum: "kelime20", gecis: "20 kelimenin en az 17'si doğru." },
+  { id: "o1-ok-2", seviye: "o1", alan: "okuma", ad: "Ders metninde akıcılık", hedef: "Ders kitabı paragraflarını uygun hız, doğruluk ve vurguyla okur; kendi akıcılık grafiğini izler.",
+    kanit: "Amaçlı akıcılık etkinlikleri (Vaughn vd. 2022, Öneri 2); tekrarlı okuma.",
+    materyal: ["Ders kitabından 150–200 kelimelik paragraflar", "Akıcılık grafiği"],
+    isinma: "Önceki paragrafı bir kez okusun.",
+    ogretim: "Model okuma; zor kelimeleri önceden çözümleme; öbekleme ve noktalamayla vurgu.",
+    uygulama: "Tekrarlı okuma (3 kez) + süre/hata grafiği; son okumada kısa bir anlama sorusu.",
+    adimlar: ["Model + öbekli okuma", "Eşli tekrarlı okuma", "Bağımsız tekrarlı okuma + grafik", "Yeni metinle 1 dk DDK"],
+    ev: ["Günün ders paragrafını 3 kez okusun.", "Siz model olun, o tekrar etsin.", "En iyi süreyi grafiğe işleyin.", "Sesli kitap dinlerken takip etsin.", "Paragrafı size sunsun."],
+    olcum: "ddk", gecis: "Yeni metinde DDK artmış, doğruluk %95." },
+  { id: "o1-ok-3", seviye: "o1", alan: "okuma", ad: "Akademik kelime ve ön bilgi", hedef: "Fen ve sosyal bilgiler metinlerindeki kavramları okumadan önce öğrenir, metinle ilişkilendirir.",
+    kanit: "Kelime ve dünya bilgisini geliştirme (Vaughn vd. 2022, Öneri 3A).",
+    materyal: ["Ünite kavram listesi", "Kavram haritası şablonu"],
+    isinma: "Geçen haftanın 3 kavramını açıklasın.",
+    ogretim: "3–4 kavram: öğrenci-dostu tanım, örnek–karşı örnek, kavram haritası. Kavramları ön bilgiyle bağla (\"Daha önce nerede gördün?\").",
+    uygulama: "Metni oku; kavram geçince dur, haritaya ekle. Okuma sonrası kavramlarla 2 cümle.",
+    adimlar: ["Kavram haritası tanıtımı", "Metinle ilişkilendirme", "Kendi cümlesi ve bağlantılar", "Yeni metinle 5 soruluk anlama"],
+    ev: ["Haftanın kavramlarını sofrada konuşun.", "Kavramla resim/şema çizsin.", "Siz tanım, o kavram.", "Belgesel izleyip 3 cümle anlatsın.", "Kavram defterini güncellesin."],
+    olcum: "anlama5", gecis: "5 sorunun en az 4'ü doğru." },
+  { id: "o1-ok-4", seviye: "o1", alan: "okuma", ad: "Anlamayı izleme", hedef: "Okurken anlamadığı yeri fark eder ve düzeltme stratejisi kullanır (yeniden oku, kelimeyi çöz, kendine sor).",
+    kanit: "Anlamayı izleme öğretimi (Vaughn vd. 2022, Öneri 3D) ve soru sorma (3B).",
+    materyal: ["Kenar işaretleri: ✓ anladım, ? anlamadım, ! önemli", "Düzeltme kartı"],
+    isinma: "Bir paragrafta '?' koyacağı yeri göstersin.",
+    ogretim: "Sesli düşünerek oku, takıldığın yerde dur: \"Burayı anlamadım; yeniden okuyacağım / bu kelimeyi çözeceğim.\" İşaretleri kullan.",
+    uygulama: "Paragraf sonlarında işaret koyma ve '?' yerlerinde düzeltme kartını kullanma; her paragrafa bir soru.",
+    adimlar: ["İşaretleri tanıma", "Düzeltme stratejileri", "Bağımsız izleme + soru", "Yeni metinle anlama ölçümü"],
+    ev: ["Okurken '?' koyduğu yeri birlikte çözün.", "Paragraf sonunda 'ne anladım?' sorusu.", "Bir kelimeyi bağlamdan tahmin etsin.", "Okuduğu haberi anlatsın.", "Haftalık okuma günlüğüne 2 cümle."],
+    olcum: "anlama5", gecis: "5 sorunun en az 4'ü doğru." },
+  { id: "o1-ok-5", seviye: "o1", alan: "okuma", ad: "Öz bulma ve özetleme", hedef: "Her paragrafın özünü yazar, öz cümlelerini birleştirerek kısa özet çıkarır.",
+    kanit: "Öz bulma rutini (Vaughn vd. 2022, Öneri 3C).",
+    materyal: ["Öz kartı", "Ders paragrafları", "Özet şablonu"],
+    isinma: "Bir film/olayı 2 cümlede özetlesin.",
+    ogretim: "Öz kartı (kim/ne – en önemli bilgi – 15 kelime) ile paragraf öz cümlesi; öz cümlelerini bağlaçlarla birleştirip özet yap.",
+    uygulama: "3 paragraf: öz cümleleri + 3 cümlelik özet.",
+    adimlar: ["Paragraf özü", "Öz cümleleriyle özet", "Ders metninde özet", "Yeni paragrafla öz puanı"],
+    ev: ["Günün dersini 3 cümlede özetlesin.", "Haberden öz cümlesi.", "Önemli–ayrıntı ayırma.", "Kitap bölümünün özeti.", "Özetini size okusun."],
+    olcum: "oz4", gecis: "İki ardışık paragrafta en az 3/4." },
+  { id: "o1-ok-6", seviye: "o1", alan: "okuma", ad: "Planlı yazma (SRSD)", hedef: "Görüş/öykü yazısını planlayarak yazar: konu cümlesi, gerekçeler, açıklama, bitiş.",
+    kanit: "SRSD (Graham & Harris): strateji öğretimi + öz düzenleme; ÖÖG'li öğrencilerde güçlü etki.",
+    materyal: ["Strateji kartı: FİKİR – PLAN – YAZ (Konu cümlesi, 3 Gerekçe, Açıklama, Bitiş)", "Kendine konuşma kartı", "Kontrol listesi"],
+    isinma: "Bir konuda görüşünü ve bir gerekçesini söylesin.",
+    ogretim: "Stratejiyi tanıt, iyi bir örnekte öğeleri bul, bir yazıyı sesli düşünerek planla-yaz. Kendi hedefini ve kendine konuşma cümlelerini seçsin.",
+    uygulama: "Birlikte plan → öğrenci yazar → kontrol listesiyle öz değerlendirme ve öğe sayısını grafiğe işleme.",
+    adimlar: ["Strateji ve öğeler, model yazı", "Birlikte planlama ve yazma", "Bağımsız yazma, öz değerlendirme", "Yeni konuyla yazı öğeleri ölçümü"],
+    ev: ["Bir konuda görüşünü 3 gerekçeyle söylesin.", "Plan şablonunu doldursun.", "Kısa paragraf yazsın.", "Kontrol listesiyle denetlesin.", "Yazısını aileye okusun."],
+    olcum: "yazi6", gecis: "Planlı yazıda en az 5/6 öğe." },
+
+  // ─────────── ORTAOKUL 5–6 · MATEMATİK ───────────
+  { id: "o1-mt-1", seviye: "o1", alan: "matematik", ad: "Kesirler sayı doğrusunda", hedef: "Kesirleri sayı doğrusunda gösterir, denk kesirleri ve büyüklük sırasını açıklar.",
+    kanit: "Kesirlerin sayı doğrusuyla öğretimi (Fuchs vd. 2021, Öneri 4).",
+    materyal: ["Kesir şeritleri", "0–1 ve 0–2 sayı doğruları"],
+    isinma: "1/2, 1/4, 3/4'ü doğruya yerleştirsin.",
+    ogretim: "Şeritten doğruya geçiş; 2/4 ile 1/2'nin aynı noktada olduğunu göster (denklik). 1'den büyük kesirler (5/4).",
+    uygulama: "Kesirleri doğruya yerleştirme ve sıralama; denk kesir eşleştirme.",
+    adimlar: ["Birim kesirler ve doğru", "Denk kesirler", "1'den büyük kesirler, sıralama", "Karışık tekrar + sayı doğrusu ölçümü"],
+    ev: ["Tarifte yarım, çeyrek ölçüler.", "Kâğıt şeritle denk kesir.", "\"Hangisi büyük?\" kesir oyunu.", "Doğruya 3 kesir yerleştirme.", "Saatte çeyrek ve yarım."],
+    olcum: "sd10", gecis: "10 maddenin en az 8'i doğru." },
+  { id: "o1-mt-2", seviye: "o1", alan: "matematik", ad: "Ondalık gösterim ve yüzde", hedef: "Kesir, ondalık ve yüzde arasındaki ilişkiyi şerit ve sayı doğrusunda gösterir.",
+    kanit: "İyi seçilmiş gösterimler ve sayı doğrusu (Fuchs vd. 2021, Öneri 3 ve 4).",
+    materyal: ["Yüzlük kare kâğıt", "0–1 doğru (0,1 aralıklı)", "Para"],
+    isinma: "Paralarla 0,50 TL, 0,25 TL.",
+    ogretim: "Yüzlük karede 25 kare = 25/100 = 0,25 = %25. Aynı değeri doğruda göster.",
+    uygulama: "Üçlü eşleştirme (kesir–ondalık–yüzde) ve doğruya yerleştirme.",
+    adimlar: ["Onda birler ve yüzde birler", "Yüzde ile ilişki", "Karşılaştırma ve sıralama", "Karışık tekrar + ölçüm"],
+    ev: ["İndirim etiketlerini (%20) konuşun.", "Fiyatları ondalıkla okusun.", "Yüzlük kareyi boyayarak gösterme.", "Üçlü eşleştirme kartları.", "\"Hangisi daha çok: %30 mu 1/4 mü?\""],
+    olcum: "sd10", gecis: "10 maddenin en az 8'i doğru." },
+  { id: "o1-mt-3", seviye: "o1", alan: "matematik", ad: "Olgu akıcılığı ve zihinden işlem", hedef: "Çarpım olgularını ve temel zihinden işlemleri hızlı ve doğru yapar.",
+    kanit: "Düzenli zamanlı etkinlikler (Fuchs vd. 2021, Öneri 6).",
+    materyal: ["Çarpım/bölme kartları", "Kronometre", "Rekor grafiği"],
+    isinma: "Eksik olgu listesinden 5 kart.",
+    ogretim: "Eksik olguları belirle (tabloda boyama). Strateji: dağılma (7 × 8 = 7 × 4 × 2), 10'a yuvarlama (99 + 47).",
+    uygulama: "Kart turu + 1 dakika rekor; yanlışlar stratejiyle tekrar.",
+    adimlar: ["Eksik olguların belirlenmesi", "Strateji çalışması", "Karışık hız çalışması", "Karışık 1 dk ölçüm"],
+    ev: ["Günde 3 dakika kart.", "Alışverişte zihinden toplam.", "Yanlış kartları stratejiyle tekrar.", "Aile içi kart oyunu (herkes kendi rekoruna karşı).", "1 dk rekoru karta yazın."],
+    olcum: "mat1dk", gecis: "Başlangıca göre %30 artış, doğruluk %95." },
+  { id: "o1-mt-4", seviye: "o1", alan: "matematik", ad: "Problem şemaları ve matematik dili", hedef: "Toplam, fark, eşit grup ve karşılaştırma problemlerini şemayla çözer; problemdeki ipucu kelimeleri açıklar.",
+    kanit: "Şema temelli sözel problem öğretimi ve matematik dili (Fuchs vd. 2021, Öneri 2 ve 5).",
+    materyal: ["Şema kartları", "Problem kartları", "Matematik sözlüğü"],
+    isinma: "Bir problemin şemasını söylesin.",
+    ogretim: "Okuma yükünü azalt (problemi birlikte okuyun). İpucu kelimeye değil yapıya bak: \"Kaç kat?\" = karşılaştırma; \"toplam\" her zaman toplama değildir!",
+    uygulama: "Karışık 3 problem: şema → çizim → işlem → kontrol.",
+    adimlar: ["Şemaları hatırlama", "Karşılaştırma (kat) problemleri", "Karışık problemler", "Yeni problemle puan"],
+    ev: ["Günlük olaydan problem kurun.", "Şemayı söyleme oyunu.", "Çizerek çözme.", "Problem yazma.", "Kontrol: tahmin–sonuç karşılaştırması."],
+    olcum: "problem4", gecis: "İki ardışık problemde en az 3/4." },
+  { id: "o1-mt-5", seviye: "o1", alan: "matematik", ad: "Oran ve orantıya giriş", hedef: "Oranı tablo ve çift sayı doğrusuyla gösterir, eşit oranları bulur.",
+    kanit: "Sayı doğrusu ve gösterimler (Fuchs vd. 2021, Öneri 3 ve 4).",
+    materyal: ["Oran tablosu şablonu", "Çift sayı doğrusu"],
+    isinma: "\"2 kalem 6 TL ise 4 kalem?\"",
+    ogretim: "Tarif örneği: 2 bardak un – 1 bardak süt. Tabloyu katlayarak büyüt, çift doğruda göster.",
+    uygulama: "Tablo doldurma ve çift doğruda eksik değeri bulma.",
+    adimlar: ["Oran tablosu", "Çift sayı doğrusu", "Eksik değer problemleri", "Karışık tekrar + problem puanı"],
+    ev: ["Tarifi iki katına çıkarın.", "Hız: 1 saatte 60 km, 3 saatte?", "Fiyat karşılaştırma (birim fiyat).", "Tablo doldurma.", "Haritada ölçek."],
+    olcum: "problem4", gecis: "İki ardışık problemde en az 3/4." },
+  { id: "o1-mt-6", seviye: "o1", alan: "matematik", ad: "Çok adımlı problemler", hedef: "İki-üç adımlı problemleri kontrol listesiyle planlar, çözer ve denetler.",
+    kanit: "Sözel problemlerin açık öğretimi ve öz düzenleme (Fuchs vd. 2021, Öneri 5).",
+    materyal: ["Kontrol listesi: Oku – Anlat – Çiz – Planla – Çöz – Kontrol et", "Çok adımlı problemler"],
+    isinma: "Tek adımlı bir problem.",
+    ogretim: "Kontrol listesini sesli düşünerek uygula; adımları numaralandır, ara sonuçları yaz.",
+    uygulama: "2 problem: listeyle çözüm, öğrenci her maddeyi işaretler.",
+    adimlar: ["Listeyi tanıma", "İki adımlı problemler", "Üç adımlı problemler", "Yeni problemle puan"],
+    ev: ["Alışveriş: toplam, para üstü.", "Listeyle bir problem çözsün.", "Ara sonuçları yazma alışkanlığı.", "Problem yazma.", "Cevabı tahminle karşılaştırma."],
+    olcum: "problem4", gecis: "İki ardışık problemde en az 3/4." },
+
+  // ─────────── ORTAOKUL 7–8 · OKUMA-YAZMA ───────────
+  { id: "o2-ok-1", seviye: "o2", alan: "okuma", ad: "Kavram yükü yüksek kelimeler", hedef: "Fen/sosyal/Türkçe metinlerindeki uzun ve kavramsal kelimeleri çözümler, anlamlarını eklerden ve bağlamdan çıkarır.",
+    kanit: "Çok heceli kelime çözümleme (Vaughn vd. 2022, Öneri 1) ve kelime bilgisi (3A).",
+    materyal: ["Ünite kavram listesi", "Kök-ek tablosu", "Kavram kartları"],
+    isinma: "5 kavramı heceleyerek okusun.",
+    ogretim: "Rutin: kök → ekler → hece → bütün okuma → anlam (ek ve bağlam ipucu). Yabancı kökenli kavramlarda heceleme (fo-to-sen-tez).",
+    uygulama: "Ders metninden 10 kavram: rutinle okuma, anlam tahmini, kavram kartı.",
+    adimlar: ["Rutin ve kök-ek", "Yabancı kökenli kavramlar", "Metin içinde çözümleme", "Karışık tekrar + 20 kelime ölçümü"],
+    ev: ["Ders kavramlarını rutinle okusun.", "Kavram kartlarıyla kendini sınasın.", "Bağlamdan anlam tahmini.", "Haberdeki kavramları konuşun.", "Haftalık kavram listesini tekrar."],
+    olcum: "kelime20", gecis: "20 kelimenin en az 17'si doğru." },
+  { id: "o2-ok-2", seviye: "o2", alan: "okuma", ad: "Paragraf akıcılığı ve zor metinler", hedef: "Uzun paragrafları akıcı okur; desteklenerek sınıf düzeyinden zor metinlerle çalışır.",
+    kanit: "Akıcılık (Vaughn vd. 2022, Öneri 2) ve zorlayıcı metinle düzenli çalışma (Öneri 4).",
+    materyal: ["Sınıf düzeyinde ve bir üst düzeyde paragraflar", "Akıcılık grafiği"],
+    isinma: "Önceki paragrafı bir kez okusun.",
+    ogretim: "Zor metne hazırlık: kavramları önceden çöz, model oku, öbekle. Zor metinde destek: eşli okuma, paragraf sonu özet.",
+    uygulama: "Tekrarlı okuma + grafik; haftada bir zor metin (destekli).",
+    adimlar: ["Model ve öbekli okuma", "Tekrarlı okuma", "Destekli zor metin", "Yeni metinle 1 dk DDK"],
+    ev: ["Günün paragrafını 3 kez okusun.", "Zor metni birlikte, sırayla okuyun.", "Sesli kitapla takip.", "En iyi süreyi grafiğe işlesin.", "Okuduğunu 2 cümlede anlatsın."],
+    olcum: "ddk", gecis: "Yeni metinde DDK artmış, doğruluk %95." },
+  { id: "o2-ok-3", seviye: "o2", alan: "okuma", ad: "Soru sorma ve çıkarım", hedef: "Metinde açıkça yazmayanı ipuçlarından çıkarır; çıkarımını metinden kanıtla destekler.",
+    kanit: "Metin hakkında soru sorma ve cevaplama (Vaughn vd. 2022, Öneri 3B).",
+    materyal: ["Çıkarım şablonu: İpucu (metinde) + Bildiğim = Çıkarımım", "Paragraf soruları"],
+    isinma: "Bir resimden çıkarım yapsın.",
+    ogretim: "Şablonla sesli düşünerek çıkarım; \"Bunu metnin neresinden anladın?\" sorusunu hep sor.",
+    uygulama: "Paragraf başına bir çıkarım sorusu + kanıt cümlesinin altını çizme.",
+    adimlar: ["Çıkarım şablonu", "Kanıt gösterme", "Paragraf sorularında çıkarım", "Yeni metinle anlama ölçümü"],
+    ev: ["Film sahnesinden çıkarım: \"Neden böyle yaptı?\"", "Okuduğundan bir çıkarım + kanıt.", "Haberde yazmayanı konuşun.", "Siz soru, o kanıt.", "Paragraf sorusu çözüp nedenini anlatsın."],
+    olcum: "anlama5", gecis: "5 sorunun en az 4'ü doğru, çıkarım sorularının ikisi de doğru." },
+  { id: "o2-ok-4", seviye: "o2", alan: "okuma", ad: "Özetleme ve metin yapısı", hedef: "Metin yapısını (neden-sonuç, karşılaştırma, sıralama, problem-çözüm) tanır; grafik düzenleyiciyle özetler.",
+    kanit: "Öz bulma ve anlama rutinleri (Vaughn vd. 2022, Öneri 3C).",
+    materyal: ["Grafik düzenleyiciler (neden-sonuç, karşılaştırma tablosu, akış şeması)", "Ders metinleri"],
+    isinma: "Bir paragrafın öz cümlesi.",
+    ogretim: "İpucu kelimelerle yapıyı tanı (çünkü, bu nedenle = neden-sonuç; oysa, benzer şekilde = karşılaştırma). Uygun düzenleyiciyi doldur, düzenleyiciden özet yaz.",
+    uygulama: "Bir ders metni: yapı tanıma → düzenleyici → 4–5 cümlelik özet.",
+    adimlar: ["Yapı ipuçları", "Düzenleyici doldurma", "Düzenleyiciden özet", "Yeni metinle öz puanı"],
+    ev: ["Ders konusunu şemaya döksün.", "İpucu kelime avı.", "Karşılaştırma tablosu (iki şehir, iki hayvan).", "Özetini size okusun.", "Haftalık özet defteri."],
+    olcum: "oz4", gecis: "İki ardışık metinde en az 3/4." },
+  { id: "o2-ok-5", seviye: "o2", alan: "okuma", ad: "Sınavda okuma stratejileri", hedef: "Soru kökünü önce okur, olumsuz ifadeleri işaretler, zamanı planlar; uzun soruda kaygısını yönetir.",
+    kanit: "Anlamayı izleme ve öz düzenleme (Vaughn vd. 2022, Öneri 3D); strateji öğretimi.",
+    materyal: ["Sınav tipi paragraf soruları", "Strateji kartı: KÖK – İŞARETLE – OKU – ELE – KONTROL", "Nefes kartı"],
+    isinma: "Bir soru kökünde olumsuz ifadeyi bulsun.",
+    ogretim: "Önce soru kökü, sonra metin; 'değildir/yoktur' gibi ifadeleri yuvarlak içine al; yanlış seçenekleri gerekçeyle ele. Takılınca nefes al, soruyu işaretleyip geç.",
+    uygulama: "5 soru: kartla çözüm, süre tutma, hata analizi (okuma hatası mı, bilgi hatası mı?).",
+    adimlar: ["Soru kökü ve işaretleme", "Seçenek eleme", "Süreli deneme ve kaygı yönetimi", "Yeni sorularla anlama ölçümü"],
+    ev: ["Günde 5 paragraf sorusu, kartla.", "Olumsuz ifade avı.", "Hata analizi defteri.", "Süre tutarak 3 soru.", "Nefes egzersizi (2 dk)."],
+    olcum: "anlama5", gecis: "5 sorunun en az 4'ü doğru." },
+  { id: "o2-ok-6", seviye: "o2", alan: "okuma", ad: "Görüş ve bilgilendirici yazı (SRSD)", hedef: "Görüş ya da bilgilendirici yazıyı planlar, gerekçelendirir, kendi yazısını denetler.",
+    kanit: "SRSD (Graham & Harris): planlama stratejisi + öz düzenleme.",
+    materyal: ["Strateji kartı: FİKİR – PLAN – YAZ (Konu cümlesi, Gerekçeler, Açıklama/Kanıt, Bitiş)", "Kontrol listesi", "Kendine konuşma kartı"],
+    isinma: "Bir konuda görüş + 2 gerekçe.",
+    ogretim: "Örnek yazıda öğeleri bul; sesli düşünerek planla-yaz; karşı görüşe yanıt öğesini ekle.",
+    uygulama: "Birlikte plan → bağımsız yazı → öz değerlendirme ve grafik.",
+    adimlar: ["Öğeler ve model yazı", "Birlikte planlama", "Bağımsız yazma ve denetim", "Yeni konuyla yazı öğeleri ölçümü"],
+    ev: ["Haftanın konusunda görüş tartışması.", "Plan şablonu.", "Kısa yazı.", "Kontrol listesiyle denetim.", "Yazısını aileye sunsun."],
+    olcum: "yazi6", gecis: "Planlı yazıda en az 5/6 öğe." },
+
+  // ─────────── ORTAOKUL 7–8 · MATEMATİK ───────────
+  { id: "o2-mt-1", seviye: "o2", alan: "matematik", ad: "Rasyonel sayılar sayı doğrusunda", hedef: "Negatif sayıları, kesirleri ve ondalıkları aynı sayı doğrusunda gösterir ve sıralar.",
+    kanit: "Sayı doğrusunun ileri matematiğe hazırlıkta kullanılması (Fuchs vd. 2021, Öneri 4).",
+    materyal: ["−5…5 sayı doğrusu", "Termometre görseli", "Sayı kartları"],
+    isinma: "Termometrede −3 ile 2 arasındaki fark.",
+    ogretim: "Sıfırın iki yanı; −1/2, −0,75 gibi değerleri yerleştir. Mutlak değeri uzaklık olarak göster.",
+    uygulama: "Karışık sayıları doğruya yerleştirme ve sıralama.",
+    adimlar: ["Tam sayılar", "Negatif kesir ve ondalıklar", "Sıralama ve mutlak değer", "Karışık tekrar + sayı doğrusu ölçümü"],
+    ev: ["Hava durumu sıcaklıklarını karşılaştırın.", "Asansör katları (−2. kat).", "Kartları sıralama.", "Borç–alacak örnekleri.", "Doğruya 5 sayı yerleştirme."],
+    olcum: "sd10", gecis: "10 maddenin en az 8'i doğru." },
+  { id: "o2-mt-2", seviye: "o2", alan: "matematik", ad: "Oran, orantı ve yüzde problemleri", hedef: "Oran-orantı ve yüzde problemlerini tablo ve çift sayı doğrusuyla çözer.",
+    kanit: "Gösterimler ve şema temelli problem öğretimi (Fuchs vd. 2021, Öneri 3 ve 5).",
+    materyal: ["Çift sayı doğrusu", "Oran tablosu", "Yüzde şeridi (0–%100)"],
+    isinma: "\"%10'u kaç?\" zihinden.",
+    ogretim: "Yüzde şeridi: %100 = bütün; %10'dan %30'a. Doğru/ters orantıyı tabloda göster.",
+    uygulama: "3 problem: gösterim seçimi → çözüm → kontrol.",
+    adimlar: ["Yüzde şeridi", "Doğru orantı", "Ters orantı ve karışık", "Yeni problemle puan"],
+    ev: ["İndirim hesaplama.", "Tarif ölçekleme.", "Hız-zaman (ters orantı) örnekleri.", "Tablo doldurma.", "Fatura yüzdeleri."],
+    olcum: "problem4", gecis: "İki ardışık problemde en az 3/4." },
+  { id: "o2-mt-3", seviye: "o2", alan: "matematik", ad: "Cebirsel ifadeler: somuttan sembole", hedef: "Cebirsel ifadeleri modelle gösterir, benzer terimleri toplar, ifadeyi sözelden sembole çevirir.",
+    kanit: "Somut → yarı somut → soyut sırası ve matematik dili (Fuchs vd. 2021, Öneri 2 ve 3).",
+    materyal: ["Cebir karoları (kâğıttan: x çubuğu, 1 karesi)", "Sözel–sembol eşleme kartları"],
+    isinma: "\"Bir sayının 3 fazlası\" nasıl yazılır?",
+    ogretim: "Karolarla 2x + 3 kur; benzer terimleri gruplayarak topla. Sözel ifade → model → sembol.",
+    uygulama: "5 ifade: model, sadeleştirme, sözel karşılık.",
+    adimlar: ["Karolarla ifade kurma", "Benzer terimler", "Sözelden sembole", "Karışık tekrar + ölçüm"],
+    ev: ["\"Yaşımın 2 katının 5 fazlası\" ifadesini yazsın.", "Karolarla ifade kurma.", "Eşleme kartları.", "Kendi sözel ifadesini yazsın.", "Benzer terim avı."],
+    olcum: "mat1dk", gecis: "Sadeleştirme maddelerinde %90 doğruluk." },
+  { id: "o2-mt-4", seviye: "o2", alan: "matematik", ad: "Denklem kurma", hedef: "Sözel problemi şemayla çözümler, denkleme çevirir ve çözer.",
+    kanit: "Şema temelli problem öğretimi (Fuchs vd. 2021, Öneri 5).",
+    materyal: ["Terazi modeli görseli", "Şema kartları", "Problem kartları"],
+    isinma: "□ + 7 = 15 → □?",
+    ogretim: "Terazi: iki tarafa aynı işlemi yap. Problem → şema → bilinmeyene harf → denklem → çöz → yerine koyup kontrol.",
+    uygulama: "3 problem: şema ve denklem; kontrol adımı zorunlu.",
+    adimlar: ["Terazi modeli", "Tek adımlı denklemler", "Problemden denkleme", "Yeni problemle puan"],
+    ev: ["\"Aklımdan bir sayı tuttum\" oyunu.", "Terazi çizimiyle denklem.", "Problemden denklem yazma.", "Çözümü yerine koyarak kontrol.", "Kendi problemini yazsın."],
+    olcum: "problem4", gecis: "İki ardışık problemde en az 3/4." },
+  { id: "o2-mt-5", seviye: "o2", alan: "matematik", ad: "İşlem akıcılığı (üslü, köklü, işlem önceliği)", hedef: "Temel üslü/köklü değerleri ve işlem önceliğini hızlı ve doğru uygular.",
+    kanit: "Düzenli zamanlı etkinlikler (Fuchs vd. 2021, Öneri 6).",
+    materyal: ["Kare/küp kartları (1²–15², 1³–5³)", "İşlem önceliği kartı (Parantez → Üs/Kök → Çarpma-Bölme → Toplama-Çıkarma)", "Kronometre"],
+    isinma: "5 kare değeri.",
+    ogretim: "Kart: tam kareler ve küpler; işlem önceliğini adım adım, her adımı ayrı satıra yazarak göster.",
+    uygulama: "1 dakika kart turu + 3 işlem önceliği sorusu; hata analizi.",
+    adimlar: ["Tam kareler ve kökler", "Üslü ifadeler", "İşlem önceliği", "Karışık 1 dk ölçüm"],
+    ev: ["Günde 3 dk kart.", "Hata analizi defteri.", "Her adımı ayrı satıra yazma.", "Aile ile kare değer yarışması.", "1 dk rekor."],
+    olcum: "mat1dk", gecis: "Başlangıca göre %30 artış, doğruluk %95." },
+  { id: "o2-mt-6", seviye: "o2", alan: "matematik", ad: "Sınav tipi çok adımlı problemler", hedef: "LGS tipi uzun problemlerde verileri ayıklar, planlar, çözer ve kontrol eder; hata türünü tanır.",
+    kanit: "Sözel problemlerin açık öğretimi ve öz düzenleme (Fuchs vd. 2021, Öneri 5).",
+    materyal: ["Kontrol listesi: Oku – Veriyi ayıkla – Çiz/Tablola – Planla – Çöz – Kontrol et", "Sınav tipi sorular", "Hata analizi tablosu (okuma / kavram / işlem)"],
+    isinma: "Bir sorudaki gereksiz veriyi bulsun.",
+    ogretim: "Uzun soru metnini parçalara böl, verileri tabloya al, planı yaz; hata analiziyle hangi aşamada yanlış yapıldığını belirle.",
+    uygulama: "2 soru: listeyle çözüm + hata analizi; okuma yükü için soruyu sesli okuma izni.",
+    adimlar: ["Veri ayıklama", "Tablolama ve plan", "Süreli çözüm", "Yeni soruyla problem puanı"],
+    ev: ["Günde 2 soru, kontrol listesiyle.", "Hata analizi tablosu.", "Verileri tabloya alma.", "Süre tutarak çözme.", "Bir soruyu size anlatarak çözsün."],
+    olcum: "problem4", gecis: "İki ardışık problemde en az 3/4." },
+];
+// Kaynaklar (uygulamada görünen kısa liste)
+const OMP_KAYNAKLAR = [
+  "Foorman, B. vd. (2016). Foundational Skills to Support Reading for Understanding in Kindergarten Through 3rd Grade. IES/WWC.",
+  "Vaughn, S. vd. (2022). Providing Reading Interventions for Students in Grades 4–9. IES/WWC.",
+  "Fuchs, L. S. vd. (2021). Assisting Students Struggling with Mathematics: Intervention in the Elementary Grades. IES/WWC.",
+  "Graham, S. & Harris, K. R. — Self-Regulated Strategy Development (SRSD) yazma modeli.",
+  "Güven, S. & Friedmann, N. (2019). Developmental Letter Position Dyslexia in Turkish. Frontiers in Psychology, 10.",
+  "Yılmaz, Ş. S. & Sarı, K. R. (2020). Disleksili olan ve olmayan öğrencilerin sözel dil becerileri. Kastamonu Eğitim Dergisi, 28(4).",
+  "Dinç, R. (2017). Disleksili öğrencinin okuma-yazma becerilerinin geliştirilmesi: eylem araştırması. Kuramsal Eğitimbilim, 10(2).",
+];
+// ===== ÖÖG MÜDAHALE PROGRAMI — İÇERİK BİTİŞ =====
+
+// ===== ÖÖG MÜDAHALE PROGRAMI — MANTIK BAŞLANGIÇ =====
+// Haftalık DDK artış varsayımı (yaklaşık; İngilizce akıcılık araştırmalarından uyarlanmıştır, Türkçe için kesin değildir — danışman değiştirebilir)
+const OMP_HAFTALIK_ARTIS = { i1: 1.5, i2: 1.0, o1: 0.7, o2: 0.5 };
+function ompUnite(id) { return OMP_UNITELER.find(u => u.id === id) || null; }
+function ompUniteler(seviye, alan) { return OMP_UNITELER.filter(u => u.seviye === seviye && u.alan === alan); }
+function ompSeviyeAd(k) { const s = OMP_SEVIYELER.find(x => x.key === k); return s ? s.ad : k; }
+function ompVarsayilanSeviye(sinifAdi) {
+  const n = parseInt(String(sinifAdi || "").match(/\d{1,2}/)?.[0] || "", 10);
+  if (n === 1 || n === 2) return "i1"; if (n === 3 || n === 4) return "i2"; if (n === 5 || n === 6) return "o1"; if (n === 7 || n === 8) return "o2";
+  return "o1";
+}
+// Oturum listesi: tek alan → başlangıç ünitesinden sona; iki alan → her alandan 3 ünite, haftada 1 okuma + 1 matematik
+function ompOturumlarOlustur(seviye, alan, bas) {
+  const al = (a, n) => ompUniteler(seviye, a).slice(Math.max(0, (Number(bas && bas[a]) || 1) - 1)).slice(0, n);
+  const oturumlar = [];
+  if (alan === "ikisi") {
+    const ok = al("okuma", 3), mt = al("matematik", 3);
+    const okS = ok.flatMap(u => [1, 2, 3, 4].map(sira => ({ uniteId: u.id, sira })));
+    const mtS = mt.flatMap(u => [1, 2, 3, 4].map(sira => ({ uniteId: u.id, sira })));
+    for (let i = 0; i < Math.max(okS.length, mtS.length); i++) { if (okS[i]) oturumlar.push(okS[i]); if (mtS[i]) oturumlar.push(mtS[i]); }
+  } else al(alan, 6).forEach(u => [1, 2, 3, 4].forEach(sira => oturumlar.push({ uniteId: u.id, sira })));
+  return oturumlar.map((o, i) => ({ ...o, no: i + 1 }));
+}
+// Geçiş ölçütü sağlanmadıysa: aynı üniteden "rehberli" ve "bağımsız" oturumları araya eklenir
+function ompUzat(plan, no) {
+  const i = plan.oturumlar.findIndex(o => o.no === no); if (i < 0) return plan;
+  const u = plan.oturumlar[i].uniteId;
+  const ek = [{ uniteId: u, sira: 2, ek: true }, { uniteId: u, sira: 4, ek: true }];
+  const yeni = [...plan.oturumlar.slice(0, i + 1), ...ek, ...plan.oturumlar.slice(i + 1)];
+  // Numaralar yeniden verilir; kayıtlar yeni numaralara taşınır
+  const kay = {}; const eskiNo = {};
+  yeni.forEach((o, j) => { if (o.no != null) eskiNo[j + 1] = o.no; });
+  const sonuc = yeni.map((o, j) => ({ uniteId: o.uniteId, sira: o.sira, no: j + 1, ...(o.ek ? { ek: true } : {}) }));
+  Object.entries(eskiNo).forEach(([yeniN, eskiN]) => { if (plan.kayitlar && plan.kayitlar[eskiN]) kay[yeniN] = plan.kayitlar[eskiN]; });
+  return { ...plan, oturumlar: sonuc, kayitlar: kay, uzatildi: [...(plan.uzatildi || []), u] };
+}
+// Öğrencinin son sesli okuma akıcılığı testinden başlangıç DDK'sı ve sınıf aralığı
+function ompOkumaBaslangic(testKayitlari, o) {
+  try {
+    const l = (pdrSozlukOku(testKayitlari || {}, o.name, o.className, o.numara) || []).filter(k => k && k.tip === "okuma_hizi" && k.veri)
+      .sort((a, b) => (pdrTarihMs(b.tarih) || 0) - (pdrTarihMs(a.tarih) || 0));
+    for (const k of l) { const r = ohHesapla(k.veri, k.tarih, false, k.id); if (r && r.ddk != null) return { ddk: r.ddk, dogruluk: r.dogruluk, hedef: r.hedef || null, tarih: k.tarih, sinif: r.m && r.m.sinif }; }
+  } catch (e) {}
+  return null;
+}
+function ompVarsayilanHedef(baslangic, seviye, oturumSay, aralik) {
+  const b = Number(baslangic); if (!b) return "";
+  const hafta = Math.ceil(oturumSay / 2);
+  const artis = Math.round(b + (OMP_HAFTALIK_ARTIS[seviye] || 1) * hafta);
+  // Öğrenci sınıf aralığının altındaysa ve artış aralığı aşıyorsa: hedef önce aralığın alt sınırı
+  return aralik && aralik[0] && b < aralik[0] ? Math.min(artis, aralik[0]) : artis;
+}
+// DDK ilerlemesi + karar kuralı (son 4 ölçüm hedef çizgisinin altında/üstünde)
+function ompIlerleme(plan) {
+  const N = plan.oturumlar.length, b = Number(plan.baslangic && plan.baslangic.ddk) || null, h = Number(plan.hedefDdk) || null;
+  const noktalar = plan.oturumlar.map(o => ({ no: o.no, ddk: plan.kayitlar && plan.kayitlar[o.no] && plan.kayitlar[o.no].ddk != null && plan.kayitlar[o.no].ddk !== "" ? Number(plan.kayitlar[o.no].ddk) : null })).filter(x => x.ddk != null && !isNaN(x.ddk));
+  const cizgi = (no) => (b != null && h != null && N) ? b + (h - b) * (no / N) : null;
+  let karar = null;
+  if (b != null && h != null && noktalar.length >= 4) {
+    const son = noktalar.slice(-4), alt = son.every(p => p.ddk < cizgi(p.no)), ust = son.every(p => p.ddk > cizgi(p.no));
+    karar = alt ? { tur: "alt", metin: "Son 4 ölçüm hedef çizgisinin altında. Yöntemi değiştirmeyi düşün: üniteyi tekrar et ya da uzat, ev çalışmasının düzenini veliyle gözden geçir, oturum sıklığını artır; ilerleme yine olmazsa RAM / destek eğitim ile görüş." }
+      : ust ? { tur: "ust", metin: "Son 4 ölçüm hedef çizgisinin üstünde. Hedefi yükseltebilir ya da bir sonraki üniteye erken geçebilirsin." }
+      : { tur: "yolunda", metin: "İlerleme hedef çizgisi çevresinde; plana devam." };
+  } else if (b != null && h != null) karar = { tur: "az", metin: `Karar için en az 4 DDK ölçümü gerekir (şu an ${noktalar.length}).` };
+  return { N, b, h, noktalar, cizgi, karar };
+}
+function ompOturumBilgi(plan, o) {
+  const u = ompUnite(o.uniteId); const rol = OMP_ROLLER[(o.sira || 1) - 1];
+  const hafta = Math.ceil(o.no / 2);
+  return { u, rol, hafta, adim: u ? u.adimlar[(o.sira || 1) - 1] : "", olcum: u ? OMP_OLCUMLER[u.olcum] : null };
+}
+const ompHtmlKac = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+function ompOturumHtml(plan, o, ogr) {
+  const { u, rol, hafta, adim, olcum } = ompOturumBilgi(plan, o); if (!u) return "";
+  const K = ompHtmlKac;
+  const blok = (bas, dk, ic) => `<div style="border:1px solid #B9CFBE;border-radius:8px;padding:8px 10px;margin:6px 0"><div style="font-weight:800;color:#127C56">${K(bas)} <span style="color:#6E8579;font-weight:600">(${dk} dk)</span></div><div style="margin-top:3px">${ic}</div></div>`;
+  return `<div style="font-family:Arial,sans-serif;font-size:13px;color:#1C2B24;line-height:1.5">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #127C56;padding-bottom:6px;margin-bottom:8px">
+    <div><div style="font-size:11px;color:#6E8579">ÖÖG Müdahale Programı · ${K(ompSeviyeAd(plan.seviye))}</div>
+    <div style="font-size:17px;font-weight:800">Oturum ${o.no} · Hafta ${hafta}${o.ek ? " · ek oturum" : ""}</div>
+    <div style="font-size:14px;font-weight:700">${K(OMP_ALANLAR[u.alan])} — ${K(u.ad)} (${o.sira}/4: ${K(rol.ad)})</div></div>
+    <div style="text-align:right;font-size:12px">${K(ogr.name)}<br>${K(ogr.className || "")}<br>Tarih: ____________</div>
+  </div>
+  <div><b>Ünite hedefi:</b> ${K(u.hedef)}</div>
+  <div><b>Bu oturumun odağı:</b> ${K(adim)}</div>
+  <div style="margin:4px 0"><b>Uygulayıcı rolü:</b> ${K(rol.ne)}</div>
+  <div><b>Materyal:</b> ${u.materyal.map(K).join(" · ")}</div>
+  ${blok(OMP_AKIS[0][0], OMP_AKIS[0][1], K(u.isinma))}
+  ${blok(OMP_AKIS[1][0], OMP_AKIS[1][1], K(u.ogretim))}
+  ${blok(OMP_AKIS[2][0], OMP_AKIS[2][1], K(u.uygulama))}
+  ${blok(OMP_AKIS[3][0], OMP_AKIS[3][1], `Öğrenciyle grafiğe işle, ev kartını ver, başarılı bir maddeyle bitir.${o.sira === 4 ? `<br><b>Ölçüm (${K(olcum.ad)}):</b> ${K(olcum.nasil)}<br><b>Geçiş ölçütü:</b> ${K(u.gecis)}<br>Sonuç: __________ ${K(olcum.birim)} &nbsp; Ölçüt sağlandı mı? ☐ Evet ☐ Hayır (üniteyi 2 oturum uzat)` : ""}`)}
+  <div style="margin-top:8px"><b>Gözlem notu:</b><div style="border-bottom:1px dotted #999;height:22px"></div><div style="border-bottom:1px dotted #999;height:22px"></div></div>
+  <div style="margin-top:8px;font-size:10.5px;color:#6E8579">Kanıt temeli: ${K(u.kanit)}</div>
+</div>`;
+}
+function ompHaftaEtkinlikleri(plan, hafta) {
+  const ots = plan.oturumlar.filter(o => Math.ceil(o.no / 2) === hafta);
+  const us = [...new Set(ots.map(o => o.uniteId))].map(ompUnite).filter(Boolean);
+  if (!us.length) return { us, gunler: [] };
+  if (us.length === 1) return { us, gunler: us[0].ev.slice(0, 5).map(m => ({ u: us[0], m })) };
+  const [a, c] = us;
+  return { us, gunler: [{ u: a, m: a.ev[0] }, { u: c, m: c.ev[0] }, { u: a, m: a.ev[2] }, { u: c, m: c.ev[2] }, { u: a, m: a.ev[4] }] };
+}
+function ompVeliKartiHtml(plan, hafta, ogr) {
+  const K = ompHtmlKac; const { us, gunler } = ompHaftaEtkinlikleri(plan, hafta);
+  const gunAd = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma"];
+  return `<div style="font-family:Arial,sans-serif;font-size:14px;color:#1C2B24;line-height:1.55">
+  <div style="border-bottom:2px solid #127C56;padding-bottom:6px;margin-bottom:10px">
+    <div style="font-size:12px;color:#6E8579">Rehberlik Servisi · Evde Destek Kartı</div>
+    <div style="font-size:19px;font-weight:800">${K(ogr.name)} · ${hafta}. hafta</div>
+    <div>Bu hafta çalıştığımız beceri${us.length > 1 ? "ler" : ""}: <b>${us.map(u => K(u.ad)).join("</b> ve <b>")}</b></div>
+  </div>
+  <div style="background:#D7EEE1;border-radius:8px;padding:8px 12px;margin-bottom:10px"><b>Her gün 15 dakika</b><ul style="margin:4px 0 0 18px;padding:0">${OMP_VELI_KURALLAR.map(k => `<li>${K(k)}</li>`).join("")}</ul></div>
+  <table style="width:100%;border-collapse:collapse">${gunler.map((g, i) => `<tr><td style="border:1px solid #B9CFBE;padding:8px;width:22%;font-weight:700">${gunAd[i]}</td><td style="border:1px solid #B9CFBE;padding:8px">${K(g.m)}</td><td style="border:1px solid #B9CFBE;padding:8px;width:16%;text-align:center">☐ Yaptık</td></tr>`).join("")}</table>
+  <div style="margin-top:10px">Çocuğunuzun bu haftaki çabası için bir not (isteğe bağlı):<div style="border-bottom:1px dotted #999;height:24px"></div></div>
+  <div style="margin-top:12px;font-size:12px;color:#6E8579">Kartı hafta sonunda okula geri gönderiniz. Sorularınız için rehberlik servisine başvurabilirsiniz.</div>
+</div>`;
+}
+function ompYazdir(html, dosyaAdi) {
+  const id = "omp-yazdir-" + Date.now(); const tmp = document.createElement("div"); tmp.id = id;
+  Object.assign(tmp.style, { position: "absolute", left: "-9999px", top: "0", width: "800px", padding: "18px", background: "#fff" });
+  tmp.innerHTML = html; document.body.appendChild(tmp);
+  raporIndir(id, dosyaAdi);
+  setTimeout(() => { const el = document.getElementById(id); if (el) el.remove(); }, 8000);
+}
+// ===== ÖÖG MÜDAHALE PROGRAMI — MANTIK BİTİŞ =====
+
+function OmpGrafik({ plan }) {
+  const { N, b, h, noktalar, cizgi } = ompIlerleme(plan);
+  if (b == null) return null;
+  const W = 380, H = 200, sol = 28, sag = 10, ust = 18, alt = 24;
+  const enCok = Math.max(10, b, h || 0, ...noktalar.map(p => p.ddk)) * 1.12;
+  const x = (no) => sol + (W - sol - sag) * (no / Math.max(1, N));
+  const y = (v) => ust + (H - ust - alt) * (1 - v / enCok);
+  const adim = enCok > 120 ? 40 : enCok > 60 ? 20 : 10;
+  const izgara = []; for (let v = 0; v <= enCok; v += adim) izgara.push(v);
+  const tum = [{ no: 0, ddk: b }, ...noktalar];
+  return (
+    <div data-testid="omp-grafik" style={{ background: "#fff", border: `1px solid ${BORDER}`, borderRadius: 10, padding: "8px 8px 4px" }}>
+      <div style={{ fontSize: 12, fontWeight: 800, color: TEXT, marginBottom: 2 }}>📈 Okuma akıcılığı (DDK)</div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
+        {izgara.map(v => <g key={v}><line x1={sol} x2={W - sag} y1={y(v)} y2={y(v)} stroke="#E3ECE6" /><text x={sol - 5} y={y(v) + 3} fontSize="9" textAnchor="end" fill={MUTED}>{v}</text></g>)}
+        {h != null && <line x1={x(0)} y1={y(b)} x2={x(N)} y2={y(h)} stroke={ORANGE} strokeDasharray="5 4" strokeWidth="1.6" />}
+        {h != null && <text x={x(N) - 2} y={y(h) - 6} fontSize="10" textAnchor="end" fill={ORANGE} fontWeight="700">hedef {h}</text>}
+        <polyline points={tum.map(p => `${x(p.no)},${y(p.ddk)}`).join(" ")} fill="none" stroke={ACCENT} strokeWidth="2.2" />
+        {tum.map((p, i) => <g key={i}><circle cx={x(p.no)} cy={y(p.ddk)} r="3.8" fill={i === 0 ? "#fff" : (cizgi(p.no) != null && p.ddk < cizgi(p.no) ? ORANGE : ACCENT)} stroke={ACCENT} strokeWidth="1.6" /><text x={x(p.no)} y={y(p.ddk) - 7} fontSize="9.5" textAnchor="middle" fill={TEXT} fontWeight="700">{p.ddk}</text></g>)}
+        <text x={x(0)} y={H - 8} fontSize="9" textAnchor="start" fill={MUTED}>başlangıç</text>
+        <text x={x(N)} y={H - 8} fontSize="9" textAnchor="end" fill={MUTED}>{N}. oturum</text>
+      </svg>
+    </div>
+  );
+}
+
+function OogMudahaleEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, oogMudahale, kaydet, testKayitlari }) {
+  const [seciliAd, setSeciliAd] = useState(aktifOgrenci?.name || "");
+  const [arama, setArama] = useState("");
+  const [bilgiAcik, setBilgiAcik] = useState(false);
+  const [acik, setAcik] = useState(null);            // açık oturum no
+  const [kayitForm, setKayitForm] = useState(null);  // { no, tarih, olcum, ddk, ev, not, gecti }
+  const [onay, setOnay] = useState(null);            // "bitir" | "yeni"
+  const [form, setForm] = useState(null);
+  useEffect(() => { setSeciliAd(aktifOgrenci?.name || ""); }, [aktifOgrenci?.name]);
+  const ogr = pdrSeciliOgr(kayitliListesi, seciliAd, aktifOgrenci);
+  const planlar = ogr ? (pdrSozlukOku(oogMudahale || {}, ogr.name, ogr.className, ogr.numara) || []) : [];
+  const aktifPlan = [...planlar].reverse().find(p => p && p.durum === "devam") || null;
+  const sonPlan = planlar[planlar.length - 1] || null;
+  const okBas = ogr ? ompOkumaBaslangic(testKayitlari, ogr) : null;
+
+  // Yeni plan formu: öğrenci değişince varsayılanlarla dolar
+  useEffect(() => {
+    if (!ogr) { setForm(null); return; }
+    const sev = ompVarsayilanSeviye(ogr.className);
+    setForm({ seviye: sev, alan: "okuma", bas: { okuma: 1, matematik: 1 }, ddk: okBas ? String(okBas.ddk) : "", dogruluk: okBas ? String(okBas.dogruluk) : "", hedef: "" });
+    setAcik(null); setKayitForm(null); setOnay(null);
+  }, [ogr && pdrOgrAnahtar(ogr.name, ogr.className, ogr.numara)]);
+
+  const planlariYaz = async (yeniListe) => {
+    const v = pdrSozlukYaz(oogMudahale || {}, ogr.name, ogr.className, yeniListe, ogr.numara);
+    await kaydet(v);
+  };
+  const planGuncelle = async (p) => planlariYaz(planlar.map(x => x.id === p.id ? p : x));
+
+  const formOturum = form ? ompOturumlarOlustur(form.seviye, form.alan, form.bas) : [];
+  const formHedef = form && form.hedef !== "" ? form.hedef : (form ? ompVarsayilanHedef(form.ddk, form.seviye, formOturum.length, okBas && okBas.hedef) : "");
+  const planOlustur = async () => {
+    if (!formOturum.length) return;
+    const okumaVar = form.alan !== "matematik";
+    const p = { id: "omp" + Date.now().toString(36), olusturma: today(), seviye: form.seviye, alan: form.alan, bas: form.bas,
+      oturumlar: formOturum, kayitlar: {}, durum: "devam",
+      baslangic: okumaVar && form.ddk !== "" ? { ddk: Number(form.ddk), dogruluk: form.dogruluk !== "" ? Number(form.dogruluk) : null, kaynak: okBas && String(okBas.ddk) === String(form.ddk) ? `Sesli okuma testi (${okBas.tarih})` : "Elle girildi" } : null,
+      hedefDdk: okumaVar && formHedef !== "" ? Number(formHedef) : null };
+    await planlariYaz([...planlar, p]);
+  };
+  const kayitKaydet = async () => {
+    const f = kayitForm; const p = aktifPlan; if (!f || !p) return;
+    const num = (v) => v === "" || v == null ? null : Number(String(v).replace(",", "."));
+    let yeni = { ...p, kayitlar: { ...(p.kayitlar || {}), [f.no]: { tarih: f.tarih || today(), olcum: num(f.olcum), ddk: num(f.ddk), ev: num(f.ev), not: String(f.not || "").trim().slice(0, 400), ...(f.gecti != null ? { gecti: f.gecti } : {}) } } };
+    if (f.gecti === false && f.uzat) yeni = ompUzat(yeni, f.no);
+    await planGuncelle(yeni); setKayitForm(null);
+  };
+  const kayitSil = async (no) => { const p = aktifPlan; const k = { ...(p.kayitlar || {}) }; delete k[no]; await planGuncelle({ ...p, kayitlar: k }); };
+
+  const kutu = { background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 14, marginBottom: 12, boxShadow: "0 4px 12px rgba(20,40,32,0.10)" };
+  const etiket = { fontSize: 11.5, fontWeight: 800, color: MUTED, marginBottom: 4, display: "block" };
+  const giris = { width: "100%", padding: "8px 10px", border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 13, background: "#fff", boxSizing: "border-box" };
+  const dugme = (renk, dolu) => ({ padding: "8px 12px", borderRadius: 8, border: `1px solid ${renk}`, background: dolu ? renk : "#fff", color: dolu ? "#fff" : renk, fontSize: 12.5, fontWeight: 700, cursor: "pointer" });
+
+  const uygulanan = aktifPlan ? Object.keys(aktifPlan.kayitlar || {}).length : 0;
+  const haftaSay = aktifPlan ? Math.ceil(aktifPlan.oturumlar.length / 2) : 0;
+  const ilerleme = aktifPlan ? ompIlerleme(aktifPlan) : null;
+  const ogrBilgi = ogr ? { name: ogr.name, className: ogr.className } : null;
+
+  return (
+    <div data-testid="omp-ekran" style={{ padding: "4px 2px 40px" }}>
+      <div style={{ ...kutu, background: "#F3EEFB", borderColor: PURPLE }}>
+        <div style={{ fontSize: 16, fontWeight: 800, color: TEXT }}>🧩 ÖÖG Müdahale Programı</div>
+        <div style={{ fontSize: 12.5, color: TEXT, lineHeight: 1.6, marginTop: 4 }}>
+          Özel öğrenme güçlüğü olan öğrenciler için seviye gruplu beceri destek programı: <b>haftada 2 × 30 dk okulda</b> + <b>her gün 15 dk evde</b> (veli kartı). Her ünite 4 oturum: göster → birlikte → sen yap → pekiştir ve ölç.
+        </div>
+        <button onClick={() => setBilgiAcik(!bilgiAcik)} style={{ ...dugme(PURPLE, false), marginTop: 8, padding: "5px 10px", fontSize: 11.5 }}>{bilgiAcik ? "▲ Gizle" : "▼ Nasıl çalışır · Kaynaklar"}</button>
+        {bilgiAcik && (
+          <div data-testid="omp-bilgi" style={{ fontSize: 12, color: TEXT, lineHeight: 1.6, marginTop: 8 }}>
+            <div style={{ fontWeight: 800, marginBottom: 2 }}>Seviye grupları</div>
+            {OMP_SEVIYELER.map(s => <div key={s.key}>• <b>{s.ad}</b>: {s.aciklama}</div>)}
+            <div style={{ fontWeight: 800, margin: "8px 0 2px" }}>30 dakikalık oturum akışı</div>
+            {OMP_AKIS.map(([a, d]) => <div key={a}>• {a} — {d} dk</div>)}
+            <div style={{ fontWeight: 800, margin: "8px 0 2px" }}>İlkeler</div>
+            {OMP_GENEL_ILKELER.map(x => <div key={x}>• {x}</div>)}
+            <div style={{ background: "#FEF9C3", borderRadius: 8, padding: "8px 10px", margin: "8px 0", color: "#92400E", fontWeight: 600 }}>
+              Bu program tanı koymaz ve ÖÖG'yi "tedavi etmez"; okuma, yazma ve matematik becerilerini geliştirmeyi hedefler. RAM raporuna dayalı destek eğitimin yerine geçmez, onu tamamlar. Seviye, sınıfa göre değil öğrencinin <b>beceri düzeyine</b> göre seçilir.
+            </div>
+            <div style={{ fontWeight: 800, margin: "8px 0 2px" }}>Kaynaklar</div>
+            {OMP_KAYNAKLAR.map(x => <div key={x} style={{ fontSize: 11, color: MUTED }}>• {x}</div>)}
+          </div>
+        )}
+      </div>
+
+      {/* Öğrenci seçimi */}
+      <div style={kutu}>
+        {ogr ? (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: TEXT }}>👤 {ogr.name} <span style={{ color: MUTED, fontWeight: 600 }}>{ogr.className}</span></div>
+            <button onClick={() => { setSeciliAd(""); if (setAktifOgrenci) setAktifOgrenci({ name: "", className: "" }); }} style={dugme(MUTED, false)}>Değiştir</button>
+          </div>
+        ) : (
+          <>
+            <label style={etiket}>Öğrenci seç</label>
+            <input data-testid="omp-ara" value={arama} onChange={e => setArama(e.target.value)} placeholder="Öğrenci ara (en az 2 harf)…" style={giris} />
+            {arama.trim().length >= 2 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                {kayitliListesi.filter(o => o.name.toLocaleLowerCase("tr").includes(arama.toLocaleLowerCase("tr"))).slice(0, 15).map(o => (
+                  <button key={pdrOgrAnahtar(o.name, o.className, o.numara)} onClick={() => { setSeciliAd(o.name); if (setAktifOgrenci) setAktifOgrenci({ name: o.name, className: o.className || "", numara: o.numara || "" }); setArama(""); }} style={{ ...dugme(ACCENT, false), borderRadius: 16, padding: "4px 10px" }}>{o.name} <span style={{ color: MUTED }}>{o.className}</span></button>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Yeni plan */}
+      {ogr && !aktifPlan && form && (
+        <div data-testid="omp-yeni" style={kutu}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: TEXT, marginBottom: 8 }}>Yeni plan oluştur{sonPlan ? <span style={{ fontSize: 11, color: MUTED, fontWeight: 600 }}> · önceki plan {sonPlan.olusturma} ({sonPlan.durum === "bitti" ? "tamamlandı" : "kapatıldı"})</span> : null}</div>
+          <label style={etiket}>Seviye grubu (öğrencinin beceri düzeyine göre)</label>
+          <select data-testid="omp-seviye" value={form.seviye} onChange={e => setForm({ ...form, seviye: e.target.value, hedef: "" })} style={giris}>
+            {OMP_SEVIYELER.map(s => <option key={s.key} value={s.key}>{s.ad}</option>)}
+          </select>
+          <div style={{ fontSize: 11, color: MUTED, margin: "4px 0 10px" }}>Örn. 6. sınıfta olup okuması 2. sınıf düzeyindeyse "İlkokul 1–2" ya da "3–4" seç.</div>
+          <label style={etiket}>Çalışılacak alan</label>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+            {[["okuma", OMP_ALANLAR.okuma], ["matematik", OMP_ALANLAR.matematik], ["ikisi", "İkisi (haftada 1 + 1)"]].map(([k, ad]) => (
+              <button key={k} data-omp-alan={k} onClick={() => setForm({ ...form, alan: k, hedef: "" })} style={dugme(ACCENT, form.alan === k)}>{ad}</button>
+            ))}
+          </div>
+          {["okuma", "matematik"].filter(a => form.alan === a || form.alan === "ikisi").map(a => (
+            <div key={a} style={{ marginBottom: 10 }}>
+              <label style={etiket}>{OMP_ALANLAR[a]} · başlangıç ünitesi</label>
+              <select data-omp-bas={a} value={form.bas[a]} onChange={e => setForm({ ...form, bas: { ...form.bas, [a]: Number(e.target.value) }, hedef: "" })} style={giris}>
+                {ompUniteler(form.seviye, a).map((u, i) => <option key={u.id} value={i + 1}>{i + 1}. {u.ad}</option>)}
+              </select>
+            </div>
+          ))}
+          {form.alan !== "matematik" && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 8 }}>
+              <div><label style={etiket}>Başlangıç DDK</label><input data-testid="omp-ddk" inputMode="numeric" value={form.ddk} onChange={e => setForm({ ...form, ddk: e.target.value.replace(/[^\d]/g, ""), hedef: "" })} style={giris} /></div>
+              <div><label style={etiket}>Doğruluk %</label><input inputMode="numeric" value={form.dogruluk} onChange={e => setForm({ ...form, dogruluk: e.target.value.replace(/[^\d.,]/g, "") })} style={giris} /></div>
+              <div><label style={etiket}>Hedef DDK</label><input data-testid="omp-hedef" inputMode="numeric" value={formHedef} onChange={e => setForm({ ...form, hedef: e.target.value.replace(/[^\d]/g, "") })} style={giris} /></div>
+            </div>
+          )}
+          {form.alan !== "matematik" && (
+            <div style={{ fontSize: 11, color: MUTED, marginBottom: 10, lineHeight: 1.5 }}>
+              {okBas ? <>Başlangıç, <b>Sesli Okuma Akıcılığı</b> testinden alındı ({okBas.tarih}: {okBas.ddk} DDK{okBas.hedef ? `, sınıf aralığı ${okBas.hedef[0]}–${okBas.hedef[1]}` : ""}). </> : <>Başlangıç için önce Testler → <b>Sesli Okuma Akıcılığı</b> uygulayabilir ya da 1 dakikalık okumayla elle girebilirsin. </>}
+              Hedef, haftalık yaklaşık {String(OMP_HAFTALIK_ARTIS[form.seviye]).replace(".", ",")} DDK artışla önerilir (İngilizce araştırmalardan uyarlanmış yaklaşık değer); istediğin gibi değiştir.
+            </div>
+          )}
+          <div style={{ background: ACCENT_LIGHT, borderRadius: 8, padding: "8px 10px", fontSize: 12, color: ACCENT, fontWeight: 700, marginBottom: 10 }}>
+            Plan: {formOturum.length} oturum · {Math.ceil(formOturum.length / 2)} hafta · {[...new Set(formOturum.map(o => o.uniteId))].length} ünite
+          </div>
+          <button data-testid="omp-olustur" onClick={planOlustur} disabled={!formOturum.length} style={{ ...dugme(ACCENT, true), width: "100%", padding: 10 }}>Planı oluştur</button>
+        </div>
+      )}
+
+      {/* Aktif plan */}
+      {ogr && aktifPlan && (
+        <>
+          <div data-testid="omp-plan" style={kutu}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: TEXT }}>{ompSeviyeAd(aktifPlan.seviye)} · {aktifPlan.alan === "ikisi" ? "Okuma-Yazma + Matematik" : OMP_ALANLAR[aktifPlan.alan]}</div>
+                <div style={{ fontSize: 11.5, color: MUTED }}>Başlangıç {aktifPlan.olusturma} · {aktifPlan.oturumlar.length} oturum / {haftaSay} hafta{aktifPlan.baslangic ? ` · başlangıç ${aktifPlan.baslangic.ddk} DDK → hedef ${aktifPlan.hedefDdk ?? "—"}` : ""}</div>
+              </div>
+              <div data-testid="omp-sayac" style={{ fontSize: 13, fontWeight: 800, color: ACCENT }}>{uygulanan}/{aktifPlan.oturumlar.length} uygulandı</div>
+            </div>
+            <div style={{ height: 8, background: "#E3ECE6", borderRadius: 6, marginTop: 8, overflow: "hidden" }}><div style={{ width: `${Math.round(100 * uygulanan / Math.max(1, aktifPlan.oturumlar.length))}%`, height: "100%", background: ACCENT }} /></div>
+          </div>
+          {ilerleme && ilerleme.b != null && (
+            <div style={kutu}>
+              <OmpGrafik plan={aktifPlan} />
+              {ilerleme.karar && <div data-testid="omp-karar" style={{ marginTop: 8, fontSize: 12, fontWeight: 700, lineHeight: 1.5, borderRadius: 8, padding: "8px 10px", background: ilerleme.karar.tur === "alt" ? "#FDECEA" : ilerleme.karar.tur === "ust" ? ACCENT_LIGHT : "#F1F5F2", color: ilerleme.karar.tur === "alt" ? "#B42318" : ilerleme.karar.tur === "ust" ? ACCENT : TEXT }}>{ilerleme.karar.tur === "alt" ? "⚠ " : ilerleme.karar.tur === "ust" ? "✓ " : "ℹ "}{ilerleme.karar.metin}</div>}
+            </div>
+          )}
+          {Array.from({ length: haftaSay }, (_, hi) => hi + 1).map(hafta => (
+            <div key={hafta} style={kutu}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: TEXT }}>{hafta}. hafta</div>
+                <button data-omp-veli={hafta} onClick={() => ompYazdir(ompVeliKartiHtml(aktifPlan, hafta, ogrBilgi), `Veli_karti_${ogr.name}_hafta_${hafta}`)} style={{ ...dugme(BLUE, false), padding: "4px 9px", fontSize: 11.5 }}>🏠 Veli kartı</button>
+              </div>
+              {aktifPlan.oturumlar.filter(o => Math.ceil(o.no / 2) === hafta).map(o => {
+                const { u, rol, adim, olcum } = ompOturumBilgi(aktifPlan, o); if (!u) return null;
+                const k = (aktifPlan.kayitlar || {})[o.no]; const ac = acik === o.no;
+                return (
+                  <div key={o.no} data-omp-oturum={o.no} style={{ border: `1px solid ${k ? ACCENT : BORDER}`, borderRadius: 10, marginBottom: 8, background: k ? "#F2FAF5" : "#fff" }}>
+                    <div onClick={() => setAcik(ac ? null : o.no)} style={{ padding: "9px 11px", cursor: "pointer", display: "flex", justifyContent: "space-between", gap: 8 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 800, color: TEXT }}>{k ? "✓ " : ""}Oturum {o.no} · {u.alan === "okuma" ? "📖" : "🔢"} {u.ad}{o.ek ? " · ek" : ""}</div>
+                        <div style={{ fontSize: 11, color: MUTED }}>{o.sira}/4 {rol.ad} — {adim}{k ? ` · ${k.tarih}${k.olcum != null ? ` · ölçüm ${k.olcum}` : ""}${k.ddk != null ? ` · ${k.ddk} DDK` : ""}` : ""}</div>
+                      </div>
+                      <span style={{ color: MUTED, fontSize: 12, flexShrink: 0 }}>{ac ? "▲" : "▼"}</span>
+                    </div>
+                    {ac && (
+                      <div data-testid="omp-oturum-detay" style={{ padding: "0 11px 11px", fontSize: 12, color: TEXT, lineHeight: 1.6 }}>
+                        <div><b>Ünite hedefi:</b> {u.hedef}</div>
+                        <div><b>Rolün:</b> {rol.ne}</div>
+                        <div><b>Materyal:</b> {u.materyal.join(" · ")}</div>
+                        <div style={{ marginTop: 6 }}>
+                          {[[OMP_AKIS[0], u.isinma], [OMP_AKIS[1], u.ogretim], [OMP_AKIS[2], u.uygulama], [OMP_AKIS[3], o.sira === 4 ? `Ölçüm — ${olcum.ad}: ${olcum.nasil} Geçiş ölçütü: ${u.gecis}` : "Öğrenciyle grafiğe işle, ev kartını ver, başarılı bir maddeyle bitir."]].map(([[ad, dk], ic]) => (
+                            <div key={ad} style={{ borderLeft: `3px solid ${ACCENT}`, paddingLeft: 8, margin: "5px 0" }}><b>{ad}</b> <span style={{ color: MUTED }}>({dk} dk)</span><div>{ic}</div></div>
+                          ))}
+                        </div>
+                        <div style={{ fontSize: 10.5, color: MUTED, marginTop: 4 }}>Kanıt temeli: {u.kanit}</div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                          <button data-omp-kagit={o.no} onClick={() => ompYazdir(ompOturumHtml(aktifPlan, o, ogrBilgi), `OOG_oturum_${o.no}_${ogr.name}`)} style={dugme(BLUE, false)}>📄 Oturum kâğıdı</button>
+                          <button data-omp-kaydet-ac={o.no} onClick={() => setKayitForm({ no: o.no, tarih: k?.tarih || today(), olcum: k?.olcum ?? "", ddk: k?.ddk ?? "", ev: k?.ev ?? "", not: k?.not || "", gecti: o.sira === 4 ? (k?.gecti ?? null) : null, uzat: false })} style={dugme(ACCENT, true)}>{k ? "✎ Kaydı düzenle" : "✓ Uygulandı olarak kaydet"}</button>
+                          {k && <button onClick={() => kayitSil(o.no)} style={dugme("#C5221F", false)}>Kaydı sil</button>}
+                        </div>
+                        {k && k.not && <div style={{ marginTop: 6, fontSize: 11.5, color: MUTED }}>Not: {k.not}</div>}
+                        {kayitForm && kayitForm.no === o.no && (
+                          <div data-testid="omp-kayit-form" style={{ marginTop: 10, background: "#F7FAF8", border: `1px solid ${BORDER}`, borderRadius: 10, padding: 10 }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                              <div><label style={etiket}>Tarih</label><input value={kayitForm.tarih} onChange={e => setKayitForm({ ...kayitForm, tarih: e.target.value })} style={giris} /></div>
+                              <div><label style={etiket}>{olcum.ad} ({olcum.birim}){o.sira === 4 ? "" : " · isteğe bağlı"}</label><input data-testid="omp-olcum" inputMode="decimal" value={kayitForm.olcum} onChange={e => setKayitForm({ ...kayitForm, olcum: e.target.value.replace(/[^\d.,]/g, "") })} style={giris} /></div>
+                              {aktifPlan.alan !== "matematik" && <div><label style={etiket}>DDK (1 dk okuma) · isteğe bağlı</label><input data-testid="omp-kayit-ddk" inputMode="numeric" value={kayitForm.ddk} onChange={e => setKayitForm({ ...kayitForm, ddk: e.target.value.replace(/[^\d]/g, "") })} style={giris} /></div>}
+                              <div><label style={etiket}>Ev çalışması (geçen hafta, gün 0–5)</label><input inputMode="numeric" value={kayitForm.ev} onChange={e => setKayitForm({ ...kayitForm, ev: e.target.value.replace(/[^0-5]/g, "").slice(0, 1) })} style={giris} /></div>
+                            </div>
+                            {o.sira === 4 && (
+                              <div style={{ marginTop: 8 }}>
+                                <label style={etiket}>Geçiş ölçütü ({u.gecis}) sağlandı mı?</label>
+                                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                                  <button data-omp-gecti="evet" onClick={() => setKayitForm({ ...kayitForm, gecti: true, uzat: false })} style={dugme(ACCENT, kayitForm.gecti === true)}>Evet</button>
+                                  <button data-omp-gecti="hayir" onClick={() => setKayitForm({ ...kayitForm, gecti: false, uzat: !k })} style={dugme(ORANGE, kayitForm.gecti === false)}>Hayır</button>
+                                </div>
+                                {kayitForm.gecti === false && !k && <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12, marginTop: 6 }}><input type="checkbox" checked={!!kayitForm.uzat} onChange={e => setKayitForm({ ...kayitForm, uzat: e.target.checked })} /> Üniteyi 2 oturum uzat (rehberli + pekiştirme)</label>}
+                              </div>
+                            )}
+                            <label style={{ ...etiket, marginTop: 8 }}>Gözlem notu</label>
+                            <textarea value={kayitForm.not} onChange={e => setKayitForm({ ...kayitForm, not: e.target.value })} rows={2} style={{ ...giris, resize: "vertical" }} />
+                            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                              <button data-testid="omp-kayit-kaydet" onClick={kayitKaydet} style={dugme(ACCENT, true)}>Kaydet</button>
+                              <button onClick={() => setKayitForm(null)} style={dugme(MUTED, false)}>Vazgeç</button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+          <div style={{ ...kutu, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            {!onay ? (
+              <>
+                <button data-testid="omp-bitir" onClick={() => setOnay("bitir")} style={dugme(ACCENT, false)}>Planı tamamlandı olarak kapat</button>
+                <span style={{ fontSize: 11, color: MUTED }}>Kapatılan plan saklanır; sonra yeni plan oluşturabilirsin.</span>
+              </>
+            ) : (
+              <>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: TEXT }}>Plan kapatılsın mı? ({uygulanan}/{aktifPlan.oturumlar.length} oturum uygulandı)</span>
+                <button data-testid="omp-bitir-evet" onClick={async () => { await planGuncelle({ ...aktifPlan, durum: uygulanan >= aktifPlan.oturumlar.length ? "bitti" : "kapatildi", bitis: today() }); setOnay(null); }} style={dugme(ACCENT, true)}>Evet, kapat</button>
+                <button onClick={() => setOnay(null)} style={dugme(MUTED, false)}>Vazgeç</button>
+              </>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function MudahaleKutuphanesiEkrani({ kayitliListesi, records, aktifOgrenci, setAktifOgrenci, mudahaleOnerileri, setMudahaleOnerileri }) {
   const [seciliAd, setSeciliAd] = useState(aktifOgrenci?.name || "");
   const [ogrenciArama, setOgrenciArama] = useState("");
@@ -19990,6 +20918,12 @@ async function saveProfNotlari(data) {
 // tutuluyordu, sekmeden çıkıp girince ya da uygulamayı kapatıp açınca
 // kayboluyordu ve tekrar görmek için AI'ı yeniden (ek maliyetle) çağırmak
 // gerekiyordu. Anahtar: pdrOgrAnahtar(ad, sınıf, numara).
+async function loadOogMudahale() {
+  try { const r = await window.storage.get("pdr-oog-mudahale"); return r ? JSON.parse(r.value) : {}; } catch { return {}; }
+}
+async function saveOogMudahale(data) {
+  try { await window.storage.set("pdr-oog-mudahale", JSON.stringify(data)); } catch(e) { console.warn(e); }
+}
 async function loadMudahaleOnerileri() {
   try { const r = await window.storage.get("pdr-mudahale-onerileri"); return r ? JSON.parse(r.value) : {}; } catch { return {}; }
 }
@@ -47858,6 +48792,7 @@ const PDR_YEDEK_EK_ALANLAR = [
   ["uyumIzleme", loadUyumIzleme, saveUyumIzleme],
   ["riskHaritasi", loadRiskHaritasi, saveRiskHaritasi],
   ["mudahaleOnerileri", loadMudahaleOnerileri, saveMudahaleOnerileri],
+  ["oogMudahale", loadOogMudahale, saveOogMudahale],
   ["bilproDegerlendirmeler", loadBilproDegerlendirmeler, saveBilproDegerlendirmeler],
   ["asistanNotlari", loadAsistanNotlari, saveAsistanNotlari]
 ];
@@ -47873,7 +48808,7 @@ const PDR_YEDEK_UYARI_GUN = 30;
 //  • Yedekteki adlar eski maskeleme biçiminde olabilir ("Yı****"); mevcut öğrenciyle
 //    eşleşen adlar mevcut biçime çevrilir, böylece kayıt doğru öğrenciye bağlanır.
 //  • Tek değerli ayarlar (kademe, sınav türü, aktif yıl) değiştirilmez.
-const PDR_YEDEK_ALAN_AD = { asistanNotlari: "Asistan notları", ogrenciler: "Öğrenciler", records: "Görüşme kayıtları", profiles: "Profil 1", profiles2: "Profil 2", riskListesi: "Risk kayıtları", denemeler: "Denemeler (öğrenci)", sevkler: "Sevkler", mudahalePlan: "Müdahale planları", hazirlikNotlari: "Seans hazırlık notları", ilerlemeNotlari: "İlerleme notları", profNotlari: "Prof. Hakan notları", kutuphane: "Kütüphane", testKayitlari: "Test kayıtları", hatirlatmalar: "Hatırlatmalar", netHaritasiKayitlari: "Net haritası", konuHaritasiVerisi: "Konu haritası", bireyiTanima: "Bireyi tanıma", bdtAnaliz: "BDT analizi", sinavKaygisi: "Sınav kaygısı", oogDegerlendirmeler: "ÖÖG ön-tarama", castDegerlendirmeler: "Otizm taraması", pasDegerlendirmeler: "CAS taraması", pasPerformanslar: "CAS performans", akademikTaramalar: "Akademik düzey taraması", ilkokulTaramalar: "İlkokul düzey taraması", liseTaramalar: "Lise düzey taraması", benlikOlcekleri: "Benlik ölçeği", bilproDegerlendirmeler: "BİLPRO", sosyometri: "Sosyometri", krizKayitlari: "Kriz kayıtları", grupCalismalari: "Grup çalışmaları", uyumIzleme: "Uyum izleme", riskHaritasi: "Risk haritası", mudahaleOnerileri: "Müdahale önerileri", yillar: "Yıllar", sinifListesi: "Sınıf listesi" };
+const PDR_YEDEK_ALAN_AD = { asistanNotlari: "Asistan notları", ogrenciler: "Öğrenciler", records: "Görüşme kayıtları", profiles: "Profil 1", profiles2: "Profil 2", riskListesi: "Risk kayıtları", denemeler: "Denemeler (öğrenci)", sevkler: "Sevkler", mudahalePlan: "Müdahale planları", hazirlikNotlari: "Seans hazırlık notları", ilerlemeNotlari: "İlerleme notları", profNotlari: "Prof. Hakan notları", kutuphane: "Kütüphane", testKayitlari: "Test kayıtları", hatirlatmalar: "Hatırlatmalar", netHaritasiKayitlari: "Net haritası", konuHaritasiVerisi: "Konu haritası", bireyiTanima: "Bireyi tanıma", bdtAnaliz: "BDT analizi", sinavKaygisi: "Sınav kaygısı", oogDegerlendirmeler: "ÖÖG ön-tarama", castDegerlendirmeler: "Otizm taraması", pasDegerlendirmeler: "CAS taraması", pasPerformanslar: "CAS performans", akademikTaramalar: "Akademik düzey taraması", ilkokulTaramalar: "İlkokul düzey taraması", liseTaramalar: "Lise düzey taraması", benlikOlcekleri: "Benlik ölçeği", bilproDegerlendirmeler: "BİLPRO", sosyometri: "Sosyometri", krizKayitlari: "Kriz kayıtları", grupCalismalari: "Grup çalışmaları", uyumIzleme: "Uyum izleme", riskHaritasi: "Risk haritası", mudahaleOnerileri: "Müdahale önerileri", oogMudahale: "ÖÖG müdahale programı", yillar: "Yıllar", sinifListesi: "Sınıf listesi" };
 function pdrYedekAdEsle(ad, sinif, numara, ogrenciler) {
   if (!ad || !ogrenciler || !ogrenciler.length) return ad;
   const n = (x) => pdrSoyadMaskele(String(x || "")).toLocaleLowerCase("tr").trim();
@@ -48938,6 +49873,7 @@ const SEMA_DALLARI = [
     yapraklar: [
       { tab: "kutuphane", label: "📚 Kütüphane" },
       { tab: "mudahale_kutuphane", label: "📁 Müdahale Programları" },
+      { tab: "oog_mudahale", label: "🧩 ÖÖG Müdahale Programı" },
       { tab: "prof_danisma", label: "🎓 Prof. Hakan" },
       { tab: "asistan", label: "🤖 Asistan" },
     ] },
@@ -48980,6 +49916,7 @@ const SEMA_ICERIK = {
   uyum_izleme: [["Uyum taraması (6 gösterge, 37 madde)"], ["Görüşme notundan otomatik öneri"]],
   kutuphane: [["Yönetmelik / makale yükle — AI referansı"]],
   mudahale_kutuphane: [["Hazır müdahale programları"]],
+  oog_mudahale: [["ÖÖG müdahale programı (4 seviye, okuma-yazma + matematik)", true], ["Oturum kâğıdı ve veli ev kartı PDF"], ["DDK ilerleme grafiği ve karar kuralı"]],
   prof_danisma: [["Süpervizyon soru-cevap"]],
   asistan: [["Yazarak iş ver: özet, liste, hazırlık, rapor", true], ["Kayıt eklemeden önce onay ister"], ["Claude / ücretsiz model seçimi"]],
   grup_calismalari: [["Sınıf / okul grup etkinlikleri"]],
@@ -49322,6 +50259,7 @@ export default function App() {
   const [hazirlikNotlari, setHazirlikNotlari] = useState({});
   const [profNotlari, setProfNotlari] = useState({});
   const [mudahaleOnerileri, setMudahaleOnerileri] = useState({});
+  const [oogMudahale, setOogMudahale] = useState({});
   const [ilerlemeNotlari, setIlerlemeNotlari] = useState({});
   const [sevkler, setSevkler] = useState([]);
   const [grupCalismalari, setGrupCalismalari] = useState([]);
@@ -49371,6 +50309,7 @@ export default function App() {
     loadHazirlikNotlari().then(setHazirlikNotlari);
     loadProfNotlari().then(setProfNotlari);
     loadMudahaleOnerileri().then(setMudahaleOnerileri);
+    loadOogMudahale().then(setOogMudahale);
     loadIlerlemeNotlari().then(setIlerlemeNotlari);
     loadSevkler().then(setSevkler);
     loadGrupCalismalari().then(setGrupCalismalari);
@@ -49436,6 +50375,7 @@ export default function App() {
       "pdr-hazirlik": () => loadHazirlikNotlari().then(setHazirlikNotlari),
       "pdr-prof-notlar": () => loadProfNotlari().then(setProfNotlari),
       "pdr-mudahale-onerileri": () => loadMudahaleOnerileri().then(setMudahaleOnerileri),
+      "pdr-oog-mudahale": () => loadOogMudahale().then(setOogMudahale),
       "pdr-ilerleme": () => loadIlerlemeNotlari().then(setIlerlemeNotlari),
       "pdr-sevkler": () => loadSevkler().then(setSevkler),
       "pdr-grup-calismalari": () => loadGrupCalismalari().then(setGrupCalismalari),
@@ -50047,6 +50987,8 @@ export default function App() {
     setRiskHaritasi(updRiskHarSinif); await saveRiskHaritasi(updRiskHarSinif);
     const updMudOneriSinif = pdrSozlukSinifTemizle(mudahaleOnerileri||{});
     setMudahaleOnerileri(updMudOneriSinif); await saveMudahaleOnerileri(updMudOneriSinif);
+    const updOmpSinif = pdrSozlukSinifTemizle(oogMudahale||{});
+    setOogMudahale(updOmpSinif); await saveOogMudahale(updOmpSinif);
     const updKaygiSinif = pdrSozlukSinifTemizle(sinavKaygisi||{});
     setSinavKaygisi(updKaygiSinif); await saveSinavKaygisi(updKaygiSinif);
     // Elle eklenen sınıf listesinden de kaldır — aksi halde öğrencisiz olsa da kart tekrar görünür/eklenebilir kalır.
@@ -50294,8 +51236,8 @@ const TABS_TUMU = [
     { key: "ogrenciler", label: "👥 Öğrenciler" },
     { key: "yeni", label: "📝 Görüşme Notu" },
     { key: "profil_merkez", label: "📋 Profil" },
-    { key: "mudahale", label: "🎯 Müdahale", grup: ["mudahale","mudahale_kutuphane"],
-      grupEtiketler: { mudahale: "🎯 Müdahale Planı", mudahale_kutuphane: "📁 Müdahale Programları" } },
+    { key: "mudahale", label: "🎯 Müdahale", grup: ["mudahale","mudahale_kutuphane","oog_mudahale"],
+      grupEtiketler: { mudahale: "🎯 Müdahale Planı", mudahale_kutuphane: "📁 Müdahale Programları", oog_mudahale: "🧩 ÖÖG Programı" } },
     { key: "sinif_profili", label: "🏫 Sınıf" },
     { key: "devamsizlik", label: "📅 Devamsızlık" },
     { key: "risk", label: "⚠ Risk" },
@@ -50328,6 +51270,7 @@ const SEKME_ACIKLAMALARI = {
   profil_merkez: "Öğrencinin akademik/gelişimsel profili (Profil 1 ve Profil 2) — geçmiş yıl not ortalamaları da buradan girilir.",
   mudahale: "Seçili öğrenci için AI destekli, bireysel müdahale planı oluşturur.",
   mudahale_kutuphane: "Daha önce oluşturduğun/kaydettiğin müdahale programlarının kütüphanesi — tekrar kullanmak için.",
+  oog_mudahale: "Özel öğrenme güçlüğü olan öğrenciler için seviye gruplu (ilkokul 1–2, 3–4, ortaokul 5–6, 7–8) okuma-yazma ve matematik destek programı: oturum kâğıtları, veli ev kartları ve ilerleme grafiği.",
   sinif_profili: "Sınıf bazında genel görünüm: öğrenci listesi, Öncelik Listesi, Risk Haritası, net tablosu/grafiği ve Sınıf Haritası yazdırma.",
   devamsizlik: "Öğrencilerin devamsızlık günlerini kaydet, ani artışları takip et.",
   risk: "Riskli gördüğün öğrencileri işaretle, önceliklendir ve takip et.",
@@ -50626,6 +51569,8 @@ function pdrBaslangicSekmesi() {
 
     const kalanMudahaleOnerileri = pdrSozlukTemizle(mudahaleOnerileri);
     setMudahaleOnerileri(kalanMudahaleOnerileri); await saveMudahaleOnerileri(kalanMudahaleOnerileri);
+    const kalanOmp = pdrSozlukTemizle(oogMudahale || {});
+    setOogMudahale(kalanOmp); await saveOogMudahale(kalanOmp);
   }
 
   return (
@@ -51622,6 +52567,8 @@ function pdrBaslangicSekmesi() {
 
               const yeniMudahaleOnerileri = pdrSozlukTasi(mudahaleOnerileri);
               setMudahaleOnerileri(yeniMudahaleOnerileri); await saveMudahaleOnerileri(yeniMudahaleOnerileri);
+              const yeniOmp = pdrSozlukTasi(oogMudahale || {});
+              setOogMudahale(yeniOmp); await saveOogMudahale(yeniOmp);
 
               // ÖNEMLİ DÜZELTME: bu altı koleksiyon (bireyi tanıma, BDT analiz,
               // uyum izleme, testler, sınav kaygısı, sosyometri) sınıf/ad
@@ -51803,6 +52750,8 @@ function pdrBaslangicSekmesi() {
 
               const updMudahaleOnerileri = pdrSozlukOgrenciTemizle(mudahaleOnerileri);
               setMudahaleOnerileri(updMudahaleOnerileri); await saveMudahaleOnerileri(updMudahaleOnerileri);
+              const updOmp = pdrSozlukOgrenciTemizle(oogMudahale || {});
+              setOogMudahale(updOmp); await saveOogMudahale(updOmp);
 
               // Testler, Konu Haritası ve Sınav Kaygısı da aynı sözlük deseniyle
               // (isim||sınıf||numara anahtarlı) tutuluyor — bunlar da daha önce
@@ -52293,6 +53242,11 @@ function pdrBaslangicSekmesi() {
         )}
 
         {/* ── MÜDAHALE PROGRAMLARI KÜTÜPHANESİ ────────────────────────── */}
+        {tab === "oog_mudahale" && (
+          <OogMudahaleEkrani kayitliListesi={kayitliListesi} aktifOgrenci={aktifOgrenci} setAktifOgrenci={setAktifOgrenci} oogMudahale={oogMudahale} testKayitlari={testKayitlari}
+            kaydet={async (v) => { setOogMudahale(v); await saveOogMudahale(v); }} />
+        )}
+
         {tab === "mudahale_kutuphane" && (
           <MudahaleKutuphanesiEkrani kayitliListesi={kayitliListesi} records={records} aktifOgrenci={aktifOgrenci} setAktifOgrenci={setAktifOgrenci} mudahaleOnerileri={mudahaleOnerileri} setMudahaleOnerileri={setMudahaleOnerileri} />
         )}

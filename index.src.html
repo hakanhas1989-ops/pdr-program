@@ -3151,6 +3151,7 @@ const OMP_TB_DOGRU = {
   ondalik: { min: 0, max: 1, uret: () => { const n = ompTbRas(1, 19) * 5; return { etiket: (n / 100).toFixed(n % 10 === 0 ? 1 : 2).replace(".", ","), deger: n / 100 }; } },
   negatif: { min: -5, max: 5, uret: () => { const n = ompTbRas(-9, 9) / 2; return { etiket: (n < 0 ? "−" : "") + String(Math.abs(n)).replace(".", ","), deger: n }; } },
 };
+function ompTbDogruListe(D, n) { const l = [], g = new Set(); for (let t = 0; l.length < n && t < 200; t++) { const x = D.uret(); if (!g.has(x.etiket) && !l.some(y => Math.abs(y.deger - x.deger) < 1e-9)) { g.add(x.etiket); l.push(x); } } while (l.length < n) l.push(D.uret()); return l; }
 // Ünite → tablet etkinlikleri
 const OMP_TB_UNITE = {
   "i1-ok-1": [{ tur: "kartlar", ad: "Ses birleştirme kartları", kaynak: "ses", adet: 10, olcum: "ses10" }],
@@ -3566,7 +3567,7 @@ function OmpTbHizliBakis({ onBitir }) {
 // 7) Sayı doğrusu — doğruya dokun, sonra Tamam (kabul: aralığın %5'i)
 function OmpTbDogru({ e, onBitir }) {
   const D = OMP_TB_DOGRU[e.dogru] || OMP_TB_DOGRU.tam100;
-  const uret = () => Array.from({ length: 10 }, () => D.uret());
+  const uret = () => ompTbDogruListe(D, 10);
   const [liste, setListe] = useState(uret); const [i, setI] = useState(0); const [konum, setKonum] = useState(null); const [puan, setPuan] = useState(0); const [geri, setGeri] = useState(null); const [bitti, setBitti] = useState(false);
   const ref = useRef(null);
   const W = 1000, sol = 50, sag = 950;
@@ -3661,6 +3662,7 @@ function OmpTablet({ plan, oturum, ogr, onKapat }) {
           <div style={{ fontSize: 18, fontWeight: 800, color: OMP_TB.metin }}>{e ? e.ad : u ? u.ad : ""}</div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
+          <button data-testid="omp-tb-kagit" title="Tablet yoksa ya da yedek olarak: yazdırılabilir öğrenci kâğıdı ve cevap anahtarı" onClick={() => { const h = ompKagitFormHtml(plan, oturum, ogr); if (h) ompYazdir(h, `OOG_kagit_form_${oturum.no}_${ogr.name}`); }} style={{ ...ompTbDugme("#475569"), fontSize: 15, padding: "10px 14px" }}>✏️ Kâğıt</button>
           {e && <button onClick={() => setSecili(null)} style={{ ...ompTbDugme("#64748B"), fontSize: 15, padding: "10px 14px" }}>← Etkinlikler</button>}
           <button data-testid="omp-tablet-kapat" onClick={() => onKapat(sonuclar)} style={{ ...ompTbDugme("#0F172A"), fontSize: 15, padding: "10px 14px" }}>✕ Kapat{sonuclar.length ? ` (${sonuclar.length})` : ""}</button>
         </div>
@@ -3707,6 +3709,94 @@ function ompTabletKayitOnerisi(u, sonuclar) {
   return { olcum: es ? (u.olcum === "ddk" ? "" : String(es.puan)) : "", ddk: ok ? String(ok.ddk) : "", not };
 }
 // ===== ÖÖG TABLET ETKİNLİKLERİ BİTİŞ =====
+// ── Kâğıt-kalem formu: tablet etkinliklerinin yazdırılabilir öğrenci kâğıdı + uygulayıcı cevap anahtarı ──
+function ompKagitFormHtml(plan, oturum, ogr) {
+  const K = ompHtmlKac; const u = ompUnite(oturum.uniteId); const sev = ompTbSeviye(u, plan);
+  const etk = OMP_TB_UNITE[oturum.uniteId] || [];
+  const ogrSay = [], uygSay = [];
+  const sayfa = (ic, ilk) => `<div style="${ilk ? "" : "page-break-before:always;break-before:page;"}padding-top:4px">${ic}</div>`;
+  const ust = (baslik, kim) => `<div style="display:flex;justify-content:space-between;border-bottom:2px solid #127C56;padding-bottom:4px;margin-bottom:10px"><div><div style="font-size:11px;color:#6E8579">ÖÖG Müdahale Programı · Oturum ${oturum.no} · ${K(u ? u.ad : "")}</div><div style="font-size:18px;font-weight:800">${K(baslik)}</div></div><div style="font-size:12px;text-align:right">${kim === "ogr" ? `Ad: ${K(ogr.name)}<br>Tarih: ____________` : `Uygulayıcı kâğıdı<br>${K(ogr.name)} · ${K(ogr.className || "")}`}</div></div>`;
+  const yonerge = (t) => `<div style="background:#F1F5F2;border-radius:6px;padding:6px 10px;font-size:13px;margin-bottom:10px">${K(t)}</div>`;
+  const izgara = (l, fs, kolon) => `<div style="display:grid;grid-template-columns:repeat(${kolon}, 1fr);gap:10px 6px;font-size:${fs}px;font-weight:700;text-align:center">${l.map(x => `<div style="border:1px solid #CBD5E1;border-radius:6px;padding:8px 2px">${K(x)}</div>`).join("")}</div>`;
+  const satirlar = (n, h) => Array.from({ length: n }, (_, i) => `<div style="display:flex;gap:8px;align-items:flex-end;height:${h || 40}px;border-bottom:1px solid #94A3B8;font-size:14px"><b>${i + 1}.</b></div>`).join("");
+  etk.forEach((e, ei) => {
+    const ilk = ogrSay.length === 0;
+    if (e.tur === "kartlar") {
+      let l;
+      if (e.kaynak === "harf") l = ompTbKar([...OMP_TB_HARFLER, ...OMP_TB_HARFLER]).slice(0, 50);
+      else if (e.kaynak === "hece") l = ompTbHeceler(60);
+      else if (e.kaynak === "ses") l = null;
+      else { const tb = sev === "i1" ? [...ompTbKelimeler("i1"), ...OMP_TB_YER_CIFT.map(c => c[0]), "atlı", "sıra"] : ompTbKelimeler(sev); l = ompTbKar(tb).concat(ompTbKar(tb)).slice(0, e.adet || 20); }
+      if (l) {
+        ogrSay.push(sayfa(ust(e.ad, "ogr") + yonerge(e.sure ? "Soldan sağa, satır satır sesli oku." : "Kelimeleri sırayla sesli oku.") + izgara(l, e.kaynak === "kelime" || !e.kaynak ? 22 : 30, e.kaynak === "harf" || e.kaynak === "hece" ? 10 : 4), ilk));
+        uygSay.push(`<h3 style="margin:10px 0 4px">${K(e.ad)}</h3><div style="font-size:12.5px">${e.sure ? `${e.sure} saniye tut. Hatalı okunan maddenin üstüne çarpı koy, süre bitince son okunan maddeyi daire içine al. Puan = okunan madde − hata.` : "Hatalı okunanları işaretle. Puan = doğru okunan sayısı."}</div><div style="font-size:13px;margin-top:4px">Sonuç: ______ ${e.sure ? "doğru / " + e.sure + " sn" : "/ " + l.length}</div>`);
+      } else {
+        const sl = ompTbKar(ompTbKelimeler("i1")).slice(0, e.adet || 10);
+        uygSay.push(`<h3 style="margin:10px 0 4px">${K(e.ad)} (sözlü — öğrenci kâğıdı yok)</h3><div style="font-size:12.5px">Sesleri ayrı ayrı söyle, öğrenci kelimeyi bulsun. Doğruysa ✓.</div><table style="width:100%;border-collapse:collapse;font-size:14px;margin-top:4px">${sl.map((k, i) => `<tr><td style="border:1px solid #CBD5E1;padding:4px;width:30px">${i + 1}</td><td style="border:1px solid #CBD5E1;padding:4px">${K([...k].join(" - "))}</td><td style="border:1px solid #CBD5E1;padding:4px">${K(k)}</td><td style="border:1px solid #CBD5E1;padding:4px;width:50px">☐</td></tr>`).join("")}</table><div style="font-size:13px;margin-top:4px">Sonuç: ______ / ${sl.length}</div>`);
+      }
+    } else if (e.tur === "hece") {
+      const l = ompTbKar(OMP_TB_KELIME[sev] || OMP_TB_KELIME.i1).slice(0, 10);
+      ogrSay.push(sayfa(ust(e.ad, "ogr") + yonerge("Karışık heceleri doğru sıraya koyarak kelimeyi yaz.") + l.map((w, i) => `<div style="display:flex;gap:10px;align-items:center;margin:8px 0;font-size:20px"><b style="width:28px">${i + 1}.</b>${ompTbKar(w.split("-")).map(h => `<span style="border:1px solid #94A3B8;border-radius:6px;padding:4px 10px;font-weight:700">${K(h)}</span>`).join(" ")}<span style="flex:1;border-bottom:1px solid #94A3B8;height:28px;margin-left:12px"></span></div>`).join(""), ilk));
+      uygSay.push(`<h3 style="margin:10px 0 4px">${K(e.ad)} — cevaplar</h3><div style="font-size:13px">${l.map((w, i) => `${i + 1}. ${K(w.replace(/-/g, ""))}`).join(" · ")}</div><div style="font-size:13px;margin-top:4px">Sonuç: ______ / 10</div>`);
+    } else if (e.tur === "ikili") {
+      const tb = e.yerCift || sev === "i1" ? [...OMP_TB_YER_CIFT.map(c => c[0]), ...ompTbKelimeler("i1")] : ompTbKelimeler(sev);
+      const l = ompTbKar(tb).slice(0, 10).map(k => { const cift = OMP_TB_YER_CIFT.find(c => c[0] === k); const cel = cift ? [cift[1], ...ompTbCeldirici(k)].slice(0, 2) : ompTbCeldirici(k); return { k, s: ompTbKar([k, ...cel]) }; });
+      ogrSay.push(sayfa(ust(e.ad, "ogr") + yonerge("Öğretmenin söylediği kelimeyi bul ve daire içine al.") + l.map((x, i) => `<div style="display:flex;gap:26px;align-items:center;margin:10px 0;font-size:24px"><b style="width:28px;font-size:16px">${i + 1}.</b>${x.s.map(s => `<span style="min-width:150px">${K(s)}</span>`).join("")}</div>`).join(""), ilk));
+      uygSay.push(`<h3 style="margin:10px 0 4px">${K(e.ad)} — sırayla söyle</h3><div style="font-size:14px">${l.map((x, i) => `${i + 1}. <b>${K(x.k)}</b>`).join(" · ")}</div><div style="font-size:13px;margin-top:4px">Sonuç: ______ / 10</div>`);
+    } else if (e.tur === "dikte") {
+      const l = ompTbKar(ompTbKelimeler(sev)).slice(0, 10);
+      ogrSay.push(sayfa(ust(e.ad, "ogr") + yonerge("Öğretmenin söylediği kelimeleri yaz.") + satirlar(10, 46), ilk));
+      uygSay.push(`<h3 style="margin:10px 0 4px">${K(e.ad)} — sırayla söyle</h3><div style="font-size:14px">${l.map((w, i) => `${i + 1}. <b>${K(w)}</b>`).join(" · ")}</div><div style="font-size:13px;margin-top:4px">Sonuç (tamamen doğru yazılan): ______ / 10</div>`);
+    } else if (e.tur === "islem") {
+      const g = OMP_TB_ISLEM[e.islem] || OMP_TB_ISLEM.topla10; const l = Array.from({ length: e.islem === "onluk" || e.islem === "yuzde" || e.islem === "denklem" ? 24 : 48 }, () => g());
+      const uzun = l.some(x => x.soru.length > 12);
+      ogrSay.push(sayfa(ust(e.ad, "ogr") + yonerge("Öğretmen “başla” deyince sırayla çöz. 1 dakika sonra kalemini bırak.") + `<div style="display:grid;grid-template-columns:repeat(${uzun ? 2 : 4}, 1fr);gap:12px 18px;font-size:${uzun ? 17 : 20}px">${l.map(x => `<div>${K(x.soru.includes("?") || x.soru.includes("x =") ? x.soru : x.soru + " =")} ______</div>`).join("")}</div>`, ilk));
+      uygSay.push(`<h3 style="margin:10px 0 4px">${K(e.ad)} — cevap anahtarı</h3><div style="font-size:12.5px">${l.map((x, i) => `${i + 1}) ${K(String(x.cevap).replace(".", ","))}`).join("  ")}</div><div style="font-size:13px;margin-top:4px">1 dakikada doğru: ______</div>`);
+    } else if (e.tur === "hizlibakis") {
+      const l = Array.from({ length: 10 }, (_, i) => ompTbRas(1, i >= 4 ? 20 : 10));
+      const cer = (n) => `<div style="display:inline-grid;grid-template-columns:repeat(5, 30px);gap:3px;background:#334155;padding:3px;border-radius:4px;margin:2px">${Array.from({ length: 10 }, (_, j) => `<div style="height:30px;background:#fff;display:flex;align-items:center;justify-content:center">${j < n ? `<div style="width:20px;height:20px;border-radius:50%;background:#DC2626"></div>` : ""}</div>`).join("")}</div>`;
+      ogrSay.push(sayfa(ust(e.ad + " — gösterim kartları", "uyg") + yonerge("Kartları kesin. Her kartı 2 saniye gösterip kapatın; öğrenci kaç nokta gördüğünü söylesin.") + `<div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:14px">${l.map((n, i) => `<div style="border:1px dashed #94A3B8;padding:8px;text-align:center"><div style="font-size:11px;color:#6E8579">Kart ${i + 1}</div>${cer(Math.min(10, n))}${n > 10 ? cer(n - 10) : ""}</div>`).join("")}</div>`, ilk));
+      uygSay.push(`<h3 style="margin:10px 0 4px">${K(e.ad)} — cevaplar</h3><div style="font-size:14px">${l.map((n, i) => `Kart ${i + 1}: ${n}`).join(" · ")}</div><div style="font-size:13px;margin-top:4px">Sonuç: ______ / 10</div>`);
+    } else if (e.tur === "dogru") {
+      const D = OMP_TB_DOGRU[e.dogru] || OMP_TB_DOGRU.tam100; const l = ompTbDogruListe(D, 10);
+      const fmt = (v) => (v < 0 ? "−" : "") + String(Math.abs(v)).replace(".", ",");
+      const cizgi = (x) => `<div style="display:flex;align-items:center;gap:12px;margin:12px 0"><div style="width:70px;font-size:22px;font-weight:800;text-align:right">${K(x.etiket)}</div><svg viewBox="0 0 620 50" style="flex:1;height:46px"><line x1="20" x2="600" y1="22" y2="22" stroke="#334155" stroke-width="3"/><line x1="20" x2="20" y1="10" y2="34" stroke="#334155" stroke-width="3"/><line x1="600" x2="600" y1="10" y2="34" stroke="#334155" stroke-width="3"/>${D.min < 0 ? `<line x1="310" x2="310" y1="12" y2="32" stroke="#334155" stroke-width="2"/><text x="310" y="48" font-size="13" text-anchor="middle">0</text>` : ""}<text x="20" y="48" font-size="13" text-anchor="middle">${fmt(D.min)}</text><text x="600" y="48" font-size="13" text-anchor="middle">${fmt(D.max)}</text></svg></div>`;
+      ogrSay.push(sayfa(ust(e.ad, "ogr") + yonerge("Soldaki sayının doğru üzerindeki yerini kısa bir çizgiyle işaretle.") + l.map(cizgi).join(""), ilk));
+      uygSay.push(`<h3 style="margin:10px 0 4px">${K(e.ad)} — kontrol</h3><div style="font-size:12.5px">Kabul: işaret, doğru yerden doğrunun uzunluğunun %5'i kadar (20 cm'lik doğruda 1 cm) uzaklıktaysa doğru sayılır. ${l.map((x, i) => `${i + 1}) ${K(x.etiket)} = doğrunun %${Math.round(100 * (x.deger - D.min) / (D.max - D.min))}'i`).join(" · ")}</div><div style="font-size:13px;margin-top:4px">Sonuç: ______ / 10</div>`);
+    } else if (e.tur === "okuma") {
+      const m = (OMP_TB_METIN[sev] || OMP_TB_METIN.i1)[ompTbRas(0, 3)]; const kel = m.metin.split(/\s+/);
+      ogrSay.push(sayfa(ust(m.ad, "ogr") + `<div style="font-size:${sev === "i1" ? 26 : sev === "i2" ? 22 : 19}px;line-height:1.9;text-align:left">${K(m.metin)}</div>`, ilk));
+      let say = 0; const sat = []; for (let i = 0; i < kel.length; i += 10) { const p = kel.slice(i, i + 10); say += p.length; sat.push(`<div style="display:flex;justify-content:space-between;gap:8px;font-size:13.5px;line-height:1.8"><span>${K(p.join(" "))}</span><b style="color:#6E8579">${say}</b></div>`); }
+      uygSay.push(`<h3 style="margin:10px 0 4px">${K(e.ad)}: “${K(m.ad)}” (${kel.length} kelime)</h3><div style="font-size:12.5px">Öğrenci okurken hatalı kelimelerin üstüne çarpı koy. Sağdaki sayılar satır sonuna kadar toplam kelimedir. DDK = (okunan kelime − hata) × 60 ÷ süre (sn). Ölçüm olarak ilk okuma kaydedilir.</div>${sat.join("")}<table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:6px"><tr><th style="border:1px solid #CBD5E1;padding:4px"></th><th style="border:1px solid #CBD5E1;padding:4px">Süre (sn)</th><th style="border:1px solid #CBD5E1;padding:4px">Hata</th><th style="border:1px solid #CBD5E1;padding:4px">DDK</th></tr>${[1, 2, 3].map(n => `<tr><td style="border:1px solid #CBD5E1;padding:6px">${n}. okuma</td><td style="border:1px solid #CBD5E1"></td><td style="border:1px solid #CBD5E1"></td><td style="border:1px solid #CBD5E1"></td></tr>`).join("")}</table>`);
+    } else if (e.tur === "kokek") {
+      const sadeceKok = sev === "i1" || sev === "i2"; const l = ompTbKar(OMP_TB_KOKEK[sev === "i1" ? "i2" : sev] || OMP_TB_KOKEK.i2).slice(0, 10);
+      ogrSay.push(sayfa(ust(e.ad, "ogr") + yonerge(sadeceKok ? "Her kelimenin kökünün altını çiz." : "Kök ile ekleri arasına eğik çizgi (/) koy. Örnek: göz/lük/çü") + `<div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:16px 30px;font-size:26px;letter-spacing:3px">${l.map((w, i) => `<div><b style="font-size:15px;letter-spacing:0">${i + 1}.</b> ${K(w.replace(/\|/g, ""))}</div>`).join("")}</div>`, ilk));
+      uygSay.push(`<h3 style="margin:10px 0 4px">${K(e.ad)} — cevaplar</h3><div style="font-size:13.5px">${l.map((w, i) => `${i + 1}. ${sadeceKok ? `kök: ${K(w.split("|")[0])}` : K(w.replace(/\|/g, " / "))}`).join(" · ")}</div><div style="font-size:13px;margin-top:4px">Sonuç: ______ / 10</div>`);
+    } else if (e.tur === "siralama") {
+      const cum = (OMP_TB_METIN[sev] || OMP_TB_METIN.i1).flatMap(mm => mm.metin.match(/[^.!?]+[.!?]/g) || []).map(c => c.trim()).filter(c => { const n = c.split(/\s+/).length; return n >= 4 && n <= (sev === "i1" ? 6 : 9) && !/["“”]/.test(c); });
+      const l = ompTbKar(cum).slice(0, 8);
+      ogrSay.push(sayfa(ust(e.ad, "ogr") + yonerge("Karışık kelimeleri doğru sıraya koyup cümleyi yaz.") + l.map((c, i) => { const k = c.slice(0, -1).split(/\s+/).map((w, j) => j === 0 ? w.charAt(0).toLocaleLowerCase("tr") + w.slice(1) : w); return `<div style="margin:10px 0"><div style="font-size:19px"><b style="font-size:15px">${i + 1}.</b> ${ompTbKar(k).map(w => `<span style="border:1px solid #94A3B8;border-radius:6px;padding:2px 8px;margin:0 3px">${K(w)}</span>`).join("")}</div><div style="border-bottom:1px solid #94A3B8;height:34px"></div></div>`; }).join(""), ilk));
+      uygSay.push(`<h3 style="margin:10px 0 4px">${K(e.ad)} — cevaplar</h3><div style="font-size:13px">${l.map((c, i) => `${i + 1}. ${K(c)}`).join("<br>")}</div><div style="font-size:13px;margin-top:4px">Sonuç: ______ / ${l.length}</div>`);
+    } else if (e.tur === "anlama") {
+      const havuz = OMP_TB_ANLAMA[sev] || OMP_TB_ANLAMA.i2; const once = e.tip ? ompTbKar(havuz.filter(x => x.tip === e.tip)) : [];
+      const l = [...once.slice(0, 3), ...ompTbKar(havuz.filter(x => !once.includes(x)))].slice(0, 5).map(x => ({ ...x, s: ompTbKar([x.dogru, ...x.yanlis]) }));
+      ogrSay.push(sayfa(ust(e.ad, "ogr") + yonerge("Her paragrafı oku, sorunun doğru cevabını daire içine al.") + l.map((x, i) => `<div style="margin:0 0 14px"><div style="font-size:${sev === "i1" ? 19 : 16}px;line-height:1.6;border-left:3px solid #127C56;padding-left:8px">${K(x.metin)}</div><div style="font-size:16px;font-weight:700;margin:6px 0 4px">${i + 1}. ${K(x.soru)}</div>${x.s.map((s, j) => `<div style="font-size:15px;margin:2px 0 2px 14px">${"abc"[j]}) ${K(s)}</div>`).join("")}</div>`).join(""), ilk));
+      uygSay.push(`<h3 style="margin:10px 0 4px">${K(e.ad)} — cevap anahtarı</h3><div style="font-size:13.5px">${l.map((x, i) => `${i + 1}) ${"abc"[x.s.indexOf(x.dogru)]} (${({ acik: "metinde açık", cikarim: "çıkarım", kelime: "kelime", anafikir: "ana fikir" })[x.tip]})`).join(" · ")}</div><div style="font-size:13px;margin-top:4px">Sonuç: ______ / 5</div>`);
+    } else if (e.tur === "problem") {
+      const l = Array.from({ length: 5 }, () => ompTbProblem(sev)); const sm = sev === "i1" ? ["birlestirme", "karsilastirma"] : ["birlestirme", "karsilastirma", "esitgrup"];
+      ogrSay.push(sayfa(ust(e.ad, "ogr") + yonerge("Önce problemin şemasını işaretle, sonra şemayı çizip çöz.") + l.map((x, i) => `<div style="border:1px solid #CBD5E1;border-radius:8px;padding:8px 10px;margin-bottom:10px"><div style="font-size:16px;line-height:1.5"><b>${i + 1}.</b> ${K(x.metin)}</div><div style="font-size:14px;margin:6px 0">Şema: ${sm.map(s => `☐ ${K(OMP_TB_SEMA[s].ad)}`).join("   ")}</div><div style="display:flex;gap:10px"><div style="flex:2;height:70px;border:1px dashed #94A3B8;border-radius:6px;font-size:11px;color:#6E8579;padding:3px">Çizim / işlem</div><div style="flex:1;height:70px;border:1px dashed #94A3B8;border-radius:6px;font-size:11px;color:#6E8579;padding:3px">Cevap</div></div></div>`).join(""), ilk));
+      uygSay.push(`<h3 style="margin:10px 0 4px">${K(e.ad)} — cevap anahtarı</h3><div style="font-size:13.5px">${l.map((x, i) => `${i + 1}) ${K(OMP_TB_SEMA[x.sema].ad)}, ${x.cevap}`).join(" · ")}</div><div style="font-size:13px;margin-top:4px">Problem puanı (0–4: şema, çizim, işlem, kontrol): ______</div>`);
+    }
+  });
+  if (!etk.length && u && u.alan === "gorselmotor") {
+    const m = (OMP_TB_METIN[sev] || OMP_TB_METIN.i1)[0].metin.split(/(?<=[.!?])\s+/).slice(0, 2).join(" ");
+    ogrSay.push(sayfa(ust("Kopyalama ve yazı düzeni", "ogr") + yonerge("Aşağıdaki cümleleri satır çizgisine oturtarak, kelimeler arasında parmak boşluğu bırakarak kopyala.") + `<div style="font-size:24px;line-height:1.8;margin-bottom:10px">${K(m)}</div>` + Array.from({ length: 8 }, () => `<div style="height:44px;border-bottom:2px solid #DC2626;border-top:1px dashed #CBD5E1;margin-bottom:6px"></div>`).join(""), true));
+    uygSay.push(`<h3 style="margin:10px 0 4px">Kopyalama — kontrol</h3><div style="font-size:12.5px">10 kelime say: satırda, doğru boşlukla ve okunaklı olanlar. Sonuç: ______ / 10</div>`);
+  }
+  if (!ogrSay.length && !uygSay.length) return "";
+  const uyg = sayfa(ust("Cevap anahtarı ve kayıt", "uyg") + `<div style="font-size:12.5px;color:#6E8579;margin-bottom:6px">Sonuçları programda bu oturumun kayıt formuna yaz (Ünite ölçümü ve DDK alanları).</div>` + uygSay.join(""), ogrSay.length === 0);
+  return `<div style="font-family:Arial,sans-serif;color:#1C2B24">${ogrSay.join("")}${uyg}</div>`;
+}
 function OmpGrafik({ plan }) {
   const { N, b, h, noktalar, cizgi } = ompIlerleme(plan);
   if (b == null) return null;
@@ -3972,6 +4062,7 @@ function OogMudahaleEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, oogM
                         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
                           <button data-omp-tablet={o.no} onClick={() => setTablet(o)} style={dugme(PURPLE, true)}>📱 Tablette çalış</button>
                           <button data-omp-kagit={o.no} onClick={() => ompYazdir(ompOturumHtml(aktifPlan, o, ogrBilgi), `OOG_oturum_${o.no}_${ogr.name}`)} style={dugme(BLUE, false)}>📄 Oturum kâğıdı</button>
+                          <button data-omp-kalem={o.no} onClick={() => { const h = ompKagitFormHtml(aktifPlan, o, ogrBilgi); if (h) ompYazdir(h, `OOG_kagit_form_${o.no}_${ogr.name}`); }} style={dugme(BLUE, false)}>✏️ Kâğıt-kalem formu</button>
                           <button data-omp-kaydet-ac={o.no} onClick={() => setKayitForm({ no: o.no, tarih: k?.tarih || today(), olcum: k?.olcum ?? "", ddk: k?.ddk ?? "", ev: k?.ev ?? "", not: k?.not || "", gecti: o.sira === 4 ? (k?.gecti ?? null) : null, uzat: false })} style={dugme(ACCENT, true)}>{k ? "✎ Kaydı düzenle" : "✓ Uygulandı olarak kaydet"}</button>
                           {k && <button onClick={() => kayitSil(o.no)} style={dugme("#C5221F", false)}>Kaydı sil</button>}
                         </div>

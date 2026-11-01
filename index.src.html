@@ -3011,6 +3011,7 @@ function ompButuncul(o, K) {
   if (!pb.perf && !pb.gozlem) eksik.push("CAS bilişsel süreçler (PASS) taraması ya da performans testi");
   db.dikkat.forEach(x => bilissel.push(x));
   if (!db.dikkat.length) eksik.push("Dikkat testi (D2, ÇDT ya da Frankfurter)");
+  const cat = son("cattell"); if (cat) { const r = cattellHesapla(cat.veri, cat.tarih); if (r.iq && r.iq.iq) bilissel.push({ ad: `Cattell ${r.form} (${cat.tarih})`, olumsuz: r.iq.iq < 80, metin: `ZB ${r.iq.alt ? "≤" : r.iq.ust ? "≥" : ""}${r.iq.iq} (${r.sinif.ad.toLocaleLowerCase("tr")})${r.iq.iq < 80 ? " — ÖÖG'den önce bireysel zekâ testiyle doğrulanmalı" : ""}` }); }
   const wisc = son("wisc_r"); if (wisc) { const d = ozTestDurum(wisc); bilissel.push({ ad: `WISC-R (${wisc.tarih})`, olumsuz: d.renk === OZ_KIRMIZI, metin: d.renk === OZ_KIRMIZI ? "ortalamanın altında puan(lar) var — ayrıntı Testler'de" : d.renk === OZ_SARI ? "sınırda puan(lar) var" : "puanlar beklenen aralıkta" }); }
   // Görsel-motor
   db.okuma.filter(x => /Bender|Frostig/.test(x.ad)).forEach(x => gorselMotor.push(x));
@@ -23056,7 +23057,7 @@ function raporVerisiOlustur({ ozetAc, ogrenciProfilleri2, ogrenci, ogrenciSinif,
 // Öğrencinin tüm verilerini tek bakışta gösteren grafik/tablo ağırlıklı rapor.
 // Tamamen cihazda hesaplanır; hiçbir veri dışarı gönderilmez.
 const OZ_TEST_GRUP = {
-  bilissel: ["wisc_r", "iq_esdeger", "alt_test", "gelisimsel_hata", "metropolitan", "okul_olgunlugu", "porteus"],
+  bilissel: ["wisc_r", "iq_esdeger", "cattell", "alt_test", "gelisimsel_hata", "metropolitan", "okul_olgunlugu", "porteus"],
   dikkat: ["d2", "dikkat_cdt", "stroop_tbag", "dikkat_egitim", "frankfurter"],
   okuma: ["okuma_degerlendirme", "okuma_programi", "kaynastirma_ed", "net_kontrol", "bender", "frostig", "gesell", "okuma_hizi"],
   duygusal: ["scas_cocuk", "toplam_duzey", "toplam_duzey_serbest", "insan_ciz", "louisa_duss", "beier_form_a"],
@@ -23078,6 +23079,7 @@ function ozTestDurum(k) {
       case "frostig": { const r = frostigHesapla(v, k.tarih); if (r.ts) return { renk: r.ts.p < 50 ? OZ_KIRMIZI : r.ts.p < 60 ? OZ_SARI : OZ_YESIL }; break; }
       case "okuma_hizi": { const r = ohHesapla(v, k.tarih, false, k.id); if (r.ddk != null) { const y = r.hizDurum === "alti", h = r.dogruluk < 90; return { renk: y && h ? OZ_KIRMIZI : y || h ? OZ_SARI : OZ_YESIL }; } break; }
       case "gesell": { const r = gesellHesapla(v, k.tarih); if (r.yas && r.uygulanan.length) return { renk: r.eksik.length >= 2 ? OZ_KIRMIZI : r.eksik.length ? OZ_SARI : OZ_YESIL }; break; }
+      case "cattell": { const r = cattellHesapla(v, k.tarih); if (r.sinif) return { renk: r.sinif.renk === "#B91C1C" ? OZ_KIRMIZI : r.sinif.renk === "#B45309" ? OZ_SARI : OZ_YESIL }; break; }
       case "porteus": { const r = porteusHesapla(v, k.tarih); if (r.sinif) return { renk: r.sinif.renk === "#B91C1C" ? OZ_KIRMIZI : r.sinif.renk === "#B45309" ? OZ_SARI : OZ_YESIL }; break; }
       case "metropolitan": { const r = metroHesapla(v); if (r.genelH) return { renk: r.genelH.harf === "E" ? OZ_KIRMIZI : r.genelH.harf === "D" ? OZ_SARI : OZ_YESIL }; break; }
       case "wisc_r": { const r = wiscHesapla(v); const c = wiscSinif(r.tp != null ? r.tp : r.sz != null ? r.sz : r.pf); if (c) return { renk: c.renk === "#B91C1C" ? OZ_KIRMIZI : c.renk === "#B45309" ? OZ_SARI : OZ_YESIL }; break; }
@@ -25765,7 +25767,7 @@ function scasRaporHtmlOlustur(sonuc, bilgi) {
 
 
 // ===== EK TESTLER: Stroop TBAG · Metropolitan · Louisa Düss · WISC-R =====
-const EK_TESTLER = ["stroop_tbag", "metropolitan", "louisa_duss", "wisc_r", "frankfurter", "porteus", "bender", "frostig", "gesell", "okuma_hizi"];
+const EK_TESTLER = ["stroop_tbag", "metropolitan", "louisa_duss", "wisc_r", "frankfurter", "porteus", "bender", "frostig", "gesell", "okuma_hizi", "cattell"];
 const ekSayi = x => { if (x === null || x === undefined || String(x).trim() === "") return null; const n = parseFloat(String(x).replace(",", ".")); return isFinite(n) ? n : null; };
 const ekYaz = x => x == null ? "—" : String(Math.round(x * 100) / 100).replace(".", ",");
 
@@ -26073,6 +26075,138 @@ function porteusRapor(ek, tarih) {
   if (ek.gozlem) L.push("Gözlem: " + ek.gozlem);
   L.push("", "Not: Porteus Labirentleri sözel olmayan planlama ve öngörü becerisini ölçen bir performans testidir; okul başarısını ölçen sözel testlerden farklı sonuç verebilir. Tek başına tanı koydurmaz.");
   return { r, metin: L.join("\n") };
+}
+
+// ── R.B. Cattell Zekâ Testi 2A / 3A (kültürden arınık; B. Toğrol uyarlaması) ──
+// 4 alt test: 1 Seriyi tamamlama · 2 Sınıflama (tasnif) · 3 Matrisler (yerleştirme) · 4 Koşullar (yerleştirme).
+// Cevap anahtarı ve norm tabloları telifli olduğundan kodda değil, danışmanın yüklediği veri dosyasındadır (pdr-cattell-norm).
+const CATTELL_ALT = [
+  { k: 1, ad: "Seriyi tamamlama", olcer: "dizideki değişim kuralını bulma (tümevarım)" },
+  { k: 2, ad: "Sınıflama (tasnif)", olcer: "ortak özelliği bulup farklı olanı ayırma" },
+  { k: 3, ad: "Matrisler (yerleştirme)", olcer: "sağ-sol ve alt-üst ilişkilerinden boş kareyi bulma" },
+  { k: 4, ad: "Koşullar (yerleştirme)", olcer: "verilen koşulları sağlayan yeri bulma (uzamsal akıl yürütme)" },
+];
+const CATTELL_FORM = {
+  "2A": { ad: "Ölçek 2 · Form A", madde: [12, 14, 12, 8], sure: ["3 dk", "4 dk", "3 dk", "4 dk"], yas: "7;6 – 14;0 yaş (ortaokul)" },
+  "3A": { ad: "Ölçek 3 · Form A", madde: [13, 14, 13, 10], sure: ["3 dk", "4 dk", "3 dk", "2,5 dk"], yas: "lise ve üstü, üstün yetenekli yetişkinler" },
+};
+let CATTELL_NORM = null;
+function pdrCattellNormDogrula(j) {
+  if (!j || j.tur !== "pdr-cattell-norm" || !j.anahtar || !j.f2A || !j.f3A) return null;
+  const sat = v => v && typeof v.b === "number" && Array.isArray(v.v) && v.v.length > 5 && v.v.every(x => typeof x === "number");
+  const anOk = ["2A", "3A"].every(f => Array.isArray(j.anahtar[f]) && j.anahtar[f].length === 4 && j.anahtar[f].every((c, i) => Array.isArray(c) && c.length === CATTELL_FORM[f].madde[i]));
+  const cOk = j.f2A.cocuk && Object.entries(j.f2A.cocuk).length >= 5 && Object.entries(j.f2A.cocuk).every(([k, v]) => /^\d+$/.test(k) && sat(v));
+  const pOk = Array.isArray(j.f3A.puan) && j.f3A.puan.length > 5 && j.f3A.puan.every(x => Array.isArray(x) && x.length === 2);
+  return anOk && cOk && sat(j.f2A.yetiskin) && pOk ? j : null;
+}
+async function pdrCattellNormYukle() {
+  try { const r = await window.storage.get("pdr-cattell-norm"); const t = r && r.value ? pdrCattellNormDogrula(JSON.parse(r.value)) : null; if (t) CATTELL_NORM = t; } catch (e) {}
+  return CATTELL_NORM;
+}
+async function pdrCattellNormKaydet(j) {
+  const t = pdrCattellNormDogrula(j); if (!t) throw new Error("Bu dosya Cattell norm dosyası değil ya da bozuk.");
+  await window.storage.set("pdr-cattell-norm", JSON.stringify(j)); CATTELL_NORM = t; return Object.keys(t.f2A.cocuk).length;
+}
+const cattellHarf = s => String(s || "").toLowerCase().replace(/[^a-f]/g, "").split("").sort().join("");
+function cattellAyYaz(ay) { return `${Math.floor(ay / 12)};${ay % 12}`; }
+function cattellIQ(form, toplam, yas, tablo) {
+  if (!CATTELL_NORM || toplam == null) return null;
+  if (form === "3A") {
+    const P = [...CATTELL_NORM.f3A.puan].sort((a, b) => a[0] - b[0]);
+    if (toplam < P[0][0]) return { iq: P[0][1], alt: true, kaynak: "3A puanlama tablosu" };
+    if (toplam > P[P.length - 1][0]) return { iq: P[P.length - 1][1], ust: true, kaynak: "3A puanlama tablosu" };
+    const tam = P.find(x => x[0] === toplam); if (tam) return { iq: tam[1], kaynak: "3A puanlama tablosu" };
+    const i = P.findIndex(x => x[0] > toplam); const a = P[i - 1], b = P[i];
+    return { iq: Math.round(a[1] + (b[1] - a[1]) * (toplam - a[0]) / (b[0] - a[0])), ara: true, kaynak: `3A puanlama tablosu (${a[0]} ile ${b[0]} puan arası değer)` };
+  }
+  const yetiskin = tablo === "yetiskin" || (tablo !== "cocuk" && yas && yas.toplamAy >= 216);
+  let satir, kaynak;
+  if (yetiskin) { satir = CATTELL_NORM.f2A.yetiskin; kaynak = "2A yetişkin puanlama tablosu"; }
+  else {
+    if (!yas) return { yok: true, neden: "Zekâ bölümü için doğum tarihi ya da yaş girin." };
+    const anahtar = Object.keys(CATTELL_NORM.f2A.cocuk).map(Number).filter(a => a <= yas.toplamAy).sort((a, b) => b - a)[0];
+    if (anahtar == null) return { yok: true, neden: "2A norm tablosu 7 yaş 3 aydan başlıyor." };
+    satir = CATTELL_NORM.f2A.cocuk[anahtar]; kaynak = `2A yaş normu: ${satir.ad || cattellAyYaz(anahtar) + " yaş satırı"}`;
+  }
+  const i = toplam - satir.b;
+  if (i < 0) return { iq: satir.v[0], alt: true, kaynak, yetiskin };
+  if (i >= satir.v.length) return { iq: satir.v[satir.v.length - 1], ust: true, kaynak, yetiskin };
+  return { iq: satir.v[i], kaynak, yetiskin };
+}
+function cattellHesapla(ek, tarih) {
+  ek = ek || {}; const form = ek.form === "3A" ? "3A" : "2A"; const F = CATTELL_FORM[form];
+  const madde = ek.giris === "madde"; const an = CATTELL_NORM ? CATTELL_NORM.anahtar[form] : null;
+  const uyari = [];
+  const alt = CATTELL_ALT.map((x, i) => {
+    const n = F.madde[i];
+    if (madde) {
+      const m = (ek.m && ek.m[form] && ek.m[form][i]) || [];
+      const isaret = Array.from({ length: n }, (_, j) => { const c = cattellHarf(m[j]); return !c ? null : an ? c === an[i][j] : null; });
+      const cevap = isaret.filter(v => v !== null).length;
+      return { ...x, n, ham: an && m.some(s => cattellHarf(s)) ? isaret.filter(v => v === true).length : null, isaret, cevap };
+    }
+    let h = ekSayi(ek.a && ek.a[i]);
+    if (h != null && (h < 0 || h > n)) { uyari.push(`${x.k}. alt testin puanı 0–${n} arasında olmalı (${h} girildi).`); h = Math.max(0, Math.min(n, h)); }
+    return { ...x, n, ham: h };
+  });
+  const girilen = alt.filter(x => x.ham != null);
+  const toplam = girilen.length ? girilen.reduce((t, x) => t + x.ham, 0) : null;
+  const maks = F.madde.reduce((t, x) => t + x, 0);
+  if (girilen.length && girilen.length < 4) uyari.push(`${4 - girilen.length} alt testin puanı girilmedi; zekâ bölümü dört alt testin toplamıyla bulunur.`);
+  const yas = ekYasHesapla(ek, tarih);
+  if (form === "2A" && yas && (yas.toplamAy < 90 || yas.toplamAy > 168) && ek.tablo !== "yetiskin" && yas.toplamAy < 216) uyari.push("2A formu 7;6 – 14;0 yaş için hazırlanmıştır; bu yaşta sonuç temkinli yorumlanmalı.");
+  const iq = girilen.length === 4 ? cattellIQ(form, toplam, yas, ek.tablo) : null;
+  const zy = iq && iq.iq && !iq.yetiskin && form === "2A" && yas ? Math.round(iq.iq * yas.toplamAy / 100) : null;
+  return { form, F, alt, toplam, maks, yas, iq, sinif: iq && iq.iq ? wiscSinif(iq.iq) : null, zy, uyari, madde };
+}
+function cattellRapor(ek, tarih) {
+  const r = cattellHesapla(ek, tarih); ek = ek || {}; const L = [`R.B. CATTELL ZEKÂ TESTİ (${r.form}) — DEĞERLENDİRME`];
+  L.push(`Form: ${r.form} (${r.F.ad}) · Takvim yaşı: ${ekYasYaz(r.yas)}`);
+  L.push("Alt testler: " + r.alt.map(x => `${x.k}. ${x.ad} ${x.ham ?? "—"}/${x.n}`).join(" · "));
+  if (r.toplam != null) L.push(`Toplam ham puan: ${r.toplam}/${r.maks}`);
+  if (r.iq && r.iq.iq) L.push(`Zekâ bölümü (ZB): ${r.iq.alt ? "≤" : r.iq.ust ? "≥" : ""}${r.iq.iq} → ${r.sinif.ad} (${r.iq.kaynak})`);
+  else if (r.iq && r.iq.yok) L.push("Zekâ bölümü: " + r.iq.neden);
+  else if (r.toplam != null && r.alt.every(x => x.ham != null) && !CATTELL_NORM) L.push("Zekâ bölümü: norm dosyası yüklenmediği için hesaplanamadı (test ekranından cattell-norm.json yükleyin).");
+  if (r.zy) L.push(`Zekâ yaşı (yaklaşık, ZB × takvim yaşı / 100): ${cattellAyYaz(r.zy)}`);
+  r.uyari.forEach(u => L.push("⚠ " + u));
+  L.push("");
+  if (ek.gozlem) L.push(`Gözlem: ${ek.gozlem}`);
+  (ek.dus || []).forEach((d, i) => { if (String(d || "").trim()) L.push(`${i + 1}. alt test gözlemi: ${d}`); });
+  if (r.iq && r.iq.iq && r.toplam != null) {
+    L.push(`Testten toplam ${r.toplam} puan almıştır. Cattell ${r.form} testi sonucu ${r.iq.alt ? "≤" : r.iq.ust ? "≥" : ""}${r.iq.iq} ZB ile "${r.sinif.ad}" düzeyindedir.`);
+    const yuz = r.alt.map(x => x.ham / x.n);
+    const ort = yuz.reduce((t, x) => t + x, 0) / 4;
+    const zayif = r.alt.filter((x, i) => yuz[i] <= ort - 0.25), guclu = r.alt.filter((x, i) => yuz[i] >= ort + 0.25);
+    if (zayif.length) L.push(`→ Görece zayıf alt test: ${zayif.map(x => `${x.ad} (${x.olcer})`).join("; ")}. Bu alanda örnek maddelerin anlaşılıp anlaşılmadığı ve süre baskısı gözden geçirilmeli.`);
+    if (guclu.length) L.push(`→ Görece güçlü alt test: ${guclu.map(x => x.ad).join(", ")}.`);
+    if (r.iq.iq < 70) L.push("→ Puan zihinsel yetersizlik düzeyinde: bireysel bir zekâ testiyle (ör. WISC) doğrulanması ve RAM'a yönlendirme düşünülmeli. Grup testinde dikkat, motivasyon ve yönergeyi anlama sorunları puanı düşürebilir.");
+    else if (r.iq.iq < 80) L.push("→ Puan sınır/normalin altı düzeyde: tek bir grup testiyle karar verilmemeli; bireysel zekâ testi ve akademik değerlendirmeyle birlikte ele alınmalı.");
+    else if (r.iq.iq >= 130) L.push("→ Puan üstün düzeyde: üstün yetenek tanılama süreci (BİLSEM) açısından değerlendirilebilir.");
+  }
+  L.push("", "Not: Cattell, dil ve kültür etkisini azaltmak için şekillerle akıl yürütmeyi (akıcı zekâ) ölçen bir grup testidir; okuma ve sözel bilgi gerektirmez. Süreye bağlıdır. Tek başına tanı koydurmaz; ÖÖG değerlendirmesinde zekânın normal sınırlarda olduğunu göstermek için kullanılabilir, kesin karar bireysel testle verilir.");
+  return { r, metin: L.join("\n") };
+}
+// Yazdırılabilir öğrenci cevap kâğıdı (özgün; test maddeleri değil, yalnız cevap kutuları)
+function cattellCevapKagidiHtml(form, bilgi) {
+  const F = CATTELL_FORM[form] || CATTELL_FORM["2A"]; const e = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); const b = bilgi || {};
+  const kutu = (n, t) => `<div style="display:inline-block;width:46px;margin:0 6px 8px 0;text-align:center"><div style="font-size:10px;color:#555">${n}</div><div style="border:1.5px solid #333;height:30px;border-radius:4px"></div></div>`;
+  const alt = CATTELL_ALT.map((x, i) => `<div style="border:1px solid #CBD5E1;border-radius:8px;padding:8px 10px;margin-bottom:10px;page-break-inside:avoid"><div style="font-weight:700;font-size:13px;margin-bottom:6px">TEST ${x.k} <span style="font-weight:400;color:#555">· ${F.madde[i]} madde · süre ${F.sure[i]}</span>${form === "3A" && i === 1 ? '<span style="font-weight:400;color:#B45309"> · her maddede İKİ harf yazın</span>' : ""}</div>${Array.from({ length: F.madde[i] }, (_, j) => kutu(j + 1)).join("")}<div style="font-size:10.5px;color:#555;margin-top:2px">Örnekler: ${Array.from({ length: i === 1 ? 2 : 3 }, (_, j) => `Ö${j + 1} ____`).join("  ")}</div></div>`).join("");
+  return `<div style="font-family:Arial,Helvetica,sans-serif;color:#111;font-size:12px">
+    <div style="text-align:center;font-size:17px;font-weight:700">R.B. CATTELL ZEKÂ TESTİ — ${form} CEVAP KÂĞIDI</div>
+    <div style="text-align:center;font-size:11px;color:#555;margin-bottom:10px">Cevabınızı, test kitapçığındaki şıklardan seçtiğiniz harf olarak kutuya yazın. Size söylenmeden sayfayı çevirmeyin.</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:10px">
+      <tr><td style="padding:4px 0;width:50%">Adı Soyadı: <b>${e(b.ogrenci || "")}</b>${b.ogrenci ? "" : " ..............................."}</td><td>Sınıfı: <b>${e(b.sinif || "")}</b>${b.sinif ? "" : " ........"}</td></tr>
+      <tr><td style="padding:4px 0">Doğum tarihi: ${e(b.dogum || "....................")}</td><td>Uygulama tarihi: ${e(b.tarih || "....................")}</td></tr>
+      <tr><td style="padding:4px 0">Cinsiyet: ${e(b.cinsiyet || "............")}</td><td></td></tr>
+    </table>
+    ${alt}
+    <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:6px">
+      <tr>${["Test", "I", "II", "III", "IV", "Toplam"].map(t => `<th style="border:1px solid #333;padding:5px;background:#F1F5F9">${t}</th>`).join("")}</tr>
+      <tr><td style="border:1px solid #333;padding:5px;font-weight:700">Puan</td>${F.madde.map(n => `<td style="border:1px solid #333;padding:5px;text-align:center;color:#888">/${n}</td>`).join("")}<td style="border:1px solid #333;padding:5px;text-align:center;color:#888">/${F.madde.reduce((t, x) => t + x, 0)}</td></tr>
+    </table>
+    <div style="display:flex;justify-content:space-between;margin-top:10px;font-size:12px"><div>Takvim yaşı: ..............</div><div>Zekâ yaşı: ..............</div><div>Z.B.: ..............</div></div>
+    <div style="margin-top:8px;font-size:12px">Düşünceler / gözlem: ..........................................................................................................................</div>
+  </div>`;
 }
 
 // ── Görsel algı testleri: Bender-Gestalt (Koppitz), Frostig, Gesell ──
@@ -26406,6 +26540,7 @@ function ekTestRapor(k, tum) {
     if (k.tip === "frankfurter") return frankRapor(v, k.tarih).metin; if (k.tip === "porteus") return porteusRapor(v, k.tarih).metin;
     if (k.tip === "bender") return benderRapor(v, k.tarih).metin; if (k.tip === "frostig") return frostigRapor(v, k.tarih).metin; if (k.tip === "gesell") return gesellRapor(v, k.tarih).metin;
     if (k.tip === "okuma_hizi") return ohRapor(v, k.tarih, null, k.id).metin;
+    if (k.tip === "cattell") return cattellRapor(v, k.tarih).metin;
   } catch (e) {}
   return "";
 }
@@ -26415,6 +26550,7 @@ function ekTestOzet(k) {
   if (k.tip === "metropolitan") { const r = metroHesapla(v); return `Okuma ${r.okuma ?? "—"}/66 ${r.okumaH ? r.okumaH.harf : ""} · Sayı ${r.sayi ?? "—"}/24 ${r.sayiH ? r.sayiH.harf : ""} · Genel ${r.genel ?? "—"}/100 ${r.genelH ? `${r.genelH.harf} (${r.genelH.ad})` : ""}`; }
   if (k.tip === "louisa_duss") { const r = dussHesapla(v); return `${r.yanitSay}/10 öykü yanıtlandı · ${r.sinyal.length} öyküde çatışma belirtisi${r.sinyal.length ? ": " + r.sinyal.map(x => x.o.ad).join(", ") : ""}`; }
   if (k.tip === "frankfurter") { const r = frankHesapla(v, k.tarih); return r.son != null ? `Ham puan ${r.ham} · son değer ${r.son} (${r.duzey.ad}, ${r.duzey.yuzde})` : r.ham != null ? `Ham puan ${r.ham}` : "Puan girilmedi"; }
+  if (k.tip === "cattell") { const r = cattellHesapla(v, k.tarih); return r.toplam != null ? `${r.form} · toplam ${r.toplam}/${r.maks}${r.iq && r.iq.iq ? ` · ZB ${r.iq.alt ? "≤" : r.iq.ust ? "≥" : ""}${r.iq.iq} (${r.sinif.ad})` : ""}` : "Puan girilmedi"; }
   if (k.tip === "porteus") { const r = porteusHesapla(v, k.tarih); return r.zy != null ? `Zekâ yaşı ${String(r.zy).replace(".", ",")}${r.iq && r.iq.iq ? ` · ZB ${r.iq.alt ? "≤" : r.iq.ust ? "≥" : ""}${r.iq.iq} (${r.sinif.ad})` : ""}` : "Kart sonucu girilmedi"; }
   if (k.tip === "bender") { const r = benderHesapla(v, k.tarih); return r.hata != null ? `Hata puanı ${r.hata}${r.yasEsdeger ? ` · yaş eşdeğeri ${r.yasEsdeger}` : ""}${r.yuzdelik ? ` · yüzdelik ${r.yuzdelik.metin}` : ""}` : "Puan girilmedi"; }
   if (k.tip === "frostig") { const r = frostigHesapla(v, k.tarih); return r.toplam != null ? `Toplam ham ${r.toplam}${r.ts ? ` · standart puan ${r.ts.alt ? "≤1" : r.ts.p} (${r.tDuzey.ad})` : ""}` : r.alt.filter(x => x.ham != null).map(x => `${x.k}: ${x.ham}`).join(" · ") || "Puan girilmedi"; }
@@ -26431,6 +26567,7 @@ function ekTestGecerli(tip, ek) {
   if (tip === "wisc_r") return [ek.sozel, ek.perf, ek.toplam, ...Object.values(ek.alt || {})].some(x => ekSayi(x) != null);
   if (tip === "frankfurter") return ekSayi(ek.armut) != null;
   if (tip === "porteus") return Object.values(ek.d || {}).some(x => x);
+  if (tip === "cattell") return (ek.giris === "madde" ? Object.values(ek.m || {}).some(f => (f || []).some(c => (c || []).some(x => x))) : false) || (ek.a || []).some(x => ekSayi(x) != null);
   if (tip === "bender") return Object.values(ek.h || {}).some(Boolean) || ekSayi(ek.elleHata) != null || ek.hataYok === true;
   if (tip === "frostig") return ["a1", "a2", "a3", "d3", "a4", "a5"].some(k => ekSayi(ek[k]) != null);
   if (tip === "gesell") return Object.values(ek.s || {}).some(x => x === "0" || x === "1");
@@ -26447,7 +26584,7 @@ BÖLÜMLER (başlıkları aynen kullan): Genel izlenim: / Öne çıkan temalar: 
   return pdrKalinTemizle(metin).replace(/##+ ?/g, "").trim();
 }
 
-function EkTestFormu({ tip, ek, setEk, cinsiyet, yas, tarih, dogum, sinif }) {
+function EkTestFormu({ tip, ek, setEk, cinsiyet, yas, tarih, dogum, sinif, ogrenci }) {
   const e = ek || {};
   const inp = { width: "100%", padding: "8px 9px", border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 13, boxSizing: "border-box", background: "#fff" };
   const lbl = { fontSize: 10.5, fontWeight: 800, color: MUTED, display: "block", marginBottom: 3 };
@@ -26455,10 +26592,11 @@ function EkTestFormu({ tip, ek, setEk, cinsiyet, yas, tarih, dogum, sinif }) {
   const [acik, setAcik] = useState(-1); const [aiDurum, setAiDurum] = useState("");
   const [, setNormSurum] = useState(0); const [normDurum, setNormDurum] = useState("");
   useEffect(() => {
-    if (!["frankfurter", "porteus", "bender", "frostig", "gesell"].includes(tip)) return;
+    if (!["frankfurter", "porteus", "bender", "frostig", "gesell", "cattell"].includes(tip)) return;
     const ekle = {}; if (!e.cinsiyet && (cinsiyet === "Kız" || cinsiyet === "Erkek")) ekle.cinsiyet = cinsiyet; if (!e.dogum && !e.yasYil && dogum) ekle.dogum = dogum;
     if (Object.keys(ekle).length) setEk({ ...e, ...ekle });
     if (tip === "porteus" && !PORTEUS_NORM) pdrPorteusNormYukle().then(() => setNormSurum(x => x + 1));
+    if (tip === "cattell" && !CATTELL_NORM) pdrCattellNormYukle().then(() => setNormSurum(x => x + 1));
     if ((tip === "bender" || tip === "frostig") && !GORSEL_NORM) pdrGorselNormYukle().then(() => setNormSurum(x => x + 1));
   }, [tip]);
   const yasAlani = (<div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr", gap: 6, marginBottom: 6 }}>
@@ -26597,6 +26735,59 @@ function EkTestFormu({ tip, ek, setEk, cinsiyet, yas, tarih, dogum, sinif }) {
       {ekTestGecerli(tip, e) && <div data-ektest-sonuc="1" style={kutu}>{frankRapor(e, tarih).metin}</div>}
     </div>);
   }
+  if (tip === "cattell") {
+    const form = e.form === "3A" ? "3A" : "2A"; const F = CATTELL_FORM[form];
+    const r = cattellHesapla(e, tarih);
+    const maddeMi = e.giris === "madde" && !!CATTELL_NORM;
+    const setA = (i, v) => { const a = [...(e.a || [])]; while (a.length < 4) a.push(""); a[i] = v; setEk({ ...e, a }); };
+    const setDus = (i, v) => { const d = [...(e.dus || [])]; while (d.length < 4) d.push(""); d[i] = v; setEk({ ...e, dus: d }); };
+    const setM = (i, j, v) => { const m = { ...(e.m || {}) }; const f = (m[form] || [[], [], [], []]).map(x => [...(x || [])]); f[i][j] = v.replace(/[^a-fA-F]/g, "").toLowerCase().slice(0, form === "3A" && i === 1 ? 2 : 1); m[form] = f; setEk({ ...e, m }); };
+    async function normDosyasi(ev) {
+      const f = ev.target.files && ev.target.files[0]; ev.target.value = ""; if (!f) return;
+      try { const n = await pdrCattellNormKaydet(JSON.parse(await f.text())); setNormDurum(`✓ Cattell cevap anahtarı ve norm tabloları yüklendi (${n} yaş satırı). Hesabınızın bulutuna kaydedildi; diğer cihazlarınızda da çalışır.`); setNormSurum(x => x + 1); }
+      catch (er) { setNormDurum("⚠ " + ((er && er.message) || "Dosya okunamadı.")); }
+    }
+    const sek = (aktif) => ({ flex: 1, padding: "7px 6px", borderRadius: 8, border: `1px solid ${aktif ? "#1D4ED8" : BORDER}`, background: aktif ? "#EFF6FF" : "#fff", color: aktif ? "#1D4ED8" : TEXT, fontSize: 12, fontWeight: 800, cursor: "pointer" });
+    return (<div data-ektest="cattell">
+      <div style={{ fontSize: 11.5, color: MUTED, marginBottom: 6, lineHeight: 1.5 }}>Kültürden arınık grup testi: 4 alt test, her birinin süresi ayrı (kronometre gerekli). Her alt testten önce örnekler birlikte çözülür; süre örneklerden sonra başlar. Her doğru madde 1 puan.</div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+        {["2A", "3A"].map(f => <button key={f} data-cattell-form={f} onClick={() => setEk({ ...e, form: f })} style={sek(form === f)}>{f}<div style={{ fontSize: 10, fontWeight: 500, color: MUTED }}>{CATTELL_FORM[f].yas}</div></button>)}
+      </div>
+      {yasAlani}
+      {form === "2A" && <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}><label style={{ ...lbl, margin: 0, whiteSpace: "nowrap" }}>Norm tablosu</label>
+        <select data-cattell-tablo="1" value={e.tablo || ""} onChange={ev => setEk({ ...e, tablo: ev.target.value })} style={{ ...inp, padding: "6px 8px" }}><option value="">Otomatik (18 yaş altı yaş normu)</option><option value="cocuk">Yaşa göre tablo</option><option value="yetiskin">Yetişkin tablosu</option></select></div>}
+      <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+        <button data-cattell-giris="alt" onClick={() => setEk({ ...e, giris: "alt" })} style={sek(!maddeMi)}>Alt test puanları</button>
+        <button data-cattell-giris="madde" onClick={() => { if (CATTELL_NORM) setEk({ ...e, giris: "madde" }); else setNormDurum("Madde madde puanlama için önce cattell-norm.json dosyasını yükleyin (cevap anahtarı onun içinde)."); }} style={sek(maddeMi)}>Cevapları gir (otomatik puan)</button>
+      </div>
+      <div style={{ border: `1px solid ${BORDER}`, borderRadius: 9, overflow: "hidden" }}>
+        {CATTELL_ALT.map((x, i) => {
+          const sat = r.alt[i]; const m = ((e.m || {})[form] || [])[i] || [];
+          return (<div key={x.k} style={{ padding: "7px 8px", borderTop: i ? `1px solid ${BORDER}` : "none" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{ flex: 1, fontSize: 12, fontWeight: 800 }}>{x.k}. {x.ad} <span style={{ fontWeight: 500, color: MUTED }}>· {sat.n} madde · {F.sure[i]}</span></div>
+              {!maddeMi ? <input data-cattell-alt={x.k} type="number" min="0" max={sat.n} value={(e.a || [])[i] ?? ""} onChange={ev => setA(i, ev.target.value)} placeholder={`0–${sat.n}`} style={{ ...inp, width: 70, padding: "6px 8px", textAlign: "center" }} />
+                : <div style={{ fontSize: 13, fontWeight: 900, color: "#1D4ED8", minWidth: 44, textAlign: "right" }}>{sat.ham ?? "—"}/{sat.n}</div>}
+            </div>
+            {maddeMi && <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 5 }}>
+              {Array.from({ length: sat.n }, (_, j) => { const d = sat.isaret[j]; return (<label key={j} style={{ display: "flex", flexDirection: "column", alignItems: "center", fontSize: 9.5, color: MUTED }}>{j + 1}
+                <input data-cattell-m={`${x.k}-${j + 1}`} value={m[j] || ""} onChange={ev => setM(i, j, ev.target.value)} style={{ width: form === "3A" && i === 1 ? 38 : 30, padding: "5px 2px", textAlign: "center", fontSize: 13, fontWeight: 800, borderRadius: 6, border: `1.5px solid ${d === true ? "#16A34A" : d === false ? "#DC2626" : BORDER}`, background: d === true ? "#F0FDF4" : d === false ? "#FEF2F2" : "#fff" }} /></label>); })}
+            </div>}
+            <input data-cattell-dus={x.k} value={(e.dus || [])[i] || ""} onChange={ev => setDus(i, ev.target.value)} placeholder="Gözlem / düşünce (isteğe bağlı)" style={{ ...inp, marginTop: 5, padding: "5px 8px", fontSize: 12 }} />
+          </div>);
+        })}
+      </div>
+      {maddeMi && <div style={{ fontSize: 10.5, color: MUTED, marginTop: 4 }}>Öğrencinin yazdığı harfi girin (a–f){form === "3A" ? "; 3A'nın 2. testinde iki harf" : ""}. Yeşil doğru, kırmızı yanlış; boş = cevapsız.</div>}
+      <label style={{ ...lbl, marginTop: 6 }}>Genel gözlem (kaygı, örnekleri anlama, hız, dikkat)</label>
+      <input data-cattell-gozlem="1" value={e.gozlem || ""} onChange={ev => setEk({ ...e, gozlem: ev.target.value })} style={inp} />
+      {r.toplam != null && <div data-cattell-ozet="1" style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>{[["Toplam ham", `${r.toplam}/${r.maks}`, "#334155"], ["Takvim yaşı", r.yas ? `${r.yas.yil};${r.yas.ay}` : "—", "#334155"], ["Zekâ bölümü", r.iq && r.iq.iq ? (r.iq.alt ? "≤" : r.iq.ust ? "≥" : "") + r.iq.iq : "—", r.sinif ? r.sinif.renk : "#334155"], ["Zekâ yaşı", r.zy ? cattellAyYaz(r.zy) : "—", "#334155"]].map(([a, v, c]) => <div key={a} style={{ flex: "1 1 70px", textAlign: "center", border: `1px solid ${BORDER}`, borderRadius: 8, padding: "6px 4px" }}><div style={{ fontSize: 17, fontWeight: 900, color: c }}>{v}</div><div style={{ fontSize: 10, color: MUTED }}>{a}</div></div>)}</div>}
+      {r.sinif && <div style={{ textAlign: "center", fontWeight: 800, color: r.sinif.renk, fontSize: 13, marginTop: 4 }}>{r.sinif.ad}</div>}
+      {!CATTELL_NORM && <div style={{ fontSize: 11.5, background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 8, padding: "7px 9px", marginTop: 8 }}>Zekâ bölümü ve otomatik puanlama için cevap anahtarı + norm tablosu gerekli (telifli olduğu için programın içinde değil). Size gönderilen <b>cattell-norm.json</b> dosyasını bir kez yükleyin: <label style={{ color: "#1D4ED8", fontWeight: 800, cursor: "pointer" }}>📂 Dosya seç<input data-cattell-norm="1" type="file" accept=".json,application/json" onChange={normDosyasi} style={{ display: "none" }} /></label></div>}
+      {normDurum && <div style={{ fontSize: 11.5, color: MUTED, marginTop: 4 }}>{normDurum}</div>}
+      <button data-cattell-kagit="1" onClick={() => ompYazdir(cattellCevapKagidiHtml(form, { ogrenci, sinif, dogum: e.dogum || dogum, tarih, cinsiyet: e.cinsiyet || cinsiyet }), `Cattell_${form}_cevap_kagidi${ogrenci ? "_" + String(ogrenci).replace(/\s+/g, "_") : ""}`)} style={{ marginTop: 8, width: "100%", padding: "8px", borderRadius: 8, border: `1px solid ${BORDER}`, background: "#fff", fontSize: 12.5, fontWeight: 800, cursor: "pointer", color: TEXT }}>🖨 Öğrenci cevap kâğıdı ({form})</button>
+      {ekTestGecerli(tip, e) && <div data-ektest-sonuc="1" style={kutu}>{cattellRapor(e, tarih).metin}</div>}
+    </div>);
+  }
   if (tip === "porteus") {
     const d = e.d || {}; const setD = (k, v) => setEk({ ...e, d: { ...d, [k]: v } });
     const r = porteusHesapla(e, tarih);
@@ -26701,7 +26892,7 @@ function EkTestFormu({ tip, ek, setEk, cinsiyet, yas, tarih, dogum, sinif }) {
 // ── Ek testler için yazdırılabilir (PDF) rapor ──
 function ekTestRaporHtml(k, bilgi, tum) {
   const v = (k && k.veri) || {}; const e = cdtEsc; const b = bilgi || {};
-  const RENK = { d2: "#6D28D9", stroop_tbag: "#B45309", metropolitan: "#0E7490", louisa_duss: "#7C3AED", wisc_r: "#1D4ED8", frankfurter: "#BE185D", porteus: "#4D7C0F", bender: "#0369A1", frostig: "#9333EA", gesell: "#C2410C", okuma_hizi: "#0E7490" }[k.tip] || "#334155";
+  const RENK = { d2: "#6D28D9", stroop_tbag: "#B45309", metropolitan: "#0E7490", louisa_duss: "#7C3AED", wisc_r: "#1D4ED8", frankfurter: "#BE185D", porteus: "#4D7C0F", bender: "#0369A1", frostig: "#9333EA", gesell: "#C2410C", okuma_hizi: "#0E7490", cattell: "#1E40AF" }[k.tip] || "#334155";
   const baslik = t => `<div style="background:${RENK};color:#fff;font-size:12.5px;font-weight:700;padding:6px 11px;border-radius:6px;margin:14px 0 7px;page-break-after:avoid">${t}</div>`;
   const th = t => `<th style="text-align:left;padding:5px 7px;background:#F8FAFC;color:#475569;font-size:10.5px;border-bottom:1px solid #E2E8F0">${t}</th>`;
   const td = (t, ek) => `<td style="padding:5px 7px;border-bottom:1px solid #EEF2F7;font-size:11px;${ek || ""}">${t}</td>`;
@@ -26729,6 +26920,10 @@ function ekTestRaporHtml(k, bilgi, tum) {
     const r = frankHesapla(v, k.tarih);
     ust = `<div style="display:flex;gap:8px;flex-wrap:wrap">${[["Ham puan", r.ham ?? "—"], ["Ek puan", r.ekPuan == null ? "—" : "+" + r.ekPuan], ["Son değer", r.son ?? "—"]].map(([a, z]) => `<div style="flex:1 1 120px;border:1px solid ${a === "Son değer" && r.duzey ? r.duzey.renk + "66" : "#E5E7EB"};border-radius:8px;padding:8px;text-align:center"><div style="font-size:22px;font-weight:700;color:${a === "Son değer" && r.duzey ? r.duzey.renk : "#334155"}">${e(z)}</div><div style="font-size:10.5px;color:#555">${a}${a === "Son değer" && r.duzey ? " · " + e(r.duzey.ad) + " (" + r.duzey.yuzde + ")" : ""}</div></div>`).join("")}</div>`;
     olcum = tablo(["Bilgi", "Değer"], [["Yaş", ekYasYaz(r.yas)], ["Cinsiyet", r.cins || "—"], ["İşaretlenen armut", r.armut ?? "—"], ["İşaretlenen elma (puana eklenen)", `${r.elma} (${r.elmaSayilan})`], ["Yaş-cinsiyet ek puanı", r.bant && r.ekPuan != null ? `${r.bant.ad}: +${r.ekPuan}` : "—"], ["Karşılaştırma", "0–22 ortalamanın altı (%26) · 23–32 ortalama (%49) · 33–48 ortalamanın üstü (%75)"]].map(([a, z]) => [td(e(a)), td(`<b>${e(z)}</b>`)]));
+  } else if (k.tip === "cattell") {
+    const r = cattellHesapla(v, k.tarih);
+    ust = `<div style="display:flex;gap:8px;flex-wrap:wrap">${[["Form", r.form], ["Toplam ham puan", r.toplam == null ? "—" : r.toplam + "/" + r.maks], ["Takvim yaşı", ekYasYaz(r.yas)], ["Zekâ bölümü", r.iq && r.iq.iq ? (r.iq.alt ? "≤" : r.iq.ust ? "≥" : "") + r.iq.iq : "—"], ["Düzey", r.sinif ? r.sinif.ad : "—"]].map(([a, z]) => `<div style="flex:1 1 110px;border:1px solid #E5E7EB;border-radius:8px;padding:6px;text-align:center"><div style="font-size:10px;color:#555">${a}</div><div style="font-size:15px;font-weight:800;color:${a === "Zekâ bölümü" || a === "Düzey" ? (r.sinif ? r.sinif.renk : "#334155") : "#334155"}">${e(String(z))}</div></div>`).join("")}</div>`;
+    olcum = tablo(["Alt test", "Ölçtüğü", "Puan", "Oran"], r.alt.map(x => [td(`<b>${x.k}. ${e(x.ad)}</b>`), td(e(x.olcer), "color:#64748B"), td(`<b>${x.ham ?? "—"}</b> / ${x.n}`), td(x.ham != null ? `<div style="background:#E2E8F0;border-radius:4px;height:8px;width:110px"><div style="background:${RENK};height:8px;border-radius:4px;width:${Math.round(x.ham / x.n * 110)}px"></div></div>` : "—")]));
   } else if (k.tip === "porteus") {
     const r = porteusHesapla(v, k.tarih);
     ust = `<div style="display:flex;gap:8px;flex-wrap:wrap">${[["Zekâ yaşı", r.zy == null ? "—" : String(r.zy).replace(".", ",")], ["Takvim yaşı", ekYasYaz(r.yas)], ["Zekâ bölümü", r.iq && r.iq.iq ? (r.iq.alt ? "≤" : r.iq.ust ? "≥" : "") + r.iq.iq : "—"]].map(([a, z]) => `<div style="flex:1 1 120px;border:1px solid ${a === "Zekâ bölümü" && r.sinif ? r.sinif.renk + "66" : "#E5E7EB"};border-radius:8px;padding:8px;text-align:center"><div style="font-size:20px;font-weight:700;color:${a === "Zekâ bölümü" && r.sinif ? r.sinif.renk : "#334155"}">${e(z)}</div><div style="font-size:10.5px;color:#555">${a}${a === "Zekâ bölümü" && r.sinif ? " · " + e(r.sinif.ad) : ""}</div></div>`).join("")}</div>`;
@@ -26786,7 +26981,7 @@ const TEST_LISTESI = {
     { ad: "Bender Gestalt Görsel Motor Algı Testi", tip: "bender" },
     { ad: "Gesell Gelişim Figürleri Testi", tip: "gesell" },
     { ad: "Sesli Okuma Akıcılığı (1–8. sınıf)", tip: "okuma_hizi" },
-    { ad: "R.B Catell 2A-3A Zeka Testi", tip: "iq_esdeger" },
+    { ad: "R.B. Cattell 2A-3A Zekâ Testi", tip: "cattell" },
     { ad: "Metropolitan Okul Öncesi Olgunluk Testi", tip: "metropolitan" },
     { ad: "Stroop Testi TBAG Formu", tip: "stroop_tbag" },
     { ad: "WISC-R (Wechsler Çocuklar İçin Zekâ Ölçeği)", tip: "wisc_r" },
@@ -33406,6 +33601,7 @@ function pdrTestOlcumleri(k, sinifNo) {
       case "wisc_r": { const r = wiscHesapla(v); ekle("Sözel ZB", r.sz, "yuksek"); ekle("Performans ZB", r.pf, "yuksek"); ekle("Toplam ZB", r.tp, "yuksek"); WISC_ALT.forEach(x => ekle(x.ad, r.p[x.k], "yuksek")); break; }
       case "frankfurter": { const r = frankHesapla(v, k.tarih); ekle("Ham puan", r.ham, "yuksek"); ekle("Son değer", r.son, "yuksek"); ekle("İşaretlenen elma", r.armut != null ? r.elma : null, "dusuk"); break; }
       case "porteus": { const r = porteusHesapla(v, k.tarih); ekle("Zekâ yaşı", r.zy, "yuksek"); ekle("Zekâ bölümü", r.iq && r.iq.iq, "yuksek"); break; }
+      case "cattell": { const r = cattellHesapla(v, k.tarih); r.alt.forEach(x => ekle(x.ad, x.ham, "yuksek", "/" + x.n)); ekle("Toplam ham puan", r.toplam, "yuksek", "/" + r.maks); ekle("Zekâ bölümü", r.iq && r.iq.iq, "yuksek"); break; }
       case "bender": { const r = benderHesapla(v, k.tarih); ekle("Hata puanı", r.hata, "dusuk"); ekle("Yüzdelik", r.yuzdelik && r.yuzdelik.p, "yuksek"); Object.entries(BENDER_TUR).forEach(([t, a]) => { if (r.isaret.length) ekle(a, r.tur[t], "dusuk"); }); break; }
       case "frostig": { const r = frostigHesapla(v, k.tarih); r.alt.forEach(x => ekle(x.ad + " (ham)", x.ham, "yuksek", "/" + x.maks)); ekle("Toplam ham puan", r.toplam, "yuksek"); ekle("Genel standart puan", r.ts && r.ts.p, "yuksek"); break; }
       case "gesell": { const r = gesellHesapla(v, k.tarih); ekle("Doğru şekil", r.dogru.length, "yuksek", "/10"); break; }
@@ -34641,7 +34837,7 @@ KURALLAR:
               </>)}
 
               {EK_TESTLER.includes(seciliTest.tip) && (
-                <EkTestFormu tip={seciliTest.tip} ek={form.ek} setEk={ek => setForm(f => ({ ...f, ek }))} cinsiyet={seciliOgr?.cinsiyet || ""} yas={cdtYasTahmin(seciliSinif)} tarih={form.tarih} dogum={seciliOgr?.dogumTarihi || seciliOgr?.dogum || ""} sinif={seciliSinif} />
+                <EkTestFormu tip={seciliTest.tip} ek={form.ek} setEk={ek => setForm(f => ({ ...f, ek }))} cinsiyet={seciliOgr?.cinsiyet || ""} yas={cdtYasTahmin(seciliSinif)} tarih={form.tarih} dogum={seciliOgr?.dogumTarihi || seciliOgr?.dogum || ""} sinif={seciliSinif} ogrenci={seciliOgr?.name || ""} />
               )}
               {seciliTest.tip === "alt_test" && (<>
                 {seciliTest.altTestler.map(alt => (
@@ -51422,6 +51618,7 @@ export default function App() {
     pdrD2NormYukle();
     pdrIczVeriYukle();
     pdrPorteusNormYukle();
+    pdrCattellNormYukle();
     pdrGorselNormYukle();
   }, []);
 
@@ -51488,6 +51685,7 @@ export default function App() {
       "pdr-d2-norm": () => pdrD2NormYukle(),
       "pdr-insan-ciz-veri": () => pdrIczVeriYukle(),
       "pdr-porteus-norm": () => pdrPorteusNormYukle(),
+      "pdr-cattell-norm": () => pdrCattellNormYukle(),
       "pdr-gorsel-algi-norm": () => pdrGorselNormYukle(),
       "pdr-sinav-kaygisi": () => loadSinavKaygisi().then(setSinavKaygisi),
       // "pdr-rehber-gorundu" bilerek dahil edilmedi — bu sadece "ilk açılışta

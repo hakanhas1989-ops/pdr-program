@@ -4176,6 +4176,48 @@ function metinOgrenciTemalari(o, records, riskHaritasi, aktifYil) {
   if (rh && rh.maddeler) Object.keys(rh.maddeler).filter(k => rh.maddeler[k]).forEach(k => (METIN_RISK_ETIKET[k] || []).forEach(t => ekle(t, 1.5, "risk haritası")));
   return Object.entries(puan).sort((a, b) => b[1].p - a[1].p).map(([t, v]) => ({ t, p: v.p, neden: [...v.neden] }));
 }
+// ── Derslerde şu an hangi metin? (tahmini) ──
+// MEB çalışma takvimi + tema ders saatleri (TYMM: 5–6. sınıf 35 saat/tema, haftada 6 saat; 7. sınıf 29 saat/tema, haftada 5 saat;
+// 8. sınıf eski program, 8 tema, haftada 5 saat → ~21 saat/tema). Tema içindeki metinlere kitaptaki sayfa sayısı oranında süre verilir.
+const METIN_TAKVIM = {
+  "2026-2027": { bas: "2026-09-14", son: "2027-06-25", tatil: [["2026-11-16", "2026-11-20"], ["2027-01-25", "2027-02-05"], ["2027-03-08", "2027-03-12"]] },
+};
+const METIN_DERS_SAATI = { 5: { w: 6, h: 35 }, 6: { w: 6, h: 35 }, 7: { w: 5, h: 29 }, 8: { w: 5, h: 21 } };
+const METIN_DIZILER = [{ k: "5", sinif: 5, kitaplar: ["t51", "t52"] }, { k: "6", sinif: 6, kitaplar: ["t61", "t62"] }, { k: "7", sinif: 7, kitaplar: ["t71", "t72"] }, { k: "8m", sinif: 8, kitaplar: ["t8m"] }, { k: "8h", sinif: 8, kitaplar: ["t8h"] }];
+function metinTakvimi(yil, bugun) {
+  if (METIN_TAKVIM[yil]) return METIN_TAKVIM[yil];
+  const y = parseInt(String(yil || "").slice(0, 4), 10) || (bugun.getMonth() >= 7 ? bugun.getFullYear() : bugun.getFullYear() - 1);
+  const d = new Date(y, 8, 1); while (d.getDay() !== 1) d.setDate(d.getDate() + 1); d.setDate(d.getDate() + 7);
+  const iso = x => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
+  return { bas: iso(d), son: `${y + 1}-06-20`, tatil: [[`${y + 1}-01-22`, `${y + 1}-02-05`]], tahmini: true };
+}
+// Okul açıldığından beri geçen ders günü (hafta içi, tatiller hariç)
+function metinDersGunu(takvim, bugun) {
+  const g = s => { const [a, b, c] = s.split("-").map(Number); return new Date(a, b - 1, c); };
+  const bas = g(takvim.bas), son = g(takvim.son); const t = new Date(bugun.getFullYear(), bugun.getMonth(), bugun.getDate());
+  if (t < bas) return 0;
+  const tatil = takvim.tatil.map(([a, b]) => [g(a), g(b)]); let n = 0;
+  for (const d = new Date(bas); d <= t && d <= son; d.setDate(d.getDate() + 1)) { const w = d.getDay(); if (w === 0 || w === 6) continue; if (tatil.some(([a, b]) => d >= a && d <= b)) continue; n++; }
+  return n;
+}
+function metinDersKonumu(dizin, dz, bugun, yil, kaydirma) {
+  const metinler = dizin.metinler.filter(m => dz.kitaplar.includes(m.k)).sort((a, b) => dz.kitaplar.indexOf(a.k) - dz.kitaplar.indexOf(b.k) || a.s - b.s);
+  if (!metinler.length) return null;
+  const temalar = []; metinler.forEach(m => { const son = temalar[temalar.length - 1]; if (son && son.tema === m.tema && son.k === m.k) son.m.push(m); else temalar.push({ tema: m.tema, k: m.k, m: [m] }); });
+  const S = METIN_DERS_SAATI[dz.sinif]; const takvim = metinTakvimi(yil, bugun);
+  const gun = metinDersGunu(takvim, bugun); const hafta = Math.max(0, gun / 5 + (kaydirma || 0));
+  const saat = hafta * S.w; const ti = Math.floor(saat / S.h);
+  const durum = {};
+  if (gun === 0) { metinler.forEach(m => { durum[m.id] = "sirada"; }); return { once: true, hafta: 0, temalar, durum }; }
+  if (ti >= temalar.length) { metinler.forEach(m => { durum[m.id] = "islendi"; }); return { bitti: true, hafta: Math.ceil(hafta), temalar, durum }; }
+  const T = temalar[ti]; const f = (saat - ti * S.h) / S.h;
+  const agirlik = T.m.map(m => Math.max(1, m.e - m.s + 1)); const top = agirlik.reduce((a, b) => a + b, 0);
+  let birikim = 0, mi = T.m.length - 1; for (let i = 0; i < T.m.length; i++) { birikim += agirlik[i] / top; if (f < birikim) { mi = i; break; } }
+  const simdi = T.m[mi];
+  temalar.forEach((x, i) => x.m.forEach((m, j) => { durum[m.id] = i < ti || (i === ti && j < mi) ? "islendi" : (i === ti && j === mi) ? "simdi" : "sirada"; }));
+  const sonraki = T.m[mi + 1] || (temalar[ti + 1] && temalar[ti + 1].m[0]) || null;
+  return { hafta: Math.floor(hafta) + 1, temaNo: ti + 1, temaSay: temalar.length, tema: T.tema, simdi, sonraki, durum, tahmini: !!takvim.tahmini };
+}
 function metinSinifNo(sinif) { const m = /(\d{1,2})/.exec(String(sinif || "")); return m ? +m[1] : null; }
 function metinOner(dizin, temalar, sinifNo, adet = 8) {
   if (!dizin) return [];
@@ -4282,6 +4324,11 @@ function MetinCalismaEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, rec
   const [seciliAd, setSeciliAd] = useState(aktifOgrenci?.name || "");
   const [q, setQ] = useState(""); const [etiket, setEtiket] = useState(""); const [sinif, setSinif] = useState("");
   const [acik, setAcik] = useState(null); const [gosterici, setGosterici] = useState(null); const [kitapDurum, setKitapDurum] = useState({}); const [mesaj, setMesaj] = useState(""); const [kitaplarAcik, setKitaplarAcik] = useState(false);
+  const [kaydirma, setKaydirma] = useState({}); const [takvimAcik, setTakvimAcik] = useState(true);
+  useEffect(() => { (async () => { try { const r = await window.storage.get("pdr-metin-takvim"); if (r && r.value) setKaydirma(JSON.parse(r.value) || {}); } catch (e) {} })(); }, []);
+  const kaydir = async (k, d) => { const y = { ...kaydirma, [k]: Math.max(-6, Math.min(6, (kaydirma[k] || 0) + d)) }; setKaydirma(y); try { await window.storage.set("pdr-metin-takvim", JSON.stringify(y)); } catch (e) {} };
+  const konumlar = useMemo(() => { if (!dizin) return []; const b = new Date(); return METIN_DIZILER.map(dz => ({ dz, r: metinDersKonumu(dizin, dz, b, aktifYil, kaydirma[dz.k] || 0) })).filter(x => x.r); }, [dizin, aktifYil, kaydirma]);
+  const metinDurum = id => { for (const x of konumlar) if (x.r.durum[id]) return x.r.durum[id]; return null; };
   useEffect(() => { if (!dizin) pdrMetinDizinYukle().then(j => { if (j) setDizin(j); else setHata("Metin dizini yüklenemedi; internet bağlantısını kontrol edip tekrar deneyin."); }); }, []);
   useEffect(() => { setSeciliAd(aktifOgrenci?.name || ""); }, [aktifOgrenci?.name]);
   const kitapDurumYenile = async () => { if (!dizin) return; const d = {}; for (const k of Object.keys(dizin.kitaplar)) { const r = await pdrKitapOku(k); d[k] = r ? { boyut: r.boyut, sayfa: r.sayfa, tarih: r.tarih } : null; } setKitapDurum(d); };
@@ -4310,7 +4357,7 @@ function MetinCalismaEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, rec
       <div key={(oneri ? "o-" : "") + m.id} data-metin={m.id} style={{ border: `1px solid ${BORDER}`, borderRadius: 10, marginBottom: 7, background: oneri ? "#F0FDFA" : "#fff" }}>
         <div onClick={() => setAcik(ac ? null : m.id)} style={{ padding: "8px 10px", cursor: "pointer" }}>
           <div style={{ display: "flex", gap: 6, alignItems: "baseline" }}><div style={{ flex: 1, fontSize: 13, fontWeight: 800, color: TEXT }}>{m.ad}</div><span style={{ fontSize: 11, color: MUTED }}>{ac ? "▲" : "▼"}</span></div>
-          <div style={{ fontSize: 10.5, color: MUTED }}>{kitapAd(m.k)} · s. {m.s}–{m.e} · {m.tur}</div>
+          <div style={{ fontSize: 10.5, color: MUTED }}>{kitapAd(m.k)} · s. {m.s}–{m.e} · {m.tur}{(() => { const d = metinDurum(m.id); return d === "simdi" ? <b style={{ color: "#B45309" }}> · 📅 şu an derste (tahmini)</b> : d === "islendi" ? <span style={{ color: "#15803D" }}> · ✓ işlendi (tahmini)</span> : null; })()}</div>
           <div style={{ marginTop: 3 }}>{m.pdr.map(t => <span key={t} style={{ display: "inline-block", fontSize: 10, fontWeight: 700, color: temalar.some(x => x.t === t) ? "#fff" : "#075985", background: temalar.some(x => x.t === t) ? "#0E7490" : "#E0F2FE", borderRadius: 9, padding: "1px 7px", margin: "2px 3px 0 0" }}>{METIN_ETIKET[t] || t}</span>)}</div>
           {!ac && <div style={{ fontSize: 11.5, color: TEXT, marginTop: 4, lineHeight: 1.45 }}>{m.ozet}</div>}
         </div>
@@ -4337,6 +4384,27 @@ function MetinCalismaEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, rec
       <div style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.5, marginTop: 2 }}>Türkçe ders kitaplarındaki metinler danışmanlık temalarına göre dizinlendi: her metnin özeti, kimlerle nasıl kullanılacağı, görüşme soruları ve kitaptaki etkinlikler. Kitabın PDF'ini bu cihaza bir kez yüklerseniz sayfayı doğrudan açabilirsiniz.</div>
       {hata && <div style={{ color: "#B91C1C", fontSize: 12, marginTop: 6 }}>{hata}</div>}
       {!dizin && !hata && <div style={{ color: MUTED, fontSize: 12, marginTop: 8 }}>Dizin yükleniyor…</div>}
+      {dizin && konumlar.length > 0 && (
+        <div data-metin-takvim="1" style={{ marginTop: 10, background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 10, padding: 9 }}>
+          <div onClick={() => setTakvimAcik(v => !v)} style={{ fontSize: 12.5, fontWeight: 900, color: "#92400E", cursor: "pointer" }}>📅 Bu hafta derslerde (tahmini) {takvimAcik ? "▲" : "▼"}</div>
+          {takvimAcik && (<>
+            <div style={{ fontSize: 10.5, color: "#92400E", margin: "3px 0 6px", lineHeight: 1.45 }}>MEB çalışma takvimi ve temaların ders saatine göre hesaplandı{konumlar[0].r.tahmini ? " (bu yılın takvimi programda yok, yaklaşık)" : ""}. Okulunuzda öne ya da geride iseniz ◀ ▶ ile haftayı düzeltin; ayar kaydedilir.</div>
+            {konumlar.map(({ dz, r }) => (
+              <div key={dz.k} data-metin-takvim-sinif={dz.k} style={{ display: "flex", gap: 6, alignItems: "center", padding: "6px 0", borderTop: "1px dashed #FDE68A" }}>
+                <div style={{ flex: 1, fontSize: 12, lineHeight: 1.4 }}>
+                  <b>{dz.sinif}. sınıf{dz.k === "8m" ? " (MEB kitabı)" : dz.k === "8h" ? " (Hecce kitabı)" : ""}</b>{" "}
+                  {r.once ? <span style={{ color: MUTED }}>— okullar henüz açılmadı</span> : r.bitti ? <span style={{ color: MUTED }}>— kitap bitti, tekrar dönemi</span> : (<>
+                    <span style={{ color: MUTED }}>· {r.hafta}. hafta · {r.temaNo}/{r.temaSay}. tema: {r.tema}</span><br />
+                    <span onClick={() => { setQ(r.simdi.ad); setEtiket(""); setSinif(""); setAcik(r.simdi.id); }} style={{ color: "#B45309", fontWeight: 800, cursor: "pointer", textDecoration: "underline" }}>{r.simdi.ad}</span> <span style={{ color: MUTED }}>(s. {r.simdi.s}–{r.simdi.e})</span>
+                    {r.sonraki && <span style={{ color: MUTED }}> → sırada: {r.sonraki.ad}</span>}
+                  </>)}
+                  {(kaydirma[dz.k] || 0) !== 0 && <span style={{ fontSize: 10.5, color: "#92400E" }}> · düzeltme {kaydirma[dz.k] > 0 ? "+" : ""}{kaydirma[dz.k]} hafta</span>}
+                </div>
+                <button data-metin-geri={dz.k} onClick={() => kaydir(dz.k, -1)} title="Bir hafta geride" style={{ padding: "4px 8px", borderRadius: 7, border: "1px solid #FCD34D", background: "#fff", fontWeight: 800, cursor: "pointer" }}>◀</button>
+                <button data-metin-ileri={dz.k} onClick={() => kaydir(dz.k, 1)} title="Bir hafta ileride" style={{ padding: "4px 8px", borderRadius: 7, border: "1px solid #FCD34D", background: "#fff", fontWeight: 800, cursor: "pointer" }}>▶</button>
+              </div>))}
+          </>)}
+        </div>)}
       {dizin && (<>
         <div style={{ marginTop: 10, background: "#F8FAFC", border: `1px solid ${BORDER}`, borderRadius: 10, padding: 9 }}>
           <label style={{ fontSize: 11, fontWeight: 800, color: MUTED }}>Öğrenci (önerileri onun görüşme konularına ve risk haritasına göre getirir)</label>
@@ -4387,7 +4455,8 @@ async function ksAsistanMetinOner(g, ctx, o) {
   if (g && g.sorgu) { liste = metinAra(d, { q: g.sorgu, sinif: g.sinif }); if (!liste.length) { const s = ksSade(g.sorgu); const tl = Object.entries(METIN_ANAHTAR).filter(([, re]) => re.test(s)).map(([t]) => ({ t, p: 1 })); liste = metinOner(d, tl, g.sinif ? +g.sinif : null, 6); } baslik = `"${g.sorgu}" için`; }
   if (!liste.length && o) { const t = metinOgrenciTemalari(o, ctx.records, ctx.riskHaritasi, ctx.aktifYil); liste = metinOner(d, t, metinSinifNo(o.className), 5); baslik = `bu öğrencinin temalarına (${t.slice(0, 4).map(x => METIN_ETIKET[x.t]).join(", ") || "tema yok"}) göre`; }
   if (!liste.length) return "Uygun metin bulunamadı. Konuyu farklı kelimelerle (ör. yalnızlık, kayıp, öfke, taşınma, sosyal medya) deneyebilirsin.";
-  return `TÜRKÇE DERS KİTABI METİNLERİ — ${baslik} (Metinle Çalışma ekranında kitap sayfası açılabilir):\n` + liste.slice(0, Number(g && g.adet) || 5).map(m => `• "${m.ad}" — ${d.kitaplar[m.k].ad}, s. ${m.s}–${m.e} (${m.tur}; temalar: ${m.pdr.map(t => METIN_ETIKET[t]).join(", ")})\n  Özet: ${m.ozet}\n  Kullanım: ${m.kullanim}\n  Sorular: ${m.sorular.join(" | ")}${m.onerilen.length ? `\n  Etkinlik: s. ${m.onerilen[0].s} — ${m.onerilen[0].ad} → ${m.onerilen[0].uyarlama}` : ""}`).join("\n");
+  let buHafta = ""; try { let ky = {}; try { const r = await window.storage.get("pdr-metin-takvim"); if (r && r.value) ky = JSON.parse(r.value) || {}; } catch (e) {} const b = new Date(); buHafta = METIN_DIZILER.map(dz => { const r = metinDersKonumu(d, dz, b, ctx.aktifYil, ky[dz.k] || 0); return r && r.simdi ? `${dz.sinif}. sınıf${dz.k === "8m" ? " MEB" : dz.k === "8h" ? " Hecce" : ""}: "${r.simdi.ad}" (${r.tema})` : ""; }).filter(Boolean).join("; "); } catch (e) {}
+  return `TÜRKÇE DERS KİTABI METİNLERİ — ${baslik} (Metinle Çalışma ekranında kitap sayfası açılabilir):\n${buHafta ? `Bu hafta derslerde (tahmini, MEB takvimine göre): ${buHafta}\n` : ""}` + liste.slice(0, Number(g && g.adet) || 5).map(m => `• "${m.ad}" — ${d.kitaplar[m.k].ad}, s. ${m.s}–${m.e} (${m.tur}; temalar: ${m.pdr.map(t => METIN_ETIKET[t]).join(", ")})\n  Özet: ${m.ozet}\n  Kullanım: ${m.kullanim}\n  Sorular: ${m.sorular.join(" | ")}${m.onerilen.length ? `\n  Etkinlik: s. ${m.onerilen[0].s} — ${m.onerilen[0].ad} → ${m.onerilen[0].uyarlama}` : ""}`).join("\n");
 }
 // ===== METİNLE ÇALIŞMA BİTİŞ =====
 

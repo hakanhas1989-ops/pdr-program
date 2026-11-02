@@ -4324,7 +4324,7 @@ function MetinCalismaEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, rec
   const [seciliAd, setSeciliAd] = useState(aktifOgrenci?.name || "");
   const [q, setQ] = useState(""); const [etiket, setEtiket] = useState(""); const [sinif, setSinif] = useState("");
   const [acik, setAcik] = useState(null); const [gosterici, setGosterici] = useState(null); const [kitapDurum, setKitapDurum] = useState({}); const [mesaj, setMesaj] = useState(""); const [kitaplarAcik, setKitaplarAcik] = useState(false);
-  const [kaydirma, setKaydirma] = useState({}); const [takvimAcik, setTakvimAcik] = useState(true);
+  const [kaydirma, setKaydirma] = useState({}); const [takvimAcik, setTakvimAcik] = useState(true); const [takvimKart, setTakvimKart] = useState(null);
   useEffect(() => { (async () => { try { const r = await window.storage.get("pdr-metin-takvim"); if (r && r.value) setKaydirma(JSON.parse(r.value) || {}); } catch (e) {} })(); }, []);
   const kaydir = async (k, d) => { const y = { ...kaydirma, [k]: Math.max(-6, Math.min(6, (kaydirma[k] || 0) + d)) }; setKaydirma(y); try { await window.storage.set("pdr-metin-takvim", JSON.stringify(y)); } catch (e) {} };
   const konumlar = useMemo(() => { if (!dizin) return []; const b = new Date(); return METIN_DIZILER.map(dz => ({ dz, r: metinDersKonumu(dizin, dz, b, aktifYil, kaydirma[dz.k] || 0) })).filter(x => x.r); }, [dizin, aktifYil, kaydirma]);
@@ -4389,20 +4389,21 @@ function MetinCalismaEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, rec
           <div onClick={() => setTakvimAcik(v => !v)} style={{ fontSize: 12.5, fontWeight: 900, color: "#92400E", cursor: "pointer" }}>📅 Bu hafta derslerde (tahmini) {takvimAcik ? "▲" : "▼"}</div>
           {takvimAcik && (<>
             <div style={{ fontSize: 10.5, color: "#92400E", margin: "3px 0 6px", lineHeight: 1.45 }}>MEB çalışma takvimi ve temaların ders saatine göre hesaplandı{konumlar[0].r.tahmini ? " (bu yılın takvimi programda yok, yaklaşık)" : ""}. Okulunuzda öne ya da geride iseniz ◀ ▶ ile haftayı düzeltin; ayar kaydedilir.</div>
-            {konumlar.map(({ dz, r }) => (
+            {konumlar.map(({ dz, r }) => [(
               <div key={dz.k} data-metin-takvim-sinif={dz.k} style={{ display: "flex", gap: 6, alignItems: "center", padding: "6px 0", borderTop: "1px dashed #FDE68A" }}>
                 <div style={{ flex: 1, fontSize: 12, lineHeight: 1.4 }}>
                   <b>{dz.sinif}. sınıf{dz.k === "8m" ? " (MEB kitabı)" : dz.k === "8h" ? " (Hecce kitabı)" : ""}</b>{" "}
                   {r.once ? <span style={{ color: MUTED }}>— okullar henüz açılmadı</span> : r.bitti ? <span style={{ color: MUTED }}>— kitap bitti, tekrar dönemi</span> : (<>
                     <span style={{ color: MUTED }}>· {r.hafta}. hafta · {r.temaNo}/{r.temaSay}. tema: {r.tema}</span><br />
-                    <span onClick={() => { setQ(r.simdi.ad); setEtiket(""); setSinif(""); setAcik(r.simdi.id); }} style={{ color: "#B45309", fontWeight: 800, cursor: "pointer", textDecoration: "underline" }}>{r.simdi.ad}</span> <span style={{ color: MUTED }}>(s. {r.simdi.s}–{r.simdi.e})</span>
-                    {r.sonraki && <span style={{ color: MUTED }}> → sırada: {r.sonraki.ad}</span>}
+                    <span data-metin-takvim-ac={dz.k} onClick={() => sayfaAc(r.simdi, r.simdi.s)} style={{ color: "#B45309", fontWeight: 800, cursor: "pointer", textDecoration: "underline" }}>📄 {r.simdi.ad}</span> <span style={{ color: MUTED }}>(s. {r.simdi.s}–{r.simdi.e})</span>
+                    {r.sonraki && <span style={{ color: MUTED }}> → sırada: <span onClick={() => sayfaAc(r.sonraki, r.sonraki.s)} style={{ cursor: "pointer", textDecoration: "underline" }}>{r.sonraki.ad}</span></span>}
+                    <br /><button data-metin-takvim-kart={dz.k} onClick={() => { setTakvimKart(takvimKart === r.simdi.id ? null : r.simdi.id); setAcik(r.simdi.id); }} style={{ marginTop: 4, padding: "3px 9px", borderRadius: 7, border: "1px solid #FCD34D", background: "#fff", color: "#92400E", fontWeight: 800, fontSize: 11, cursor: "pointer" }}>{takvimKart === r.simdi.id ? "▲ Kartı kapat" : "💬 Görüşme kartı ve sorular"}</button>
                   </>)}
                   {(kaydirma[dz.k] || 0) !== 0 && <span style={{ fontSize: 10.5, color: "#92400E" }}> · düzeltme {kaydirma[dz.k] > 0 ? "+" : ""}{kaydirma[dz.k]} hafta</span>}
                 </div>
                 <button data-metin-geri={dz.k} onClick={() => kaydir(dz.k, -1)} title="Bir hafta geride" style={{ padding: "4px 8px", borderRadius: 7, border: "1px solid #FCD34D", background: "#fff", fontWeight: 800, cursor: "pointer" }}>◀</button>
                 <button data-metin-ileri={dz.k} onClick={() => kaydir(dz.k, 1)} title="Bir hafta ileride" style={{ padding: "4px 8px", borderRadius: 7, border: "1px solid #FCD34D", background: "#fff", fontWeight: 800, cursor: "pointer" }}>▶</button>
-              </div>))}
+              </div>)].concat(r.simdi && takvimKart === r.simdi.id ? [<div key={dz.k + "-kart"} style={{ marginBottom: 6 }}>{kart(r.simdi, false)}</div>] : []))}
           </>)}
         </div>)}
       {dizin && (<>

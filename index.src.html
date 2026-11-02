@@ -4226,16 +4226,21 @@ function KitapSayfaGosterici({ kitap, kitapAd, sayfa, aralik, ofset = 0, onKapat
         setToplam(belge.numPages - ofset);
         const sf = await belge.getPage(Math.max(1, Math.min(belge.numPages, s + ofset)));
         const gen = Math.min(window.innerWidth - 24, 900) * olcek;
-        const v1 = sf.getViewport({ scale: 1 }); const vp = sf.getViewport({ scale: gen / v1.width * (window.devicePixelRatio > 1 ? 1.5 : 1) });
+        const v1 = sf.getViewport({ scale: 1 });
+        // Ekranın gerçek piksel yoğunluğunda çiz (telefonda 2–3 kat) → keskin görüntü; tuval sınırı için en fazla ~16 milyon piksel
+        const dpr = Math.min(Math.max(window.devicePixelRatio || 1, 1), 3);
+        let olc = gen / v1.width * dpr * 1.25;
+        const enFazla = 16000000; if (v1.width * v1.height * olc * olc > enFazla) olc = Math.sqrt(enFazla / (v1.width * v1.height));
+        const vp = sf.getViewport({ scale: olc });
         const c = kanvas.current; if (!c || iptal) return;
-        c.width = vp.width; c.height = vp.height; c.style.width = gen + "px";
+        c.width = Math.floor(vp.width); c.height = Math.floor(vp.height); c.style.width = gen + "px"; c.style.height = (gen * vp.height / vp.width) + "px";
         await sf.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
         if (!iptal) setDurum("hazir");
       } catch (e) { if (!iptal) setDurum("hata:" + ((e && e.message) || e)); }
     })();
     return () => { iptal = true; };
   }, [kitap, s, olcek]);
-  const yazdir = () => { try { const u = kanvas.current.toDataURL("image/jpeg", 0.92); ompYazdir(`<div style="text-align:center"><img src="${u}" style="max-width:100%"/><div style="font-size:10px;color:#666;margin-top:4px">${cdtEsc(kitapAd)} · s. ${s}</div></div>`, `Kitap_s${s}`); } catch (e) {} };
+  const yazdir = () => { try { const u = kanvas.current.toDataURL("image/jpeg", 0.95); ompYazdir(`<div style="text-align:center"><img src="${u}" style="max-width:100%"/><div style="font-size:10px;color:#666;margin-top:4px">${cdtEsc(kitapAd)} · s. ${s}</div></div>`, `Kitap_s${s}`); } catch (e) {} };
   const btn = { padding: "7px 11px", borderRadius: 8, border: "1px solid #CBD5E1", background: "#fff", fontWeight: 800, fontSize: 13, cursor: "pointer" };
   return (
     <div data-kitap-sayfa="1" style={{ position: "fixed", inset: 0, zIndex: 2147483000, background: "rgba(15,23,42,0.92)", display: "flex", flexDirection: "column" }}>
@@ -4243,8 +4248,8 @@ function KitapSayfaGosterici({ kitap, kitapAd, sayfa, aralik, ofset = 0, onKapat
         <div style={{ flex: 1, minWidth: 120, fontSize: 12.5, fontWeight: 800 }}>{kitapAd} · s. {s}{toplam ? ` / ${toplam}` : ""}{aralik ? <span style={{ fontWeight: 500, color: "#94A3B8" }}> (metin s. {aralik[0]}–{aralik[1]})</span> : null}</div>
         <button data-kitap-onceki="1" onClick={() => setS(x => Math.max(1, x - 1))} style={btn}>◀</button>
         <button data-kitap-sonraki="1" onClick={() => setS(x => toplam ? Math.min(toplam, x + 1) : x + 1)} style={btn}>▶</button>
-        <button onClick={() => setOlcek(x => Math.max(0.6, x - 0.25))} style={btn}>−</button>
-        <button onClick={() => setOlcek(x => Math.min(3, x + 0.25))} style={btn}>+</button>
+        <button onClick={() => setOlcek(x => Math.max(1, x - 0.5))} style={btn}>−</button>
+        <button data-kitap-buyut="1" onClick={() => setOlcek(x => Math.min(4, x + 0.5))} style={btn}>+</button>
         <button onClick={yazdir} disabled={durum !== "hazir"} style={btn}>🖨</button>
         <button data-kitap-kapat="1" onClick={onKapat} style={{ ...btn, background: "#FEE2E2" }}>✕</button>
       </div>

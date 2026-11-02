@@ -4122,6 +4122,269 @@ function OogMudahaleEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, oogM
   );
 }
 
+// ===== METİNLE ÇALIŞMA (Türkçe ders kitabı metinleri → danışmanlık) =====
+// metin-dizini.json: her metin için danışmanın kendi dilinde özet, danışmanlık temaları, kullanım önerisi,
+// görüşme soruları ve kitaptaki etkinliklerin sayfa listesi (kitap metni değil). Kitap PDF'leri yalnız
+// danışmanın cihazında (IndexedDB) saklanır; "sayfayı aç" o PDF'ten sayfayı çizer. Hiçbir şey dışarı gitmez.
+const PDR_METIN_DIZIN_SURUM = "1";
+let PDR_METIN_DIZIN = null, PDR_METIN_DIZIN_YUKLENIYOR = null;
+async function pdrMetinDizinYukle() {
+  if (PDR_METIN_DIZIN) return PDR_METIN_DIZIN;
+  if (!PDR_METIN_DIZIN_YUKLENIYOR) PDR_METIN_DIZIN_YUKLENIYOR = (async () => {
+    const adresler = [];
+    if (/^https?:|^file:/.test(location.protocol)) adresler.push(`metin-dizini.json?v=${PDR_METIN_DIZIN_SURUM}`);
+    adresler.push(`https://raw.githubusercontent.com/hakanhas1989-ops/pdr-program/main/metin-dizini.json?v=${PDR_METIN_DIZIN_SURUM}`);
+    for (const u of adresler) {
+      try { const res = await fetch(u); if (res.ok) { const j = await res.json(); if (j && Array.isArray(j.metinler)) { PDR_METIN_DIZIN = j; return j; } } } catch (e) {}
+    }
+    return null;
+  })();
+  const s = await PDR_METIN_DIZIN_YUKLENIYOR; if (!s) PDR_METIN_DIZIN_YUKLENIYOR = null; return s;
+}
+const METIN_ETIKET = {
+  kayip_yas: "Kayıp / yas", aile: "Aile", uyum_goc: "Uyum / göç", duygu: "Duygular", ozsaygi: "Özsaygı", azim_hedef: "Azim / hedef",
+  arkadaslik: "Arkadaşlık", zorbalik: "Zorbalık", ofke: "Öfke", empati: "Empati / iyilik", iletisim: "İletişim", kaygi: "Kaygı / korku",
+  sorumluluk: "Sorumluluk / haklar", dijital: "Dijital / ekran", saglik: "Sağlık / uyku", gelecek_meslek: "Gelecek / meslek",
+  deger_ahlak: "Değerler", okuma_merak: "Okuma / merak", aidiyet: "Aidiyet / kimlik", doga: "Doğa",
+};
+const METIN_ANAHTAR = {
+  kayip_yas: /vefat|olum|olen|kayip|kaybet|yas tut|cenaze|sehit/, aile: /aile|anne|baba|bosan|ayri yasa|kardes|ebeveyn|uvey/,
+  uyum_goc: /uyum|goc|tasin|yeni gel|nakil|yabanci|multeci|turkce bilm|okula alis/, ozsaygi: /ozguven|ozsaygi|degersiz|kendini begenm|utan|cekingen|beden alg/,
+  azim_hedef: /motivasyon|isteksiz|hedef|basarisiz|ders calis|ertele|vazgec|akademik|not dusuk|dusuk not/, arkadaslik: /arkadas|dislan|yalniz|akran|grup|kus/,
+  zorbalik: /zorba|alay|dalga gec|lakap|siber|tehdit|itil|dovul/, duygu: /uzgun|mutsuz|agla|duygu|keder|depres|icine kapan|kendini kotu/,
+  ofke: /ofke|kavga|sinir|vurdu|saldirgan|bagir|tartis|durtu/, empati: /empati|saygisiz|yardim/, iletisim: /iletisim|anlasama|hayir diye|kendini ifade/,
+  sorumluluk: /sorumluluk|kural|odev yap|disiplin|devamsiz|okula gelm/, dijital: /telefon|oyun|sosyal medya|ekran|internet|tablet|bagimli/,
+  saglik: /uyku|kahvalti|beslen|kilo|hastal|spor/, kaygi: /kaygi|korku|stres|sinav|panik|endise|lgs|kabus/,
+  gelecek_meslek: /meslek|kariyer|lise tercih|gelecek|yetenek|ilgi alan/, deger_ahlak: /yalan|hirsiz|durust|kopya/, okuma_merak: /okuma|kitap|okumuyor/,
+};
+const METIN_RISK_ETIKET = {
+  aile_ici_siddet: ["aile", "duygu"], ailede_bagimli_birey: ["aile"], anne_baba_bosanmis: ["aile"], anne_baba_ayri: ["aile"], yalnizca_anne: ["aile"], yalnizca_baba: ["aile"],
+  annesi_hayatta_degil: ["kayip_yas"], babasi_hayatta_degil: ["kayip_yas"], anne_baba_hayatta_degil: ["kayip_yas"], sehit_cocugu: ["kayip_yas"],
+  koruyucu_aile: ["aile", "uyum_goc"], sevgi_evleri: ["aile", "uyum_goc"], shcek: ["aile", "uyum_goc"], mevsimlik_isci: ["uyum_goc"],
+  surekli_devamsiz: ["sorumluluk", "azim_hedef"], akademik_basari_dusuk: ["azim_hedef"], riskli_akran: ["arkadaslik", "deger_ahlak"],
+  ogrenci_ruhsal_hastalik: ["duygu", "kaygi"], bir_iste_calisan: ["sorumluluk", "gelecek_meslek"], ozel_yetenekli: ["gelecek_meslek", "okuma_merak"], maddi_sikinti: ["azim_hedef"],
+};
+// Öğrencinin görüşme konuları ve risk haritası maddelerinden danışmanlık temaları
+function metinOgrenciTemalari(o, records, riskHaritasi, aktifYil) {
+  const puan = {}; const ekle = (t, p, neden) => { if (!puan[t]) puan[t] = { p: 0, neden: new Set() }; puan[t].p += p; puan[t].neden.add(neden); };
+  if (!o) return [];
+  (records || []).filter(r => pdrAyniOgrenci(r.studentName, r.className, o.name, o.className, r.numara, o.numara)).slice(-12).forEach(r => {
+    const s = ksSade(`${r.topic || ""} ${r.summary || ""} ${r.konu || ""}`);
+    Object.entries(METIN_ANAHTAR).forEach(([t, re]) => { if (re.test(s)) ekle(t, 2, "görüşme"); });
+  });
+  const rh = (riskHaritasi || []).find(r => (!r.yil || r.yil === aktifYil) && pdrAyniOgrenci(r.studentName, r.className, o.name, o.className, r.numara, o.numara));
+  if (rh && rh.maddeler) Object.keys(rh.maddeler).filter(k => rh.maddeler[k]).forEach(k => (METIN_RISK_ETIKET[k] || []).forEach(t => ekle(t, 1.5, "risk haritası")));
+  return Object.entries(puan).sort((a, b) => b[1].p - a[1].p).map(([t, v]) => ({ t, p: v.p, neden: [...v.neden] }));
+}
+function metinSinifNo(sinif) { const m = /(\d{1,2})/.exec(String(sinif || "")); return m ? +m[1] : null; }
+function metinOner(dizin, temalar, sinifNo, adet = 8) {
+  if (!dizin) return [];
+  const T = new Map(temalar.map(x => [x.t, x.p]));
+  return dizin.metinler.map(m => {
+    let p = m.pdr.reduce((t, x, i) => t + (T.get(x) || 0) * (i === 0 ? 1.4 : i === 1 ? 1.15 : 1), 0);
+    if (p && sinifNo && m.sinif === sinifNo) p += 1.2;
+    if (p && /dinleme/.test(m.tur)) p -= 0.6;
+    return { m, p };
+  }).filter(x => x.p > 0).sort((a, b) => b.p - a.p).slice(0, adet).map(x => x.m);
+}
+function metinAra(dizin, { q, etiket, sinif }) {
+  if (!dizin) return [];
+  const s = ksSade(String(q || "").trim()); const w = s.split(/\s+/).filter(x => x.length >= 3);
+  return dizin.metinler.filter(m => (!sinif || m.sinif === +sinif) && (!etiket || m.pdr.includes(etiket)) && (!w.length || w.every(x => ksSade(`${m.ad} ${m.tema} ${m.ozet} ${m.kullanim} ${m.pdr.map(t => METIN_ETIKET[t] || t).join(" ")}`).includes(x))));
+}
+// ── Kitap PDF'leri: yalnız bu cihazda (IndexedDB) ──
+function pdrKitapDb() {
+  return new Promise((ok, hata) => { try { const r = indexedDB.open("pdr-ders-kitap", 1); r.onupgradeneeded = () => { r.result.createObjectStore("kitap"); }; r.onsuccess = () => ok(r.result); r.onerror = () => hata(r.error); } catch (e) { hata(e); } });
+}
+async function pdrKitapKaydet(k, blob, sayfa) { const db = await pdrKitapDb(); await new Promise((ok, hata) => { const t = db.transaction("kitap", "readwrite"); t.objectStore("kitap").put({ blob, sayfa, ad: blob.name || "", boyut: blob.size, tarih: today() }, k); t.oncomplete = ok; t.onerror = () => hata(t.error); }); }
+async function pdrKitapOku(k) { try { const db = await pdrKitapDb(); return await new Promise(ok => { const t = db.transaction("kitap", "readonly").objectStore("kitap").get(k); t.onsuccess = () => ok(t.result || null); t.onerror = () => ok(null); }); } catch (e) { return null; } }
+async function pdrKitapSil(k) { try { const db = await pdrKitapDb(); await new Promise(ok => { const t = db.transaction("kitap", "readwrite"); t.objectStore("kitap").delete(k); t.oncomplete = ok; t.onerror = ok; }); } catch (e) {} }
+const PDR_KITAP_BELGE = {};
+// Büyük PDF'i belleğe almadan, gerektiği kadar parça okuyarak açar (pdf.js aralık aktarımı)
+async function pdrKitapBelge(k) {
+  if (PDR_KITAP_BELGE[k]) return PDR_KITAP_BELGE[k];
+  const kayit = await pdrKitapOku(k); if (!kayit || !kayit.blob) return null;
+  const lib = await pdrPdfJsYukle(); const blob = kayit.blob;
+  const ilk = new Uint8Array(await blob.slice(0, Math.min(blob.size, 262144)).arrayBuffer());
+  const tr = new lib.PDFDataRangeTransport(blob.size, ilk);
+  tr.requestDataRange = (bas, son) => { blob.slice(bas, son).arrayBuffer().then(b => tr.onDataRange(bas, new Uint8Array(b))); };
+  const belge = await lib.getDocument({ range: tr, length: blob.size, disableAutoFetch: true, disableStream: true, rangeChunkSize: 262144 }).promise;
+  PDR_KITAP_BELGE[k] = belge; return belge;
+}
+function KitapSayfaGosterici({ kitap, kitapAd, sayfa, aralik, onKapat, onKitapYukle }) {
+  const [s, setS] = useState(sayfa); const [olcek, setOlcek] = useState(1); const [durum, setDurum] = useState("yukleniyor"); const [toplam, setToplam] = useState(0);
+  const kanvas = useRef(null);
+  useEffect(() => { setS(sayfa); }, [sayfa]);
+  useEffect(() => {
+    let iptal = false;
+    (async () => {
+      setDurum("yukleniyor");
+      try {
+        const belge = await pdrKitapBelge(kitap);
+        if (iptal) return;
+        if (!belge) { setDurum("yok"); return; }
+        setToplam(belge.numPages);
+        const sf = await belge.getPage(Math.max(1, Math.min(belge.numPages, s)));
+        const gen = Math.min(window.innerWidth - 24, 900) * olcek;
+        const v1 = sf.getViewport({ scale: 1 }); const vp = sf.getViewport({ scale: gen / v1.width * (window.devicePixelRatio > 1 ? 1.5 : 1) });
+        const c = kanvas.current; if (!c || iptal) return;
+        c.width = vp.width; c.height = vp.height; c.style.width = gen + "px";
+        await sf.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
+        if (!iptal) setDurum("hazir");
+      } catch (e) { if (!iptal) setDurum("hata:" + ((e && e.message) || e)); }
+    })();
+    return () => { iptal = true; };
+  }, [kitap, s, olcek]);
+  const yazdir = () => { try { const u = kanvas.current.toDataURL("image/jpeg", 0.92); ompYazdir(`<div style="text-align:center"><img src="${u}" style="max-width:100%"/><div style="font-size:10px;color:#666;margin-top:4px">${cdtEsc(kitapAd)} · s. ${s}</div></div>`, `Kitap_s${s}`); } catch (e) {} };
+  const btn = { padding: "7px 11px", borderRadius: 8, border: "1px solid #CBD5E1", background: "#fff", fontWeight: 800, fontSize: 13, cursor: "pointer" };
+  return (
+    <div data-kitap-sayfa="1" style={{ position: "fixed", inset: 0, zIndex: 2147483000, background: "rgba(15,23,42,0.92)", display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px", background: "#0F172A", color: "#fff", flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 120, fontSize: 12.5, fontWeight: 800 }}>{kitapAd} · s. {s}{toplam ? ` / ${toplam}` : ""}{aralik ? <span style={{ fontWeight: 500, color: "#94A3B8" }}> (metin s. {aralik[0]}–{aralik[1]})</span> : null}</div>
+        <button data-kitap-onceki="1" onClick={() => setS(x => Math.max(1, x - 1))} style={btn}>◀</button>
+        <button data-kitap-sonraki="1" onClick={() => setS(x => toplam ? Math.min(toplam, x + 1) : x + 1)} style={btn}>▶</button>
+        <button onClick={() => setOlcek(x => Math.max(0.6, x - 0.25))} style={btn}>−</button>
+        <button onClick={() => setOlcek(x => Math.min(3, x + 0.25))} style={btn}>+</button>
+        <button onClick={yazdir} disabled={durum !== "hazir"} style={btn}>🖨</button>
+        <button data-kitap-kapat="1" onClick={onKapat} style={{ ...btn, background: "#FEE2E2" }}>✕</button>
+      </div>
+      <div style={{ flex: 1, overflow: "auto", padding: 12, textAlign: "center" }}>
+        {durum === "yukleniyor" && <div style={{ color: "#CBD5E1", fontSize: 13, marginTop: 30 }}>Sayfa hazırlanıyor…</div>}
+        {durum === "yok" && <div style={{ color: "#fff", fontSize: 13.5, marginTop: 30, lineHeight: 1.6 }}>Bu kitabın PDF'i bu cihazda yüklü değil.<br /><label style={{ display: "inline-block", marginTop: 10, padding: "9px 14px", background: "#fff", color: "#0F172A", borderRadius: 9, fontWeight: 800, cursor: "pointer" }}>📂 {kitapAd} PDF'ini seç<input type="file" accept="application/pdf,.pdf" onChange={e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) onKitapYukle(kitap, f).then(() => { delete PDR_KITAP_BELGE[kitap]; setS(x => x); setOlcek(x => x + 0.0001); }); }} style={{ display: "none" }} /></label></div>}
+        {durum.startsWith("hata") && <div style={{ color: "#FCA5A5", fontSize: 13, marginTop: 30 }}>Sayfa açılamadı ({durum.slice(5)}).</div>}
+        <canvas ref={kanvas} style={{ display: durum === "hazir" ? "inline-block" : "none", background: "#fff", boxShadow: "0 4px 18px rgba(0,0,0,0.4)" }} />
+      </div>
+    </div>
+  );
+}
+function metinKartHtml(m, kitapAd, ogr) {
+  const e = cdtEsc;
+  return `<div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:12.5px;line-height:1.55">
+    <div style="border-bottom:2px solid #0E7490;padding-bottom:6px;margin-bottom:8px"><div style="font-size:10px;color:#0E7490;font-weight:700;letter-spacing:1px">PDR SERVİSİ · METİNLE ÇALIŞMA KARTI</div>
+    <div style="font-size:18px;font-weight:800">${e(m.ad)}</div><div style="font-size:11px;color:#555">${e(kitapAd)} · ${e(m.tema)} · s. ${m.s}–${m.e} · ${e(m.tur)}${ogr ? ` · Öğrenci: <b>${e(ogr)}</b>` : ""}</div></div>
+    <div style="margin:4px 0 8px">${m.pdr.map(t => `<span style="display:inline-block;background:#E0F2FE;color:#075985;border-radius:10px;padding:1px 8px;margin:0 4px 3px 0;font-size:10.5px;font-weight:700">${e(METIN_ETIKET[t] || t)}</span>`).join("")}</div>
+    <div style="font-weight:800;color:#0E7490;margin-top:6px">Metin ne anlatıyor?</div><div>${e(m.ozet)}</div>
+    <div style="font-weight:800;color:#0E7490;margin-top:8px">Kimlerle, nasıl kullanılır?</div><div>${e(m.kullanim)}</div>
+    <div style="font-weight:800;color:#0E7490;margin-top:8px">Görüşme soruları</div><ol style="margin:3px 0 0 18px;padding:0">${m.sorular.map(s => `<li style="margin-bottom:4px">${e(s)}</li>`).join("")}</ol>
+    ${m.onerilen.length ? `<div style="font-weight:800;color:#0E7490;margin-top:8px">Kitaptan seçilen etkinlik</div>${m.onerilen.map(a => `<div style="margin:3px 0 6px"><b>s. ${a.s}:</b> ${e(a.ad)}<br><span style="color:#166534">→ Uyarlama: ${e(a.uyarlama)}</span></div>`).join("")}` : ""}
+    <div style="margin-top:12px;border-top:1px dashed #999;padding-top:6px;font-size:11px;color:#444">Görüşme notu: ......................................................................................................................................<br><br>......................................................................................................................................................................</div>
+  </div>`;
+}
+function MetinCalismaEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, records, riskHaritasi, aktifYil }) {
+  const [dizin, setDizin] = useState(PDR_METIN_DIZIN); const [hata, setHata] = useState("");
+  const [seciliAd, setSeciliAd] = useState(aktifOgrenci?.name || "");
+  const [q, setQ] = useState(""); const [etiket, setEtiket] = useState(""); const [sinif, setSinif] = useState("");
+  const [acik, setAcik] = useState(null); const [gosterici, setGosterici] = useState(null); const [kitapDurum, setKitapDurum] = useState({}); const [mesaj, setMesaj] = useState(""); const [kitaplarAcik, setKitaplarAcik] = useState(false);
+  useEffect(() => { if (!dizin) pdrMetinDizinYukle().then(j => { if (j) setDizin(j); else setHata("Metin dizini yüklenemedi; internet bağlantısını kontrol edip tekrar deneyin."); }); }, []);
+  useEffect(() => { setSeciliAd(aktifOgrenci?.name || ""); }, [aktifOgrenci?.name]);
+  const kitapDurumYenile = async () => { if (!dizin) return; const d = {}; for (const k of Object.keys(dizin.kitaplar)) { const r = await pdrKitapOku(k); d[k] = r ? { boyut: r.boyut, sayfa: r.sayfa, tarih: r.tarih } : null; } setKitapDurum(d); };
+  useEffect(() => { kitapDurumYenile(); }, [dizin]);
+  const ogr = pdrSeciliOgr(kayitliListesi, seciliAd, aktifOgrenci);
+  const temalar = useMemo(() => metinOgrenciTemalari(ogr, records, riskHaritasi, aktifYil), [ogr && ogr.name, records, riskHaritasi, aktifYil]);
+  const sinifNo = ogr ? metinSinifNo(ogr.className) : null;
+  const oneriler = useMemo(() => metinOner(dizin, temalar, sinifNo, 6), [dizin, temalar, sinifNo]);
+  const liste = useMemo(() => metinAra(dizin, { q, etiket, sinif }), [dizin, q, etiket, sinif]);
+  const kitapAd = k => (dizin && dizin.kitaplar[k] && dizin.kitaplar[k].ad) || k;
+  async function kitapYukle(k, f) {
+    setMesaj(`${kitapAd(k)} yükleniyor…`);
+    try {
+      let sayfa = null; try { delete PDR_KITAP_BELGE[k]; await pdrKitapKaydet(k, f, null); const b = await pdrKitapBelge(k); sayfa = b ? b.numPages : null; } catch (e) {}
+      await pdrKitapKaydet(k, f, sayfa);
+      const bek = dizin.kitaplar[k].sayfa;
+      setMesaj(sayfa && bek && sayfa !== bek ? `⚠ ${kitapAd(k)} yüklendi ama sayfa sayısı farklı (${sayfa}, beklenen ${bek}); sayfa numaraları kaymış olabilir.` : `✓ ${kitapAd(k)} bu cihaza kaydedildi${sayfa ? ` (${sayfa} sayfa)` : ""}. İnternete gönderilmez.`);
+    } catch (e) { setMesaj("⚠ Kaydedilemedi: " + ((e && e.message) || e) + " (cihazda yer kalmamış olabilir)."); }
+    kitapDurumYenile();
+  }
+  const sayfaAc = (m, s) => setGosterici({ kitap: m.k, sayfa: s, aralik: [m.s, m.e], kitapAd: kitapAd(m.k) });
+  const chip = (aktif) => ({ padding: "4px 9px", borderRadius: 14, border: `1px solid ${aktif ? ACCENT : BORDER}`, background: aktif ? ACCENT_LIGHT : "#fff", color: aktif ? ACCENT : TEXT, fontSize: 11.5, fontWeight: 700, cursor: "pointer" });
+  const kart = (m, oneri) => {
+    const ac = acik === m.id;
+    return (
+      <div key={(oneri ? "o-" : "") + m.id} data-metin={m.id} style={{ border: `1px solid ${BORDER}`, borderRadius: 10, marginBottom: 7, background: oneri ? "#F0FDFA" : "#fff" }}>
+        <div onClick={() => setAcik(ac ? null : m.id)} style={{ padding: "8px 10px", cursor: "pointer" }}>
+          <div style={{ display: "flex", gap: 6, alignItems: "baseline" }}><div style={{ flex: 1, fontSize: 13, fontWeight: 800, color: TEXT }}>{m.ad}</div><span style={{ fontSize: 11, color: MUTED }}>{ac ? "▲" : "▼"}</span></div>
+          <div style={{ fontSize: 10.5, color: MUTED }}>{kitapAd(m.k)} · s. {m.s}–{m.e} · {m.tur}</div>
+          <div style={{ marginTop: 3 }}>{m.pdr.map(t => <span key={t} style={{ display: "inline-block", fontSize: 10, fontWeight: 700, color: temalar.some(x => x.t === t) ? "#fff" : "#075985", background: temalar.some(x => x.t === t) ? "#0E7490" : "#E0F2FE", borderRadius: 9, padding: "1px 7px", margin: "2px 3px 0 0" }}>{METIN_ETIKET[t] || t}</span>)}</div>
+          {!ac && <div style={{ fontSize: 11.5, color: TEXT, marginTop: 4, lineHeight: 1.45 }}>{m.ozet}</div>}
+        </div>
+        {ac && (<div style={{ padding: "0 10px 10px", fontSize: 12, lineHeight: 1.55, color: TEXT }}>
+          <div><b>Metin ne anlatıyor?</b> {m.ozet}</div>
+          <div style={{ marginTop: 5 }}><b>Kimlerle, nasıl?</b> {m.kullanim}</div>
+          <div style={{ marginTop: 5, fontWeight: 800 }}>Görüşme soruları</div>
+          <ol style={{ margin: "2px 0 0 18px", padding: 0 }}>{m.sorular.map((s, i) => <li key={i} style={{ marginBottom: 2 }}>{s}</li>)}</ol>
+          {m.onerilen.length > 0 && <div style={{ marginTop: 6 }}><div style={{ fontWeight: 800 }}>Kitaptan seçilen etkinlik</div>{m.onerilen.map((a, i) => <div key={i} style={{ background: "#F0FDF4", border: "1px solid #BBF7D0", borderRadius: 8, padding: "6px 8px", marginTop: 4 }}><div><b>s. {a.s}:</b> {a.ad}</div><div style={{ color: "#166534" }}>→ {a.uyarlama}</div><button data-metin-etkinlik={a.s} onClick={() => sayfaAc(m, a.s)} style={{ marginTop: 4, padding: "4px 9px", borderRadius: 7, border: "1px solid #16A34A", background: "#fff", color: "#166534", fontWeight: 800, fontSize: 11.5, cursor: "pointer" }}>📄 s. {a.s} sayfasını aç</button></div>)}</div>}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+            <button data-metin-sayfa={m.id} onClick={() => sayfaAc(m, m.s)} style={{ padding: "7px 11px", borderRadius: 8, border: "none", background: ACCENT, color: "#fff", fontWeight: 800, fontSize: 12, cursor: "pointer" }}>📄 Kitap sayfasını aç (s. {m.s})</button>
+            <button data-metin-kart={m.id} onClick={() => ompYazdir(metinKartHtml(m, kitapAd(m.k), ogr ? ogr.name : ""), `Metin_karti_${m.ad.replace(/[^\wçğıöşüÇĞİÖŞÜ]+/g, "_")}`)} style={{ padding: "7px 11px", borderRadius: 8, border: `1px solid ${BORDER}`, background: "#fff", fontWeight: 800, fontSize: 12, cursor: "pointer", color: TEXT }}>🖨 Görüşme kartı</button>
+          </div>
+          {m.akt.length > 0 && <details style={{ marginTop: 8 }}><summary style={{ cursor: "pointer", fontWeight: 800, fontSize: 11.5, color: MUTED }}>Kitaptaki tüm etkinlikler ({m.akt.length})</summary>
+            {m.akt.map((a, i) => <div key={i} onClick={() => sayfaAc(m, a.s)} style={{ fontSize: 11, padding: "4px 2px", borderBottom: `1px dashed ${BORDER}`, cursor: "pointer" }}><b style={{ color: ACCENT }}>s. {a.s} · {a.no}. etkinlik</b> — {a.y} <span style={{ color: ACCENT }}>📄</span></div>)}
+          </details>}
+        </div>)}
+      </div>
+    );
+  };
+  return (
+    <div data-metin-ekrani="1" style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 12 }}>
+      <div style={{ fontSize: 15, fontWeight: 900, color: TEXT }}>📖 Metinle Çalışma</div>
+      <div style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.5, marginTop: 2 }}>Türkçe ders kitaplarındaki metinler danışmanlık temalarına göre dizinlendi: her metnin özeti, kimlerle nasıl kullanılacağı, görüşme soruları ve kitaptaki etkinlikler. Kitabın PDF'ini bu cihaza bir kez yüklerseniz sayfayı doğrudan açabilirsiniz.</div>
+      {hata && <div style={{ color: "#B91C1C", fontSize: 12, marginTop: 6 }}>{hata}</div>}
+      {!dizin && !hata && <div style={{ color: MUTED, fontSize: 12, marginTop: 8 }}>Dizin yükleniyor…</div>}
+      {dizin && (<>
+        <div style={{ marginTop: 10, background: "#F8FAFC", border: `1px solid ${BORDER}`, borderRadius: 10, padding: 9 }}>
+          <label style={{ fontSize: 11, fontWeight: 800, color: MUTED }}>Öğrenci (önerileri onun görüşme konularına ve risk haritasına göre getirir)</label>
+          <select data-metin-ogrenci="1" value={seciliAd} onChange={e => { setSeciliAd(e.target.value); const o = (kayitliListesi || []).find(x => x.name === e.target.value); if (o && setAktifOgrenci) setAktifOgrenci(o); }} style={{ width: "100%", padding: "7px 8px", borderRadius: 8, border: `1px solid ${BORDER}`, marginTop: 3, fontSize: 13 }}>
+            <option value="">— Öğrenci seçmeden göz at —</option>
+            {(kayitliListesi || []).map(o => <option key={o.name + o.className} value={o.name}>{o.name}{o.className ? " · " + o.className : ""}</option>)}
+          </select>
+          {ogr && (<div style={{ marginTop: 7 }}>
+            {temalar.length ? <div style={{ fontSize: 11.5, color: TEXT }}>Öne çıkan temalar: {temalar.slice(0, 5).map(x => <span key={x.t} style={{ display: "inline-block", fontSize: 10.5, fontWeight: 800, color: "#fff", background: "#0E7490", borderRadius: 9, padding: "1px 7px", margin: "2px 3px 0 0" }} title={x.neden.join(", ")}>{METIN_ETIKET[x.t] || x.t}</span>)}</div>
+              : <div style={{ fontSize: 11.5, color: MUTED }}>Bu öğrenci için görüşme konusu ya da risk maddesinden tema çıkmadı; aşağıdan temaya göre seçebilirsiniz.</div>}
+            {sinifNo && sinifNo < 7 && <div style={{ fontSize: 11, color: "#B45309", marginTop: 3 }}>Şimdilik 7 ve 8. sınıf kitapları var; 5–6. sınıf kitapları eklenince öneriler sınıfına göre gelecek.</div>}
+            {oneriler.length > 0 && <div data-metin-oneriler="1" style={{ marginTop: 6 }}><div style={{ fontSize: 12, fontWeight: 900, color: "#0E7490", marginBottom: 4 }}>⭐ {ogr.name.split(" ")[0]} için önerilen metinler</div>{oneriler.map(m => kart(m, true))}</div>}
+          </div>)}
+        </div>
+        <div style={{ marginTop: 10 }}>
+          <input data-metin-ara="1" value={q} onChange={e => setQ(e.target.value)} placeholder="Ara: metin adı, konu (ör. yalnızlık, öfke, taşınma)…" style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 9, border: `1px solid ${BORDER}`, fontSize: 13 }} />
+          <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 6 }}>
+            {[["", "Tüm sınıflar"], ["7", "7. sınıf"], ["8", "8. sınıf"]].map(([v, l]) => <button key={v} onClick={() => setSinif(v)} style={chip(sinif === v)}>{l}</button>)}
+          </div>
+          <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 5 }}>
+            <button onClick={() => setEtiket("")} style={chip(!etiket)}>Tüm temalar</button>
+            {Object.entries(METIN_ETIKET).filter(([t]) => dizin.metinler.some(m => m.pdr.includes(t))).map(([t, l]) => <button key={t} data-metin-etiket={t} onClick={() => setEtiket(etiket === t ? "" : t)} style={chip(etiket === t)}>{l}</button>)}
+          </div>
+          <div style={{ fontSize: 11, color: MUTED, margin: "7px 0 5px" }}>{liste.length} metin</div>
+          {liste.map(m => kart(m, false))}
+        </div>
+        <div style={{ marginTop: 10, border: `1px solid ${BORDER}`, borderRadius: 10, padding: 9 }}>
+          <div onClick={() => setKitaplarAcik(v => !v)} style={{ fontSize: 12.5, fontWeight: 900, color: TEXT, cursor: "pointer" }}>📚 Bu cihazdaki kitaplar ({Object.values(kitapDurum).filter(Boolean).length}/{Object.keys(dizin.kitaplar).length}) {kitaplarAcik ? "▲" : "▼"}</div>
+          {kitaplarAcik && <div style={{ marginTop: 6 }}>
+            <div style={{ fontSize: 11, color: MUTED, marginBottom: 6, lineHeight: 1.5 }}>PDF'ler yalnız bu cihazda saklanır; buluta ya da internete gönderilmez. Başka cihazda kullanmak için orada da bir kez yükleyin.</div>
+            {Object.entries(dizin.kitaplar).map(([k, b]) => { const d = kitapDurum[k]; return (
+              <div key={k} data-kitap={k} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 0", borderTop: `1px solid ${BORDER}` }}>
+                <div style={{ flex: 1, fontSize: 12 }}><b>{b.ad}</b><div style={{ fontSize: 10.5, color: d ? "#15803D" : MUTED }}>{d ? `✓ yüklü · ${Math.round(d.boyut / 1048576)} MB${d.sayfa ? ` · ${d.sayfa} sayfa` : ""}` : "yüklü değil"}</div></div>
+                <label style={{ padding: "5px 9px", borderRadius: 8, border: `1px solid ${ACCENT}`, color: ACCENT, fontWeight: 800, fontSize: 11.5, cursor: "pointer" }}>{d ? "Değiştir" : "📂 PDF seç"}<input data-kitap-dosya={k} type="file" accept="application/pdf,.pdf" onChange={e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) kitapYukle(k, f); }} style={{ display: "none" }} /></label>
+                {d && <button onClick={async () => { await pdrKitapSil(k); delete PDR_KITAP_BELGE[k]; kitapDurumYenile(); }} style={{ padding: "5px 8px", borderRadius: 8, border: `1px solid ${BORDER}`, background: "#fff", fontSize: 11.5, cursor: "pointer" }}>Kaldır</button>}
+              </div>); })}
+            {mesaj && <div style={{ fontSize: 11.5, marginTop: 6, color: mesaj.startsWith("⚠") ? "#B45309" : "#15803D" }}>{mesaj}</div>}
+          </div>}
+        </div>
+      </>)}
+      {gosterici && <KitapSayfaGosterici {...gosterici} onKapat={() => setGosterici(null)} onKitapYukle={async (k, f) => { await kitapYukle(k, f); }} />}
+    </div>
+  );
+}
+// Asistan aracı: konu ya da öğrenci için metin önerir
+async function ksAsistanMetinOner(g, ctx, o) {
+  const d = await pdrMetinDizinYukle(); if (!d) return "Metin dizini yüklenemedi (internet bağlantısı gerekli).";
+  let liste = [], baslik = "";
+  if (g && g.sorgu) { liste = metinAra(d, { q: g.sorgu, sinif: g.sinif }); if (!liste.length) { const s = ksSade(g.sorgu); const tl = Object.entries(METIN_ANAHTAR).filter(([, re]) => re.test(s)).map(([t]) => ({ t, p: 1 })); liste = metinOner(d, tl, g.sinif ? +g.sinif : null, 6); } baslik = `"${g.sorgu}" için`; }
+  if (!liste.length && o) { const t = metinOgrenciTemalari(o, ctx.records, ctx.riskHaritasi, ctx.aktifYil); liste = metinOner(d, t, metinSinifNo(o.className), 5); baslik = `bu öğrencinin temalarına (${t.slice(0, 4).map(x => METIN_ETIKET[x.t]).join(", ") || "tema yok"}) göre`; }
+  if (!liste.length) return "Uygun metin bulunamadı. Konuyu farklı kelimelerle (ör. yalnızlık, kayıp, öfke, taşınma, sosyal medya) deneyebilirsin.";
+  return `TÜRKÇE DERS KİTABI METİNLERİ — ${baslik} (Metinle Çalışma ekranında kitap sayfası açılabilir):\n` + liste.slice(0, Number(g && g.adet) || 5).map(m => `• "${m.ad}" — ${d.kitaplar[m.k].ad}, s. ${m.s}–${m.e} (${m.tur}; temalar: ${m.pdr.map(t => METIN_ETIKET[t]).join(", ")})\n  Özet: ${m.ozet}\n  Kullanım: ${m.kullanim}\n  Sorular: ${m.sorular.join(" | ")}${m.onerilen.length ? `\n  Etkinlik: s. ${m.onerilen[0].s} — ${m.onerilen[0].ad} → ${m.onerilen[0].uyarlama}` : ""}`).join("\n");
+}
+// ===== METİNLE ÇALIŞMA BİTİŞ =====
+
 function MudahaleKutuphanesiEkrani({ kayitliListesi, records, aktifOgrenci, setAktifOgrenci, mudahaleOnerileri, setMudahaleOnerileri }) {
   const [seciliAd, setSeciliAd] = useState(aktifOgrenci?.name || "");
   const [ogrenciArama, setOgrenciArama] = useState("");
@@ -15372,6 +15635,11 @@ const KS_ASISTAN_ARACLAR = {
       return `${ekNot ? `Görüşmeye ek yapıldı (${r.date}${ekHedef.length > 1 ? `; grup görüşmesinin ${ekHedef.length} kaydına` : ""}); eski not aynen duruyor.` : `Görüşme düzeltildi (${r.date}${yt ? " → " + yt : ""}).`}${tasimaNotu}${r.grupKatilimcilari && r.grupKatilimcilari.length && !(ekNot && ekHedef.length > 1) ? ` Bu bir grup görüşmesi; diğer öğrencilerin (${r.grupKatilimcilari.join(", ")}) kayıtları ayrı, gerekirse onları da düzeltmeyi öner.` : ""} Bu nota dayanan risk/müdahale kaydı varsa yeniden değerlendirme gerekebilir.`;
     },
   },
+  metin_oner: {
+    aciklama: "Türkçe ders kitaplarındaki (7–8. sınıf) metinlerden danışmanlıkta kullanılacak olanları önerir: biblioterapi, görüşmede birlikte okuma, duygu/konu üzerine konuşma açmak için. sorgu: konu ya da ihtiyaç (ör. kayıp, yalnızlık, öfke, taşınma, sosyal medya, özgüven); ogrenci verilirse onun görüşme konularına ve risk haritasına göre önerir. Her metin için kitap ve sayfa, özet, kullanım, görüşme soruları ve kitaptan uyarlanmış etkinlik döner.",
+    girdi: '{"sorgu": "isteğe bağlı konu", "ogrenci": "isteğe bağlı", "sinif": "7 ya da 8 (isteğe bağlı)", "adet": 5}', yontem: "hepsi",
+    calistir: (g, ctx, o) => ksAsistanMetinOner(g, ctx, o),
+  },
   oog_programi: {
     aciklama: "Öğrencinin ÖÖG Müdahale Programı planını getirir (🎯 Müdahale → 🧩 ÖÖG Programı): seviye grubu, alan, uygulanan oturumlar, ünite ölçümleri ve geçiş durumu, DDK (okuma akıcılığı) ilerlemesi ve karar kuralı, sıradaki oturum, ev çalışması, MEB destek eğitim programı hedef karşılıkları. 'ÖÖG planı ne durumda', 'okuma hızı ilerliyor mu', 'sıradaki oturum ne', 'öğrenme güçlüğü çalışması' sorularında kullan.",
     girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true, yontem: "hepsi",
@@ -16915,6 +17183,7 @@ const KS_ARAC_GRUPLARI = {
   program: { re: /program|nerede|nasil yap|sekme|ekran|oturum|etkinlik|ozellik|ne yapabil/, araclar: ["program_rehberi", "program_ara", "program_oturumu"] },
   bilgi: { re: /nedir|ne demek|acikla|kuram|bilgi|kitap|kaynak|arastirma|teknik|yontem|ornek/, araclar: ["kutuphane_ara", "kutuphane_oku", "alan_bilgisi", "sinav_rehberi"] },
   deneyim: { re: /kendini|ogrendi|ders kaydet|dersler|deneyim|hata yap/, araclar: ["deneyim_gunlugu", "ders_kaydet"] },
+  metin: { re: /metin|hikaye|oyku|siir|ders kitab|turkce kitab|biblioterapi|okuma parca|birlikte oku|okutabil/, araclar: ["metin_oner"] },
   oog: { re: /oog|ogrenme guclu|disleksi|diskalkuli|okuma hiz|akicilik|ddk|oturum|unite/, araclar: ["oog_programi", "test_sonucu"] },
   isdefteri: { re: /devam et|devam edelim|kaldig|kaldıg|dunku|yarim kal|tum(u|unu)?\b|hepsi|butun|sinifin|listedeki|her ogrenci|toplu|teker teker|tek tek|is defter/, araclar: ["is_defteri", "is_defteri_yaz"] },
 };
@@ -17021,6 +17290,7 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - Danışman bir yanıtı ya da bu sohbeti öğrencinin dosyasına kaydetmek/göndermek isterse asistan_notu_kaydet kullan (kapsam: son ya da hepsi). Kaydedilecek metni yeniden yazma; program yanıtları aynen kaydeder.
 - Danışmanın kendi Kütüphanesi (yüklediği kitap, makale, yönetmelik, genelge — tam metin): "kütüphanede/yüklediğim kaynakta … ne diyor", mevzuat, süre/madde sorusu ya da kuramsal bir soru geldiğinde önce kutuphane_ara, ayrıntı için kutuphane_oku kullan; yanıtta kaynağın adını ve bölümünü belirt, kaynakta olmayanı kaynaktaymış gibi söyleme.
 - Müdahale Programları kütüphanesindeki kitaplar (8 kitap, tam metin) senin başvuru kaynağın: bir konu/beceri için etkinlik, oturum ya da program önerirken, grup ya da bireysel çalışma planlarken veya danışman bir kitap/oturum sorduğunda önce program_ara, ayrıntı için program_oturumu kullan. Önerinde kitabın adını, oturum numarasını ve PDF sayfasını belirt; kitapta olmayan bir şeyi kitaptaymış gibi söyleme.
+- Görüşmede birlikte okunacak bir metin, öykü ya da şiir istendiğinde ya da bir duyguyu/konuyu açmak için kaynak arandığında metin_oner kullan (Türkçe ders kitaplarındaki metinler, danışmanlık temalarına göre dizinli). Önerinde kitabın adını ve sayfasını belirt; danışman sayfayı 📖 Metinle Çalışma ekranından açabilir.
 - LGS'ye hazırlık, "hangi konuya öncelik vermeli", "LGS'de en çok hangi konudan soru çıkıyor", "kaç net artırabilir" gibi sorularda lgs_konu_onceligi kullan; kazanılabilir neti "en fazla/yaklaşık" diye temkinli söyle.
 - Uyum izleme, bireyi tanıma, BDT çarpıtması ve sevk kaydı için uyum_kaydet, bireyi_tanima_ekle, bdt_ekle, sevk_kaydet, sevk_sonuc araçları vardır; hepsi danışmanın onayından geçer.
 - Bir öğrenci için risk değerlendirmesi, müdahale planı, seans hazırlığı, süpervizyon ya da veli yazısı istendiğinde ÖNCE ogrenci_dosyasi aracını çağır. Görüşme geçmişini, akademik gidişi (bu yılın ve geçmiş dönemin denemeleri, yıl sonu not ortalamaları), BDT çarpıtmalarını, bireyi tanıma bilgilerini, test sonuçlarını, devamsızlığı ve önceki risk/müdahale kayıtlarını BİRLİKTE değerlendir. Önerinin hangi verilere dayandığını kısaca belirt; olmayan veri için "… kaydı yok" de, uydurma.
@@ -17545,7 +17815,7 @@ const KS_YEREL_EKRAN = [
   ["mudahale", /mudahale\w*/], ["risk", /\brisk\b/], ["hatirlatici", /hatirlatici\w*|hatirlatma ekran\w*/],
   ["takvim", /takvim\w*/], ["deneme", /\bdeneme (ekran|sayfa|sekme|sonuclari)\w*/], ["testler", /\btest\w*/], ["devamsizlik", /devamsizlik\w*/],
   ["sosyometri", /sosyometri\w*/], ["kriz", /\bkriz\w*/], ["uyum_izleme", /uyum izleme\w*/], ["istatistik", /istatistik\w*/], ["belgeler", /\bbelge\w*/],
-  ["sinif_profili", /sinif profil\w*/], ["prof_danisma", /prof\.? hakan|supervizyon ekran\w*/], ["sema", /\bsema\b|semayi/],
+  ["metin_calisma", /metinle calisma\w*|ders kitab\w* metin\w*/], ["sinif_profili", /sinif profil\w*/], ["prof_danisma", /prof\.? hakan|supervizyon ekran\w*/], ["sema", /\bsema\b|semayi/],
 ];
 const KS_YEREL_FIIL = /\b(ac|acar misin|acsana|goster|gostersene|getir|git|gec|listele|neler|kimler)\w*/;
 const KS_YEREL_YASAK = /(olustur|hazirla|\byaz\b|yazar|ekle|kaydet|analiz|degerlendir|duzelt|\bsil\b|neden|nasil|\boner|plan yap|rapor|ozetle|karsilastir|hesapla|\bmi\b|\bmu\b|\?)/;
@@ -39740,6 +40010,7 @@ function pdrAsistanDurdur() {
 function pdrAsistanBildir() { const S = PDR_ASISTAN_SOHBET; if (S.dinle) S.dinle(x => x + 1); if (S.dinleYuzen) S.dinleYuzen(x => x + 1); }
 
 const PDR_ASISTAN_ARAC_AD = {
+  metin_oner: "Ders kitabından metin önerisi",
   ogrenci_ara: "Öğrenci arandı", ogrenci_ozeti: "Öğrenci özeti", gorusme_notlari: "Görüşme notları okundu",
   risk_analizi: "Risk analizi (kapalı sistem)", seans_hazirlik: "Seans hazırlığı (kapalı sistem)", mudahale_plani: "Müdahale planı önerisi (kapalı sistem)",
   deneme_analizi: "Deneme analizi (kapalı sistem)", profil_analizi: "Profil analizi (kapalı sistem)", supervizyon: "Süpervizyon raporu (kapalı sistem)",
@@ -51304,6 +51575,7 @@ const SEMA_DALLARI = [
       { tab: "kutuphane", label: "📚 Kütüphane" },
       { tab: "mudahale_kutuphane", label: "📁 Müdahale Programları" },
       { tab: "oog_mudahale", label: "🧩 ÖÖG Müdahale Programı" },
+      { tab: "metin_calisma", label: "📖 Metinle Çalışma" },
       { tab: "prof_danisma", label: "🎓 Prof. Hakan" },
       { tab: "asistan", label: "🤖 Asistan" },
     ] },
@@ -51346,6 +51618,7 @@ const SEMA_ICERIK = {
   uyum_izleme: [["Uyum taraması (6 gösterge, 37 madde)"], ["Görüşme notundan otomatik öneri"]],
   kutuphane: [["Yönetmelik / makale yükle — AI referansı"]],
   mudahale_kutuphane: [["Hazır müdahale programları"]],
+  metin_calisma: [["Ders kitabı metinleri danışmanlık temalarına göre", true], ["Öğrenciye göre metin önerisi"], ["Kitap sayfasını cihazdan açma"]],
   oog_mudahale: [["ÖÖG müdahale programı (4 seviye, okuma-yazma + matematik)", true], ["Oturum kâğıdı ve veli ev kartı PDF"], ["DDK ilerleme grafiği ve karar kuralı"]],
   prof_danisma: [["Süpervizyon soru-cevap"]],
   asistan: [["Yazarak iş ver: özet, liste, hazırlık, rapor", true], ["Kayıt eklemeden önce onay ister"], ["Claude / ücretsiz model seçimi"]],
@@ -52668,8 +52941,8 @@ const TABS_TUMU = [
     { key: "ogrenciler", label: "👥 Öğrenciler" },
     { key: "yeni", label: "📝 Görüşme Notu" },
     { key: "profil_merkez", label: "📋 Profil" },
-    { key: "mudahale", label: "🎯 Müdahale", grup: ["mudahale","mudahale_kutuphane","oog_mudahale"],
-      grupEtiketler: { mudahale: "🎯 Müdahale Planı", mudahale_kutuphane: "📁 Müdahale Programları", oog_mudahale: "🧩 ÖÖG Programı" } },
+    { key: "mudahale", label: "🎯 Müdahale", grup: ["mudahale","mudahale_kutuphane","oog_mudahale","metin_calisma"],
+      grupEtiketler: { mudahale: "🎯 Müdahale Planı", mudahale_kutuphane: "📁 Müdahale Programları", oog_mudahale: "🧩 ÖÖG Programı", metin_calisma: "📖 Metinle Çalışma" } },
     { key: "sinif_profili", label: "🏫 Sınıf" },
     { key: "devamsizlik", label: "📅 Devamsızlık" },
     { key: "risk", label: "⚠ Risk" },
@@ -52702,6 +52975,7 @@ const SEKME_ACIKLAMALARI = {
   profil_merkez: "Öğrencinin akademik/gelişimsel profili (Profil 1 ve Profil 2) — geçmiş yıl not ortalamaları da buradan girilir.",
   mudahale: "Seçili öğrenci için AI destekli, bireysel müdahale planı oluşturur.",
   mudahale_kutuphane: "Daha önce oluşturduğun/kaydettiğin müdahale programlarının kütüphanesi — tekrar kullanmak için.",
+  metin_calisma: "Türkçe ders kitaplarındaki metinler danışmanlık temalarına göre (kayıp, uyum, öfke, arkadaşlık, dijital…): özet, kullanım, görüşme soruları, kitaptaki etkinlikler ve cihazdaki PDF'ten sayfa açma.",
   oog_mudahale: "Özel öğrenme güçlüğü olan öğrenciler için seviye gruplu (ilkokul 1–2, 3–4, ortaokul 5–6, 7–8) okuma-yazma ve matematik destek programı: oturum kâğıtları, veli ev kartları ve ilerleme grafiği.",
   sinif_profili: "Sınıf bazında genel görünüm: öğrenci listesi, Öncelik Listesi, Risk Haritası, net tablosu/grafiği ve Sınıf Haritası yazdırma.",
   devamsizlik: "Öğrencilerin devamsızlık günlerini kaydet, ani artışları takip et.",
@@ -54679,6 +54953,10 @@ function pdrBaslangicSekmesi() {
             kaydet={async (v) => { setOogMudahale(v); await saveOogMudahale(v); }}
             pasPerformanslar={pasPerformanslar} pasDegerlendirmeler={pasDegerlendirmeler} mudahalePlan={mudahalePlan} kademe={kademe} oogDegerlendirmeler={oogDegerlendirmeler}
             mudahalePlanKaydet={async (v) => { setMudahalePlan(v); await saveMudahalePlan(v); }} />
+        )}
+
+        {tab === "metin_calisma" && (
+          <MetinCalismaEkrani kayitliListesi={kayitliListesi} aktifOgrenci={aktifOgrenci} setAktifOgrenci={setAktifOgrenci} records={records} riskHaritasi={riskHaritasi} aktifYil={aktifYil} />
         )}
 
         {tab === "mudahale_kutuphane" && (

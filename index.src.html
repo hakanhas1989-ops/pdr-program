@@ -6764,6 +6764,7 @@ function RiskHaritasiTablosu({ ogrenciler, riskHaritasi, setRiskHaritasi, aktifY
                       <td style={{ position: "sticky", left: 0, zIndex: 2, background: CARD, minWidth: AD_W, maxWidth: AD_W, padding: "3px 6px 3px 2px", fontSize: 10, color: TEXT, borderBottom: `1px solid ${BORDER}`, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {o.studentName}
                         {toplam > 0 && <span style={{ marginLeft: 4, fontSize: 8.5, fontWeight: 800, color: toplam >= 3 ? "#C0392B" : "#B5651D" }}>({toplam})</span>}
+                        {kayit?.formSon && <span title={`Öğretmen formu: ${(kayit.formGecmis || []).length} bildirim, son ${riskFormTarihYaz(riskFormTarih(kayit.formSon))}`} style={{ marginLeft: 3, fontSize: 8, color: MUTED }}>📥{(kayit.formGecmis || []).length > 1 ? (kayit.formGecmis || []).length : ""}</span>}
                       </td>
                       {RISK_HARITASI_GRUPLARI.flatMap(g => g.maddeler.map((m, mi) => {
                         const isaretli = !!kayit?.maddeler?.[m.key];
@@ -6805,6 +6806,139 @@ function RiskHaritasiTablosu({ ogrenciler, riskHaritasi, setRiskHaritasi, aktifY
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Google Form (Sınıf Risk Haritası — Öğrenci Bildirimi) yanıtlarını programa aktarma ──
+// Tablodan indirilen Excel/CSV okunur (Yanıtlar sayfası). Sınıf + şube + okul numarasıyla öğrenci bulunur.
+// Formdaki madde sırası (1–34 + 35 Diğer) programdaki MEB S.İ.4.a maddeleriyle aynıdır. Hiçbir veri dışarı gitmez.
+const RISK_FORM_ACIL = ["aile_ici_siddet", "ailede_bagimli_birey", "ogrenci_ruhsal_hastalik", "danismanlik_tedbir", "egitim_tedbir", "bir_iste_calisan", "riskli_akran", "surekli_devamsiz", "koruyucu_aile"];
+function riskFormTarih(v) {
+  if (v instanceof Date && !isNaN(v)) return v;
+  if (typeof v === "number" && v > 20000) return new Date(Math.round((v - 25569) * 86400000) + new Date().getTimezoneOffset() * 60000);
+  const m = /(\d{1,2})[./](\d{1,2})[./](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/.exec(String(v || ""));
+  if (m) return new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0));
+  const d = new Date(String(v || "")); return isNaN(d) ? null : d;
+}
+function riskFormTarihYaz(d) { if (!d) return "—"; const p = n => String(n).padStart(2, "0"); return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`; }
+// Satırları okur → [{ tarih, sinif, numara, ogretmen, keys[], diger, digerMetin }]
+function riskFormSatirlari(rows) {
+  const sade = s => String(s || "").toLocaleLowerCase("tr").replace(/[“”"]/g, "").trim();
+  let hi = rows.findIndex(r => r.some(c => /okul numaras/.test(sade(c))));
+  if (hi < 0) throw new Error("Bu dosyada risk haritası formunun yanıt sütunları bulunamadı (\"Öğrencinin okul numarası\" sütunu yok). Tablodan \"Yanıtlar\" sayfasını indirin.");
+  const H = rows[hi].map(sade);
+  const bul = f => H.findIndex(f);
+  const cZ = bul(h => /zaman|timestamp/.test(h)), cS = bul(h => h === "sınıf"), cB = bul(h => h === "şube"), cN = bul(h => /okul numaras/.test(h)), cO = bul(h => /öğretmen/.test(h));
+  const cG = H.map((h, i) => /aile yapısı|ailenin durumu|öğrencinin durumu/.test(h) ? i : -1).filter(i => i >= 0);
+  const cD = bul(h => /diğer.*açıklama/.test(h));
+  if (cS < 0 || cB < 0 || cG.length === 0) throw new Error("Sınıf, şube ya da madde sütunları bulunamadı. Dosya, kurulum betiğiyle oluşturulan formun yanıtları olmalı.");
+  const M = RISK_HARITASI_TUM_MADDELER;
+  return rows.slice(hi + 1).map((r, i) => {
+    const sinif = String(r[cS] || "").trim(), sube = String(r[cB] || "").trim(), numara = String(r[cN] || "").trim().replace(/\.0+$/, "");
+    if (!sinif || !numara) return null;
+    const metin = cG.map(c => String(r[c] || "")).join(", ");
+    const nolar = [...metin.matchAll(/(?:^|,\s*)(\d+)\.\s/g)].map(m => +m[1]);
+    const keys = [...new Set(nolar.filter(n => n >= 1 && n <= M.length).map(n => M[n - 1].key))];
+    return { sira: i, tarih: cZ >= 0 ? riskFormTarih(r[cZ]) : null, sinif: `${sinif}-${sube}`, numara, ogretmen: cO >= 0 ? String(r[cO] || "").trim() : "", keys, diger: nolar.includes(M.length + 1), digerMetin: cD >= 0 ? String(r[cD] || "").trim() : "" };
+  }).filter(Boolean);
+}
+// Yanıtları programdaki öğrencilerle eşleştirip yapılacak değişiklikleri hazırlar
+function riskFormPlan(satirlar, ogrenciler, riskHaritasi, aktifYil, koru) {
+  const yilOgr = (ogrenciler || []).filter(o => !o.yil || o.yil === aktifYil);
+  const gruplar = new Map(), eslesmeyen = new Map();
+  satirlar.forEach(s => {
+    const o = yilOgr.find(x => pdrAyniOgrenci("", s.sinif, x.studentName, x.className, s.numara, x.numara));
+    if (!o) { const k = s.sinif + " no " + s.numara; eslesmeyen.set(k, (eslesmeyen.get(k) || 0) + 1); return; }
+    const k = o.studentName + "||" + o.className + "||" + (o.numara || "");
+    if (!gruplar.has(k)) gruplar.set(k, { o, liste: [] });
+    gruplar.get(k).liste.push(s);
+  });
+  const plan = [...gruplar.values()].map(({ o, liste }) => {
+    liste.sort((a, b) => (a.tarih && b.tarih ? a.tarih - b.tarih : 0) || a.sira - b.sira);
+    const son = liste[liste.length - 1], onceki = liste.length > 1 ? liste[liste.length - 2] : null;
+    const mevcut = (riskHaritasi || []).find(r => r.yil === aktifYil && pdrAyniOgrenci(r.studentName, r.className, o.studentName, o.className, r.numara, o.numara));
+    const eski = Object.keys((mevcut && mevcut.maddeler) || {}).filter(k => mevcut.maddeler[k]);
+    const yeniSet = new Set(koru ? [...eski, ...son.keys] : son.keys);
+    const eklenen = [...yeniSet].filter(k => !eski.includes(k)), cikan = eski.filter(k => !yeniSet.has(k));
+    const formdaYeni = onceki ? son.keys.filter(k => !onceki.keys.includes(k)) : son.keys;
+    const digerMetin = son.diger || son.digerMetin ? (son.digerMetin || "Diğer (formda işaretli)") : (mevcut && mevcut.digerMetin) || "";
+    const gecmis = liste.map(s => ({ tarih: s.tarih ? s.tarih.toISOString() : "", ogretmen: s.ogretmen, keys: s.keys, diger: s.diger, digerMetin: s.digerMetin }));
+    const ayniGecmis = mevcut && JSON.stringify(mevcut.formGecmis || []) === JSON.stringify(gecmis);
+    return { o, mevcut, son, onceki, sayi: liste.length, eklenen, cikan, formdaYeni, acil: eklenen.filter(k => RISK_FORM_ACIL.includes(k)), digerMetin, gecmis, degisti: eklenen.length > 0 || cikan.length > 0 || (digerMetin !== ((mevcut && mevcut.digerMetin) || "")) || !ayniGecmis };
+  }).sort((a, b) => (b.acil.length - a.acil.length) || (b.eklenen.length - a.eklenen.length) || a.o.className.localeCompare(b.o.className, "tr"));
+  return { plan, eslesmeyen: [...eslesmeyen.entries()] };
+}
+function RiskFormYukle({ ogrenciler, riskHaritasi, setRiskHaritasi, aktifYil }) {
+  const [acik, setAcik] = useState(false);
+  const [satirlar, setSatirlar] = useState(null);
+  const [koru, setKoru] = useState(true);
+  const [mesaj, setMesaj] = useState("");
+  const [dosyaAdi, setDosyaAdi] = useState("");
+  const etiket = k => (RISK_HARITASI_TUM_MADDELER.find(m => m.key === k) || {}).label || k;
+  const p = satirlar ? riskFormPlan(satirlar, ogrenciler, riskHaritasi, aktifYil, koru) : null;
+  const degisen = p ? p.plan.filter(x => x.degisti) : [];
+  function dosyaSec(ev) {
+    const f = ev.target.files && ev.target.files[0]; ev.target.value = ""; if (!f) return;
+    setMesaj(""); setDosyaAdi(f.name);
+    const rd = new FileReader();
+    rd.onload = e => {
+      try {
+        if (typeof XLSX === "undefined" || !XLSX.read) throw new Error("Excel okuyucu yüklenemedi; internet bağlantısını kontrol edip sayfayı yenileyin.");
+        const wb = XLSX.read(e.target.result, { type: "binary", cellDates: true });
+        const ad = wb.SheetNames.find(n => /yanıtlar|yanitlar|form yan/i.test(n)) || wb.SheetNames.find(n => { const r = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: "" }).slice(0, 3); return r.some(x => x.some(c => /okul numaras/i.test(String(c)))); }) || wb.SheetNames[0];
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[ad], { header: 1, defval: "", raw: true });
+        const s = riskFormSatirlari(rows);
+        if (!s.length) throw new Error("Dosyada yanıt satırı yok.");
+        setSatirlar(s);
+      } catch (er) { setSatirlar(null); setMesaj("⚠ " + ((er && er.message) || "Dosya okunamadı.")); }
+    };
+    rd.readAsBinaryString(f);
+  }
+  async function uygula() {
+    if (!degisen.length) return;
+    if (typeof window !== "undefined" && window.confirm && !window.confirm(`${degisen.length} öğrencinin risk haritası kaydı güncellenecek. Onaylıyor musunuz?`)) return;
+    let liste = [...(riskHaritasi || [])];
+    degisen.forEach(x => {
+      const maddeler = {}; const set = new Set(koru ? [...Object.keys((x.mevcut && x.mevcut.maddeler) || {}).filter(k => x.mevcut.maddeler[k]), ...x.son.keys] : x.son.keys);
+      set.forEach(k => { maddeler[k] = true; });
+      const ek = { maddeler, digerMetin: x.digerMetin, formGecmis: x.gecmis, formSon: x.son.tarih ? x.son.tarih.toISOString() : "", formYukleme: new Date().toISOString(), className: x.o.className, numara: x.o.numara };
+      if (x.mevcut) liste = liste.map(r => r.id === x.mevcut.id ? { ...r, ...ek } : r);
+      else liste.push({ id: uid(), studentName: x.o.studentName, yil: aktifYil, ...ek });
+    });
+    setRiskHaritasi(liste); await saveRiskHaritasi(liste);
+    setMesaj(`✓ ${degisen.length} öğrencinin kaydı güncellendi. Sınıf risk haritası tablolarında ve öğrenci dosyasında görünür.`); setSatirlar(null);
+  }
+  const chip = (t, renk, bg) => <span style={{ display: "inline-block", fontSize: 10.5, fontWeight: 700, color: renk, background: bg, borderRadius: 10, padding: "2px 7px", margin: "2px 3px 0 0" }}>{t}</span>;
+  return (
+    <div data-risk-form="1" style={{ background: CARD, border: `1px solid ${BORDER}`, boxShadow: "0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius: 12, padding: 12, marginTop: 10 }}>
+      <div onClick={() => setAcik(v => !v)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
+        <span style={{ fontSize: 13, fontWeight: 800, color: TEXT }}>📥 Öğretmen formundan risk haritası yükle</span>
+        <span style={{ fontSize: 12, color: MUTED }}>{acik ? "▲" : "▼"}</span>
+      </div>
+      {acik && (<div style={{ marginTop: 8 }}>
+        <div style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.55 }}>Google tablosunda <b>Dosya → İndir → Microsoft Excel (.xlsx)</b> deyin ve dosyayı buradan seçin. Program "Yanıtlar" sayfasını okur, öğrenciyi <b>sınıf + şube + okul numarasından</b> bulur. Her öğrencinin en son bildirimi yazılır; önceki bildirimler tarihleriyle saklanır. Aynı dosyayı tekrar yüklemek sorun olmaz, yalnız değişenler güncellenir.</div>
+        <label style={{ display: "block", marginTop: 8, textAlign: "center", padding: "9px", border: `1.5px dashed ${ACCENT}`, borderRadius: 9, color: ACCENT, fontWeight: 800, fontSize: 12.5, cursor: "pointer" }}>📂 Excel / CSV dosyası seç<input data-risk-form-dosya="1" type="file" accept=".xlsx,.xls,.csv" onChange={dosyaSec} style={{ display: "none" }} /></label>
+        {mesaj && <div style={{ fontSize: 12, marginTop: 6, color: mesaj.startsWith("✓") ? "#15803D" : "#B91C1C" }}>{mesaj}</div>}
+        {p && (<div data-risk-form-onizleme="1" style={{ marginTop: 8 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: TEXT }}>{dosyaAdi}: {satirlar.length} yanıt · {p.plan.length} öğrenci eşleşti · <span style={{ color: degisen.length ? "#B45309" : "#15803D" }}>{degisen.length} öğrencide değişiklik</span>{p.plan.filter(x => x.acil.length).length ? <span style={{ color: "#B91C1C" }}> · ⚠ {p.plan.filter(x => x.acil.length).length} acil</span> : null}</div>
+          <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 11.5, color: TEXT, marginTop: 6 }}><input type="checkbox" checked={koru} onChange={e => setKoru(e.target.checked)} />Programda elle işaretlediklerimi koru (formdan yalnız ekle)</label>
+          <div style={{ maxHeight: 380, overflow: "auto", marginTop: 6, border: `1px solid ${BORDER}`, borderRadius: 9 }}>
+            {p.plan.map(x => (
+              <div key={x.o.studentName + x.o.className} data-risk-form-ogr={x.o.numara} style={{ padding: "7px 9px", borderBottom: `1px solid ${BORDER}`, background: x.acil.length ? "#FEF2F2" : x.degisti ? "#FFFBEB" : "#fff" }}>
+                <div style={{ fontSize: 12.5, fontWeight: 800, color: TEXT }}>{x.o.studentName} <span style={{ fontWeight: 500, color: MUTED }}>· {x.o.className} · no {x.o.numara}</span></div>
+                <div style={{ fontSize: 10.5, color: MUTED }}>{x.sayi > 1 ? `${x.sayi} bildirim · ilk ${riskFormTarihYaz(riskFormTarih(x.gecmis[0].tarih))} · son ${riskFormTarihYaz(x.son.tarih)}` : `İlk bildirim · ${riskFormTarihYaz(x.son.tarih)}`}{x.son.ogretmen ? ` · ${x.son.ogretmen}` : ""}{!x.degisti ? " · programdaki kayıtla aynı" : ""}</div>
+                {x.onceki && x.formdaYeni.length > 0 && <div style={{ fontSize: 10.5, color: "#B45309", marginTop: 2 }}>Son güncellemede formda yeni: {x.formdaYeni.map(etiket).join(", ")}</div>}
+                <div>{x.eklenen.map(k => chip("✚ " + etiket(k), RISK_FORM_ACIL.includes(k) ? "#fff" : "#166534", RISK_FORM_ACIL.includes(k) ? "#DC2626" : "#DCFCE7"))}{x.cikan.map(k => chip("✖ " + etiket(k), "#475569", "#E2E8F0"))}{x.digerMetin && x.digerMetin !== ((x.mevcut && x.mevcut.digerMetin) || "") ? chip("Diğer: " + x.digerMetin, "#6D28D9", "#EDE9FE") : null}</div>
+              </div>))}
+            {p.eslesmeyen.length > 0 && <div style={{ padding: "7px 9px", fontSize: 11, color: "#B91C1C" }}>Programda bulunamayan ({p.eslesmeyen.length}): {p.eslesmeyen.map(([k, n]) => k + (n > 1 ? ` (${n})` : "")).join(", ")}. Öğrenci listesinde sınıf/numara eksik ya da öğretmen yanlış yazmış olabilir.</div>}
+          </div>
+          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+            <button data-risk-form-uygula="1" disabled={!degisen.length} onClick={uygula} style={{ flex: 2, padding: "9px", borderRadius: 9, border: "none", background: degisen.length ? ACCENT : "#CBD5E1", color: "#fff", fontWeight: 800, fontSize: 12.5, cursor: degisen.length ? "pointer" : "default" }}>{degisen.length ? `✅ ${degisen.length} öğrenciyi güncelle` : "Değişiklik yok"}</button>
+            <button onClick={() => setSatirlar(null)} style={{ flex: 1, padding: "9px", borderRadius: 9, border: `1px solid ${BORDER}`, background: "#fff", fontWeight: 700, fontSize: 12.5, cursor: "pointer", color: TEXT }}>Vazgeç</button>
+          </div>
+        </div>)}
+      </div>)}
     </div>
   );
 }
@@ -15452,6 +15586,11 @@ function ksAsistanEkKayitlar(ctx, o) {
   // Risk haritası (bu yıl, işaretli maddeler)
   try {
     const rh = (ctx.riskHaritasi || []).filter(r => (!r.yil || !ctx.aktifYil || r.yil === ctx.aktifYil) && pdrAyniOgrenci(r.studentName, r.className, ad, sinif, r.numara, no))[0];
+    if (rh && (rh.formGecmis || []).length) {
+      const fg = rh.formGecmis, M = k => (RISK_HARITASI_TUM_MADDELER.find(m => m.key === k) || {}).label || k;
+      const son = fg[fg.length - 1], onc = fg.length > 1 ? fg[fg.length - 2] : null, yeni = onc ? son.keys.filter(k => !onc.keys.includes(k)) : [];
+      b.push(`RİSK HARİTASI (öğretmen bildirimleri): ${fg.length} bildirim; ilk ${riskFormTarihYaz(riskFormTarih(fg[0].tarih))}, son ${riskFormTarihYaz(riskFormTarih(son.tarih))}${yeni.length ? `; son güncellemede YENİ eklenen: ${yeni.map(M).join(", ")}` : ""}`);
+    }
     if (rh) {
       const isaret = RISK_HARITASI_GRUPLARI.map(g => ({ g: g.baslik, m: g.maddeler.filter(m => rh.maddeler && rh.maddeler[m.key]).map(m => m.label) })).filter(x => x.m.length);
       if (isaret.length || (rh.digerMetin || "").trim()) b.push(`RİSK HARİTASI (${isaret.reduce((t, x) => t + x.m.length, 0)} madde): ${isaret.map(x => `${x.g}: ${x.m.join(", ")}`).join(" | ")}${(rh.digerMetin || "").trim() ? ` | Diğer: ${K(rh.digerMetin, 120)}` : ""}`);
@@ -48988,6 +49127,7 @@ function SinifProfili({ ogrenciler, setOgrenciler, records, riskListesi, aktifYi
         </div>
 
         <RiskHaritasiTablosu ogrenciler={st.ogr} riskHaritasi={riskHaritasi} setRiskHaritasi={setRiskHaritasi} aktifYil={aktifYil} sinifAdi={seciliSinif} />
+        <RiskFormYukle ogrenciler={ogrenciler} riskHaritasi={riskHaritasi} setRiskHaritasi={setRiskHaritasi} aktifYil={aktifYil} />
 
         {(() => {
           const duzey = (seciliSinif.match(/\d+/) || [])[0];

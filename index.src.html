@@ -4126,7 +4126,7 @@ function OogMudahaleEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, oogM
 // metin-dizini.json: her metin için danışmanın kendi dilinde özet, danışmanlık temaları, kullanım önerisi,
 // görüşme soruları ve kitaptaki etkinliklerin sayfa listesi (kitap metni değil). Kitap PDF'leri yalnız
 // danışmanın cihazında (IndexedDB) saklanır; "sayfayı aç" o PDF'ten sayfayı çizer. Hiçbir şey dışarı gitmez.
-const PDR_METIN_DIZIN_SURUM = "1";
+const PDR_METIN_DIZIN_SURUM = "2";
 let PDR_METIN_DIZIN = null, PDR_METIN_DIZIN_YUKLENIYOR = null;
 async function pdrMetinDizinYukle() {
   if (PDR_METIN_DIZIN) return PDR_METIN_DIZIN;
@@ -4182,7 +4182,7 @@ function metinOner(dizin, temalar, sinifNo, adet = 8) {
   const T = new Map(temalar.map(x => [x.t, x.p]));
   return dizin.metinler.map(m => {
     let p = m.pdr.reduce((t, x, i) => t + (T.get(x) || 0) * (i === 0 ? 1.4 : i === 1 ? 1.15 : 1), 0);
-    if (p && sinifNo && m.sinif === sinifNo) p += 1.2;
+    if (p && sinifNo && m.sinif === sinifNo) p += 0.6;
     if (p && /dinleme/.test(m.tur)) p -= 0.6;
     return { m, p };
   }).filter(x => x.p > 0).sort((a, b) => b.p - a.p).slice(0, adet).map(x => x.m);
@@ -4211,7 +4211,7 @@ async function pdrKitapBelge(k) {
   const belge = await lib.getDocument({ range: tr, length: blob.size, disableAutoFetch: true, disableStream: true, rangeChunkSize: 262144 }).promise;
   PDR_KITAP_BELGE[k] = belge; return belge;
 }
-function KitapSayfaGosterici({ kitap, kitapAd, sayfa, aralik, onKapat, onKitapYukle }) {
+function KitapSayfaGosterici({ kitap, kitapAd, sayfa, aralik, ofset = 0, onKapat, onKitapYukle }) {
   const [s, setS] = useState(sayfa); const [olcek, setOlcek] = useState(1); const [durum, setDurum] = useState("yukleniyor"); const [toplam, setToplam] = useState(0);
   const kanvas = useRef(null);
   useEffect(() => { setS(sayfa); }, [sayfa]);
@@ -4223,8 +4223,8 @@ function KitapSayfaGosterici({ kitap, kitapAd, sayfa, aralik, onKapat, onKitapYu
         const belge = await pdrKitapBelge(kitap);
         if (iptal) return;
         if (!belge) { setDurum("yok"); return; }
-        setToplam(belge.numPages);
-        const sf = await belge.getPage(Math.max(1, Math.min(belge.numPages, s)));
+        setToplam(belge.numPages - ofset);
+        const sf = await belge.getPage(Math.max(1, Math.min(belge.numPages, s + ofset)));
         const gen = Math.min(window.innerWidth - 24, 900) * olcek;
         const v1 = sf.getViewport({ scale: 1 }); const vp = sf.getViewport({ scale: gen / v1.width * (window.devicePixelRatio > 1 ? 1.5 : 1) });
         const c = kanvas.current; if (!c || iptal) return;
@@ -4295,7 +4295,7 @@ function MetinCalismaEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, rec
     } catch (e) { setMesaj("⚠ Kaydedilemedi: " + ((e && e.message) || e) + " (cihazda yer kalmamış olabilir)."); }
     kitapDurumYenile();
   }
-  const sayfaAc = (m, s) => setGosterici({ kitap: m.k, sayfa: s, aralik: [m.s, m.e], kitapAd: kitapAd(m.k) });
+  const sayfaAc = (m, s) => setGosterici({ kitap: m.k, sayfa: s, aralik: [m.s, m.e], kitapAd: kitapAd(m.k), ofset: (dizin.kitaplar[m.k] && dizin.kitaplar[m.k].ofset) || 0 });
   const chip = (aktif) => ({ padding: "4px 9px", borderRadius: 14, border: `1px solid ${aktif ? ACCENT : BORDER}`, background: aktif ? ACCENT_LIGHT : "#fff", color: aktif ? ACCENT : TEXT, fontSize: 11.5, fontWeight: 700, cursor: "pointer" });
   const kart = (m, oneri) => {
     const ac = acik === m.id;
@@ -4340,14 +4340,13 @@ function MetinCalismaEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, rec
           {ogr && (<div style={{ marginTop: 7 }}>
             {temalar.length ? <div style={{ fontSize: 11.5, color: TEXT }}>Öne çıkan temalar: {temalar.slice(0, 5).map(x => <span key={x.t} style={{ display: "inline-block", fontSize: 10.5, fontWeight: 800, color: "#fff", background: "#0E7490", borderRadius: 9, padding: "1px 7px", margin: "2px 3px 0 0" }} title={x.neden.join(", ")}>{METIN_ETIKET[x.t] || x.t}</span>)}</div>
               : <div style={{ fontSize: 11.5, color: MUTED }}>Bu öğrenci için görüşme konusu ya da risk maddesinden tema çıkmadı; aşağıdan temaya göre seçebilirsiniz.</div>}
-            {sinifNo && sinifNo < 7 && <div style={{ fontSize: 11, color: "#B45309", marginTop: 3 }}>Şimdilik 7 ve 8. sınıf kitapları var; 5–6. sınıf kitapları eklenince öneriler sınıfına göre gelecek.</div>}
             {oneriler.length > 0 && <div data-metin-oneriler="1" style={{ marginTop: 6 }}><div style={{ fontSize: 12, fontWeight: 900, color: "#0E7490", marginBottom: 4 }}>⭐ {ogr.name.split(" ")[0]} için önerilen metinler</div>{oneriler.map(m => kart(m, true))}</div>}
           </div>)}
         </div>
         <div style={{ marginTop: 10 }}>
           <input data-metin-ara="1" value={q} onChange={e => setQ(e.target.value)} placeholder="Ara: metin adı, konu (ör. yalnızlık, öfke, taşınma)…" style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 9, border: `1px solid ${BORDER}`, fontSize: 13 }} />
           <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 6 }}>
-            {[["", "Tüm sınıflar"], ["7", "7. sınıf"], ["8", "8. sınıf"]].map(([v, l]) => <button key={v} onClick={() => setSinif(v)} style={chip(sinif === v)}>{l}</button>)}
+            {[["", "Tüm sınıflar"], ["5", "5. sınıf"], ["6", "6. sınıf"], ["7", "7. sınıf"], ["8", "8. sınıf"]].map(([v, l]) => <button key={v} onClick={() => setSinif(v)} style={chip(sinif === v)}>{l}</button>)}
           </div>
           <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 5 }}>
             <button onClick={() => setEtiket("")} style={chip(!etiket)}>Tüm temalar</button>
@@ -15636,7 +15635,7 @@ const KS_ASISTAN_ARACLAR = {
     },
   },
   metin_oner: {
-    aciklama: "Türkçe ders kitaplarındaki (7–8. sınıf) metinlerden danışmanlıkta kullanılacak olanları önerir: biblioterapi, görüşmede birlikte okuma, duygu/konu üzerine konuşma açmak için. sorgu: konu ya da ihtiyaç (ör. kayıp, yalnızlık, öfke, taşınma, sosyal medya, özgüven); ogrenci verilirse onun görüşme konularına ve risk haritasına göre önerir. Her metin için kitap ve sayfa, özet, kullanım, görüşme soruları ve kitaptan uyarlanmış etkinlik döner.",
+    aciklama: "Türkçe ders kitaplarındaki (5–8. sınıf) metinlerden danışmanlıkta kullanılacak olanları önerir: biblioterapi, görüşmede birlikte okuma, duygu/konu üzerine konuşma açmak için. sorgu: konu ya da ihtiyaç (ör. kayıp, yalnızlık, öfke, taşınma, sosyal medya, özgüven); ogrenci verilirse onun görüşme konularına ve risk haritasına göre önerir. Her metin için kitap ve sayfa, özet, kullanım, görüşme soruları ve kitaptan uyarlanmış etkinlik döner.",
     girdi: '{"sorgu": "isteğe bağlı konu", "ogrenci": "isteğe bağlı", "sinif": "7 ya da 8 (isteğe bağlı)", "adet": 5}', yontem: "hepsi",
     calistir: (g, ctx, o) => ksAsistanMetinOner(g, ctx, o),
   },

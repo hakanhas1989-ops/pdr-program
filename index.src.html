@@ -4387,13 +4387,13 @@ function MetinCalismaEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, rec
       {!dizin && !hata && <div style={{ color: MUTED, fontSize: 12, marginTop: 8 }}>Dizin yükleniyor…</div>}
       {dizin && konumlar.length > 0 && (
         <div data-metin-takvim="1" style={{ marginTop: 10, background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 10, padding: 9 }}>
-          <div onClick={() => setTakvimAcik(v => !v)} style={{ fontSize: 12.5, fontWeight: 900, color: "#92400E", cursor: "pointer" }}>📅 Bu hafta derslerde (tahmini) {takvimAcik ? "▲" : "▼"}</div>
+          <div onClick={() => setTakvimAcik(v => !v)} style={{ fontSize: 12.5, fontWeight: 900, color: "#92400E", cursor: "pointer" }}>📅 Bu hafta Türkçe derslerinde (tahmini) {takvimAcik ? "▲" : "▼"}</div>
           {takvimAcik && (<>
             <div style={{ fontSize: 10.5, color: "#92400E", margin: "3px 0 6px", lineHeight: 1.45 }}>MEB çalışma takvimi ve temaların ders saatine göre hesaplandı{konumlar[0].r.tahmini ? " (bu yılın takvimi programda yok, yaklaşık)" : ""}. Okulunuzda öne ya da geride iseniz ◀ ▶ ile haftayı düzeltin; ayar kaydedilir.</div>
             {konumlar.map(({ dz, r }) => [(
               <div key={dz.k} data-metin-takvim-sinif={dz.k} style={{ display: "flex", gap: 6, alignItems: "center", padding: "6px 0", borderTop: "1px dashed #FDE68A" }}>
                 <div style={{ flex: 1, fontSize: 12, lineHeight: 1.4 }}>
-                  <b>{dz.sinif}. sınıf{dz.k === "8m" ? " (MEB kitabı)" : dz.k === "8h" ? " (Hecce kitabı)" : ""}</b>{" "}
+                  <b>{dz.sinif}. sınıf <span data-ders-ad style={{ display:"inline-block", fontSize:11, fontWeight:800, color:"#fff", background:"#B45309", borderRadius:8, padding:"1px 7px" }}>Türkçe</span>{dz.k === "8m" ? " (MEB kitabı)" : dz.k === "8h" ? " (Hecce kitabı)" : ""}</b>{" "}
                   {r.once ? <span style={{ color: MUTED }}>— okullar henüz açılmadı</span> : r.bitti ? <span style={{ color: MUTED }}>— kitap bitti, tekrar dönemi</span> : (<>
                     <span style={{ color: MUTED }}>· {r.hafta}. hafta · {r.temaNo}/{r.temaSay}. tema: {r.tema}</span><br />
                     <span data-metin-takvim-ac={dz.k} onClick={() => sayfaAc(r.simdi, r.simdi.s)} style={{ color: "#B45309", fontWeight: 800, cursor: "pointer", textDecoration: "underline" }}>📄 {r.simdi.ad}</span> <span style={{ color: MUTED }}>(s. {r.simdi.s}–{r.simdi.e})</span>
@@ -4458,7 +4458,7 @@ async function ksAsistanMetinOner(g, ctx, o) {
   if (!liste.length && o) { const t = metinOgrenciTemalari(o, ctx.records, ctx.riskHaritasi, ctx.aktifYil); liste = metinOner(d, t, metinSinifNo(o.className), 5); baslik = `bu öğrencinin temalarına (${t.slice(0, 4).map(x => METIN_ETIKET[x.t]).join(", ") || "tema yok"}) göre`; }
   if (!liste.length) return "Uygun metin bulunamadı. Konuyu farklı kelimelerle (ör. yalnızlık, kayıp, öfke, taşınma, sosyal medya) deneyebilirsin.";
   let buHafta = ""; try { let ky = {}; try { const r = await window.storage.get("pdr-metin-takvim"); if (r && r.value) ky = JSON.parse(r.value) || {}; } catch (e) {} const b = new Date(); buHafta = METIN_DIZILER.map(dz => { const r = metinDersKonumu(d, dz, b, ctx.aktifYil, ky[dz.k] || 0); return r && r.simdi ? `${dz.sinif}. sınıf${dz.k === "8m" ? " MEB" : dz.k === "8h" ? " Hecce" : ""}: "${r.simdi.ad}" (${r.tema})` : ""; }).filter(Boolean).join("; "); } catch (e) {}
-  return `TÜRKÇE DERS KİTABI METİNLERİ — ${baslik} (Metinle Çalışma ekranında kitap sayfası açılabilir):\n${buHafta ? `Bu hafta derslerde (tahmini, MEB takvimine göre): ${buHafta}\n` : ""}` + liste.slice(0, Number(g && g.adet) || 5).map(m => `• "${m.ad}" — ${d.kitaplar[m.k].ad}, s. ${m.s}–${m.e} (${m.tur}; temalar: ${m.pdr.map(t => METIN_ETIKET[t]).join(", ")})\n  Özet: ${m.ozet}\n  Kullanım: ${m.kullanim}\n  Sorular: ${m.sorular.join(" | ")}${m.onerilen.length ? `\n  Etkinlik: s. ${m.onerilen[0].s} — ${m.onerilen[0].ad} → ${m.onerilen[0].uyarlama}` : ""}`).join("\n");
+  return `TÜRKÇE DERS KİTABI METİNLERİ — ${baslik} (Metinle Çalışma ekranında kitap sayfası açılabilir):\n${buHafta ? `Bu hafta Türkçe derslerinde (tahmini, MEB takvimine göre): ${buHafta}\n` : ""}` + liste.slice(0, Number(g && g.adet) || 5).map(m => `• "${m.ad}" — ${d.kitaplar[m.k].ad}, s. ${m.s}–${m.e} (${m.tur}; temalar: ${m.pdr.map(t => METIN_ETIKET[t]).join(", ")})\n  Özet: ${m.ozet}\n  Kullanım: ${m.kullanim}\n  Sorular: ${m.sorular.join(" | ")}${m.onerilen.length ? `\n  Etkinlik: s. ${m.onerilen[0].s} — ${m.onerilen[0].ad} → ${m.onerilen[0].uyarlama}` : ""}`).join("\n");
 }
 // ===== METİNLE ÇALIŞMA BİTİŞ =====
 

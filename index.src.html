@@ -4331,20 +4331,21 @@ function MetinCalismaEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, rec
   const metinDurum = id => { for (const x of konumlar) if (x.r.durum[id]) return x.r.durum[id]; return null; };
   useEffect(() => { if (!dizin) pdrMetinDizinYukle().then(j => { if (j) setDizin(j); else setHata("Metin dizini yüklenemedi; internet bağlantısını kontrol edip tekrar deneyin."); }); }, []);
   useEffect(() => { setSeciliAd(aktifOgrenci?.name || ""); }, [aktifOgrenci?.name]);
-  const kitapDurumYenile = async () => { if (!dizin) return; const d = {}; for (const k of Object.keys(dizin.kitaplar)) { const r = await pdrKitapOku(k); d[k] = r ? { boyut: r.boyut, sayfa: r.sayfa, tarih: r.tarih } : null; } setKitapDurum(d); };
+  const tumKitaplar = () => ({ ...(dizin ? dizin.kitaplar : {}), ...Object.fromEntries(Object.values(PDR_LGS_KITAPLAR).map(b => [b.k, { ad: b.ad, sayfa: b.sayfa, sinif: 8, lgs: true }])) });
+  const kitapDurumYenile = async () => { if (!dizin) return; const d = {}; for (const k of Object.keys(tumKitaplar())) { const r = await pdrKitapOku(k); d[k] = r ? { boyut: r.boyut, sayfa: r.sayfa, tarih: r.tarih } : null; } setKitapDurum(d); };
   useEffect(() => { kitapDurumYenile(); }, [dizin]);
   const ogr = pdrSeciliOgr(kayitliListesi, seciliAd, aktifOgrenci);
   const temalar = useMemo(() => metinOgrenciTemalari(ogr, records, riskHaritasi, aktifYil), [ogr && ogr.name, records, riskHaritasi, aktifYil]);
   const sinifNo = ogr ? metinSinifNo(ogr.className) : null;
   const oneriler = useMemo(() => metinOner(dizin, temalar, sinifNo, 6), [dizin, temalar, sinifNo]);
   const liste = useMemo(() => metinAra(dizin, { q, etiket, sinif }), [dizin, q, etiket, sinif]);
-  const kitapAd = k => (dizin && dizin.kitaplar[k] && dizin.kitaplar[k].ad) || k;
+  const kitapAd = k => (tumKitaplar()[k] || {}).ad || k;
   async function kitapYukle(k, f) {
     setMesaj(`${kitapAd(k)} yükleniyor…`);
     try {
       let sayfa = null; try { delete PDR_KITAP_BELGE[k]; await pdrKitapKaydet(k, f, null); const b = await pdrKitapBelge(k); sayfa = b ? b.numPages : null; } catch (e) {}
       await pdrKitapKaydet(k, f, sayfa);
-      const bek = dizin.kitaplar[k].sayfa;
+      const bek = (tumKitaplar()[k] || {}).sayfa;
       setMesaj(sayfa && bek && sayfa !== bek ? `⚠ ${kitapAd(k)} yüklendi ama sayfa sayısı farklı (${sayfa}, beklenen ${bek}); sayfa numaraları kaymış olabilir.` : `✓ ${kitapAd(k)} bu cihaza kaydedildi${sayfa ? ` (${sayfa} sayfa)` : ""}. İnternete gönderilmez.`);
     } catch (e) { setMesaj("⚠ Kaydedilemedi: " + ((e && e.message) || e) + " (cihazda yer kalmamış olabilir)."); }
     kitapDurumYenile();
@@ -4432,12 +4433,12 @@ function MetinCalismaEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, rec
           {liste.map(m => kart(m, false))}
         </div>
         <div style={{ marginTop: 10, border: `1px solid ${BORDER}`, borderRadius: 10, padding: 9 }}>
-          <div onClick={() => setKitaplarAcik(v => !v)} style={{ fontSize: 12.5, fontWeight: 900, color: TEXT, cursor: "pointer" }}>📚 Bu cihazdaki kitaplar ({Object.values(kitapDurum).filter(Boolean).length}/{Object.keys(dizin.kitaplar).length}) {kitaplarAcik ? "▲" : "▼"}</div>
+          <div onClick={() => setKitaplarAcik(v => !v)} style={{ fontSize: 12.5, fontWeight: 900, color: TEXT, cursor: "pointer" }}>📚 Bu cihazdaki kitaplar ({Object.values(kitapDurum).filter(Boolean).length}/{Object.keys(tumKitaplar()).length}) {kitaplarAcik ? "▲" : "▼"}</div>
           {kitaplarAcik && <div style={{ marginTop: 6 }}>
             <div style={{ fontSize: 11, color: MUTED, marginBottom: 6, lineHeight: 1.5 }}>PDF'ler yalnız bu cihazda saklanır; buluta ya da internete gönderilmez. Başka cihazda kullanmak için orada da bir kez yükleyin.</div>
-            {Object.entries(dizin.kitaplar).map(([k, b]) => { const d = kitapDurum[k]; return (
+            {Object.entries(tumKitaplar()).sort((a, c) => (a[1].sinif - c[1].sinif) || ((a[1].lgs ? 1 : 0) - (c[1].lgs ? 1 : 0))).map(([k, b]) => { const d = kitapDurum[k]; return (
               <div key={k} data-kitap={k} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 0", borderTop: `1px solid ${BORDER}` }}>
-                <div style={{ flex: 1, fontSize: 12 }}><b>{b.ad}</b><div style={{ fontSize: 10.5, color: d ? "#15803D" : MUTED }}>{d ? `✓ yüklü · ${Math.round(d.boyut / 1048576)} MB${d.sayfa ? ` · ${d.sayfa} sayfa` : ""}` : "yüklü değil"}</div></div>
+                <div style={{ flex: 1, fontSize: 12 }}><b>{b.ad}</b>{b.lgs && <span style={{ fontSize: 9.5, fontWeight: 800, color: "#6D28D9", background: "#EDE9FE", borderRadius: 8, padding: "1px 6px", marginLeft: 5 }}>Konu Haritası</span>}<div style={{ fontSize: 10.5, color: d ? "#15803D" : MUTED }}>{d ? `✓ yüklü · ${Math.round(d.boyut / 1048576)} MB${d.sayfa ? ` · ${d.sayfa} sayfa` : ""}` : "yüklü değil"}</div></div>
                 <label style={{ padding: "5px 9px", borderRadius: 8, border: `1px solid ${ACCENT}`, color: ACCENT, fontWeight: 800, fontSize: 11.5, cursor: "pointer" }}>{d ? "Değiştir" : "📂 PDF seç"}<input data-kitap-dosya={k} type="file" accept="application/pdf,.pdf" onChange={e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) kitapYukle(k, f); }} style={{ display: "none" }} /></label>
                 {d && <button onClick={async () => { await pdrKitapSil(k); delete PDR_KITAP_BELGE[k]; kitapDurumYenile(); }} style={{ padding: "5px 8px", borderRadius: 8, border: `1px solid ${BORDER}`, background: "#fff", fontSize: 11.5, cursor: "pointer" }}>Kaldır</button>}
               </div>); })}

@@ -37763,6 +37763,9 @@ function LgsBuHaftaPaneli({ aktifYil, onDurum }) {
   const [kaydirma, setKaydirma] = useState({}); const [acik, setAcik] = useState(true); const [gosterici, setGosterici] = useState(null);
   useEffect(() => { pdrMetinTakvimKaydirmaOku().then(setKaydirma); }, []);
   const [dizin, setDizin] = useState(PDR_METIN_DIZIN);
+  const [acikB, setAcikB] = useState(null); // "ders|beceri"
+  const beceriSatiri = (ders, konular) => { const ids = [...new Set(konular.flatMap(k => lgsKonuBecerileri(ders, k)))]; if (!ids.length) return null; const ac = ids.find(id => acikB === ders + "|" + id);
+    return (<div data-buhafta-beceri={ders} style={{ marginTop: 3 }}><span style={{ fontSize: 10, color: "#0F766E", fontWeight: 800, marginRight: 3 }}>🧠 Bu hafta gelişen beceriler:</span>{ids.map(id => <LgsBeceriCip key={id} id={id} acik={ac === id} onClick={() => setAcikB(a => a === ders + "|" + id ? null : ders + "|" + id)} />)}{ac && <LgsBeceriKutu id={ac} />}</div>); };
   useEffect(() => { if (!dizin) pdrMetinDizinYukle().then(d => setDizin(d)).catch(() => {}); }, []);
   const konumlar = useMemo(() => { const b = new Date(); return Object.keys(PDR_LGS_KITAPLAR).map(d => ({ d, r: lgsDersKonumu(d, b, aktifYil, kaydirma[LGS_TAKVIM_ANAHTAR[d]] || 0) })).filter(x => x.r); }, [aktifYil, kaydirma]);
   const turkce = useMemo(() => lgsTurkceKonumu(dizin, new Date(), aktifYil, kaydirma["8m"] || 0), [dizin, aktifYil, kaydirma]);
@@ -37783,6 +37786,7 @@ function LgsBuHaftaPaneli({ aktifYil, onDurum }) {
                 <span style={{ color: MUTED }}>· {turkce.hafta}. hafta · {turkce.temaNo}/{turkce.temaSay}. tema: {turkce.tema}</span><br />
                 <span data-lgs-ac="turkce" onClick={() => setGosterici({ kitap: "t8m", kitapAd: (dizin.kitaplar.t8m || {}).ad || "8. Sınıf Türkçe (MEB)", sayfa: turkce.simdi.s, aralik: [turkce.simdi.s, turkce.simdi.e], ofset: (dizin.kitaplar.t8m || {}).ofset || 0 })} style={{ color: "#6D28D9", fontWeight: 800, cursor: "pointer", textDecoration: "underline" }}>📄 {turkce.simdi.ad}</span> <span style={{ color: MUTED }}>(s. {turkce.simdi.s}–{turkce.simdi.e})</span>
                 {turkce.dilbilgisi.length > 0 && <span data-lgs-dilbilgisi style={{ display: "block", color: TEXT }}>✏️ Dil bilgisi (tahmini): <b>{turkce.dilbilgisi.join(", ")}</b></span>}
+                {beceriSatiri("Türkçe", ["Parçada Anlam", ...turkce.dilbilgisi])}
               </>)}
               {(kaydirma["8m"] || 0) !== 0 && <span style={{ fontSize: 10.5, color: "#5B21B6" }}> · düzeltme {kaydirma["8m"] > 0 ? "+" : ""}{kaydirma["8m"]} hafta</span>}
             </div>
@@ -37798,6 +37802,7 @@ function LgsBuHaftaPaneli({ aktifYil, onDurum }) {
                 <span data-lgs-ac={kk} onClick={() => ac(r, r.sayfa)} style={{ color: "#6D28D9", fontWeight: 800, cursor: "pointer", textDecoration: "underline" }}>📄 {r.birim.konu}</span>
                 {r.alt && <span style={{ color: TEXT }}> — {r.alt[0]}</span>} <span style={{ color: MUTED }}>(≈ s. {r.sayfa})</span>
                 {r.sonraki && <span style={{ color: MUTED }}> → sırada: <span onClick={() => ac({ ...r, birim: r.sonraki }, r.sonraki.s)} style={{ cursor: "pointer", textDecoration: "underline" }}>{r.sonraki.konu}</span></span>}
+                {beceriSatiri(d, [r.birim.konu])}
               </>)}
               {(kaydirma[kk] || 0) !== 0 && <span style={{ fontSize: 10.5, color: "#5B21B6" }}> · düzeltme {kaydirma[kk] > 0 ? "+" : ""}{kaydirma[kk]} hafta</span>}
             </div>

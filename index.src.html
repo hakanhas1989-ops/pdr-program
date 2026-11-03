@@ -15717,6 +15717,11 @@ const KS_ASISTAN_ARACLAR = {
       return `${ekNot ? `Görüşmeye ek yapıldı (${r.date}${ekHedef.length > 1 ? `; grup görüşmesinin ${ekHedef.length} kaydına` : ""}); eski not aynen duruyor.` : `Görüşme düzeltildi (${r.date}${yt ? " → " + yt : ""}).`}${tasimaNotu}${r.grupKatilimcilari && r.grupKatilimcilari.length && !(ekNot && ekHedef.length > 1) ? ` Bu bir grup görüşmesi; diğer öğrencilerin (${r.grupKatilimcilari.join(", ")}) kayıtları ayrı, gerekirse onları da düzeltmeyi öner.` : ""} Bu nota dayanan risk/müdahale kaydı varsa yeniden değerlendirme gerekebilir.`;
     },
   },
+  lgs_beceri: {
+    aciklama: "LGS becerileri (yerelde): LGS'nin ölçtüğü beceriler (okuduğunu anlama, çıkarım-yorum, tablo-grafik okuma, akıl yürütme, problem çözme, modelleme, uzamsal düşünme, bilimsel süreç, neden-sonuç, kronoloji, harita okuma, kanıt-görüş ayrımı, kavram bilgisi, söz varlığı, dil bilgisi, günlük hayata aktarma, dikkat-süre) ve 8. sınıf konularıyla eşleşmesi. konu verirsen o konunun istediği/geliştirdiği becerileri ve geliştirme önerilerini; beceri verirsen o beceriyi isteyen konuları; ogrenci verirsen Konu Haritası yüzdelerinden tahmini beceri durumunu verir. 'Bu konu hangi becerileri istiyor', 'LGS hangi becerileri ölçüyor', 'hangi beceriyi geliştirmeli' sorularında kullan.",
+    girdi: '{"ogrenci": "isteğe bağlı", "sinif": "isteğe bağlı", "konu": "isteğe bağlı", "beceri": "isteğe bağlı"}', yontem: "hepsi",
+    calistir: (g, ctx, o) => ksAsistanLgsBeceri(g, ctx, o),
+  },
   onkosul_plani: {
     aciklama: "Ön koşul köprüsü (yerelde hesaplanır): Öğrenci bir dersi/konuyu yapamıyorsa nedeni önceki sınıflardan gelen ön koşul becerilerinin eksikliği olabilir. ogrenci verirsen Konu Haritası'nda yapılan kısa ön koşul kontrollerinin sonuçlarını ve eksik becerilerden oluşan sıralı köprü planını (süre, ne çalışmalı) verir. konu/ders verirsen o 8. sınıf LGS konusunun ön koşul becerilerini verir; ikisi de yoksa bu hafta derste işlenen konuların ön koşullarını verir. Ayrıca öğrenciye anlatım (psikoeğitim) ilkelerini içerir. 'Öğrenci X konusunu anlamıyor', 'temel eksik', 'önceki sınıf konusu', 'ön koşul' sorularında kullan.",
     girdi: '{"ogrenci": "isteğe bağlı", "sinif": "isteğe bağlı", "konu": "isteğe bağlı", "ders": "isteğe bağlı"}', yontem: "hepsi",
@@ -17258,8 +17263,8 @@ const KS_ARAC_GRUPLARI = {
     araclar: ["risk_analizi", "risk_kaydet", "ekranda_risk", "risk_kapat", "sevk_kaydet", "sevk_sonuc"] },
   mudahale: { re: /mudahale|plan|program|hedef|uyum|izlem|takip/,
     araclar: ["mudahale_plani", "mudahale_kaydet", "ekranda_mudahale", "mudahale_durum", "mudahale_programi_ara", "mudahale_programi_kaydet", "uyum_kaydet", "seans_hazirlik"] },
-  akademik: { re: /deneme|net|lgs|yks|puan|yuzdelik|okul|lise|tercih|taban|konu|ders|calisma|karne|yazili|yil sonu|not ortalam|sinav|on kosul|onkosul|anlamiyor|yapamiyor|temel eksik|kopru plan/,
-    araclar: ["deneme_kaydet", "deneme_analizi", "konu_guncelle", "lgs_konu_onceligi", "onkosul_plani", "hedef_okul", "hedef_okul_kaydet", "lise_taban_puanlari", "sinav_rehberi", "not_kaydet"] },
+  akademik: { re: /deneme|net|lgs|yks|puan|yuzdelik|okul|lise|tercih|taban|konu|ders|calisma|karne|yazili|yil sonu|not ortalam|sinav|on kosul|onkosul|anlamiyor|yapamiyor|temel eksik|kopru plan|beceri/,
+    araclar: ["deneme_kaydet", "deneme_analizi", "konu_guncelle", "lgs_konu_onceligi", "onkosul_plani", "lgs_beceri", "hedef_okul", "hedef_okul_kaydet", "lise_taban_puanlari", "sinav_rehberi", "not_kaydet"] },
   ogrenci: { re: /ekle|yeni ogrenci|nakil|kaydet|devamsiz|profil|kariyer|ilgi|meslek|d2/,
     araclar: ["ogrenci_ekle", "devamsizlik_kaydet", "profil_puanla", "profil2_guncelle"] },
   hatirlatma: { re: /hatirla|randevu|takvim|yarin|haftaya|gun sonra|unutma/,
@@ -17377,6 +17382,7 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - Danışman bir yanıtı ya da bu sohbeti öğrencinin dosyasına kaydetmek/göndermek isterse asistan_notu_kaydet kullan (kapsam: son ya da hepsi). Kaydedilecek metni yeniden yazma; program yanıtları aynen kaydeder.
 - Danışmanın kendi Kütüphanesi (yüklediği kitap, makale, yönetmelik, genelge — tam metin): "kütüphanede/yüklediğim kaynakta … ne diyor", mevzuat, süre/madde sorusu ya da kuramsal bir soru geldiğinde önce kutuphane_ara, ayrıntı için kutuphane_oku kullan; yanıtta kaynağın adını ve bölümünü belirt, kaynakta olmayanı kaynaktaymış gibi söyleme.
 - Müdahale Programları kütüphanesindeki kitaplar (8 kitap, tam metin) senin başvuru kaynağın: bir konu/beceri için etkinlik, oturum ya da program önerirken, grup ya da bireysel çalışma planlarken veya danışman bir kitap/oturum sorduğunda önce program_ara, ayrıntı için program_oturumu kullan. Önerinde kitabın adını, oturum numarasını ve PDF sayfasını belirt; kitapta olmayan bir şeyi kitaptaymış gibi söyleme.
+- LGS'nin ölçtüğü beceriler, bir konunun hangi becerileri istediği ya da öğrencinin hangi beceriyi geliştirmesi gerektiği sorulduğunda lgs_beceri kullan.
 - Öğrenci bir konuyu anlamadığında/yapamadığında, 'temel eksik' ya da 'önceki sınıf konusu' konuşulduğunda onkosul_plani kullan: eksik ön koşul becerilerini ve köprü planını (önce 20 dk temel, sonra güncel konu) öğrenciyi etiketlemeden anlat.
 - Görüşmede birlikte okunacak bir metin, öykü ya da şiir istendiğinde ya da bir duyguyu/konuyu açmak için kaynak arandığında metin_oner kullan (Türkçe ders kitaplarındaki metinler, danışmanlık temalarına göre dizinli). Önerinde kitabın adını ve sayfasını belirt; danışman sayfayı 📖 Metinle Çalışma ekranından açabilir.
 - LGS'ye hazırlık, "hangi konuya öncelik vermeli", "LGS'de en çok hangi konudan soru çıkıyor", "kaç net artırabilir" gibi sorularda lgs_konu_onceligi kullan; kazanılabilir neti "en fazla/yaklaşık" diye temkinli söyle.
@@ -38075,6 +38081,123 @@ async function ksAsistanOnkosul(g, ctx, o) {
   return b.join("\n\n");
 }
 
+// ── LGS BECERİ HARİTASI ──
+// 8. sınıf 2026-2027'de hâlâ 2018 öğretim programlarıyla okutuluyor; beceriler bu programlardaki beceri
+// adlarından (Türkçe okuma-anlama ve söz varlığı, Matematik süreç becerileri, Fen bilimsel süreç ve yaşam
+// becerileri, İnkılap tarihsel düşünme) ve MEB'in LGS için vurguladığı becerilerden (okuduğunu anlama,
+// yorumlama, akıl yürütme, analiz, problem çözme, bilimsel süreç) derlendi. Konu eşleşmeleri özgün çalışmadır.
+// [kısa ad, tam ad, ne demek, LGS'de nasıl sorulur, nasıl geliştirilir, program dayanağı]
+const LGS_BECERI = {
+  ok: ["Okuduğunu anlama", "Okuduğunu anlama", "Uzun metinleri, soru kökünü ve seçenekleri doğru ve eksiksiz anlamak.", "Bütün derslerde soru, paragraf ya da diyalogla başlar; cevap çoğu zaman metnin içindedir.", ["Her gün 2–3 paragraf soru çöz; çözmeden önce paragrafın ana fikrini tek cümleyle yaz.", "Ders metinlerini okurken her paragrafın kenarına 3–4 kelimelik başlık koy.", "Günde en az 20 dakika kitap okuma alışkanlığı edin."], "Türkçe ÖP (2018) okuma becerisi; tüm derslerde anadilde iletişim yetkinliği"],
+  cik: ["Çıkarım-yorum", "Çıkarım yapma ve yorumlama", "Metinde açıkça yazmayanı verilen ipuçlarından mantıklı biçimde çıkarmak; 'buna göre hangisi söylenebilir / söylenemez' sorusunu cevaplamak.", "\"Bu metinden hangi sonuca ulaşılabilir?\", \"…ulaşılamaz?\" kalıbındaki sorular; özellikle Türkçe, Din ve İnkılap'ta.", ["Seçenekleri tek tek metne götür: metinde dayanağı yoksa ele.", "\"Söylenemez\" sorularında olumsuzluğu soru kökünde daire içine al.", "Okuduğun bir haberden 'yazmıyor ama anlaşılıyor' dediğin 2 sonuç çıkar."], "Türkçe ÖP okuma-anlama kazanımları (metinle ilgili çıkarımda bulunma)"],
+  gorsel: ["Tablo-grafik okuma", "Tablo, grafik, şekil ve görsel okuma", "Grafik, tablo, şema, harita ve görsellerdeki bilgiyi okuyup metinle birleştirmek.", "Sütun/çizgi grafikleri, tablolar, deney düzenekleri, besin ağları, infografikler; İngilizce'de afiş ve tablo.", ["Grafiğe bakınca önce başlığı, eksenleri ve birimleri sesli söyle.", "Tablodaki en büyük, en küçük ve değişen değeri işaretle.", "Haftada bir gazete ya da dergiden bir grafik bul ve 2 cümleyle yorumla."], "Türkçe ÖP (grafik, tablo ve görselleri yorumlama); Matematik veri işleme; Fen verileri kaydetme ve kullanma"],
+  muh: ["Akıl yürütme", "Akıl yürütme (muhakeme)", "Verilen bilgilerden adım adım mantıklı sonuca gitmek; kural, örüntü ya da ilişki bulmak.", "Matematikte işlemden çok muhakeme isteyen sorular; Türkçe'de sözel mantık; dil bilgisinde kuralı uygulama.", ["Çözümünü adım adım yaz ve her adımın nedenini söyle ('çünkü…').", "Yanlış yaptığın soruda hangi adımda koptuğunu bul.", "Sözel mantık ve sayısal mantık sorularında tablo çizmeyi alışkanlık yap."], "Matematik ÖP (2018) matematiksel süreç becerileri: akıl yürütme"],
+  prob: ["Problem çözme", "Çok adımlı problem çözme", "Problemi anlamak, plan yapmak, uygulamak ve kontrol etmek; birden fazla bilgiyi birleştirmek.", "Uzun, günlük hayattan alınmış, 2–3 adımlı matematik ve fen soruları.", ["Problemi okuyunca 'verilenler / istenen' diye iki satır yaz.", "Şekil ya da tablo çizerek problemi görselleştir.", "Bulduğun cevabı soruya geri koyup kontrol et."], "Matematik ÖP süreç becerileri: problem çözme; Fen ÖP yaşam becerileri: analitik düşünme"],
+  temsil: ["Modelleme", "Matematiksel modelleme ve temsil", "Günlük hayattaki bir durumu denklem, ifade, grafik ya da tabloyla göstermek ve bunlar arasında geçiş yapmak.", "\"Bu durumu gösteren denklem/grafik hangisidir?\" soruları; harfli ifade, eğim, eşitsizlik.", ["Her problemde bilinmeyene bir harf ver ve cümleyi denkleme çevir.", "Aynı durumu tablo, grafik ve denklemle üç farklı biçimde göster.", "Günlük bir durumu (telefon tarifesi, taksi ücreti) denklemle yaz."], "Matematik ÖP süreç becerileri: iletişim ve ilişkilendirme"],
+  uzam: ["Uzamsal düşünme", "Uzamsal (geometrik) düşünme", "Şekilleri zihinde döndürmek, katlamak, kaydırmak; cisimleri farklı yönlerden görmek.", "Öteleme-yansıma, cisimlerin açınımı, benzer üçgenler ve görsel geometri soruları.", ["Kareli kâğıtta şekilleri ötele, yansıt ve çiz.", "Kâğıttan prizma ve silindir açınımı yapıp katla.", "Şeklin üzerine bilinen tüm uzunluk ve açıları yaz."], "Matematik ÖP geometri ve ölçme öğrenme alanı"],
+  bsb: ["Bilimsel süreç", "Bilimsel süreç becerileri (deney yorumlama)", "Deneyde bağımlı-bağımsız-kontrol değişkenlerini ayırmak, hipotez kurmak, sonucu yorumlamak.", "Fen'de deney düzeneği verilip 'hangi değişken test ediliyor / hangi sonuca ulaşılır' diye sorulur.", ["Her deneyde 'neyi değiştirdik, neyi ölçtük, neyi sabit tuttuk' tablosunu doldur.", "Ders kitabındaki deneyleri sonucu okumadan önce tahmin et.", "Evde basit bir deney yap ve değişkenlerini yaz."], "Fen Bilimleri ÖP (2018) bilimsel süreç becerileri"],
+  neden: ["Neden-sonuç", "Neden-sonuç ilişkisi kurma", "Bir olayın nedenlerini ve sonuçlarını ayırmak, aralarındaki bağı açıklamak.", "İnkılap'ta olayların nedeni/sonucu; Fen'de 'bunun sebebi nedir'; Din'de davranış-sonuç.", ["Her olay için iki sütunlu 'neden / sonuç' tablosu yap.", "\"Çünkü\" ve \"bu yüzden\" bağlaçlarıyla konuyu kendi cümlelerinle anlat.", "Soru kökündeki 'nedeni' mi 'sonucu' mu sorulduğunu işaretle."], "İnkılap Tarihi ÖP (2018) tarih yöntem kavramları: neden-sonuç; Fen ÖP analitik düşünme"],
+  kron: ["Kronoloji", "Kronolojik düşünme, değişim ve süreklilik", "Olayları zaman sırasına koymak; neyin değişip neyin sürdüğünü görmek.", "\"Hangisi diğerlerinden önce gerçekleşmiştir?\", olay sıralama, dönem karşılaştırma soruları.", ["Ünite başına bir zaman şeridi çiz ve olayları yerleştir.", "Olayları ezberlemek yerine 'bu olay hangisinin sonucuydu' diye zincir kur.", "Önce-sonra karşılaştırma tablosu yap (örn. inkılaplardan önce/sonra)."], "İnkılap Tarihi ÖP: kronoloji, değişim ve süreklilik"],
+  harita: ["Harita okuma", "Harita okuma ve yorumlama", "Haritada yer, yön ve sınırları okuyup olaylarla ilişkilendirmek.", "Cepheler, antlaşma sınırları, kongreler ve dış politika olaylarının haritayla verildiği sorular.", ["Boş Türkiye haritasına cepheleri ve kongre şehirlerini işaretle.", "Her antlaşmanın sınırlarını renkli kalemle karşılaştır.", "Haritalı soruda önce lejantı (açıklamayı) oku."], "Sosyal Bilgiler ve İnkılap Tarihi ÖP: harita okuryazarlığı"],
+  kanit: ["Kanıt-görüş ayrımı", "Kanıt kullanma, bilgi ile görüşü ayırma", "Kanıtlanabilir bilgi (nesnel) ile kişisel görüşü (öznel) ayırmak; yargıyı kaynakla desteklemek.", "\"Hangisi bilgi değil yorumdur?\", belge/söz verilip 'buna kanıt olarak hangisi gösterilebilir' soruları.", ["Cümlenin kanıtlanıp kanıtlanamayacağını sor: 'Bunu herkes doğrulayabilir mi?'", "Belgeli sorularda önce belgenin kim tarafından, ne zaman yazıldığına bak.", "Bir haberdeki bilgi ve yorum cümlelerinin altını farklı renkle çiz."], "İnkılap Tarihi ÖP: kanıt; Türkçe ÖP: öznel-nesnel yargıları ayırt etme"],
+  kavram: ["Kavram bilgisi", "Kavram bilgisi ve kavramlar arası ilişki", "Temel kavramları doğru tanımak, benzer kavramları birbirinden ayırmak.", "Kavramın tanımının ya da örneğinin sorulduğu, benzer kavramların karıştırıldığı sorular.", ["Ünite sonunda 10 anahtar kavramla kendi sözlüğünü yap.", "Karıştırdığın kavram çiftleri için 'benzerlik / fark' tablosu çiz.", "Kavramı günlük hayattan bir örnekle eşleştir."], "Tüm derslerin öğretim programlarındaki kavram öğretimi"],
+  soz: ["Söz varlığı", "Söz varlığı (kelime bilgisi)", "Kelimelerin, deyimlerin ve İngilizce sözcüklerin anlamını bilmek ve bağlamdan tahmin etmek.", "Sözcükte anlam, deyim-atasözü, söz sanatları; İngilizce'de bağlamdan kelime anlamı.", ["Okurken bilmediğin kelimeleri bir deftere yaz, haftada bir tekrar et.", "İngilizce ünite kelimelerini resimli kartlarla çalış.", "Yeni öğrendiğin kelimeyle kendi cümleni kur."], "Türkçe ÖP söz varlığı; İngilizce ÖP kelime bilgisi"],
+  dil: ["Dil bilgisi uygulama", "Dil bilgisi kuralını uygulama", "Dil bilgisi kuralını bilmek ve cümle üzerinde doğru uygulamak.", "Fiilimsi, öge, çatı, cümle türü, yazım ve noktalama soruları; çoğu zaman bir metin üzerinden.", ["Kuralı bir örnek cümleyle birlikte not al.", "Her gün 5 cümlede ilgili yapıyı bul (örn. ögelerine ayır).", "Yanlış yaptığın soruda hangi kuralı karıştırdığını not et."], "Türkçe ÖP (2018) 8. sınıf dil bilgisi kazanımları"],
+  transfer: ["Günlük hayata aktarma", "Bilgiyi günlük yaşama aktarma (transfer)", "Öğrendiğini yeni bir duruma, günlük hayattaki bir olaya uygulamak.", "Bilgi doğrudan sorulmaz; günlük bir olay anlatılıp konuyla ilişkisi sorulur.", ["Her konu için 'bunu günlük hayatta nerede görürüm?' sorusuna 2 örnek yaz.", "Haberlerde ve evde konuyla ilgili örnekler ara.", "Konuyu bir arkadaşına günlük örnekle anlat."], "MEB'in LGS için vurguladığı bilgiyi kullanma ve transfer etme"],
+  dikkat: ["Dikkat-süre", "Dikkat, yönerge analizi ve süre yönetimi", "Soru kökünü (değildir, yanlıştır, ulaşılamaz) doğru okumak ve süreyi yönetmek.", "Sözel oturum: 50 soru 75 dk; sayısal oturum: 40 soru 80 dk. Uzun metinli sorularda süre baskısı.", ["Soru kökündeki olumsuz ifadeyi daire içine al.", "Denemelerde ders başına süre tut; takıldığın soruyu işaretleyip geç.", "Haftada bir süreli deneme çöz ve 'dikkatsizlik' yanlışlarını say."], "LGS uygulama koşulları (oturum süreleri); öğrenmeyi öğrenme yetkinliği"],
+};
+// 8. sınıf LGS konusu → istediği/geliştirdiği beceriler (önem sırasıyla)
+const LGS_KONU_BECERI = {
+  "Türkçe": { "Parçada Anlam": ["ok", "cik", "gorsel", "dikkat"], "Sözel Mantık": ["muh", "dikkat", "ok"], "Cümlede Anlam": ["cik", "ok", "soz"], "Sözcükte Anlam": ["soz", "cik"], "Noktalama İşaretleri": ["dil", "dikkat"], "Yazım Kuralları": ["dil", "dikkat"], "Fiilimsiler": ["dil", "kavram"], "Metin Türleri": ["kavram", "ok", "kanit"], "Deyimler ve Atasözleri": ["soz", "cik", "transfer"], "Anlatım Bozukluğu": ["dil", "muh", "dikkat"], "Cümle Türleri": ["dil", "kavram"], "Cümlenin Ögeleri": ["dil", "muh"], "Fiillerde Çatı": ["dil", "muh"], "Söz Sanatları": ["soz", "cik", "kavram"] },
+  "Matematik": { "Çarpanlar ve Katlar": ["prob", "muh", "temsil"], "Üslü Sayılar": ["muh", "temsil", "prob"], "Köklü Sayılar": ["muh", "temsil", "uzam"], "Veri Analizi": ["gorsel", "cik", "prob"], "Olasılık": ["muh", "transfer", "prob"], "Cebirsel İfadeler": ["temsil", "muh", "uzam"], "Doğrusal Denklemler ve Eğim": ["temsil", "gorsel", "prob", "transfer"], "Eşitsizlikler": ["temsil", "muh", "transfer"], "Üçgenler": ["uzam", "muh", "prob"], "Eşlik ve Benzerlik": ["uzam", "muh", "transfer"], "Dönüşüm Geometrisi": ["uzam", "dikkat"], "Geometrik Cisimler": ["uzam", "prob", "transfer"] },
+  "Fen Bilimleri": { "Mevsimler ve İklim": ["neden", "gorsel", "kavram", "transfer"], "DNA ve Genetik Kod": ["kavram", "muh", "gorsel"], "Basınç": ["bsb", "neden", "transfer"], "Madde ve Endüstri": ["kavram", "bsb", "gorsel", "transfer"], "Basit Makineler": ["bsb", "muh", "transfer", "gorsel"], "Enerji Dönüşümleri ve Çevre Bilimi": ["neden", "gorsel", "transfer"], "Elektrik Yükleri ve Elektrik Enerjisi": ["bsb", "neden", "transfer"] },
+  "İnkılap Tarihi": { "Bir Kahraman Doğuyor": ["ok", "cik", "neden"], "Milli Uyanış: Bağımsızlık Yolunda Atılan Adımlar": ["neden", "harita", "kron", "kanit"], "Ya İstiklal Ya Ölüm": ["kron", "harita", "neden", "kanit"], "Atatürkçülük ve Çağdaşlaşan Türkiye": ["kavram", "neden", "transfer"], "Demokratikleşme Çabaları": ["kavram", "kanit", "kron"], "Atatürk Dönemi Türk Dış Politikası": ["neden", "harita", "cik"], "Atatürk'ün Vefatı ve Sonrası": ["kron", "neden", "cik"] },
+  "Din Kültürü": { "Kader İnancı": ["kavram", "ok", "cik"], "Zekat ve Sadaka": ["kavram", "transfer", "ok"], "Din ve Hayat": ["cik", "transfer", "ok"], "Hz. Muhammed'in Örnekliği": ["cik", "transfer", "ok"], "Kur'an-ı Kerim'in Özellikleri": ["kavram", "ok", "cik"], "Bir Peygamber Tanıyorum: Hz. Musa": ["ok", "cik", "kavram"] },
+  "İngilizce": { "Friendship": ["soz", "ok", "cik"], "Teen Life": ["soz", "ok", "gorsel"], "In The Kitchen": ["soz", "gorsel", "dikkat"], "On The Phone": ["ok", "cik", "soz"], "The Internet": ["gorsel", "ok", "cik"], "Adventures": ["soz", "cik", "gorsel"], "Tourism": ["ok", "gorsel", "cik"], "Chores": ["gorsel", "soz", "dikkat"], "Science": ["ok", "soz", "cik"], "Natural Forces": ["ok", "cik", "soz"] },
+};
+function lgsBeceri(id) { const b = LGS_BECERI[id]; return b ? { id, kisa: b[0], ad: b[1], tanim: b[2], lgs: b[3], gelistir: b[4], dayanak: b[5] } : null; }
+function lgsKonuBecerileri(ders, konu) { return ((LGS_KONU_BECERI[ders] || {})[konu] || []).filter(id => LGS_BECERI[id]); }
+// Becerinin LGS'deki ağırlığı (o beceriyi isteyen konulardan beklenen soru toplamı) ve öğrencinin konu tamamlanmasına göre tahmini düzeyi
+function lgsBeceriOzeti(ogrVerisi) {
+  const o = {};
+  Object.keys(LGS_BECERI).forEach(id => { o[id] = { id, soru: 0, konular: [], agirlikliYuzde: 0, isaretli: 0 }; });
+  Object.entries(LGS_KONU_HARITASI).forEach(([ders, konular]) => konular.forEach(k => {
+    const ids = lgsKonuBecerileri(ders, k.konu); if (!ids.length) return;
+    const b = lgsBeklenenSoru(k) || 0, y = ogrVerisi ? konuDegeriAl(ogrVerisi[ders], k.konu) : 0;
+    ids.forEach((id, i) => { const w = b * (i === 0 ? 1 : 0.6); const x = o[id]; x.soru += b; x.konular.push({ ders, konu: k.konu, b, yuzde: y }); x.agirlikliYuzde += w * y; x.agirlik = (x.agirlik || 0) + w; if (y > 0) x.isaretli++; });
+  }));
+  return Object.values(o).map(x => ({ ...x, ...lgsBeceri(x.id), duzey: x.agirlik ? Math.round(x.agirlikliYuzde / x.agirlik) : 0 })).sort((a, b) => b.soru - a.soru);
+}
+function lgsBeceriHaritasiHtml() {
+  const e = cdtEsc, ids = Object.keys(LGS_BECERI);
+  let h = `<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LGS Beceri Haritası</title><style>
+body{font-family:Arial,sans-serif;color:#222;margin:14px;font-size:11px;line-height:1.4}h1{font-size:16px;color:#0F766E;margin:0 0 4px}h2{font-size:13px;color:#0F766E;margin:14px 0 4px}
+table{border-collapse:collapse;width:100%;margin-bottom:6px;page-break-inside:avoid}th,td{border:1px solid #ccc;padding:3px 5px;vertical-align:top;text-align:left}th{background:#0F766E;color:#fff;font-size:10px}.not{color:#666;font-size:10px}
+.b{display:inline-block;background:#CCFBF1;color:#115E59;border-radius:6px;padding:0 5px;margin:1px;font-size:10px}@media print{body{margin:8mm}h2{page-break-after:avoid}}</style></head><body>
+<h1>🧠 LGS Beceri Haritası — 8. sınıf</h1><div class="not">Beceriler, 8. sınıfta uygulanan öğretim programlarındaki beceri adlarından ve MEB'in LGS için vurguladığı becerilerden (okuduğunu anlama, yorumlama, akıl yürütme, analiz, problem çözme, bilimsel süreç) derlendi. Konu eşleşmeleri yol göstericidir.</div>
+<h2>Konular ve istediği beceriler</h2>`;
+  Object.entries(LGS_KONU_BECERI).forEach(([ders, km]) => { h += `<table><tr><th style="width:38%">${e(ders)}</th><th>Bu konu şu becerileri ister ve geliştirir</th></tr>${Object.entries(km).map(([k, l]) => `<tr><td>${e(k)}</td><td>${l.map(id => `<span class="b">${e(LGS_BECERI[id][0])}</span>`).join(" ")}</td></tr>`).join("")}</table>`; });
+  h += `<h2>Beceriler: ne demek, nasıl geliştirilir?</h2><table><tr><th style="width:20%">Beceri</th><th style="width:30%">LGS'de nasıl sorulur?</th><th>Nasıl geliştirilir?</th></tr>${ids.map(id => { const b = lgsBeceri(id); return `<tr><td><b>${e(b.ad)}</b><br><span class="not">${e(b.tanim)}</span></td><td>${e(b.lgs)}</td><td>${b.gelistir.map(x => "• " + e(x)).join("<br>")}<br><span class="not">Dayanak: ${e(b.dayanak)}</span></td></tr>`; }).join("")}</table></body></html>`;
+  return h;
+}
+function LgsBeceriCip({ id, acik, onClick }) { const b = LGS_BECERI[id]; return <button data-beceri-cip={id} onClick={onClick} style={{ fontSize:10, fontWeight:700, borderRadius:8, padding:"1px 7px", margin:"2px 3px 0 0", border:`1px solid ${acik ? "#0F766E" : "#99F6E4"}`, background: acik ? "#0F766E" : "#F0FDFA", color: acik ? "#fff" : "#115E59", cursor:"pointer" }}>{b[0]}</button>; }
+function LgsBeceriKutu({ id }) { const b = lgsBeceri(id); return (
+  <div data-beceri-kutu={id} style={{ marginTop:4, background:"#F0FDFA", border:"1px solid #99F6E4", borderRadius:8, padding:"6px 8px", fontSize:11.5, lineHeight:1.45 }}>
+    <b style={{ color:"#0F766E" }}>{b.ad}</b>: {b.tanim}
+    <div style={{ marginTop:3 }}><b>LGS'de:</b> {b.lgs}</div>
+    <div style={{ marginTop:3 }}><b>Nasıl geliştirilir:</b>{b.gelistir.map((x, i) => <div key={i}>• {x}</div>)}</div>
+    <div style={{ fontSize:10, color:MUTED, marginTop:3 }}>Dayanak: {b.dayanak}</div>
+  </div>); }
+function LgsBeceriPaneli({ ogrVerisi, seciliAd }) {
+  const [acik, setAcik] = useState(false), [secili, setSecili] = useState(null);
+  const ozet = useMemo(() => lgsBeceriOzeti(ogrVerisi), [ogrVerisi]);
+  const isaretVar = ozet.some(x => x.isaretli > 0), zayif = isaretVar ? [...ozet].filter(x => x.soru >= 3).sort((a, b) => a.duzey - b.duzey).slice(0, 3) : [];
+  return (
+    <div data-testid="lgs-beceri" style={{ background:"#F0FDFA", border:"1px solid #5EEAD4", borderRadius:12, padding:"10px 12px", marginBottom:14 }}>
+      <div onClick={() => setAcik(v => !v)} style={{ fontSize:13, fontWeight:900, color:"#0F766E", cursor:"pointer" }}>🧠 LGS Becerileri {acik ? "▲" : "▼"}</div>
+      {acik && (<>
+        <div style={{ fontSize:10.5, color:"#115E59", margin:"3px 0 6px", lineHeight:1.45 }}>LGS bilgiyi doğrudan değil, becerilerle ölçer. Aşağıdaki beceriler 8. sınıf öğretim programlarındaki beceri adlarından ve MEB'in LGS için vurguladığı becerilerden derlendi. Sayı, o beceriyi isteyen konulardan LGS'de yılda yaklaşık kaç soru çıktığıdır (bir soru birden çok beceri isteyebilir). Konu listesinde her konunun altında istediği beceriler yazar.</div>
+        {seciliAd && (isaretVar ? <div data-testid="lgs-beceri-zayif" style={{ background:"#fff", border:"1px solid #99F6E4", borderRadius:9, padding:"6px 9px", marginBottom:6, fontSize:11.5 }}>👤 <b>{seciliAd}</b> için öncelikli beceriler (işaretlenen konu yüzdelerine göre tahmini): {zayif.map(x => `${x.kisa} %${x.duzey}`).join(" · ")}</div>
+          : <div style={{ fontSize:11, color:MUTED, marginBottom:6 }}>👤 Öğrencinin konu yüzdelerini işaretlerseniz hangi becerilere öncelik vermesi gerektiği burada çıkar.</div>)}
+        {ozet.map(x => (
+          <div key={x.id} data-beceri-satir={x.id} style={{ borderTop:"1px dashed #99F6E4", padding:"5px 0" }}>
+            <div onClick={() => setSecili(s => s === x.id ? null : x.id)} style={{ display:"flex", gap:6, alignItems:"center", cursor:"pointer" }}>
+              <span style={{ flex:1, fontSize:12, fontWeight:800 }}>{x.ad}</span>
+              {seciliAd && isaretVar && <span style={{ fontSize:10, fontWeight:800, color: x.duzey >= 75 ? "#15803D" : x.duzey >= 40 ? "#B45309" : "#B91C1C" }}>%{x.duzey}</span>}
+              <span style={{ fontSize:10, background:"#CCFBF1", color:"#115E59", borderRadius:8, padding:"1px 6px", fontWeight:700 }}>≈{lgsSayiYaz(x.soru)} soru</span>
+              <span style={{ fontSize:10, color:MUTED }}>{secili === x.id ? "▲" : "▼"}</span>
+            </div>
+            {secili === x.id && (<>
+              <LgsBeceriKutu id={x.id} />
+              <div style={{ fontSize:11, marginTop:4 }}><b>İsteyen konular:</b> {x.konular.map(k => `${k.konu} (${k.ders})`).join(", ")}</div>
+            </>)}
+          </div>))}
+        <button data-testid="lgs-beceri-yazdir" onClick={() => ootBelgeAc(lgsBeceriHaritasiHtml(), "LGS Beceri Haritası")} style={{ width:"100%", marginTop:6, padding:"7px", borderRadius:8, border:"1px solid #5EEAD4", background:"#fff", color:"#0F766E", fontSize:11.5, fontWeight:800, cursor:"pointer" }}>🖨 LGS Beceri Haritası (konu × beceri tablosu)</button>
+      </>)}
+    </div>
+  );
+}
+async function ksAsistanLgsBeceri(g, ctx, o) {
+  const b = [], sade = (x) => ksSade(String(x || ""));
+  if (g.konu) {
+    const l = []; Object.entries(LGS_KONU_BECERI).forEach(([d, km]) => Object.keys(km).forEach(k => { if (sade(k).includes(sade(g.konu))) l.push([d, k]); }));
+    if (l.length) b.push(l.slice(0, 4).map(([d, k]) => `${k} (${d}) şu becerileri ister ve geliştirir:\n` + lgsKonuBecerileri(d, k).map(id => { const x = lgsBeceri(id); return `• ${x.ad}: ${x.tanim} LGS'de: ${x.lgs} Geliştirme: ${x.gelistir.join(" ")}`; }).join("\n")).join("\n\n"));
+    else b.push("Bu adla bir 8. sınıf LGS konusu bulunamadı.");
+  }
+  if (g.beceri) {
+    const id = Object.keys(LGS_BECERI).find(i => sade(LGS_BECERI[i][1]).includes(sade(g.beceri)) || sade(LGS_BECERI[i][0]).includes(sade(g.beceri)));
+    if (id) { const x = lgsBeceriOzeti(null).find(y => y.id === id); b.push(`${x.ad} (LGS'de ≈${lgsSayiYaz(x.soru)} soruda öne çıkar): ${x.tanim}\nLGS'de: ${x.lgs}\nGeliştirme: ${x.gelistir.join(" ")}\nİsteyen konular: ${x.konular.map(k => `${k.konu} (${k.ders})`).join(", ")}\nDayanak: ${x.dayanak}`); }
+  }
+  if (o) {
+    const ogr = (ctx.konuHaritasiVerisi || {})[pdrOgrAnahtar(o.name, o.className, o.numara)] || null, oz = lgsBeceriOzeti(ogr);
+    if (oz.some(x => x.isaretli > 0)) b.push(`ÖĞRENCİNİN BECERİ DURUMU (Konu Haritası tamamlanma yüzdelerinden tahmini; konu bilgisi ile beceri birbirine bağlı olduğu için yaklaşık bir göstergedir):\n` + [...oz].filter(x => x.soru >= 3).sort((a, c) => a.duzey - c.duzey).map(x => `${x.ad}: %${x.duzey} (LGS'de ≈${lgsSayiYaz(x.soru)} soruda öne çıkar)`).join("\n"));
+    else b.push("Öğrencinin Konu Haritası'nda işaretli konu yüzdesi yok; beceri durumu çıkarılamadı.");
+  }
+  if (!g.konu && !g.beceri && !o) b.push("LGS BECERİLERİ (LGS'deki soru ağırlığına göre):\n" + lgsBeceriOzeti(null).map(x => `• ${x.ad} (≈${lgsSayiYaz(x.soru)} soruda öne çıkar): ${x.tanim}`).join("\n"));
+  b.push("Not: Beceriler 8. sınıfta uygulanan 2018 öğretim programlarındaki beceri adlarından ve MEB'in LGS için vurguladığı becerilerden (okuduğunu anlama, yorumlama, akıl yürütme, analiz, problem çözme, bilimsel süreç) derlenmiştir; konu-beceri eşleşmeleri yol göstericidir.");
+  return b.join("\n\n");
+}
+
 function KonuHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, konuHaritasiVerisi, setKonuHaritasiVerisi, kademe, aktifYil }) {
   const [seciliAd, setSeciliAd] = useState(aktifOgrenci?.name || "");
   const [ogrenciArama, setOgrenciArama] = useState("");
@@ -38082,6 +38205,7 @@ function KonuHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, kon
   const [sinavTip, setSinavTip] = useState("tyt"); // sadece kademe==="lise" iken kullanılır
   const [acikKazanim, setAcikKazanim] = useState(null); // "ders|konu": konunun kazanım listesi açık
   const [lgsDurum, setLgsDurum] = useState({}); // ders → konu → islendi/simdi/sirada (tahmini)
+  const [acikBeceri, setAcikBeceri] = useState(null); // "ders|konu|beceri"
   const [onkosulAcik, setOnkosulAcik] = useState(null); // "ders|konu": ön koşul kontrolü açık
   const [onkosulVeri, setOnkosulVeri] = useState(PDR_ONKOSUL_VERI);
   useEffect(() => { onkosulOku().then(v => setOnkosulVeri({ ...v })); }, []);
@@ -38138,6 +38262,7 @@ function KonuHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, kon
       )}
       {!liseMi && <PdrKazanimPaneli varsayilanSinif={((/(\d+)/.exec(String(seciliSinif || "")) || [])[1]) || "8"} />}
       {!liseMi && <LgsBuHaftaPaneli aktifYil={aktifYil} onDurum={setLgsDurum} />}
+      {!liseMi && <LgsBeceriPaneli ogrVerisi={seciliAd ? ogrVerisi : null} seciliAd={seciliAd} />}
 
       {liseMi && (
         <div style={{ display:"flex", gap:6, marginBottom:16 }}>
@@ -38249,6 +38374,12 @@ function KonuHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, kon
                               <button data-testid="konu-kazanim" onClick={() => setAcikKazanim(a => a === ak ? null : ak)} style={{ background:"none", border:"none", color:PURPLE, fontSize:11, fontWeight:700, cursor:"pointer", padding:"5px 0 0" }}>📜 {l.length} kazanım {acikKazanim === ak ? "▲" : "▼"}</button>
                               {acikKazanim === ak && <div data-testid="konu-kazanim-liste" style={{ marginTop:4 }}>{l.map(([kd, m]) => <div key={kd} style={{ fontSize:11.5, color:TEXT, lineHeight:1.45, padding:"2px 0 2px 8px", borderLeft:`2px solid ${PURPLE_LIGHT}` }}><b style={{ color:MUTED, fontSize:10 }}>{kd}</b> {m}</div>)}</div>}
                             </>); })()}
+                          {!liseMi && lgsKonuBecerileri(ders, k.konu).length > 0 && (() => { const ids = lgsKonuBecerileri(ders, k.konu), on = ders + "|" + k.konu + "|", ac = ids.find(id => acikBeceri === on + id); return (
+                            <div data-konu-beceri style={{ marginTop:4 }}>
+                              <span style={{ fontSize:10, color:"#0F766E", fontWeight:800, marginRight:3 }}>🧠 Becerileri:</span>
+                              {ids.map(id => <LgsBeceriCip key={id} id={id} acik={ac === id} onClick={() => setAcikBeceri(a => a === on + id ? null : on + id)} />)}
+                              {ac && <LgsBeceriKutu id={ac} />}
+                            </div>); })()}
                           {!liseMi && onkosulKonuBecerileri(ders, k.konu).length > 0 && (() => { const ak = ders + "|" + k.konu, kayit = ogrAnahtar && onkosulVeri[ogrAnahtar] && onkosulVeri[ogrAnahtar][ak], eksik = kayit ? Object.values(kayit.sonuc || {}).filter(([d, t]) => d < t).length : 0; return (
                             <>
                               <button data-testid="onkosul-ac" onClick={() => setOnkosulAcik(a => a === ak ? null : ak)} style={{ background:"none", border:"none", color:"#5B21B6", fontSize:11, fontWeight:700, cursor:"pointer", padding:"5px 0 0", marginLeft:8 }}>🧱 Ön koşul {kayit ? (eksik ? `· ${eksik} eksik (${kayit.tarih})` : `· hazır ✓ (${kayit.tarih})`) : "kontrolü"} {onkosulAcik === ak ? "▲" : "▼"}</button>
@@ -40513,6 +40644,7 @@ function pdrAsistanBildir() { const S = PDR_ASISTAN_SOHBET; if (S.dinle) S.dinle
 const PDR_ASISTAN_ARAC_AD = {
   metin_oner: "Ders kitabından metin önerisi",
   onkosul_plani: "Ön koşul köprü planı",
+  lgs_beceri: "LGS beceri haritası",
   ogrenci_ara: "Öğrenci arandı", ogrenci_ozeti: "Öğrenci özeti", gorusme_notlari: "Görüşme notları okundu",
   risk_analizi: "Risk analizi (kapalı sistem)", seans_hazirlik: "Seans hazırlığı (kapalı sistem)", mudahale_plani: "Müdahale planı önerisi (kapalı sistem)",
   deneme_analizi: "Deneme analizi (kapalı sistem)", profil_analizi: "Profil analizi (kapalı sistem)", supervizyon: "Süpervizyon raporu (kapalı sistem)",

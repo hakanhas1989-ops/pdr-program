@@ -15387,7 +15387,12 @@ const KS_ASISTAN_ARACLAR = {
   lgs_konu_onceligi: {
     aciklama: "LGS konu önceliği (yerelde hesaplanır). ogrenci verirsen öğrencinin Konu Haritası'ndaki tamamlanma yüzdelerini LGS'de konu başına beklenen soru sayısıyla birleştirip 'önce bunlara çalış' listesini ve tahmini kazanılabilir neti verir. ogrenci vermezsen derslere göre LGS'de en çok soru çıkan konuları verir. ders: isteğe bağlı (Türkçe, Matematik, Fen Bilimleri, İnkılap Tarihi, Din Kültürü, İngilizce).",
     girdi: '{"ogrenci": "isteğe bağlı", "sinif": "isteğe bağlı", "ders": "isteğe bağlı"}', yontem: "hepsi",
-    calistir: (g, ctx, o) => ksAsistanLgsOncelik(g, ctx, o),
+    calistir: async (g, ctx, o) => {
+      const t = ksAsistanLgsOncelik(g, ctx, o);
+      if (ctx.kademe === "lise") return t;
+      try { const bh = lgsBuHaftaMetni(ctx.aktifYil, await pdrMetinTakvimKaydirmaOku()); if (bh) return `${t}\nOKULDA BU HAFTA (tahmini; MEB takvimi ve ders kitabı sayfalarına göre):\n${bh}\nHenüz işlenmemiş konulardaki eksiklik normaldir; çalışma önceliğini işlenmiş ve şu an işlenen konulara ver, işlenmemişleri ön çalışma olarak öner.`; } catch (e) {}
+      return t;
+    },
   },
   test_sonucu: {
     aciklama: "Öğrencinin uygulanan testlerinin sonuçlarını programın kendi puanlamasıyla getirir: okul olgunluğu (karar, alan yüzdeleri, risk göstergeleri ve gerekçeleri, güçlü yanlar, okul/ev eylem planı, yönlendirme, izleme tarihi), okuma-yazma değerlendirmesi ve programı (destek modülleri, izleme kararı), kaynaştırma (bağımsız beceriler, desteklenecek alanlar, RAM rapor süresi), BİLPRO bilişsel profil (alan puanları, kapasite-verimlilik farkı, dikkat göstergeleri, klinik örüntüler ve ayırıcı değerlendirme, öğretmen/veli önerileri, okul içi yüzdelik), ÖÖG ön-tarama, otizm taraması, CAS tarzı tarama ve performans testi ve diğer testlerin özeti. Test sonucu sorulduğunda, veliye anlatım ya da plan hazırlanırken kullan. test: isteğe bağlı test adı (örn. okul olgunluğu). Aynı test birden çok kez uygulandıysa önceki ve ilk uygulamaya göre DEĞİŞİMİ (ilerledi/geriledi, sayılarla) de verir; 'ilerledi mi', 'gelişme var mı', 'önceki teste göre' sorularında kullan.",
@@ -37663,12 +37668,109 @@ function konuHaritasiYuzdeHesapla(ders, checkedMap, konuKaynagi) {
   return Math.round(toplamYuzde / konular.length);
 }
 
-function KonuHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, konuHaritasiVerisi, setKonuHaritasiVerisi, kademe }) {
+// ── 8. sınıf LGS dersleri: bu hafta derste hangi konu? (tahmini) ──
+// Ders kitaplarının içindekiler sayfasından ünite/bölüm ve sayfa aralıkları (kitap metni değil). Konu adları
+// Konu Haritası'ndaki adlarla aynı. Tahmin: okul açıldığından beri geçen ders haftası, kitap sayfalarına orantılı;
+// kitabın ~34. haftada (LGS öncesi) biteceği varsayılır. Kitap PDF'leri yalnız cihazda (Metinle Çalışma ile aynı depo).
+const LGS_BITIS_HAFTA = 34;
+const PDR_LGS_KITAPLAR = {
+  "Matematik": { k: "mat8", ad: "8. Sınıf Matematik (MEB)", ofset: 0, sayfa: 365, birimler: [
+    { konu: "Çarpanlar ve Katlar", unite: 1, ad: "Çarpanlar ve Katlar", s: 12, e: 32 },
+    { konu: "Üslü Sayılar", unite: 1, ad: "Üslü İfadeler", s: 33, e: 57 },
+    { konu: "Köklü Sayılar", unite: 2, ad: "Kareköklü İfadeler", s: 58, e: 94 },
+    { konu: "Veri Analizi", unite: 2, ad: "Veri Analizi", s: 95, e: 111 },
+    { konu: "Olasılık", unite: 3, ad: "Olasılık", s: 112, e: 129 },
+    { konu: "Cebirsel İfadeler", unite: 3, ad: "Cebirsel İfadeler ve Özdeşlikler", s: 130, e: 169 },
+    { konu: "Doğrusal Denklemler ve Eğim", unite: 4, ad: "Doğrusal Denklemler", s: 170, e: 214 },
+    { konu: "Eşitsizlikler", unite: 4, ad: "Eşitsizlikler", s: 215, e: 235 },
+    { konu: "Üçgenler", unite: 5, ad: "Üçgenler", s: 236, e: 280 },
+    { konu: "Eşlik ve Benzerlik", unite: 5, ad: "Eşlik ve Benzerlik", s: 281, e: 301 },
+    { konu: "Dönüşüm Geometrisi", unite: 6, ad: "Dönüşüm Geometrisi", s: 302, e: 321 },
+    { konu: "Geometrik Cisimler", unite: 6, ad: "Geometrik Cisimler", s: 322, e: 362 },
+  ] },
+  "Fen Bilimleri": { k: "fen8", ad: "8. Sınıf Fen Bilimleri (MEB)", ofset: 0, sayfa: 321, birimler: [
+    { konu: "Mevsimler ve İklim", unite: 1, ad: "Mevsimler ve İklim", s: 22, e: 48, alt: [["Mevsimlerin Oluşumu", 22], ["İklim ve Hava Hareketleri", 29]] },
+    { konu: "DNA ve Genetik Kod", unite: 2, ad: "DNA ve Genetik Kod", s: 50, e: 104, alt: [["DNA ve Genetik Kod", 50], ["Kalıtım", 61], ["Mutasyon ve Modifikasyon", 73], ["Adaptasyon", 78], ["Biyoteknoloji", 82]] },
+    { konu: "Basınç", unite: 3, ad: "Basınç", s: 106, e: 126, alt: [["Katı, sıvı ve gaz basıncı", 106]] },
+    { konu: "Madde ve Endüstri", unite: 4, ad: "Madde ve Endüstri", s: 128, e: 194, alt: [["Periyodik Sistem", 128], ["Fiziksel ve Kimyasal Değişimler", 139], ["Kimyasal Tepkimeler", 143], ["Asitler ve Bazlar", 147], ["Maddenin Isı ile Etkileşimi", 158], ["Türkiye'de Kimya Endüstrisi", 172]] },
+    { konu: "Basit Makineler", unite: 5, ad: "Basit Makineler", s: 196, e: 224, alt: [["Makaralar, kaldıraçlar, eğik düzlem", 196]] },
+    { konu: "Enerji Dönüşümleri ve Çevre Bilimi", unite: 6, ad: "Enerji Dönüşümleri ve Çevre Bilimi", s: 226, e: 272, alt: [["Besin Zinciri ve Enerji Akışı", 226], ["Enerji Dönüşümleri (fotosentez, solunum)", 233], ["Madde Döngüleri ve Çevre Sorunları", 242], ["Sürdürülebilir Kalkınma", 254]] },
+    { konu: "Elektrik Yükleri ve Elektrik Enerjisi", unite: 7, ad: "Elektrik Yükleri ve Elektrik Enerjisi", s: 274, e: 310, alt: [["Elektrik Yükleri ve Elektriklenme", 274], ["Elektrik Yüklü Cisimler", 284], ["Elektrik Enerjisinin Dönüşümü", 289]] },
+  ] },
+  "İnkılap Tarihi": { k: "ink8", ad: "8. Sınıf İnkılap Tarihi (MEB)", ofset: 1, sayfa: 242, birimler: [
+    { konu: "Bir Kahraman Doğuyor", unite: 1, ad: "Bir Kahraman Doğuyor", s: 14, e: 39, alt: [["XX. yüzyıl başında Osmanlı", 16], ["Mustafa Kemal'in çocukluğu ve eğitimi", 22], ["Fikir hayatının oluşması", 25], ["Askerlik hayatı", 30]] },
+    { konu: "Milli Uyanış: Bağımsızlık Yolunda Atılan Adımlar", unite: 2, ad: "Millî Uyanış", s: 40, e: 87, alt: [["Birinci Dünya Savaşı", 42], ["Osmanlı'nın savaştığı cepheler", 46], ["Mondros ve tepkiler", 53], ["Kuvâ-yı Millîye ve cemiyetler", 57], ["Millî Mücadele'nin hazırlık dönemi", 60], ["TBMM'nin açılması", 68], ["TBMM'ye karşı ayaklanmalar", 72], ["Sevr Antlaşması", 75]] },
+    { konu: "Ya İstiklal Ya Ölüm", unite: 3, ad: "Ya İstiklal Ya Ölüm!", s: 88, e: 129, alt: [["Doğu ve Güney cepheleri", 90], ["Batı cephesi, İnönü muharebeleri", 95], ["Maarif Kongresi", 103], ["Topyekûn mücadele", 105], ["Sakarya ve Büyük Taarruz", 108], ["Lozan Barış Antlaşması", 116], ["Millî Mücadele'de sanat ve edebiyat", 119]] },
+    { konu: "Atatürkçülük ve Çağdaşlaşan Türkiye", unite: 4, ad: "Atatürkçülük ve Çağdaşlaşan Türkiye", s: 130, e: 169, alt: [["Atatürk ilkeleri", 132], ["Siyasi alanda inkılaplar", 136], ["Hukuk alanında inkılaplar", 142], ["Eğitim ve kültür", 144], ["Toplumsal alanda inkılaplar", 151], ["Ekonomi", 155], ["Sağlık", 159], ["Yaşasın Cumhuriyet", 160], ["Temel esaslar", 164]] },
+    { konu: "Demokratikleşme Çabaları", unite: 5, ad: "Demokratikleşme Çabaları", s: 170, e: 183, alt: [["Çok partili hayat denemeleri", 172], ["Suikast girişimi", 176], ["İç ve dış tehditler", 177]] },
+    { konu: "Atatürk Dönemi Türk Dış Politikası", unite: 6, ad: "Atatürk Dönemi Türk Dış Politikası", s: 184, e: 201, alt: [["Temel ilkeler", 186], ["1923–1938 dış politika", 188], ["Hatay'ın katılması", 195]] },
+    { konu: "Atatürk'ün Vefatı ve Sonrası", unite: 7, ad: "Atatürk'ün Ölümü ve Sonrası", s: 202, e: 222, alt: [["Ölümünün yankıları", 204], ["Bıraktığı eserler", 207], ["İkinci Dünya Savaşı'na doğru", 209], ["Savaşın sonuçları ve Türkiye", 212], ["Çok partili sisteme geçiş", 215]] },
+  ] },
+};
+const LGS_TAKVIM_ANAHTAR = { "Matematik": "mat8", "Fen Bilimleri": "fen8", "İnkılap Tarihi": "ink8" };
+function lgsDersKonumu(ders, bugun, yil, kaydirma) {
+  const K = PDR_LGS_KITAPLAR[ders]; if (!K) return null;
+  const takvim = metinTakvimi(yil, bugun); const gun = metinDersGunu(takvim, bugun);
+  const hafta = Math.max(0, gun / 5 + (kaydirma || 0));
+  const B = K.birimler, bas = B[0].s, son = B[B.length - 1].e;
+  const durum = {};
+  if (gun === 0) { B.forEach(b => { durum[b.konu] = "sirada"; }); return { once: true, durum, K }; }
+  if (hafta >= LGS_BITIS_HAFTA) { B.forEach(b => { durum[b.konu] = "islendi"; }); return { bitti: true, hafta: Math.floor(hafta) + 1, durum, K }; }
+  const sayfa = bas + (son - bas + 1) * (hafta / LGS_BITIS_HAFTA);
+  let i = B.findIndex(b => sayfa <= b.e + 1); if (i < 0) i = B.length - 1;
+  const b = B[i]; let alt = null; (b.alt || []).forEach(a => { if (a[1] <= sayfa) alt = a; }); if (!alt && b.alt) alt = b.alt[0];
+  B.forEach((x, j) => { durum[x.konu] = j < i ? "islendi" : j === i ? "simdi" : "sirada"; });
+  return { hafta: Math.floor(hafta) + 1, birim: b, alt, sayfa: Math.max(b.s, Math.min(b.e, Math.round(sayfa))), sonraki: B[i + 1] || null, durum, K, tahmini: !!takvim.tahmini };
+}
+async function pdrMetinTakvimKaydirmaOku() { try { const r = await window.storage.get("pdr-metin-takvim"); return r && r.value ? JSON.parse(r.value) || {} : {}; } catch (e) { return {}; } }
+// Asistan için kısa metin
+function lgsBuHaftaMetni(yil, kaydirma) {
+  const b = new Date();
+  return Object.keys(PDR_LGS_KITAPLAR).map(d => { const r = lgsDersKonumu(d, b, yil, (kaydirma || {})[LGS_TAKVIM_ANAHTAR[d]] || 0); if (!r || r.once) return ""; if (r.bitti) return `${d}: kitap bitti (tekrar dönemi)`;
+    const sirada = r.K.birimler.filter(x => r.durum[x.konu] === "sirada").map(x => x.konu);
+    return `${d}: ${r.birim.konu}${r.alt ? ` — ${r.alt[0]}` : ""}${sirada.length ? ` (henüz işlenmemiş: ${sirada.join(", ")})` : ""}`; }).filter(Boolean).join("\n");
+}
+function LgsBuHaftaPaneli({ aktifYil, onDurum }) {
+  const [kaydirma, setKaydirma] = useState({}); const [acik, setAcik] = useState(true); const [gosterici, setGosterici] = useState(null);
+  useEffect(() => { pdrMetinTakvimKaydirmaOku().then(setKaydirma); }, []);
+  const konumlar = useMemo(() => { const b = new Date(); return Object.keys(PDR_LGS_KITAPLAR).map(d => ({ d, r: lgsDersKonumu(d, b, aktifYil, kaydirma[LGS_TAKVIM_ANAHTAR[d]] || 0) })).filter(x => x.r); }, [aktifYil, kaydirma]);
+  useEffect(() => { if (onDurum) onDurum(Object.fromEntries(konumlar.map(x => [x.d, x.r.durum]))); }, [konumlar]);
+  const kaydir = async (k, dlt) => { const y = { ...(await pdrMetinTakvimKaydirmaOku()), ...kaydirma }; y[k] = Math.max(-8, Math.min(8, (y[k] || 0) + dlt)); setKaydirma(y); try { await window.storage.set("pdr-metin-takvim", JSON.stringify(y)); } catch (e) {} };
+  const ac = (r, s) => setGosterici({ kitap: r.K.k, kitapAd: r.K.ad, sayfa: s, aralik: [r.birim ? r.birim.s : s, r.birim ? r.birim.e : s], ofset: r.K.ofset || 0 });
+  const btn = { padding: "4px 8px", borderRadius: 7, border: "1px solid #C4B5FD", background: "#fff", fontWeight: 800, cursor: "pointer" };
+  return (
+    <div data-lgs-buhafta="1" style={{ background: "#F5F3FF", border: "1px solid #C4B5FD", borderRadius: 12, padding: "10px 12px", marginBottom: 14 }}>
+      <div onClick={() => setAcik(v => !v)} style={{ fontSize: 13, fontWeight: 900, color: "#5B21B6", cursor: "pointer" }}>📅 8. sınıf — bu hafta derslerde (tahmini) {acik ? "▲" : "▼"}</div>
+      {acik && (<>
+        <div style={{ fontSize: 10.5, color: "#5B21B6", margin: "3px 0 6px", lineHeight: 1.45 }}>MEB çalışma takvimi ve ders kitabının sayfalarına göre; kitabın LGS öncesi biteceği varsayıldı. Okulunuzda öne ya da gerideyse ◀ ▶ ile düzeltin. Konu listesinde "henüz işlenmedi" yazan konudaki eksiklik normaldir. Türkçe metinleri için 📖 Metinle Çalışma'ya bakın.</div>
+        {konumlar.map(({ d, r }) => { const kk = LGS_TAKVIM_ANAHTAR[d]; return (
+          <div key={d} data-lgs-ders={kk} style={{ display: "flex", gap: 6, alignItems: "center", padding: "6px 0", borderTop: "1px dashed #C4B5FD" }}>
+            <div style={{ flex: 1, fontSize: 12, lineHeight: 1.45 }}>
+              <b>{d}</b>{" "}
+              {r.once ? <span style={{ color: MUTED }}>— okullar henüz açılmadı</span> : r.bitti ? <span style={{ color: MUTED }}>— kitap bitti, LGS tekrar dönemi</span> : (<>
+                <span style={{ color: MUTED }}>· {r.hafta}. hafta · {r.birim.unite}. ünite</span><br />
+                <span data-lgs-ac={kk} onClick={() => ac(r, r.sayfa)} style={{ color: "#6D28D9", fontWeight: 800, cursor: "pointer", textDecoration: "underline" }}>📄 {r.birim.konu}</span>
+                {r.alt && <span style={{ color: TEXT }}> — {r.alt[0]}</span>} <span style={{ color: MUTED }}>(≈ s. {r.sayfa})</span>
+                {r.sonraki && <span style={{ color: MUTED }}> → sırada: <span onClick={() => ac({ ...r, birim: r.sonraki }, r.sonraki.s)} style={{ cursor: "pointer", textDecoration: "underline" }}>{r.sonraki.konu}</span></span>}
+              </>)}
+              {(kaydirma[kk] || 0) !== 0 && <span style={{ fontSize: 10.5, color: "#5B21B6" }}> · düzeltme {kaydirma[kk] > 0 ? "+" : ""}{kaydirma[kk]} hafta</span>}
+            </div>
+            <button data-lgs-geri={kk} onClick={() => kaydir(kk, -1)} title="Bir hafta geride" style={btn}>◀</button>
+            <button data-lgs-ileri={kk} onClick={() => kaydir(kk, 1)} title="Bir hafta ileride" style={btn}>▶</button>
+          </div>); })}
+      </>)}
+      {gosterici && <KitapSayfaGosterici {...gosterici} onKapat={() => setGosterici(null)} onKitapYukle={async (k, f) => { try { await pdrKitapKaydet(k, f, null); } catch (e) {} }} />}
+    </div>
+  );
+}
+
+function KonuHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, konuHaritasiVerisi, setKonuHaritasiVerisi, kademe, aktifYil }) {
   const [seciliAd, setSeciliAd] = useState(aktifOgrenci?.name || "");
   const [ogrenciArama, setOgrenciArama] = useState("");
   const [acikDers, setAcikDers] = useState(null);
   const [sinavTip, setSinavTip] = useState("tyt"); // sadece kademe==="lise" iken kullanılır
   const [acikKazanim, setAcikKazanim] = useState(null); // "ders|konu": konunun kazanım listesi açık
+  const [lgsDurum, setLgsDurum] = useState({}); // ders → konu → islendi/simdi/sirada (tahmini)
 
   useEffect(() => {
     if (aktifOgrenci?.name) setSeciliAd(aktifOgrenci.name);
@@ -37721,6 +37823,7 @@ function KonuHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, kon
         }}>🖨️ LGS Soru Dağılımı Tablosu (yazdır / panoya as)</button>
       )}
       {!liseMi && <PdrKazanimPaneli varsayilanSinif={((/(\d+)/.exec(String(seciliSinif || "")) || [])[1]) || "8"} />}
+      {!liseMi && <LgsBuHaftaPaneli aktifYil={aktifYil} onDurum={setLgsDurum} />}
 
       {liseMi && (
         <div style={{ display:"flex", gap:6, marginBottom:16 }}>
@@ -37811,7 +37914,7 @@ function KonuHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, kon
                       return (
                         <div key={k.konu} style={{ padding:"8px 0", borderBottom:`1px solid ${BG}` }}>
                           <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:5 }}>
-                            <span style={{ flex:1, fontSize:13, color: konuYuzde>=100 ? MUTED : TEXT, textDecoration: konuYuzde>=100 ? "line-through" : "none" }}>{k.konu}</span>
+                            <span style={{ flex:1, fontSize:13, color: konuYuzde>=100 ? MUTED : TEXT, textDecoration: konuYuzde>=100 ? "line-through" : "none" }}>{k.konu}{!liseMi && lgsDurum[ders] && lgsDurum[ders][k.konu] && (() => { const d = lgsDurum[ders][k.konu]; return <span data-lgs-rozet={d} style={{ display:"inline-block", marginLeft:6, fontSize:9.5, fontWeight:800, borderRadius:8, padding:"1px 6px", textDecoration:"none", color: d === "simdi" ? "#fff" : d === "islendi" ? "#15803D" : "#64748B", background: d === "simdi" ? "#7C3AED" : d === "islendi" ? "#DCFCE7" : "#F1F5F9" }}>{d === "simdi" ? "📅 şu an derste" : d === "islendi" ? "✓ işlendi" : "henüz işlenmedi"}</span>; })()}</span>
                             {liseMi
                               ? <span style={{ fontSize:10, color:MUTED, background:BG, borderRadius:8, padding:"2px 7px", flexShrink:0 }}>{k.gecmisSoru} soru</span>
                               : (() => { const b = lgsBeklenenSoru(k); return <span title={k.yillar ? LGS_SORU_YILLARI.map((y, i) => `${y}: ${k.yillar[i]}`).join(" · ") : "Tabloda yok"} style={{ fontSize:10, color: b ? (b >= 3 ? "#8A5A00" : MUTED) : "#aaa", background: b >= 3 ? "#FFF3D6" : BG, fontWeight: b >= 3 ? 800 : 400, borderRadius:8, padding:"2px 7px", flexShrink:0 }}>{b ? `≈${lgsSayiYaz(b)} soru/yıl` : "son yıllarda çıkmadı"}</span>; })()}
@@ -54643,6 +54746,7 @@ function pdrBaslangicSekmesi() {
             konuHaritasiVerisi={konuHaritasiVerisi}
             setKonuHaritasiVerisi={setKonuHaritasiVerisi}
             kademe={kademe}
+            aktifYil={aktifYil}
           />
         )}
 

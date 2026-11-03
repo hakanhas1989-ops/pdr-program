@@ -15717,6 +15717,11 @@ const KS_ASISTAN_ARACLAR = {
       return `${ekNot ? `Görüşmeye ek yapıldı (${r.date}${ekHedef.length > 1 ? `; grup görüşmesinin ${ekHedef.length} kaydına` : ""}); eski not aynen duruyor.` : `Görüşme düzeltildi (${r.date}${yt ? " → " + yt : ""}).`}${tasimaNotu}${r.grupKatilimcilari && r.grupKatilimcilari.length && !(ekNot && ekHedef.length > 1) ? ` Bu bir grup görüşmesi; diğer öğrencilerin (${r.grupKatilimcilari.join(", ")}) kayıtları ayrı, gerekirse onları da düzeltmeyi öner.` : ""} Bu nota dayanan risk/müdahale kaydı varsa yeniden değerlendirme gerekebilir.`;
     },
   },
+  onkosul_plani: {
+    aciklama: "Ön koşul köprüsü (yerelde hesaplanır): Öğrenci bir dersi/konuyu yapamıyorsa nedeni önceki sınıflardan gelen ön koşul becerilerinin eksikliği olabilir. ogrenci verirsen Konu Haritası'nda yapılan kısa ön koşul kontrollerinin sonuçlarını ve eksik becerilerden oluşan sıralı köprü planını (süre, ne çalışmalı) verir. konu/ders verirsen o 8. sınıf LGS konusunun ön koşul becerilerini verir; ikisi de yoksa bu hafta derste işlenen konuların ön koşullarını verir. Ayrıca öğrenciye anlatım (psikoeğitim) ilkelerini içerir. 'Öğrenci X konusunu anlamıyor', 'temel eksik', 'önceki sınıf konusu', 'ön koşul' sorularında kullan.",
+    girdi: '{"ogrenci": "isteğe bağlı", "sinif": "isteğe bağlı", "konu": "isteğe bağlı", "ders": "isteğe bağlı"}', yontem: "hepsi",
+    calistir: (g, ctx, o) => ksAsistanOnkosul(g, ctx, o),
+  },
   metin_oner: {
     aciklama: "Türkçe ders kitaplarındaki (5–8. sınıf) metinlerden danışmanlıkta kullanılacak olanları önerir: biblioterapi, görüşmede birlikte okuma, duygu/konu üzerine konuşma açmak için. sorgu: konu ya da ihtiyaç (ör. kayıp, yalnızlık, öfke, taşınma, sosyal medya, özgüven); ogrenci verilirse onun görüşme konularına ve risk haritasına göre önerir. Her metin için kitap ve sayfa, özet, kullanım, görüşme soruları ve kitaptan uyarlanmış etkinlik döner.",
     girdi: '{"sorgu": "isteğe bağlı konu", "ogrenci": "isteğe bağlı", "sinif": "7 ya da 8 (isteğe bağlı)", "adet": 5}', yontem: "hepsi",
@@ -17253,8 +17258,8 @@ const KS_ARAC_GRUPLARI = {
     araclar: ["risk_analizi", "risk_kaydet", "ekranda_risk", "risk_kapat", "sevk_kaydet", "sevk_sonuc"] },
   mudahale: { re: /mudahale|plan|program|hedef|uyum|izlem|takip/,
     araclar: ["mudahale_plani", "mudahale_kaydet", "ekranda_mudahale", "mudahale_durum", "mudahale_programi_ara", "mudahale_programi_kaydet", "uyum_kaydet", "seans_hazirlik"] },
-  akademik: { re: /deneme|net|lgs|yks|puan|yuzdelik|okul|lise|tercih|taban|konu|ders|calisma|karne|yazili|yil sonu|not ortalam|sinav/,
-    araclar: ["deneme_kaydet", "deneme_analizi", "konu_guncelle", "lgs_konu_onceligi", "hedef_okul", "hedef_okul_kaydet", "lise_taban_puanlari", "sinav_rehberi", "not_kaydet"] },
+  akademik: { re: /deneme|net|lgs|yks|puan|yuzdelik|okul|lise|tercih|taban|konu|ders|calisma|karne|yazili|yil sonu|not ortalam|sinav|on kosul|onkosul|anlamiyor|yapamiyor|temel eksik|kopru plan/,
+    araclar: ["deneme_kaydet", "deneme_analizi", "konu_guncelle", "lgs_konu_onceligi", "onkosul_plani", "hedef_okul", "hedef_okul_kaydet", "lise_taban_puanlari", "sinav_rehberi", "not_kaydet"] },
   ogrenci: { re: /ekle|yeni ogrenci|nakil|kaydet|devamsiz|profil|kariyer|ilgi|meslek|d2/,
     araclar: ["ogrenci_ekle", "devamsizlik_kaydet", "profil_puanla", "profil2_guncelle"] },
   hatirlatma: { re: /hatirla|randevu|takvim|yarin|haftaya|gun sonra|unutma/,
@@ -17372,6 +17377,7 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - Danışman bir yanıtı ya da bu sohbeti öğrencinin dosyasına kaydetmek/göndermek isterse asistan_notu_kaydet kullan (kapsam: son ya da hepsi). Kaydedilecek metni yeniden yazma; program yanıtları aynen kaydeder.
 - Danışmanın kendi Kütüphanesi (yüklediği kitap, makale, yönetmelik, genelge — tam metin): "kütüphanede/yüklediğim kaynakta … ne diyor", mevzuat, süre/madde sorusu ya da kuramsal bir soru geldiğinde önce kutuphane_ara, ayrıntı için kutuphane_oku kullan; yanıtta kaynağın adını ve bölümünü belirt, kaynakta olmayanı kaynaktaymış gibi söyleme.
 - Müdahale Programları kütüphanesindeki kitaplar (8 kitap, tam metin) senin başvuru kaynağın: bir konu/beceri için etkinlik, oturum ya da program önerirken, grup ya da bireysel çalışma planlarken veya danışman bir kitap/oturum sorduğunda önce program_ara, ayrıntı için program_oturumu kullan. Önerinde kitabın adını, oturum numarasını ve PDF sayfasını belirt; kitapta olmayan bir şeyi kitaptaymış gibi söyleme.
+- Öğrenci bir konuyu anlamadığında/yapamadığında, 'temel eksik' ya da 'önceki sınıf konusu' konuşulduğunda onkosul_plani kullan: eksik ön koşul becerilerini ve köprü planını (önce 20 dk temel, sonra güncel konu) öğrenciyi etiketlemeden anlat.
 - Görüşmede birlikte okunacak bir metin, öykü ya da şiir istendiğinde ya da bir duyguyu/konuyu açmak için kaynak arandığında metin_oner kullan (Türkçe ders kitaplarındaki metinler, danışmanlık temalarına göre dizinli). Önerinde kitabın adını ve sayfasını belirt; danışman sayfayı 📖 Metinle Çalışma ekranından açabilir.
 - LGS'ye hazırlık, "hangi konuya öncelik vermeli", "LGS'de en çok hangi konudan soru çıkıyor", "kaç net artırabilir" gibi sorularda lgs_konu_onceligi kullan; kazanılabilir neti "en fazla/yaklaşık" diye temkinli söyle.
 - Uyum izleme, bireyi tanıma, BDT çarpıtması ve sevk kaydı için uyum_kaydet, bireyi_tanima_ekle, bdt_ekle, sevk_kaydet, sevk_sonuc araçları vardır; hepsi danışmanın onayından geçer.
@@ -37765,6 +37771,274 @@ function LgsBuHaftaPaneli({ aktifYil, onDurum }) {
   );
 }
 
+// ── ÖN KOŞUL KÖPRÜSÜ: beceri bankası (özgün içerik) ──
+// Her beceri: [ders, ad, nerede öğretilir, ne çalışmalı, [[soru, "a|b|c|d", doğruIndex], ...]]
+const ONKOSUL_BECERI = {
+  // Matematik
+  m_carp: ["Matematik", "Çarpım tablosu ve bölme", "4–5. sınıf", "Çarpım tablosunu 6–9'lar ağırlıklı her gün 5 dakika tekrar et; bölmeyi çarpmanın tersi olarak kontrol et.", [["7 × 8 = ?", "54|56|63|48", 1], ["72 ÷ 9 = ?", "6|7|8|9", 2]]],
+  m_bol: ["Matematik", "Bölünebilme kuralları", "5–6. sınıf", "2, 3, 5, 9 ve 10 ile bölünebilme kurallarını örnek sayılarla çalış.", [["Hangisi 3 ile tam bölünür?", "124|215|231|302", 2], ["Hangisi hem 2 hem 5 ile tam bölünür?", "25|52|70|115", 2]]],
+  m_asal: ["Matematik", "Asal sayılar ve asal çarpanlara ayırma", "6. sınıf", "İlk asal sayıları (2, 3, 5, 7, 11, 13) öğren; çarpan ağacıyla 24, 36, 60 gibi sayıları ayır.", [["Hangisi asal sayıdır?", "9|15|17|21", 2], ["36'nın asal çarpanlarına ayrılmış hâli hangisidir?", "2 · 3 · 6|2² · 3²|4 · 9|2³ · 3", 1]]],
+  m_kesir: ["Matematik", "Kesirlerle işlemler", "5–6. sınıf", "Payda eşitleme, sadeleştirme ve kesirle çarpmayı şekil (pasta) modeliyle çalış.", [["1/2 + 1/4 = ?", "2/6|3/4|1/6|2/4", 1], ["2/3 × 3/5 = ?", "5/8|6/8|2/5|1/3", 2]]],
+  m_ondalik: ["Matematik", "Ondalık gösterim ve 10'un kuvvetleri", "5–6. sınıf", "Basamak değeri tablosu çiz; 10, 100, 1000 ile çarpma-bölmede virgülün kaymasını çalış.", [["3,25 × 100 = ?", "32,5|325|3250|0,325", 1], ["0,07 hangisine eşittir?", "7/10|7/100|7/1000|70/100", 1]]],
+  m_tam: ["Matematik", "Tam sayılarla işlemler", "6–7. sınıf", "Sayı doğrusunda toplama-çıkarma yap; çarpmada işaret kuralını (− · − = +) örneklerle tekrar et.", [["(−5) + 3 = ?", "−8|−2|2|8", 1], ["(−4) × (−6) = ?", "−24|−10|10|24", 3]]],
+  m_islem: ["Matematik", "İşlem önceliği", "6. sınıf", "Önce parantez, sonra üs, sonra çarpma-bölme, en son toplama-çıkarma sırasını örneklerle çalış.", [["3 + 4 × 2 = ?", "14|11|10|24", 1], ["(8 − 2) × 3 = ?", "2|12|18|24", 2]]],
+  m_us6: ["Matematik", "Kare ve küp (üslü ifade temeli)", "6. sınıf", "1'den 15'e kadar sayıların karelerini, 1'den 5'e kadar küplerini öğren; aᵇ'nin a'yı b kez çarpmak olduğunu kavra.", [["5² = ?", "10|25|7|52", 1], ["2³ = ?", "6|8|9|5", 1]]],
+  m_rasyonel: ["Matematik", "Rasyonel sayılar", "7. sınıf", "Negatif kesirleri sayı doğrusunda göster; rasyonel sayılarla işlemlerde tam sayı kurallarını uygula.", [["−1/2 ile −1/3'ten hangisi daha büyüktür?", "−1/2|−1/3|Eşittir|Karşılaştırılamaz", 1], ["(−3/4) × 2 = ?", "−3/2|3/2|−3/8|−1/2", 0]]],
+  m_cebir7: ["Matematik", "Cebirsel ifadelerde toplama-çıkarma", "7. sınıf", "Benzer terimleri (aynı harfli olanları) gruplayıp topla; harfin bilinmeyen bir sayı olduğunu somut örnekle düşün.", [["3x + 5x = ?", "8x|15x|8x²|35x", 0], ["2a + 3 + a − 1 ifadesinin en sade hâli hangisidir?", "3a + 2|3a + 4|2a + 2|4a", 0]]],
+  m_denk7: ["Matematik", "Birinci dereceden denklem çözme", "7. sınıf", "Terazi modeliyle 'iki tarafa aynı işlemi yap' kuralını çalış; 2x + 3 = 11 gibi iki adımlı denklemlerle başla.", [["2x + 3 = 11 ise x kaçtır?", "3|4|7|8", 1], ["x − 5 = −2 ise x kaçtır?", "−7|−3|3|7", 2]]],
+  m_oran: ["Matematik", "Oran-orantı", "7. sınıf", "Doğru orantıyı tabloyla çalış (biri 2 katına çıkınca diğeri de 2 kat olur); içler-dışlar çarpımını öğren.", [["3 kalem 12 TL ise 5 kalem kaç TL'dir?", "15|18|20|24", 2], ["a/4 = 6/8 ise a kaçtır?", "2|3|4|6", 1]]],
+  m_yuzde: ["Matematik", "Yüzdeler", "7. sınıf", "%10, %25, %50'yi kesirlerle eşleştir (1/10, 1/4, 1/2); bir sayının yüzdesini bulmayı çalış.", [["200'ün %25'i kaçtır?", "25|40|50|75", 2], ["%50 hangi kesre eşittir?", "1/5|1/4|1/2|2/5", 2]]],
+  m_koord: ["Matematik", "Koordinat düzlemi", "6–7. sınıf", "Önce yatay (x), sonra dikey (y) kuralıyla nokta işaretle ve oku; dört bölgeyi tanı.", [["(3, −2) noktası için hangisi doğrudur?", "x = −2, y = 3|x = 3, y = −2|x = 3, y = 2|x = −3, y = −2", 1], ["(−4, 5) noktası hangi bölgededir?", "1. bölge|2. bölge|3. bölge|4. bölge", 1]]],
+  m_aci: ["Matematik", "Açılar", "5–7. sınıf", "Tümler (90°) ve bütünler (180°) açıları, üçgenin iç açıları toplamının 180° olduğunu çizerek çalış.", [["Bir üçgenin iki açısı 50° ve 60° ise üçüncü açı kaç derecedir?", "60|70|80|110", 1], ["35°'lik açının tümleri kaç derecedir?", "45|55|65|145", 1]]],
+  m_alan: ["Matematik", "Üçgen ve dörtgende çevre-alan", "5–7. sınıf", "Kare, dikdörtgen ve üçgenin alan formüllerini kareli kâğıtta çizerek çalış.", [["Kenarları 6 cm ve 4 cm olan dikdörtgenin alanı kaç cm²'dir?", "10|20|24|48", 2], ["Tabanı 8 cm, yüksekliği 5 cm olan üçgenin alanı kaç cm²'dir?", "13|20|40|80", 1]]],
+  m_cember: ["Matematik", "Çember ve daire", "7. sınıf", "Yarıçap-çap ilişkisini, π ≈ 3 alarak çevre (2πr) ve alan (πr²) hesaplamayı çalış.", [["Yarıçapı 5 cm olan çemberin çapı kaç cm'dir?", "2,5|5|10|25", 2], ["π = 3 alınırsa yarıçapı 2 cm olan dairenin alanı kaç cm²'dir?", "6|12|18|36", 1]]],
+  m_hacim: ["Matematik", "Prizma hacmi", "6. sınıf", "Birim küplerle 'taban alanı × yükseklik' fikrini somutlaştır.", [["Boyutları 2 cm, 3 cm ve 4 cm olan dikdörtgenler prizmasının hacmi kaç cm³'tür?", "9|12|24|26", 2], ["Bir kenarı 3 cm olan küpün hacmi kaç cm³'tür?", "9|12|18|27", 3]]],
+  m_veri: ["Matematik", "Tablo, grafik ve ortalama", "5–7. sınıf", "Sütun ve çizgi grafiğinden değer okumayı ve aritmetik ortalamayı (toplam ÷ veri sayısı) çalış.", [["4, 6 ve 8 sayılarının aritmetik ortalaması kaçtır?", "5|6|7|18", 1], ["Bir sütun grafiğinde en uzun sütun neyi gösterir?", "En küçük değeri|En büyük değeri|Ortalamayı|Toplamı", 1]]],
+  m_sayma: ["Matematik", "Olası durumları listeleme", "5–6. sınıf", "Zar, para ve torbadaki toplar gibi örneklerde bütün durumları sistemli olarak listele.", [["Bir zar atıldığında kaç farklı sonuç çıkabilir?", "2|4|6|12", 2], ["İçinde 3 kırmızı ve 2 mavi top olan torbadan bir top çekiliyor. Kaç farklı top çekilebilir?", "2|3|5|6", 2]]],
+  m_simetri: ["Matematik", "Simetri ve yansıma temeli", "5–7. sınıf", "Kareli kâğıtta bir şeklin doğruya göre simetriğini çizmeyi çalış.", [["Hangi harfin dikey simetri doğrusu vardır?", "F|A|G|R", 1], ["Simetri doğrusuna 3 birim uzaklıktaki bir noktanın simetriği doğruya kaç birim uzaklıktadır?", "0|3|6|9", 1]]],
+  // Fen Bilimleri
+  f_dunya: ["Fen Bilimleri", "Dünya'nın hareketleri", "5. sınıf", "Dönme (gece-gündüz, 24 saat) ve dolanma (yıl, 365 gün) hareketlerini bir top ve el feneriyle canlandır.", [["Gece ile gündüzün oluşmasının nedeni nedir?", "Dünya'nın Güneş etrafında dolanması|Dünya'nın kendi ekseni etrafında dönmesi|Ay'ın Dünya etrafında dolanması|Güneş'in Dünya etrafında dönmesi", 1], ["Dünya, Güneş etrafındaki bir turunu yaklaşık ne kadar sürede tamamlar?", "1 gün|1 ay|1 yıl|1 hafta", 2]]],
+  f_isik: ["Fen Bilimleri", "Işığın yayılması", "5–6. sınıf", "Işığın doğrusal yayıldığını, dik gelen ışığın dar alanı daha çok aydınlattığını el feneriyle dene.", [["Işık nasıl yayılır?", "Eğri çizgiler hâlinde|Doğrusal olarak|Yalnızca aşağı doğru|Yalnızca karanlıkta", 1], ["El feneri yere dik tutulduğunda aydınlanan alan, eğik tutulduğuna göre nasıldır?", "Daha geniş ve daha soluk|Daha dar ve daha parlak|Aynıdır|Hiç aydınlanmaz", 1]]],
+  f_hucre: ["Fen Bilimleri", "Hücre ve çekirdek", "7. sınıf", "Hücrenin bölümlerini (zar, sitoplazma, çekirdek) ve kalıtım bilgisinin çekirdekte olduğunu şekille çalış.", [["Hücrenin yönetim merkezi olan ve kalıtım bilgisini taşıyan yapı hangisidir?", "Hücre zarı|Sitoplazma|Çekirdek|Koful", 2], ["Canlıların yapı ve görev birimi nedir?", "Organ|Doku|Hücre|Sistem", 2]]],
+  f_bolunme: ["Fen Bilimleri", "Hücre bölünmesi (mitoz-mayoz)", "7. sınıf", "Mitozun büyüme ve onarım, mayozun üreme hücresi oluşumu için olduğunu karşılaştırma tablosuyla çalış.", [["Üreme hücrelerinin (sperm, yumurta) oluştuğu bölünme hangisidir?", "Mitoz|Mayoz|Tomurcuklanma|Rejenerasyon", 1], ["Yaralanan derinin onarılmasını sağlayan bölünme hangisidir?", "Mitoz|Mayoz|Döllenme|Mutasyon", 0]]],
+  f_madde: ["Fen Bilimleri", "Atom, element, bileşik, karışım", "7. sınıf", "Element (tek tür atom), bileşik (farklı atomların kimyasal birleşimi) ve karışım farkını günlük örneklerle sınıflandır.", [["Hangisi bir elementtir?", "Su|Tuzlu su|Demir|Hava", 2], ["Hangisi bir karışımdır?", "Altın|Oksijen|Şekerli su|Karbondioksit", 2]]],
+  f_degisim: ["Fen Bilimleri", "Fiziksel ve kimyasal değişim", "6–7. sınıf", "'Maddenin kimliği değişiyor mu?' sorusuyla erime, kırılma (fiziksel) ile yanma, paslanma (kimyasal) örneklerini ayır.", [["Hangisi kimyasal bir değişimdir?", "Buzun erimesi|Kâğıdın yırtılması|Demirin paslanması|Şekerin suda çözünmesi", 2], ["Hangisi fiziksel bir değişimdir?", "Odunun yanması|Sütün ekşimesi|Camın kırılması|Elmanın çürümesi", 2]]],
+  f_isi: ["Fen Bilimleri", "Isı, sıcaklık ve hâl değişimi", "5–6. sınıf", "Isı alan maddenin eridiğini ya da buharlaştığını, ısı verenin donduğunu ya da yoğuştuğunu şemayla çalış.", [["Su buharının soğuk bir yüzeyde su damlalarına dönüşmesine ne denir?", "Erime|Donma|Yoğuşma|Buharlaşma", 2], ["Hangisi ısı alarak gerçekleşir?", "Donma|Yoğuşma|Erime|Kırağılaşma", 2]]],
+  f_kuvvet: ["Fen Bilimleri", "Kuvvet ve ağırlık", "5–7. sınıf", "Kuvvetin itme ya da çekme olduğunu, birimi newton (N) olup dinamometreyle ölçüldüğünü çalış.", [["Kuvvetin birimi nedir?", "Kilogram|Newton|Metre|Joule", 1], ["Kuvveti ölçmek için hangi araç kullanılır?", "Termometre|Dinamometre|Barometre|Cetvel", 1]]],
+  f_yogunluk: ["Fen Bilimleri", "Sıvılar ve yoğunluk", "6–7. sınıf", "Yoğunluğun kütle ÷ hacim olduğunu, sıvıların yoğunluğa göre katmanlaştığını basit deneylerle çalış.", [["Su ve zeytinyağı aynı kaba konursa ne olur?", "Karışırlar|Zeytinyağı üstte kalır|Su üstte kalır|İkisi de buharlaşır", 1], ["Kütlesi 20 g, hacmi 10 cm³ olan maddenin yoğunluğu kaç g/cm³'tür?", "0,5|2|10|200", 1]]],
+  f_enerji: ["Fen Bilimleri", "Enerji çeşitleri ve dönüşümü", "7. sınıf", "Kinetik (hareket) ve potansiyel (konum) enerjiyi, enerjinin yoktan var olmayıp dönüştüğünü örneklerle çalış.", [["Yüksekte duran bir cismin sahip olduğu enerji hangisidir?", "Kinetik enerji|Çekim potansiyel enerjisi|Isı enerjisi|Ses enerjisi", 1], ["Elektrikli süpürge elektrik enerjisini çoğunlukla hangi enerjiye dönüştürür?", "Hareket enerjisine|Kimyasal enerjiye|Işık enerjisine|Nükleer enerjiye", 0]]],
+  f_besin: ["Fen Bilimleri", "Besin zinciri ve fotosentez temeli", "5–7. sınıf", "Üretici, tüketici ve ayrıştırıcı kavramlarını, bitkilerin güneş ışığıyla besin ürettiğini bir zincir çizerek çalış.", [["Bir besin zincirinde üretici hangisidir?", "Tavşan|Ot|Tilki|Kartal", 1], ["Bitkiler besinlerini üretirken hangisine ihtiyaç duyar?", "Güneş ışığına|Ay ışığına|Sese|Elektriğe", 0]]],
+  f_dongu: ["Fen Bilimleri", "Su döngüsü ve doğal kaynaklar", "5–7. sınıf", "Buharlaşma-yoğuşma-yağış döngüsünü ve yenilenebilir ile yenilenemez kaynak farkını şemayla çalış.", [["Hangisi yenilenebilir bir enerji kaynağıdır?", "Kömür|Petrol|Güneş|Doğal gaz", 2], ["Su döngüsünde bulutların oluşmasını sağlayan olay hangisidir?", "Erime|Yoğuşma|Donma|Süzülme", 1]]],
+  f_elektrik: ["Fen Bilimleri", "Basit elektrik devresi", "5–7. sınıf", "Pil, ampul, anahtar ve kablodan oluşan devreyi çiz; iletken ve yalıtkan maddeleri ayır.", [["Hangisi elektriği iletir?", "Plastik|Tahta|Bakır|Cam", 2], ["Bir devrede anahtar açıksa ampul ne olur?", "Daha parlak yanar|Yanmaz|Sönük yanar|Patlar", 1]]],
+  // Türkçe
+  t_kelime: ["Türkçe", "Gerçek, mecaz ve terim anlam", "5–6. sınıf", "Bir kelimeyi farklı cümlelerde kullanıp anlamının nasıl değiştiğini tartış; mecaz anlamı kelimenin ilk anlamından uzaklaşması olarak düşün.", [["Hangi cümlede 'ağır' kelimesi mecaz anlamdadır?", "Bu çanta çok ağır.|Ağır bir masa taşıdık.|Bu söz bana çok ağır geldi.|Ağır kutuyu yere koydu.", 2], ["'Kalbi kırıldı.' sözündeki 'kırılmak' hangi anlamdadır?", "Gerçek|Mecaz|Terim|Eş sesli", 1]]],
+  t_eszit: ["Türkçe", "Eş ve zıt anlamlı kelimeler", "5. sınıf", "Kelime kartlarıyla eş ve zıt anlamlı çiftler oluştur.", [["'Cesur' kelimesinin zıt anlamlısı hangisidir?", "Yürekli|Korkak|Güçlü|Atılgan", 1], ["'Okul' kelimesinin eş anlamlısı hangisidir?", "Mektep|Sınıf|Öğretmen|Ders", 0]]],
+  t_anafikir: ["Türkçe", "Konu ve ana fikir", "5–6. sınıf", "Kısa paragraflarda 'Ne anlatılıyor? (konu)' ve 'Yazar ne söylemek istiyor? (ana fikir)' sorularını ayrı ayrı cevapla.", [["'Ali her sabah erken kalkar, kahvaltısını yapar ve okula yürüyerek gider. Bu sayede güne enerjik başlar.' Bu paragrafın konusu nedir?", "Ali'nin okul yolu|Ali'nin sabah alışkanlıkları|Kahvaltının zararları|Okulun önemi", 1], ["Ana fikir neyi anlatır?", "Metindeki kişilerin adlarını|Yazarın okura vermek istediği temel mesajı|Metnin kaç paragraf olduğunu|Metnin başlığını", 1]]],
+  t_cikarim: ["Türkçe", "Okuduğunu anlama ve çıkarım", "5–7. sınıf", "Her paragraftan sonra 'Metinde açıkça yazmayan ama çıkarılabilen ne var?' diye kendine sor.", [["'Elif şemsiyesini aldı, montunun fermuarını çekti ve kapıdan çıktı.' Bu cümleden hangi çıkarım yapılabilir?", "Hava sıcaktır.|Hava yağmurlu ve serin olabilir.|Elif okula geç kalmıştır.|Elif evde kalacaktır.", 1], ["'Sınavdan sonra Can'ın yüzü güldü.' cümlesine göre hangisi söylenebilir?", "Can sınavı iyi geçirmiş olabilir.|Can sınava girmemiştir.|Can üzgündür.|Sınav iptal edilmiştir.", 0]]],
+  t_fiil: ["Türkçe", "Fiil, zaman ve kişi", "6–7. sınıf", "Cümlede iş, oluş, hareket bildiren kelimeleri bul; sonuna '-mak/-mek' getirerek fiil olup olmadığını dene.", [["Hangisi fiildir?", "Kitap|Güzel|Koşmak|Hızlı", 2], ["'Yarın sinemaya gideceğiz.' cümlesindeki fiil hangi zamanı bildirir?", "Geçmiş|Şimdiki|Gelecek|Geniş", 2]]],
+  t_tur: ["Türkçe", "İsim, sıfat, zamir, zarf", "6. sınıf", "Kelimeye 'ne? (isim)', 'nasıl/hangi + isim (sıfat)', 'nasıl + fiil (zarf)' sorularını sorarak türünü bul.", [["'Kırmızı elbise' öbeğinde 'kırmızı' kelimesinin türü nedir?", "İsim|Sıfat|Zamir|Fiil", 1], ["'Hızlı koştu.' cümlesinde 'hızlı' kelimesinin türü nedir?", "İsim|Sıfat|Zarf|Zamir", 2]]],
+  t_cumle: ["Türkçe", "Yüklem ve özne bulma", "6–7. sınıf", "Önce yüklemi (genellikle sondaki çekimli kelime) bul; sonra 'kim/ne yaptı?' sorusuyla özneyi bul.", [["'Kardeşim dün akşam bize geldi.' cümlesinin yüklemi hangisidir?", "Kardeşim|Dün akşam|Bize|Geldi", 3], ["'Bahçedeki çiçekler açtı.' cümlesinin öznesi hangisidir?", "Bahçedeki çiçekler|Açtı|Bahçedeki|Çiçek açtı", 0]]],
+  t_buyuk: ["Türkçe", "Büyük harf ve kesme işareti", "5. sınıf", "Özel isimlerin (kişi, yer, kurum) büyük harfle yazıldığını ve onlara gelen eklerin kesmeyle ayrıldığını örneklerle çalış.", [["Hangisi yazım bakımından doğrudur?", "ankara'ya gittik.|Ankaraya gittik.|Ankara'ya gittik.|ankaraya gittik.", 2], ["Hangisinde büyük harf yanlış kullanılmıştır?", "Ayşe okula gitti.|Bugün Pazartesi günü.|İzmir güzel bir şehir.|Kitabı Ali'ye verdim.", 1]]],
+  t_noktalama: ["Türkçe", "Temel noktalama", "5. sınıf", "Nokta, virgül, soru ve ünlem işaretlerinin nerede kullanıldığını kısa cümlelerle çalış.", [["Hangi cümlenin sonuna soru işareti gelmelidir?", "Okula gidiyorum|Nereye gidiyorsun|Hava çok güzel|Kapıyı kapat", 1], ["Eş görevli kelimeleri ayırmak için hangi işaret kullanılır?", "Nokta|Virgül|Ünlem|Soru işareti", 1]]],
+  t_tablo: ["Türkçe", "İpuçlarını tabloyla eşleştirme", "5–7. sınıf", "İpuçlarını tabloya işleyerek adım adım eleme yap; her ipucundan sonra tabloyu güncelle.", [["Ali, Can ve Ece'den biri futbolu, biri yüzmeyi, biri satrancı seviyor. Ali yüzmeyi, Ece futbolu seviyor. Can neyi seviyor?", "Futbol|Yüzme|Satranç|Hiçbirini", 2], ["Ayşe Mehmet'ten, Mehmet de Zeynep'ten büyüktür. En küçük kimdir?", "Ayşe|Mehmet|Zeynep|Bilinemez", 2]]],
+  t_metin: ["Türkçe", "Metin türlerini ayırt etme", "5–6. sınıf", "Hikâyeyi (olay, kişi, yer, zaman), bilgilendirici metni (bilgi verir) ve şiiri (dize, kafiye) karşılaştırarak ayır.", [["Olay, kişi, yer ve zaman unsurlarının bulunduğu metin türü hangisidir?", "Hikâye|Şiir|Ansiklopedi maddesi|Yemek tarifi", 0], ["Okura bir konuda bilgi vermek amacıyla yazılan metin hangisidir?", "Masal|Bilgilendirici metin|Şiir|Fıkra", 1]]],
+  // İnkılap Tarihi
+  i_kronoloji: ["İnkılap Tarihi", "Kronoloji ve yüzyıl", "5–6. sınıf Sosyal Bilgiler", "Bir tarih şeridi çizip önemli olayları sıraya koy; yüzyıl hesaplamayı (1919 → 20. yüzyıl) çalış.", [["1923 yılı kaçıncı yüzyıldadır?", "19. yüzyıl|20. yüzyıl|21. yüzyıl|18. yüzyıl", 1], ["Hangisi eskiden yeniye doğru sıralanmıştır?", "1923 – 1919 – 1920|1919 – 1920 – 1923|1920 – 1923 – 1919|1923 – 1920 – 1919", 1]]],
+  i_harita: ["İnkılap Tarihi", "Harita okuma ve Türkiye'nin konumu", "5–6. sınıf Sosyal Bilgiler", "Türkiye haritasında yönleri, bölgeleri ve komşu ülkeleri işaretleyerek çalış.", [["Haritalarda yukarı yön genellikle hangi yönü gösterir?", "Güney|Kuzey|Doğu|Batı", 1], ["Hangisi Türkiye'nin kara komşusu değildir?", "Yunanistan|Gürcistan|İtalya|İran", 2]]],
+  i_osmanli: ["İnkılap Tarihi", "Osmanlı Devleti'nin son dönemi", "7. sınıf Sosyal Bilgiler", "Osmanlı'nın son döneminde toprak kaybettiğini, savaşlar ve ekonomik sorunlar yaşadığını kısa bir özet tablosuyla çalış.", [["Osmanlı Devleti'nin son dönemindeki başkenti neresiydi?", "Bursa|Edirne|İstanbul|Ankara", 2], ["Osmanlı Devleti'nin son dönemi için hangisi doğrudur?", "Topraklarını hızla genişletmiştir.|Toprak kaybetmiş ve ekonomik sorunlar yaşamıştır.|Hiç savaşa girmemiştir.|Cumhuriyetle yönetilmiştir.", 1]]],
+  i_kavram: ["İnkılap Tarihi", "Temel yönetim kavramları", "6–7. sınıf Sosyal Bilgiler", "Egemenlik, cumhuriyet, demokrasi, anayasa ve meclis kavramlarını kendi cümlelerinle tanımla.", [["Yönetme yetkisinin halka ait olduğu yönetim biçimi hangisidir?", "Mutlak monarşi|Cumhuriyet|Saltanat|Teokrasi", 1], ["Bir devletin temel yasası hangisidir?", "Yönetmelik|Genelge|Anayasa|Dilekçe", 2]]],
+  i_ataturk: ["İnkılap Tarihi", "Atatürk'ün hayatı (temel bilgiler)", "5–7. sınıf", "Doğum yerini, aldığı eğitimi, askerlik hayatını ve önemli görevlerini bir zaman çizelgesinde topla.", [["Mustafa Kemal nerede doğmuştur?", "İstanbul|Selanik|Ankara|Manastır", 1], ["Mustafa Kemal'e 'Kemal' adını kim vermiştir?", "Annesi Zübeyde Hanım|Matematik öğretmeni|Babası Ali Rıza Efendi|Kız kardeşi Makbule", 1]]],
+  i_neden: ["İnkılap Tarihi", "Neden-sonuç ilişkisi", "5–7. sınıf", "Okuduğun her olay için 'Neden oldu? Sonucunda ne oldu?' sorularını iki sütunlu bir tabloya yaz.", [["'Yağmur çok yağdığı için maç ertelendi.' cümlesinde neden hangisidir?", "Maçın ertelenmesi|Yağmurun çok yağması|Maçın oynanması|Seyircilerin gelmesi", 1], ["'Düzenli çalıştı, sınavı kazandı.' cümlesinde sonuç hangisidir?", "Düzenli çalışması|Sınavı kazanması|Sınava girmesi|Kitap alması", 1]]],
+  // Din Kültürü
+  d_iman: ["Din Kültürü", "İman esasları ve temel kavramlar", "5–7. sınıf Din Kültürü", "İman esaslarını ve kader, tevekkül, irade kavramlarını kısa tanımlarla çalış.", [["Hangisi İslam'ın iman esaslarından biridir?", "Oruç tutmak|Ahirete inanmak|Zekât vermek|Hacca gitmek", 1], ["Bir işi yapmak için gereken çabayı gösterip sonucu Allah'a bırakmaya ne denir?", "Tevekkül|Kibir|İsraf|Gıybet", 0]]],
+  d_ibadet: ["Din Kültürü", "İbadet kavramı", "5–6. sınıf Din Kültürü", "Namaz, oruç, zekât ve haccın ne olduğunu ve kimlere farz olduğunu kısa bir tabloyla çalış.", [["Zengin Müslümanların mallarının belli bir kısmını ihtiyaç sahiplerine vermesine ne denir?", "Oruç|Zekât|Hac|Kurban", 1], ["Hangisi hem bedenle hem malla yapılan bir ibadettir?", "Namaz|Hac|Oruç|Dua", 1]]],
+  d_peygamber: ["Din Kültürü", "Peygamberlik ve Hz. Muhammed'in hayatı", "5–6. sınıf Din Kültürü", "Peygamberlerin görevlerini ve Hz. Muhammed'in hayatındaki önemli olayları bir zaman çizelgesiyle çalış.", [["Hz. Muhammed nerede doğmuştur?", "Medine|Mekke|Kudüs|Taif", 1], ["Hangisi peygamberlerin ortak özelliklerinden biridir?", "Doğruluk (sıdk)|Zenginlik|Krallık|Savaşçılık", 0]]],
+  d_kuran: ["Din Kültürü", "Kur'an-ı Kerim'in temel özellikleri", "5–6. sınıf Din Kültürü", "Sure, ayet ve vahiy kavramlarını ve Kur'an'ın indiriliş sürecini kısa notlarla çalış.", [["Kur'an-ı Kerim'in bölümlerine ne ad verilir?", "Ayet|Sure|Hadis|Dua", 1], ["Kur'an-ı Kerim'in indirilmesi yaklaşık kaç yılda tamamlanmıştır?", "1 yılda|Yaklaşık 23 yılda|50 yılda|10 günde", 1]]],
+  d_ahlak: ["Din Kültürü", "Temel ahlaki değerler", "5–7. sınıf Din Kültürü", "Yardımlaşma, dürüstlük ve sorumluluk gibi değerleri günlük hayattan örneklerle eşleştir.", [["Hangisi yardımlaşmaya örnektir?", "Arkadaşının eşyasını izinsiz almak|Depremzedelere bağış yapmak|Sırada beklemeden öne geçmek|Çöpü yere atmak", 1], ["Sözünde durmak hangi değerle ilgilidir?", "Güvenilirlik|İsraf|Bencillik|Kıskançlık", 0]]],
+  // İngilizce
+  e_be: ["İngilizce", "am / is / are", "5. sınıf", "I am, you are, he/she/it is kalıplarını kendin hakkında cümleler kurarak çalış.", [["My brother ___ twelve years old.", "am|is|are|be", 1], ["We ___ students.", "am|is|are|be", 2]]],
+  e_present: ["İngilizce", "Simple present (geniş zaman)", "6. sınıf", "Günlük rutinlerini anlatan cümleler yaz; he/she/it ile fiile -s geldiğini unutma.", [["She ___ to school by bus.", "go|goes|going|gone", 1], ["They ___ football on Sundays.", "plays|play|playing|is play", 1]]],
+  e_freq: ["İngilizce", "Sıklık zarfları", "6. sınıf", "always → usually → often → sometimes → never sıralamasını kendi alışkanlıklarınla eşleştir.", [["'Hiçbir zaman' anlamına gelen kelime hangisidir?", "always|often|never|usually", 2], ["I ___ brush my teeth before bed. (her zaman)", "never|always|sometimes|rarely", 1]]],
+  e_past: ["İngilizce", "Simple past (geçmiş zaman)", "7. sınıf", "was/were ve düzenli fiillere -ed eklemeyi; go-went, see-saw gibi düzensiz fiilleri kartlarla çalış.", [["Yesterday, I ___ to the park.", "go|goes|went|going", 2], ["They ___ at home last night.", "was|were|are|is", 1]]],
+  e_future: ["İngilizce", "will / be going to", "7. sınıf", "Plan için 'be going to', tahmin ve anlık karar için 'will' kullanımını örnek cümlelerle çalış.", [["Look at the clouds! It ___ rain.", "is going to|went to|goes|was", 0], ["I think she ___ win the race.", "will|did|was|does", 0]]],
+  e_modal: ["İngilizce", "can / should / must", "6–7. sınıf", "can (yapabilmek), should (tavsiye), must (zorunluluk) farkını kendi hayatından örneklerle çalış.", [["You ___ wear a seat belt. It's a rule.", "can|must|might|could", 1], ["'Yüzebilirim.' cümlesinin İngilizcesi hangisidir?", "I must swim.|I can swim.|I should swim.|I will swim.", 1]]],
+  e_compare: ["İngilizce", "Karşılaştırma (-er / the -est)", "7. sınıf", "tall-taller-the tallest, good-better-the best gibi kalıpları üçlü bir tabloyla çalış.", [["An elephant is ___ than a cat.", "big|bigger|biggest|more big", 1], ["This is the ___ day of my life.", "good|better|best|more good", 2]]],
+  e_vocab: ["İngilizce", "Temel kelimeler (yiyecek, ev işleri, duygular)", "5–7. sınıf", "Her gün 5 kelime: resimli kartlarla yiyecek, ev işi ve duygu kelimelerini tekrar et.", [["'Bulaşık yıkamak' hangisidir?", "do the laundry|wash the dishes|make the bed|take out the rubbish", 1], ["'Mutlu' kelimesinin İngilizcesi hangisidir?", "sad|angry|happy|bored", 2]]],
+  e_like: ["İngilizce", "like / love / hate + -ing", "5–6. sınıf", "Sevdiğin ve sevmediğin etkinlikleri 'I like reading', 'I hate waiting' gibi cümlelerle anlat.", [["I love ___ books.", "read|reading|reads|to reads", 1], ["'Beklemekten nefret ederim.' cümlesinin İngilizcesi hangisidir?", "I like waiting.|I hate waiting.|I love waiting.|I enjoy waiting.", 1]]],
+  e_wh: ["İngilizce", "Wh- soruları", "5–6. sınıf", "What (ne), Where (nerede), When (ne zaman), Who (kim), Why (neden) sorularını eşleştirme kartlarıyla çalış.", [["'Nerede' anlamına gelen soru kelimesi hangisidir?", "What|Where|When|Who", 1], ["___ is your birthday? — In May.", "Who|Where|When|What colour", 2]]],
+};
+// 8. sınıf LGS konusu → ön koşul becerileri (en temelden başlayarak)
+const ONKOSUL_HARITA = {
+  "Matematik": {
+    "Çarpanlar ve Katlar": ["m_carp", "m_bol", "m_asal"], "Üslü Sayılar": ["m_carp", "m_tam", "m_us6", "m_ondalik", "m_kesir"],
+    "Köklü Sayılar": ["m_us6", "m_asal", "m_tam", "m_ondalik"], "Veri Analizi": ["m_veri", "m_kesir", "m_yuzde"],
+    "Olasılık": ["m_sayma", "m_kesir", "m_yuzde"], "Cebirsel İfadeler": ["m_tam", "m_islem", "m_cebir7"],
+    "Doğrusal Denklemler ve Eğim": ["m_tam", "m_denk7", "m_koord", "m_oran"], "Eşitsizlikler": ["m_tam", "m_rasyonel", "m_denk7"],
+    "Üçgenler": ["m_aci", "m_alan", "m_us6"], "Eşlik ve Benzerlik": ["m_aci", "m_oran", "m_alan"],
+    "Dönüşüm Geometrisi": ["m_koord", "m_simetri"], "Geometrik Cisimler": ["m_alan", "m_cember", "m_hacim"],
+  },
+  "Fen Bilimleri": {
+    "Mevsimler ve İklim": ["f_dunya", "f_isik"], "DNA ve Genetik Kod": ["f_hucre", "f_bolunme"], "Basınç": ["f_kuvvet", "m_alan", "f_yogunluk"],
+    "Madde ve Endüstri": ["f_madde", "f_degisim", "f_isi"], "Basit Makineler": ["f_kuvvet", "f_enerji", "m_oran"],
+    "Enerji Dönüşümleri ve Çevre Bilimi": ["f_besin", "f_enerji", "f_dongu"], "Elektrik Yükleri ve Elektrik Enerjisi": ["f_elektrik", "f_enerji"],
+  },
+  "Türkçe": {
+    "Parçada Anlam": ["t_anafikir", "t_cikarim", "t_kelime"], "Sözel Mantık": ["t_tablo", "t_cikarim"], "Cümlede Anlam": ["t_cikarim", "t_kelime"],
+    "Sözcükte Anlam": ["t_kelime", "t_eszit"], "Noktalama İşaretleri": ["t_noktalama", "t_buyuk"], "Yazım Kuralları": ["t_buyuk", "t_noktalama"],
+    "Fiilimsiler": ["t_fiil", "t_tur"], "Metin Türleri": ["t_metin", "t_anafikir"], "Deyimler ve Atasözleri": ["t_kelime", "t_cikarim"],
+    "Anlatım Bozukluğu": ["t_cumle", "t_kelime"], "Cümle Türleri": ["t_cumle", "t_fiil"], "Cümlenin Ögeleri": ["t_cumle", "t_fiil", "t_tur"],
+    "Fiillerde Çatı": ["t_cumle", "t_fiil"], "Söz Sanatları": ["t_kelime", "t_metin"],
+  },
+  "İnkılap Tarihi": {
+    "Bir Kahraman Doğuyor": ["i_ataturk", "i_osmanli", "i_kronoloji"], "Milli Uyanış: Bağımsızlık Yolunda Atılan Adımlar": ["i_osmanli", "i_harita", "i_neden"],
+    "Ya İstiklal Ya Ölüm": ["i_harita", "i_kronoloji", "i_neden"], "Atatürkçülük ve Çağdaşlaşan Türkiye": ["i_kavram", "i_neden"],
+    "Demokratikleşme Çabaları": ["i_kavram", "i_kronoloji"], "Atatürk Dönemi Türk Dış Politikası": ["i_harita", "i_neden"], "Atatürk'ün Vefatı ve Sonrası": ["i_kronoloji", "i_neden"],
+  },
+  "Din Kültürü": {
+    "Kader İnancı": ["d_iman", "d_ahlak"], "Zekat ve Sadaka": ["d_ibadet", "d_ahlak"], "Din ve Hayat": ["d_ahlak", "d_iman"],
+    "Hz. Muhammed'in Örnekliği": ["d_peygamber", "d_ahlak"], "Kur'an-ı Kerim'in Özellikleri": ["d_kuran"], "Bir Peygamber Tanıyorum: Hz. Musa": ["d_peygamber", "d_kuran"],
+  },
+  "İngilizce": {
+    "Friendship": ["e_present", "e_like", "e_modal"], "Teen Life": ["e_present", "e_freq", "e_like"], "In The Kitchen": ["e_present", "e_vocab"],
+    "On The Phone": ["e_future", "e_wh"], "The Internet": ["e_present", "e_freq", "e_modal"], "Adventures": ["e_compare", "e_like"],
+    "Tourism": ["e_past", "e_compare"], "Chores": ["e_modal", "e_vocab", "e_freq"], "Science": ["e_past", "e_present"], "Natural Forces": ["e_future", "e_modal"],
+  },
+};
+// Öğrenci verisi: window.storage "pdr-onkosul" → { ogrAnahtar: { "ders|konu": { tarih, sonuc: { beceriId: [dogru, toplam] } } } }
+let PDR_ONKOSUL_VERI = {};
+async function onkosulOku() { try { const r = await window.storage.get("pdr-onkosul"); PDR_ONKOSUL_VERI = (r && r.value && JSON.parse(r.value)) || {}; } catch (e) {} return PDR_ONKOSUL_VERI; }
+async function onkosulKaydet(v) { PDR_ONKOSUL_VERI = v; try { await window.storage.set("pdr-onkosul", JSON.stringify(v)); } catch (e) {} }
+function onkosulBeceri(id) { const b = ONKOSUL_BECERI[id]; if (!b) return null; return { id, ders: b[0], ad: b[1], nerede: b[2], calisma: b[3], sorular: b[4].map((q, i) => { const sec = q[1].split("|"), n = sec.length, r = [...(id + i)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 9973, 7) % n; return { s: q[0], sec: sec.slice(r).concat(sec.slice(0, r)), d: (q[2] - r + n) % n }; }) }; }
+// (şıklar beceri adına göre sabit biçimde döndürülür; doğru cevap hep aynı harfte toplanmasın)
+function onkosulKonuBecerileri(ders, konu) { return ((ONKOSUL_HARITA[ders] || {})[konu] || []).filter(id => ONKOSUL_BECERI[id]); }
+function onkosulSinifNo(b) { const m = /(\d)/.exec(b.nerede || ""); return m ? +m[1] : 9; }
+// Becerinin en son durumu (aynı beceri farklı konularda ölçülmüş olabilir; en yeni tarih geçerli)
+function onkosulBeceriDurumu(ogrVeri) {
+  const d = {};
+  Object.entries(ogrVeri || {}).forEach(([dk, k]) => { const konu = dk.split("|")[1];
+    Object.entries(k.sonuc || {}).forEach(([id, [dg, tp]]) => { const o = d[id]; if (!o || String(k.tarih) >= String(o.tarih)) d[id] = { dogru: dg, toplam: tp, tarih: k.tarih, konular: [...new Set([...(o ? o.konular : []), konu])] }; else o.konular = [...new Set([...o.konular, konu])]; }); });
+  return d;
+}
+function onkosulSeviye(x) { return !x ? null : x.dogru >= x.toplam ? "hazir" : x.dogru > 0 ? "pekistir" : "eksik"; }
+// Köprü planı: eksik/pekiştirilecek beceriler en temelden başlayarak; şu an derste işlenen konunun ön koşulları öne alınır
+function onkosulKopruPlani(ogrVeri, lgsDurum) {
+  const durum = onkosulBeceriDurumu(ogrVeri), L = [];
+  Object.entries(durum).forEach(([id, x]) => { const sv = onkosulSeviye(x); if (sv === "hazir") return; const b = onkosulBeceri(id); if (!b) return;
+    const simdi = x.konular.some(k => lgsDurum && lgsDurum[b.ders] && lgsDurum[b.ders][k] === "simdi") || Object.keys(ogrVeri || {}).some(dk => { const [dd, kk] = dk.split("|"); return lgsDurum && lgsDurum[dd] && lgsDurum[dd][kk] === "simdi" && onkosulKonuBecerileri(dd, kk).includes(id); });
+    L.push({ ...b, ...x, seviye: sv, simdi }); });
+  L.sort((a, b) => (b.simdi - a.simdi) || (a.seviye === b.seviye ? 0 : a.seviye === "eksik" ? -1 : 1) || (onkosulSinifNo(a) - onkosulSinifNo(b)));
+  const gun = L.reduce((s, x) => s + (x.seviye === "eksik" ? 3 : 2), 0), hafta = Math.max(1, Math.ceil(gun / 5));
+  return { liste: L, gun, hafta, olculen: Object.keys(durum).length };
+}
+function onkosulPlanMetni(ogrVeri, lgsDurum) {
+  const p = onkosulKopruPlani(ogrVeri, lgsDurum);
+  if (!p.olculen) return "";
+  if (!p.liste.length) return `Ölçülen ${p.olculen} ön koşul becerisinin hepsi hazır görünüyor (2/2).`;
+  return `KÖPRÜ PLANI (${p.liste.length} beceri, ≈${p.hafta} hafta; her gün 20 dk temel + kalan süre güncel konu):\n` + p.liste.map((x, i) => `${i + 1}) ${x.ad} [${x.ders}, ${x.nerede}] — ${x.seviye === "eksik" ? "eksik" : "pekiştirilmeli"} (${x.dogru}/${x.toplam}, ${x.tarih})${x.simdi ? " · şu an derste işlenen konunun ön koşulu" : ""}; gerektiren konu: ${x.konular.join(", ")}. Ne çalışmalı: ${x.calisma}`).join("\n");
+}
+const ONKOSUL_PSIKOEGITIM = [
+  ["Neden bu konuyu zor buluyorsun?", "Dersler bir bina gibi üst üste kurulur. Bu yıl gördüğün konu, önceki yıllardaki bazı becerilerin üzerine oturuyor. O becerilerden biri eksikse yeni konu ne kadar çalışırsan çalış 'oturmaz'. Bu senin zekânla ilgili değil; sadece temelde bir tuğla eksik."],
+  ["Eksik tuğlayı bulduk", "Kısa kontrolde hangi becerilerin hazır, hangilerinin eksik olduğunu gördük. Eksik olan becerileri önceki sınıfların kitaplarından ya da basit örneklerden çalışacağız. 6. ya da 7. sınıf konusuna dönmek geri gitmek değil; yukarı çıkmak için merdiveni sağlamlaştırmaktır. Sporcular da önce temel hareketleri çalışır."],
+  ["Süreyi nasıl bölüştüreceğiz?", "Her çalışma gününde önce 20 dakika eksik temele çalış, kalan sürede sınıfta işlenen güncel konuyla devam et. Böylece hem okulda geride kalmazsın hem de temel sağlamlaşır. Her beceriye yaklaşık 2–3 gün yeter. Planındaki beceriler bitince kısa kontrolü tekrar yapacağız."],
+  ["\"Anlamıyorum\" dediğinde ne yapacaksın?", "1) Dur ve neyi anlamadığını tek cümleyle yaz. 2) Bir basamak aşağı in: planındaki temel beceriye bak. 3) Çözülmüş bir örneği adım adım incele. 4) Aynı türden kolay bir soru dene. 5) Öğrendiğini kendi cümlelerinle birine anlat. Hâlâ takılırsan sorunun numarasını yaz, öğretmenine ya da bana getir."],
+  ["İlerlemeyi nasıl göreceğiz?", "Köprü kartındaki her beceriyi bitirdikçe işaretle. Birkaç hafta sonra aynı kontrol sorularını tekrar çözeceğiz; doğru sayının artması ilerlediğini gösterecek. Küçük adımlar birikir."],
+];
+function onkosulKartHtml(ad, sinif, plan) {
+  const e = cdtEsc, t = today();
+  return `<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Köprü Planım</title><style>
+body{font-family:Arial,sans-serif;color:#222;margin:16px;font-size:12px;line-height:1.45}h1{font-size:18px;color:#5B21B6;margin:0 0 2px}h2{font-size:13px;color:#5B21B6;margin:14px 0 6px}
+table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:5px 6px;vertical-align:top;text-align:left}th{background:#EDE9FE;font-size:11px}.k{width:22px;text-align:center;font-size:15px}.not{color:#555;font-size:11px}
+.kutu{border:1.5px solid #C4B5FD;border-radius:10px;padding:8px 10px;margin:8px 0;background:#FAF5FF}@media print{body{margin:10mm}}</style></head><body>
+<h1>🧱 Köprü Planım</h1><div class="not">${e(ad)}${sinif ? " · " + e(sinif) : ""} · ${e(t)}</div>
+<div class="kutu"><b>Kuralım:</b> Her çalışma gününde önce <b>20 dakika</b> aşağıdaki temel beceriye, sonra sınıfta işlenen güncel konuya çalışacağım. Bir beceri ≈ 2–3 gün. Tahmini süre: <b>${plan.hafta} hafta</b>.</div>
+<h2>Sırayla çalışacağım beceriler</h2><table><tr><th>#</th><th>Beceri</th><th>Ne çalışacağım?</th><th class="k">✓</th></tr>
+${plan.liste.map((x, i) => `<tr><td>${i + 1}</td><td><b>${e(x.ad)}</b><br><span class="not">${e(x.ders)} · ${e(x.nerede)}</span></td><td>${e(x.calisma)}</td><td class="k">☐</td></tr>`).join("")}</table>
+<h2>"Anlamıyorum" dediğimde</h2><div>1) Neyi anlamadığımı tek cümleyle yazarım. 2) Bir basamak aşağı inerim (bu karttaki beceri). 3) Çözülmüş örneği adım adım incelerim. 4) Kolay bir soru denerim. 5) Kendi cümlelerimle anlatırım. Takılırsam soruyu işaretleyip öğretmenime / rehber öğretmenime getiririm.</div>
+<h2>Kontrol tarihi</h2><div>Planı bitirince kısa kontrolü tekrar çözeceğim: ____ / ____ / ________</div></body></html>`;
+}
+function onkosulKonusmaHtml(ad, plan) {
+  const e = cdtEsc;
+  return `<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ön Koşul Psikoeğitimi</title><style>
+body{font-family:Arial,sans-serif;color:#222;margin:16px;font-size:12.5px;line-height:1.5}h1{font-size:17px;color:#5B21B6;margin:0 0 6px}h2{font-size:13px;color:#5B21B6;margin:12px 0 3px}.not{color:#555;font-size:11px}@media print{body{margin:10mm}}</style></head><body>
+<h1>🗣 Ön Koşul Psikoeğitimi — danışman konuşma rehberi</h1><div class="not">${e(ad || "")} · Öğrenciyle tane tane, örnek vererek konuşun; her bölümden sonra "Bunu kendi cümlelerinle anlatır mısın?" diye sorun.</div>
+${ONKOSUL_PSIKOEGITIM.map(([b, m]) => `<h2>${e(b)}</h2><div>${e(m)}</div>`).join("")}
+${plan && plan.liste.length ? `<h2>Bu öğrencinin köprü becerileri</h2><div>${plan.liste.map((x, i) => `${i + 1}) ${e(x.ad)} (${e(x.nerede)})`).join("<br>")}</div>` : ""}
+<h2>Dikkat</h2><div>"Sen 6. sınıf düzeyindesin" gibi etiketleyen ifadeler yerine "Bu beceri 6. sınıfta öğretiliyor, birlikte sağlamlaştıralım" deyin. Başarıları (doğru sayısındaki artış) somut olarak gösterin.</div></body></html>`;
+}
+function onkosulFormHtml(ders, konu) {
+  const e = cdtEsc, ids = onkosulKonuBecerileri(ders, konu); let n = 0; const anahtar = [];
+  const sorular = ids.map(id => { const b = onkosulBeceri(id); return `<div class="bec"><b>${e(b.ad)}</b> <span class="not">(${e(b.nerede)})</span>${b.sorular.map(q => { n++; anahtar.push(`${n}) ${"ABCD"[q.d]}`); return `<div class="s"><b>${n}.</b> ${e(q.s)}<div class="sec">${q.sec.map((s, i) => `<span>${"ABCD"[i]}) ${e(s)}</span>`).join("")}</div></div>`; }).join("")}</div>`; }).join("");
+  return `<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ön Koşul Kontrolü</title><style>
+body{font-family:Arial,sans-serif;color:#222;margin:16px;font-size:12.5px;line-height:1.45}h1{font-size:16px;color:#5B21B6;margin:0 0 4px}.not{color:#666;font-size:11px}.bec{border-top:1px solid #ddd;padding:6px 0}.s{margin:6px 0 6px 6px}.sec{display:flex;flex-wrap:wrap;gap:4px 18px;margin:3px 0 0 14px}
+.anahtar{page-break-before:always;border-top:2px dashed #999;padding-top:10px}@media print{body{margin:10mm}}</style></head><body>
+<h1>🧱 Ön Koşul Kontrolü — ${e(ders)}: ${e(konu)}</h1><div class="not">Ad Soyad: ______________________ Sınıf/No: ________ Tarih: ____/____/______ · Doğru seçeneği daire içine al. Bilmediğini boş bırak, tahmin etme.</div>
+${sorular}<div class="anahtar"><b>Cevap anahtarı (danışman için)</b><br>${anahtar.join(" · ")}<div class="not">Sonucu programda Konu Haritası → konu → 🧱 Ön koşul kontrolü ekranında öğrencinin işaretlediği seçeneklere tıklayarak girin.</div></div></body></html>`;
+}
+// Konu satırındaki kısa kontrol (tablette öğrenci çözer ya da kâğıttaki cevaplar girilir)
+function OnKosulKontrol({ ders, konu, ogrAnahtar, onKaydet }) {
+  const ids = onkosulKonuBecerileri(ders, konu), [cevap, setCevap] = useState({}), [bitti, setBitti] = useState(false);
+  const toplamSoru = ids.length * 2, cevaplanan = Object.keys(cevap).length;
+  async function kaydet() {
+    const sonuc = {}; ids.forEach(id => { const b = onkosulBeceri(id); sonuc[id] = [b.sorular.filter((q, i) => cevap[id + "_" + i] === q.d).length, b.sorular.length]; });
+    const v = await onkosulOku(), o = { ...(v[ogrAnahtar] || {}), [ders + "|" + konu]: { tarih: today(), sonuc } };
+    await onkosulKaydet({ ...v, [ogrAnahtar]: o }); setBitti(true); if (onKaydet) onKaydet();
+  }
+  return (
+    <div data-testid="onkosul-kontrol" style={{ marginTop:6, background:"#FAF5FF", border:"1px solid #DDD6FE", borderRadius:10, padding:"8px 10px" }}>
+      <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4 }}>
+        <span style={{ flex:1, fontSize:11.5, color:"#5B21B6", fontWeight:800 }}>Bu konuyu anlamak için gereken {ids.length} beceri · {toplamSoru} soru</span>
+        <button data-testid="onkosul-form" onClick={() => ootBelgeAc(onkosulFormHtml(ders, konu), "Ön Koşul Kontrolü")} style={{ background:"#fff", border:"1px solid #C4B5FD", color:"#5B21B6", borderRadius:7, padding:"3px 8px", fontSize:10.5, fontWeight:700, cursor:"pointer" }}>🖨 Kâğıt form</button>
+      </div>
+      <div style={{ fontSize:10.5, color:MUTED, marginBottom:6 }}>Öğrenci tablette çözebilir ya da kâğıt formdaki cevaplarını buradan işaretleyin. Bilmediğini boş bıraksın.</div>
+      {ids.map(id => { const b = onkosulBeceri(id); return (
+        <div key={id} style={{ borderTop:"1px dashed #DDD6FE", padding:"6px 0" }}>
+          <div style={{ fontSize:11.5, fontWeight:800 }}>{b.ad} <span style={{ fontWeight:400, color:MUTED, fontSize:10.5 }}>({b.nerede})</span>
+            {bitti && (() => { const dg = b.sorular.filter((q, i) => cevap[id + "_" + i] === q.d).length, sv = dg >= 2 ? "hazir" : dg ? "pekistir" : "eksik"; return <span data-onkosul-sonuc={sv} style={{ marginLeft:6, fontSize:10, fontWeight:800, borderRadius:8, padding:"1px 6px", color:"#fff", background: sv === "hazir" ? "#15803D" : sv === "pekistir" ? "#B45309" : "#B91C1C" }}>{dg}/2 {sv === "hazir" ? "hazır" : sv === "pekistir" ? "pekiştir" : "eksik"}</span>; })()}</div>
+          {b.sorular.map((q, i) => { const k = id + "_" + i; return (
+            <div key={k} style={{ margin:"4px 0 0 4px" }}>
+              <div style={{ fontSize:12 }}>{q.s}</div>
+              <div style={{ display:"flex", flexWrap:"wrap", gap:4, marginTop:3 }}>{q.sec.map((s, j) => { const sec = cevap[k] === j, dogru = bitti && j === q.d, yanlis = bitti && sec && j !== q.d; return (
+                <button key={j} data-onkosul-sec={k + "_" + j} disabled={bitti} onClick={() => setCevap(c => { const y = { ...c }; if (y[k] === j) delete y[k]; else y[k] = j; return y; })} style={{ padding:"4px 8px", borderRadius:7, fontSize:11.5, cursor: bitti ? "default" : "pointer", border:`1.5px solid ${dogru ? "#15803D" : yanlis ? "#B91C1C" : sec ? PURPLE : BORDER}`, background: dogru ? "#DCFCE7" : yanlis ? "#FEE2E2" : sec ? PURPLE_LIGHT : "#fff", color: TEXT, fontWeight: sec ? 800 : 500 }}>{"ABCD"[j]}) {s}</button>); })}</div>
+            </div>); })}
+          {bitti && b.sorular.filter((q, i) => cevap[id + "_" + i] === q.d).length < 2 && <div style={{ fontSize:11, color:"#92400E", background:"#FFFBEB", borderRadius:7, padding:"4px 7px", marginTop:5 }}>💡 {b.calisma}</div>}
+        </div>); })}
+      {!bitti ? <button data-testid="onkosul-kaydet" onClick={kaydet} style={{ width:"100%", marginTop:6, padding:"7px", borderRadius:8, border:"none", background:PURPLE, color:"#fff", fontSize:12, fontWeight:800, cursor:"pointer" }}>✓ Bitir ve kaydet ({cevaplanan}/{toplamSoru} cevaplandı)</button>
+        : <div style={{ fontSize:11.5, color:"#15803D", fontWeight:800, marginTop:6 }}>Kaydedildi. Eksik beceriler yukarıdaki 🧱 Köprü Planı'na eklendi.</div>}
+    </div>
+  );
+}
+function OnKosulKopruPaneli({ ogrVeri, lgsDurum, ad, sinif }) {
+  const [konusma, setKonusma] = useState(false), p = onkosulKopruPlani(ogrVeri, lgsDurum);
+  if (!p.olculen) return (
+    <div data-testid="onkosul-bilgi" style={{ background:"#FAF5FF", border:"1px solid #DDD6FE", borderRadius:12, padding:"9px 12px", marginBottom:12, fontSize:11.5, color:"#5B21B6", lineHeight:1.45 }}>
+      🧱 <b>Ön koşul köprüsü:</b> Öğrenci bir konuyu yapamıyorsa ders listesinde o konunun altındaki <b>🧱 Ön koşul</b> düğmesine basın; önceki sınıflardan gereken becerileri kısa sorularla kontrol edip eksikler için çalışma planı çıkarır.
+    </div>);
+  return (
+    <div data-testid="onkosul-kopru" style={{ background:"#FAF5FF", border:"1px solid #C4B5FD", borderRadius:12, padding:"10px 12px", marginBottom:12 }}>
+      <div style={{ fontSize:13, fontWeight:900, color:"#5B21B6", marginBottom:4 }}>🧱 Köprü Planı {p.liste.length ? <span style={{ fontSize:11, fontWeight:700 }}>· {p.liste.length} beceri · ≈{p.hafta} hafta</span> : null}</div>
+      {!p.liste.length ? <div style={{ fontSize:12, color:"#15803D", fontWeight:700 }}>✓ Ölçülen {p.olculen} ön koşul becerisinin hepsi hazır. Zorluk konunun kendisinde olabilir; konuyu küçük adımlarla tekrar edin.</div> : <>
+        <div style={{ fontSize:11.5, color:"#4C1D95", marginBottom:6, lineHeight:1.45 }}>Her çalışma gününde <b>önce 20 dk</b> sıradaki temel beceri, <b>sonra</b> sınıfta işlenen güncel konu. Bir beceri ≈ 2–3 gün; plan bitince kontrolü tekrarlayın.</div>
+        {p.liste.map((x, i) => (
+          <div key={x.id} data-onkosul-kopru={x.id} style={{ display:"flex", gap:8, padding:"5px 0", borderTop: i ? "1px dashed #DDD6FE" : "none" }}>
+            <span style={{ fontSize:11, fontWeight:900, color:"#5B21B6", width:14 }}>{i + 1}</span>
+            <span style={{ flex:1, minWidth:0, fontSize:12 }}>
+              <b>{x.ad}</b> <span style={{ color:MUTED }}>· {x.ders} · {x.nerede}</span>
+              <span style={{ marginLeft:5, fontSize:9.5, fontWeight:800, borderRadius:8, padding:"1px 6px", color:"#fff", background: x.seviye === "eksik" ? "#B91C1C" : "#B45309" }}>{x.dogru}/{x.toplam} {x.seviye === "eksik" ? "eksik" : "pekiştir"}</span>
+              {x.simdi && <span style={{ marginLeft:4, fontSize:9.5, fontWeight:800, borderRadius:8, padding:"1px 6px", color:"#fff", background:"#7C3AED" }}>📅 bu hafta derste gerekli</span>}
+              <span style={{ display:"block", fontSize:10.5, color:MUTED }}>Gerektiren konu: {x.konular.join(", ")} · {x.tarih}</span>
+              <span style={{ display:"block", fontSize:11, color:"#4C1D95" }}>💡 {x.calisma}</span>
+            </span>
+          </div>))}
+      </>}
+      <div style={{ display:"flex", gap:6, marginTop:8, flexWrap:"wrap" }}>
+        {p.liste.length > 0 && <button data-testid="onkosul-kart" onClick={() => ootBelgeAc(onkosulKartHtml(ad, sinif, p), "Köprü Planım")} style={{ flex:1, padding:"7px", borderRadius:8, border:"1px solid #C4B5FD", background:"#fff", color:"#5B21B6", fontSize:11.5, fontWeight:800, cursor:"pointer" }}>🖨 Öğrenci kartı (Köprü Planım)</button>}
+        <button data-testid="onkosul-konusma" onClick={() => setKonusma(k => !k)} style={{ flex:1, padding:"7px", borderRadius:8, border:"1px solid #C4B5FD", background: konusma ? "#EDE9FE" : "#fff", color:"#5B21B6", fontSize:11.5, fontWeight:800, cursor:"pointer" }}>🗣 Öğrenciye nasıl anlatırım? {konusma ? "▲" : "▼"}</button>
+      </div>
+      {konusma && (
+        <div data-testid="onkosul-psikoegitim" style={{ marginTop:8, background:"#fff", border:"1px solid #DDD6FE", borderRadius:10, padding:"8px 10px" }}>
+          {ONKOSUL_PSIKOEGITIM.map(([b, m], i) => <div key={i} style={{ marginBottom:6 }}><div style={{ fontSize:12, fontWeight:800, color:"#5B21B6" }}>{i + 1}. {b}</div><div style={{ fontSize:12, lineHeight:1.5 }}>{m}</div></div>)}
+          <div style={{ fontSize:11, color:MUTED }}>"Sen 6. sınıf düzeyindesin" yerine "Bu beceri 6. sınıfta öğretiliyor, birlikte sağlamlaştıralım" deyin.</div>
+          <button onClick={() => ootBelgeAc(onkosulKonusmaHtml(ad, p), "Ön Koşul Psikoeğitimi")} style={{ marginTop:6, background:"none", border:"none", color:PURPLE, fontSize:11.5, fontWeight:800, cursor:"pointer", padding:0 }}>🖨 Konuşma rehberini yazdır</button>
+        </div>)}
+    </div>
+  );
+}
+// Asistan aracı
+async function ksAsistanOnkosul(g, ctx, o) {
+  const v = await onkosulOku(), anahtar = o ? pdrOgrAnahtar(o.name, o.className, o.numara) : null, ogrVeri = (anahtar && v[anahtar]) || {};
+  let lgsDurum = {}; try { const ky = await pdrMetinTakvimKaydirmaOku(), b = new Date(); Object.keys(PDR_LGS_KITAPLAR).forEach(d => { const r = lgsDersKonumu(d, b, ctx.aktifYil, ky[LGS_TAKVIM_ANAHTAR[d]] || 0); if (r) lgsDurum[d] = r.durum; }); } catch (e) {}
+  const b = [], plan = onkosulPlanMetni(ogrVeri, lgsDurum);
+  if (o) b.push(plan ? `ÖN KOŞUL KONTROL SONUÇLARI (${ksAsistanEtiket(o)}):\n${plan}` : "Bu öğrenci için henüz ön koşul kontrolü yapılmamış. Konu Haritası'nda konunun altındaki 🧱 Ön koşul düğmesiyle (tablet ya da kâğıt form) yapılabilir.");
+  const q = ksSade(String(g.konu || "") + " " + String(g.ders || ""));
+  const konular = [];
+  Object.entries(ONKOSUL_HARITA).forEach(([d, km]) => Object.keys(km).forEach(k => { if ((g.konu && ksSade(k).includes(ksSade(g.konu))) || (!g.konu && g.ders && ksSade(d).includes(ksSade(g.ders)))) konular.push([d, k]); }));
+  if (!konular.length && !g.konu) Object.entries(lgsDurum).forEach(([d, km]) => Object.entries(km).forEach(([k, s]) => { if (s === "simdi" && onkosulKonuBecerileri(d, k).length) konular.push([d, k]); }));
+  if (konular.length) b.push((g.konu || g.ders ? "KONUNUN ÖN KOŞUL BECERİLERİ:" : "BU HAFTA DERSTE İŞLENEN KONULARIN ÖN KOŞULLARI (tahmini):") + "\n" + konular.slice(0, 6).map(([d, k]) => `${d} — ${k}: ` + onkosulKonuBecerileri(d, k).map(id => { const x = onkosulBeceri(id); return `${x.ad} (${x.nerede}; çalışma: ${x.calisma})`; }).join("; ")).join("\n"));
+  else if (q.trim()) b.push("Bu konu için tanımlı ön koşul listesi bulunamadı (8. sınıf LGS konuları için tanımlı).");
+  b.push("PSİKOEĞİTİM İLKELERİ: Eksik ön koşulu 'temeldeki eksik tuğla' olarak anlat, etiketleme ('6. sınıf düzeyindesin' deme; 'bu beceri 6. sınıfta öğretiliyor' de). Günlük plan: önce 20 dk temel beceri, sonra güncel konu; beceri başına 2–3 gün; plan bitince kontrol tekrarlanır. 'Anlamıyorum' stratejisi: neyi anlamadığını yaz → bir basamak aşağı in → çözülmüş örnek → kolay soru → kendi cümlesiyle anlat. Öğrenci kartı ve konuşma rehberi Konu Haritası'ndaki 🧱 Köprü Planı'ndan yazdırılır.");
+  return b.join("\n\n");
+}
+
 function KonuHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, konuHaritasiVerisi, setKonuHaritasiVerisi, kademe, aktifYil }) {
   const [seciliAd, setSeciliAd] = useState(aktifOgrenci?.name || "");
   const [ogrenciArama, setOgrenciArama] = useState("");
@@ -37772,6 +38046,9 @@ function KonuHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, kon
   const [sinavTip, setSinavTip] = useState("tyt"); // sadece kademe==="lise" iken kullanılır
   const [acikKazanim, setAcikKazanim] = useState(null); // "ders|konu": konunun kazanım listesi açık
   const [lgsDurum, setLgsDurum] = useState({}); // ders → konu → islendi/simdi/sirada (tahmini)
+  const [onkosulAcik, setOnkosulAcik] = useState(null); // "ders|konu": ön koşul kontrolü açık
+  const [onkosulVeri, setOnkosulVeri] = useState(PDR_ONKOSUL_VERI);
+  useEffect(() => { onkosulOku().then(v => setOnkosulVeri({ ...v })); }, []);
 
   useEffect(() => {
     if (aktifOgrenci?.name) setSeciliAd(aktifOgrenci.name);
@@ -37888,6 +38165,8 @@ function KonuHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, kon
         );
       })()}
 
+      {seciliAd && !liseMi && <OnKosulKopruPaneli ogrVeri={(ogrAnahtar && onkosulVeri[ogrAnahtar]) || {}} lgsDurum={lgsDurum} ad={seciliAd} sinif={seciliSinif} />}
+
       {/* Ders listesi */}
       {seciliAd && (
         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
@@ -37932,6 +38211,11 @@ function KonuHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, kon
                             <>
                               <button data-testid="konu-kazanim" onClick={() => setAcikKazanim(a => a === ak ? null : ak)} style={{ background:"none", border:"none", color:PURPLE, fontSize:11, fontWeight:700, cursor:"pointer", padding:"5px 0 0" }}>📜 {l.length} kazanım {acikKazanim === ak ? "▲" : "▼"}</button>
                               {acikKazanim === ak && <div data-testid="konu-kazanim-liste" style={{ marginTop:4 }}>{l.map(([kd, m]) => <div key={kd} style={{ fontSize:11.5, color:TEXT, lineHeight:1.45, padding:"2px 0 2px 8px", borderLeft:`2px solid ${PURPLE_LIGHT}` }}><b style={{ color:MUTED, fontSize:10 }}>{kd}</b> {m}</div>)}</div>}
+                            </>); })()}
+                          {!liseMi && onkosulKonuBecerileri(ders, k.konu).length > 0 && (() => { const ak = ders + "|" + k.konu, kayit = ogrAnahtar && onkosulVeri[ogrAnahtar] && onkosulVeri[ogrAnahtar][ak], eksik = kayit ? Object.values(kayit.sonuc || {}).filter(([d, t]) => d < t).length : 0; return (
+                            <>
+                              <button data-testid="onkosul-ac" onClick={() => setOnkosulAcik(a => a === ak ? null : ak)} style={{ background:"none", border:"none", color:"#5B21B6", fontSize:11, fontWeight:700, cursor:"pointer", padding:"5px 0 0", marginLeft:8 }}>🧱 Ön koşul {kayit ? (eksik ? `· ${eksik} eksik (${kayit.tarih})` : `· hazır ✓ (${kayit.tarih})`) : "kontrolü"} {onkosulAcik === ak ? "▲" : "▼"}</button>
+                              {onkosulAcik === ak && <OnKosulKontrol key={ak} ders={ders} konu={k.konu} ogrAnahtar={ogrAnahtar} onKaydet={() => setOnkosulVeri({ ...PDR_ONKOSUL_VERI })} />}
                             </>); })()}
                         </div>
                       );
@@ -40191,6 +40475,7 @@ function pdrAsistanBildir() { const S = PDR_ASISTAN_SOHBET; if (S.dinle) S.dinle
 
 const PDR_ASISTAN_ARAC_AD = {
   metin_oner: "Ders kitabından metin önerisi",
+  onkosul_plani: "Ön koşul köprü planı",
   ogrenci_ara: "Öğrenci arandı", ogrenci_ozeti: "Öğrenci özeti", gorusme_notlari: "Görüşme notları okundu",
   risk_analizi: "Risk analizi (kapalı sistem)", seans_hazirlik: "Seans hazırlığı (kapalı sistem)", mudahale_plani: "Müdahale planı önerisi (kapalı sistem)",
   deneme_analizi: "Deneme analizi (kapalı sistem)", profil_analizi: "Profil analizi (kapalı sistem)", supervizyon: "Süpervizyon raporu (kapalı sistem)",
@@ -52279,6 +52564,7 @@ export default function App() {
       "pdr-insan-ciz-veri": () => pdrIczVeriYukle(),
       "pdr-porteus-norm": () => pdrPorteusNormYukle(),
       "pdr-cattell-norm": () => pdrCattellNormYukle(),
+      "pdr-onkosul": () => onkosulOku(),
       "pdr-gorsel-algi-norm": () => pdrGorselNormYukle(),
       "pdr-sinav-kaygisi": () => loadSinavKaygisi().then(setSinavKaygisi),
       // "pdr-rehber-gorundu" bilerek dahil edilmedi — bu sadece "ilk açılışta

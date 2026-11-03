@@ -4289,7 +4289,7 @@ function KitapSayfaGosterici({ kitap, kitapAd, sayfa, aralik, ofset = 0, onKapat
   return (
     <div data-kitap-sayfa="1" style={{ position: "fixed", inset: 0, zIndex: 2147483000, background: "rgba(15,23,42,0.92)", display: "flex", flexDirection: "column" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px", background: "#0F172A", color: "#fff", flexWrap: "wrap" }}>
-        <div style={{ flex: 1, minWidth: 120, fontSize: 12.5, fontWeight: 800 }}>{kitapAd} · s. {s}{toplam ? ` / ${toplam}` : ""}{aralik ? <span style={{ fontWeight: 500, color: "#94A3B8" }}> (metin s. {aralik[0]}–{aralik[1]})</span> : null}</div>
+        <div style={{ flex: 1, minWidth: 120, fontSize: 12.5, fontWeight: 800 }}>{kitapAd} · s. {s}{toplam ? ` / ${toplam}` : ""}{aralik && aralik[0] !== aralik[1] ? <span style={{ fontWeight: 500, color: "#94A3B8" }}> (metin s. {aralik[0]}–{aralik[1]})</span> : null}</div>
         <button data-kitap-onceki="1" onClick={() => setS(x => Math.max(1, x - 1))} style={btn}>◀</button>
         <button data-kitap-sonraki="1" onClick={() => setS(x => toplam ? Math.min(toplam, x + 1) : x + 1)} style={btn}>▶</button>
         <button onClick={() => setOlcek(x => Math.max(1, x - 0.5))} style={btn}>−</button>
@@ -15718,7 +15718,7 @@ const KS_ASISTAN_ARACLAR = {
     },
   },
   lgs_beceri: {
-    aciklama: "LGS becerileri (yerelde): LGS'nin ölçtüğü beceriler (okuduğunu anlama, çıkarım-yorum, tablo-grafik okuma, akıl yürütme, problem çözme, modelleme, uzamsal düşünme, bilimsel süreç, neden-sonuç, kronoloji, harita okuma, kanıt-görüş ayrımı, kavram bilgisi, söz varlığı, dil bilgisi, günlük hayata aktarma, dikkat-süre) ve 8. sınıf konularıyla eşleşmesi. konu verirsen o konunun istediği/geliştirdiği becerileri ve geliştirme önerilerini; beceri verirsen o beceriyi isteyen konuları; ogrenci verirsen Konu Haritası yüzdelerinden tahmini beceri durumunu verir. 'Bu konu hangi becerileri istiyor', 'LGS hangi becerileri ölçüyor', 'hangi beceriyi geliştirmeli' sorularında kullan.",
+    aciklama: "LGS becerileri (yerelde): LGS'nin ölçtüğü beceriler (okuduğunu anlama, çıkarım-yorum, tablo-grafik okuma, akıl yürütme, problem çözme, modelleme, uzamsal düşünme, bilimsel süreç, neden-sonuç, kronoloji, harita okuma, kanıt-görüş ayrımı, kavram bilgisi, söz varlığı, dil bilgisi, günlük hayata aktarma, dikkat-süre) ve 8. sınıf konularıyla eşleşmesi. konu verirsen o konunun istediği/geliştirdiği becerileri ve geliştirme önerilerini; beceri verirsen o beceriyi isteyen konuları; ogrenci verirsen Konu Haritası yüzdelerinden tahmini beceri durumunu ve öğrencinin çözdüğü geçmiş LGS'lerin beceri analizini verir. Son 5 LGS'nin (2022–2026) 450 sorusunun konu-beceri analizine dayanır. 'Bu konu hangi becerileri istiyor', 'LGS hangi becerileri ölçüyor', 'hangi beceriyi geliştirmeli' sorularında kullan.",
     girdi: '{"ogrenci": "isteğe bağlı", "sinif": "isteğe bağlı", "konu": "isteğe bağlı", "beceri": "isteğe bağlı"}', yontem: "hepsi",
     calistir: (g, ctx, o) => ksAsistanLgsBeceri(g, ctx, o),
   },
@@ -38121,7 +38121,11 @@ const LGS_KONU_BECERI = {
   "İngilizce": { "Friendship": ["soz", "ok", "cik"], "Teen Life": ["soz", "ok", "gorsel"], "In The Kitchen": ["soz", "gorsel", "dikkat"], "On The Phone": ["ok", "cik", "soz"], "The Internet": ["gorsel", "ok", "cik"], "Adventures": ["soz", "cik", "gorsel"], "Tourism": ["ok", "gorsel", "cik"], "Chores": ["gorsel", "soz", "dikkat"], "Science": ["ok", "soz", "cik"], "Natural Forces": ["ok", "cik", "soz"] },
 };
 function lgsBeceri(id) { const b = LGS_BECERI[id]; return b ? { id, kisa: b[0], ad: b[1], tanim: b[2], lgs: b[3], gelistir: b[4], dayanak: b[5] } : null; }
-function lgsKonuBecerileri(ders, konu) { return ((LGS_KONU_BECERI[ders] || {})[konu] || []).filter(id => LGS_BECERI[id]); }
+// Geçmiş LGS'de bu konudan en az 3 soru varsa beceriler gerçek soru analizinden gelir; yoksa elle yapılan eşleşme kullanılır
+function lgsKonuBecerileri(ders, konu) {
+  try { const g = typeof lgsKonuGecmis === "function" ? lgsKonuGecmis(ders, konu) : null;
+    if (g && g.sorular.length >= 3) { const n = g.sorular.length, l = lgsSirala(g.beceri).filter(([id, c]) => LGS_BECERI[id] && c >= Math.max(2, n * 0.25)).slice(0, 4).map(([id]) => id); if (l.length >= 2) return l; } } catch (e) {}
+  return ((LGS_KONU_BECERI[ders] || {})[konu] || []).filter(id => LGS_BECERI[id]); }
 // Becerinin LGS'deki ağırlığı (o beceriyi isteyen konulardan beklenen soru toplamı) ve öğrencinin konu tamamlanmasına göre tahmini düzeyi
 function lgsBeceriOzeti(ogrVerisi) {
   const o = {};
@@ -38140,8 +38144,8 @@ body{font-family:Arial,sans-serif;color:#222;margin:14px;font-size:11px;line-hei
 table{border-collapse:collapse;width:100%;margin-bottom:6px;page-break-inside:avoid}th,td{border:1px solid #ccc;padding:3px 5px;vertical-align:top;text-align:left}th{background:#0F766E;color:#fff;font-size:10px}.not{color:#666;font-size:10px}
 .b{display:inline-block;background:#CCFBF1;color:#115E59;border-radius:6px;padding:0 5px;margin:1px;font-size:10px}@media print{body{margin:8mm}h2{page-break-after:avoid}}</style></head><body>
 <h1>🧠 LGS Beceri Haritası — 8. sınıf</h1><div class="not">Beceriler, 8. sınıfta uygulanan öğretim programlarındaki beceri adlarından ve MEB'in LGS için vurguladığı becerilerden (okuduğunu anlama, yorumlama, akıl yürütme, analiz, problem çözme, bilimsel süreç) derlendi. Konu eşleşmeleri yol göstericidir.</div>
-<h2>Konular ve istediği beceriler</h2>`;
-  Object.entries(LGS_KONU_BECERI).forEach(([ders, km]) => { h += `<table><tr><th style="width:38%">${e(ders)}</th><th>Bu konu şu becerileri ister ve geliştirir</th></tr>${Object.entries(km).map(([k, l]) => `<tr><td>${e(k)}</td><td>${l.map(id => `<span class="b">${e(LGS_BECERI[id][0])}</span>`).join(" ")}</td></tr>`).join("")}</table>`; });
+<h2>Konular ve istediği beceriler</h2><div class="not">En az 3 sorusu olan konularda beceriler 2022–2026 LGS sorularının tek tek incelenmesinden gelir.</div>`;
+  Object.entries(LGS_KONU_BECERI).forEach(([ders, km]) => { h += `<table><tr><th style="width:38%">${e(ders)}</th><th>Bu konu şu becerileri ister ve geliştirir</th></tr>${Object.keys(km).map(k => [k, lgsKonuBecerileri(ders, k)]).map(([k, l]) => `<tr><td>${e(k)}</td><td>${l.map(id => `<span class="b">${e(LGS_BECERI[id][0])}</span>`).join(" ")}</td></tr>`).join("")}</table>`; });
   h += `<h2>Beceriler: ne demek, nasıl geliştirilir?</h2><table><tr><th style="width:20%">Beceri</th><th style="width:30%">LGS'de nasıl sorulur?</th><th>Nasıl geliştirilir?</th></tr>${ids.map(id => { const b = lgsBeceri(id); return `<tr><td><b>${e(b.ad)}</b><br><span class="not">${e(b.tanim)}</span></td><td>${e(b.lgs)}</td><td>${b.gelistir.map(x => "• " + e(x)).join("<br>")}<br><span class="not">Dayanak: ${e(b.dayanak)}</span></td></tr>`; }).join("")}</table></body></html>`;
   return h;
 }
@@ -38155,13 +38159,13 @@ function LgsBeceriKutu({ id }) { const b = lgsBeceri(id); return (
   </div>); }
 function LgsBeceriPaneli({ ogrVerisi, seciliAd }) {
   const [acik, setAcik] = useState(false), [secili, setSecili] = useState(null);
-  const ozet = useMemo(() => lgsBeceriOzeti(ogrVerisi), [ogrVerisi]);
+  const ozet = useMemo(() => { const S = lgsSoruIstatistik(); return lgsBeceriOzeti(ogrVerisi).sort((a, b) => (S.beceri[b.id] || 0) - (S.beceri[a.id] || 0)); }, [ogrVerisi]);
   const isaretVar = ozet.some(x => x.isaretli > 0), zayif = isaretVar ? [...ozet].filter(x => x.soru >= 3).sort((a, b) => a.duzey - b.duzey).slice(0, 3) : [];
   return (
     <div data-testid="lgs-beceri" style={{ background:"#F0FDFA", border:"1px solid #5EEAD4", borderRadius:12, padding:"10px 12px", marginBottom:14 }}>
       <div onClick={() => setAcik(v => !v)} style={{ fontSize:13, fontWeight:900, color:"#0F766E", cursor:"pointer" }}>🧠 LGS Becerileri {acik ? "▲" : "▼"}</div>
       {acik && (<>
-        <div style={{ fontSize:10.5, color:"#115E59", margin:"3px 0 6px", lineHeight:1.45 }}>LGS bilgiyi doğrudan değil, becerilerle ölçer. Aşağıdaki beceriler 8. sınıf öğretim programlarındaki beceri adlarından ve MEB'in LGS için vurguladığı becerilerden derlendi. Sayı, o beceriyi isteyen konulardan LGS'de yılda yaklaşık kaç soru çıktığıdır (bir soru birden çok beceri isteyebilir). Konu listesinde her konunun altında istediği beceriler yazar.</div>
+        <div style={{ fontSize:10.5, color:"#115E59", margin:"3px 0 6px", lineHeight:1.45 }}>LGS bilgiyi doğrudan değil, becerilerle ölçer. Aşağıdaki beceriler 8. sınıf öğretim programlarındaki beceri adlarından ve MEB'in LGS için vurguladığı becerilerden derlendi. Sayı, son 5 LGS'nin (2022–2026, 450 soru) kaçında bu becerinin istendiğidir; sorular tek tek incelendi (bir soru birden çok beceri isteyebilir). Konu listesinde her konunun altında istediği beceriler yazar.</div>
         {seciliAd && (isaretVar ? <div data-testid="lgs-beceri-zayif" style={{ background:"#fff", border:"1px solid #99F6E4", borderRadius:9, padding:"6px 9px", marginBottom:6, fontSize:11.5 }}>👤 <b>{seciliAd}</b> için öncelikli beceriler (işaretlenen konu yüzdelerine göre tahmini): {zayif.map(x => `${x.kisa} %${x.duzey}`).join(" · ")}</div>
           : <div style={{ fontSize:11, color:MUTED, marginBottom:6 }}>👤 Öğrencinin konu yüzdelerini işaretlerseniz hangi becerilere öncelik vermesi gerektiği burada çıkar.</div>)}
         {ozet.map(x => (
@@ -38169,7 +38173,7 @@ function LgsBeceriPaneli({ ogrVerisi, seciliAd }) {
             <div onClick={() => setSecili(s => s === x.id ? null : x.id)} style={{ display:"flex", gap:6, alignItems:"center", cursor:"pointer" }}>
               <span style={{ flex:1, fontSize:12, fontWeight:800 }}>{x.ad}</span>
               {seciliAd && isaretVar && <span style={{ fontSize:10, fontWeight:800, color: x.duzey >= 75 ? "#15803D" : x.duzey >= 40 ? "#B45309" : "#B91C1C" }}>%{x.duzey}</span>}
-              <span style={{ fontSize:10, background:"#CCFBF1", color:"#115E59", borderRadius:8, padding:"1px 6px", fontWeight:700 }}>≈{lgsSayiYaz(x.soru)} soru</span>
+              <span style={{ fontSize:10, background:"#CCFBF1", color:"#115E59", borderRadius:8, padding:"1px 6px", fontWeight:700 }}>{lgsSoruIstatistik().beceri[x.id] || 0} soru</span>
               <span style={{ fontSize:10, color:MUTED }}>{secili === x.id ? "▲" : "▼"}</span>
             </div>
             {secili === x.id && (<>
@@ -38198,9 +38202,129 @@ async function ksAsistanLgsBeceri(g, ctx, o) {
     if (oz.some(x => x.isaretli > 0)) b.push(`ÖĞRENCİNİN BECERİ DURUMU (Konu Haritası tamamlanma yüzdelerinden tahmini; konu bilgisi ile beceri birbirine bağlı olduğu için yaklaşık bir göstergedir):\n` + [...oz].filter(x => x.soru >= 3).sort((a, c) => a.duzey - c.duzey).map(x => `${x.ad}: %${x.duzey} (LGS'de ≈${lgsSayiYaz(x.soru)} soruda öne çıkar)`).join("\n"));
     else b.push("Öğrencinin Konu Haritası'nda işaretli konu yüzdesi yok; beceri durumu çıkarılamadı.");
   }
+  try { const S = lgsSoruIstatistik();
+    if (g.konu) { const l = Object.values(S.konu).filter(k => sade(k.konu).includes(sade(g.konu))); l.slice(0, 3).forEach(k => b.push(`GEÇMİŞ LGS (2022–2026): ${k.konu} konusundan ${k.sorular.length} soru (${k.sorular.map(q => `${q.yil}/${q.no}`).join(", ")}); en çok istenen beceriler: ${lgsSirala(k.beceri, 4).map(([x, n]) => `${LGS_BECERI[x] ? LGS_BECERI[x][1] : x} ${n}`).join(", ")}.`)); }
+    if (!g.konu) b.push(`GEÇMİŞ LGS BECERİ DAĞILIMI (2022–2026, ${S.toplam} soru tek tek incelendi): ` + lgsSirala(S.beceri, 17).map(([x, n]) => `${LGS_BECERI[x] ? LGS_BECERI[x][1] : x} ${n}`).join(", ") + "\nDerslere göre: " + Object.entries(S.ders).map(([d, x]) => `${d}: görsel/tablolu %${Math.round(100 * x.gorsel / x.sayi)}, olumsuz kök %${Math.round(100 * x.olumsuz / x.sayi)}, en çok ${lgsSirala(x.beceri, 3).map(([y]) => LGS_BECERI[y] ? LGS_BECERI[y][0] : y).join("/")}`).join("; "));
+    if (o) { const v = await lgsDenemeOku(), l = v[pdrOgrAnahtar(o.name, o.className, o.numara)] || []; if (l.length) b.push("ÖĞRENCİNİN ÇÖZDÜĞÜ GEÇMİŞ LGS'LER:\n" + l.map(lgsDenemeOzetMetni).join("\n")); }
+  } catch (e) {}
   if (!g.konu && !g.beceri && !o) b.push("LGS BECERİLERİ (LGS'deki soru ağırlığına göre):\n" + lgsBeceriOzeti(null).map(x => `• ${x.ad} (≈${lgsSayiYaz(x.soru)} soruda öne çıkar): ${x.tanim}`).join("\n"));
   b.push("Not: Beceriler 8. sınıfta uygulanan 2018 öğretim programlarındaki beceri adlarından ve MEB'in LGS için vurguladığı becerilerden (okuduğunu anlama, yorumlama, akıl yürütme, analiz, problem çözme, bilimsel süreç) derlenmiştir; konu-beceri eşleşmeleri yol göstericidir.");
   return b.join("\n\n");
+}
+
+const LGS_SORU_ANALIZI_HAM = "26say|M|1|1|kavram.muh|3|;26say|M|2|12|uzam.dikkat|3|g;26say|M|3|2|muh.temsil|3|;26say|M|4|4|temsil.uzam|3|;26say|M|5|9|prob.muh|4|g;26say|M|6|1|prob.muh|5|g;26say|M|7|6|temsil.ok|6|g;26say|M|8|4|temsil.uzam|7|g;26say|M|9|3|prob.transfer|7|;26say|M|10|10|uzam.muh|8|;26say|M|11|7|prob.transfer.dikkat|9|og;26say|M|12|1|prob.muh|9|;26say|M|13|3|muh.dikkat|10|g;26say|M|14|2|temsil.gorsel.dikkat|11|og;26say|M|15|6|temsil.prob.transfer|12|gu;26say|M|16|5|uzam.muh|13|g;26say|M|17|2|gorsel.temsil|14|g;26say|M|18|5|muh.prob|15|g;26say|M|19|8|gorsel.prob.dikkat|16|ogu;26say|M|20|11|uzam.prob|17|g;26say|F|1|3|kavram.muh|18|g;26say|F|2|3|muh.gorsel|18|g;26say|F|3|3|kavram.cik|19|gu;26say|F|4|2|gorsel.cik|19|g;26say|F|5|2|bsb.cik|20|gu;26say|F|6|2|gorsel.kavram.dikkat|21|og;26say|F|7|2|transfer.kavram|21|;26say|F|8|7|muh.neden|22|gu;26say|F|9|5|bsb.muh|22|gu;26say|F|10|5|bsb.cik|23|gu;26say|F|11|6|muh.transfer|24|gu;26say|F|12|6|muh.gorsel|25|gu;26say|F|13|4|bsb.muh|26|gu;26say|F|14|4|transfer.kavram|27|u;26say|F|15|4|transfer.cik|28|gu;26say|F|16|1|gorsel.kavram|28|g;26say|F|17|1|bsb.cik|29|g;26say|F|18|1|gorsel.muh|29|g;26say|F|19|1|neden.transfer|30|u;26say|F|20|1|gorsel.bsb|30|gu;25say|M|1|1|muh|3|;25say|M|2|1|muh.uzam|3|;25say|M|3|6|muh|3|;25say|M|4|1|uzam.muh|3|g;25say|M|5|12|uzam|4|;25say|M|6|4|temsil.uzam|5|g;25say|M|7|6|temsil.transfer|6|;25say|M|8|2|temsil.prob|7|g;25say|M|9|2|gorsel.muh.dikkat|7|og;25say|M|10|4|temsil.gorsel|8|g;25say|M|11|7|prob.muh|8|g;25say|M|12|2|gorsel.temsil|9|g;25say|M|13|5|uzam.muh|9|g;25say|M|14|3|prob.transfer|10|g;25say|M|15|5|uzam.muh|11|g;25say|M|16|5|muh|12|g;25say|M|17|8|gorsel.cik|13|g;25say|M|18|1|prob.muh|14|;25say|M|19|11|uzam.prob|15|g;25say|M|20|8|gorsel.prob|16|gu;25say|F|1|3|kavram.gorsel|17|gu;25say|F|2|3|muh.kavram|18|g;25say|F|3|3|bsb.cik.dikkat|18|ou;25say|F|4|2|gorsel.cik|19|g;25say|F|5|2|bsb.cik|19|gu;25say|F|6|2|gorsel.kavram|20|gu;25say|F|7|2|gorsel.neden.dikkat|21|og;25say|F|8|5|bsb.muh|21|gu;25say|F|9|5|bsb.cik|22|g;25say|F|10|7|gorsel.cik|23|gu;25say|F|11|6|muh.transfer|24|gu;25say|F|12|6|muh.gorsel|25|gu;25say|F|13|4|transfer.cik|26|gu;25say|F|14|4|bsb.muh|27|gu;25say|F|15|4|transfer.kavram|28|g;25say|F|16|1|gorsel.kavram|28|g;25say|F|17|1|bsb.kavram|29|g;25say|F|18|1|gorsel.muh|29|gu;25say|F|19|1|bsb.neden|30|g;25say|F|20|1|gorsel.bsb|30|;24say|M|1|4|temsil|3|;24say|M|2|3|transfer.muh|3|;24say|M|3|1|kavram|3|;24say|M|4|1|muh|3|;24say|M|5|8|gorsel.cik|4|g;24say|M|6|12|uzam.dikkat|5|og;24say|M|7|4|temsil.uzam|6|g;24say|M|8|1|prob.muh|6|;24say|M|9|6|gorsel.temsil|7|g;24say|M|10|2|gorsel.temsil|7|g;24say|M|11|1|muh.dikkat|8|o;24say|M|12|5|uzam.muh|9|;24say|M|13|6|temsil.transfer|10|;24say|M|14|11|uzam.prob|11|;24say|M|15|1|uzam.muh|12|;24say|M|16|6|temsil.prob|13|g;24say|M|17|2|uzam.temsil|14|;24say|M|18|10|uzam.muh|15|g;24say|M|19|9|muh.prob|16|g;24say|M|20|5|uzam.prob|17|g;24say|F|1|3|kavram.gorsel|18|g;24say|F|2|3|muh.kavram.dikkat|19|og;24say|F|3|3|kavram.transfer|19|gu;24say|F|4|3|neden.cik|20|gu;24say|F|5|2|muh.kavram|21|;24say|F|6|2|bsb.cik|21|;24say|F|7|2|kavram.neden|22|u;24say|F|8|2|transfer.neden|22|;24say|F|9|7|muh.neden|22|;24say|F|10|5|bsb.muh|23|gu;24say|F|11|5|bsb.muh|24|gu;24say|F|12|6|muh.gorsel|25|gu;24say|F|13|6|muh.gorsel|26|gu;24say|F|14|4|bsb.cik|26|gu;24say|F|15|4|transfer.bsb|27|gu;24say|F|16|1|gorsel.kavram|28|g;24say|F|17|1|bsb.kavram|28|;24say|F|18|1|bsb.cik.dikkat|29|ogu;24say|F|19|1|bsb.muh|30|gu;24say|F|20|1|gorsel.bsb|30|g;23say|M|1|3|muh.gorsel|3|g;23say|M|2|7|prob.transfer|3|;23say|M|3|1|prob.uzam|4|;23say|M|4|1|muh|5|g;23say|M|5|9|muh|6|g;23say|M|6|1|muh.dikkat|7|o;23say|M|7|7|prob.transfer|7|g;23say|M|8|4|temsil.uzam|8|g;23say|M|9|7|muh|9|;23say|M|10|7|muh.transfer|9|;23say|M|11|1|prob.uzam|10|g;23say|M|12|8|gorsel.cik|11|g;23say|M|13|4|temsil.uzam|12|;23say|M|14|3|prob.transfer|12|;23say|M|15|1|prob.uzam|13|gu;23say|M|16|4|temsil.uzam|14|g;23say|M|17|4|temsil.uzam|14|g;23say|M|18|3|gorsel.muh|15|g;23say|M|19|8|gorsel.cik|16|gu;23say|M|20|9|muh.prob|17|g;23say|F|1|3|muh.kavram|18|;23say|F|2|3|kavram.gorsel|18|g;23say|F|3|3|gorsel.kavram|19|g;23say|F|4|3|muh|19|;23say|F|5|3|neden.kavram|20|gu;23say|F|6|3|bsb.cik|21|gu;23say|F|7|3|kavram.transfer|22|gu;23say|F|8|3|cik.ok|23|u;23say|F|9|7|gorsel.muh|23|g;23say|F|10|7|muh.neden|24|g;23say|F|11|7|kavram.ok|24|;23say|F|12|5|bsb.cik|25|gu;23say|F|13|5|bsb.muh|26|gu;23say|F|14|5|bsb.cik|27|gu;23say|F|15|5|gorsel.bsb|27|gu;23say|F|16|5|bsb|28|gu;23say|F|17|1|gorsel.kavram|28|g;23say|F|18|1|bsb.kavram|29|;23say|F|19|1|bsb.cik|29|g;23say|F|20|1|gorsel.muh|30|gu;22say|M|1|3|muh|2|;22say|M|2|3|gorsel.transfer|2|g;22say|M|3|1|prob.uzam|3|;22say|M|4|6|temsil.muh|3|g;22say|M|5|7|muh|4|;22say|M|6|7|prob.gorsel|4|g;22say|M|7|4|temsil.uzam|5|;22say|M|8|1|uzam.muh|5|g;22say|M|9|7|prob.transfer|6|g;22say|M|10|12|uzam|7|g;22say|M|11|10|uzam|8|g;22say|M|12|5|uzam.muh|9|g;22say|M|13|4|temsil.uzam|10|g;22say|M|14|9|muh.dikkat|11|;22say|M|15|2|temsil.uzam|12|;22say|M|16|5|uzam.muh|13|;22say|M|17|1|prob|14|u;22say|M|18|2|temsil.prob|14|g;22say|M|19|11|uzam.prob|15|g;22say|M|20|2|gorsel.temsil|16|g;22say|F|1|3|kavram.gorsel|17|gu;22say|F|2|3|muh.dikkat|18|ou;22say|F|3|3|cik.kavram|18|gu;22say|F|4|3|kavram|19|u;22say|F|5|2|neden.cik|20|gu;22say|F|6|2|bsb.cik|21|gu;22say|F|7|2|gorsel.kavram.dikkat|22|og;22say|F|8|2|transfer.kavram|22|;22say|F|9|7|muh.gorsel|23|g;22say|F|10|5|bsb|23|gu;22say|F|11|5|bsb.muh|24|gu;22say|F|12|6|muh.gorsel|25|gu;22say|F|13|6|muh|26|gu;22say|F|14|4|transfer.cik|27|gu;22say|F|15|4|bsb.muh|28|g;22say|F|16|1|gorsel.kavram|29|g;22say|F|17|1|bsb.cik.dikkat|29|ogu;22say|F|18|1|gorsel.muh|30|g;22say|F|19|1|gorsel.bsb|30|g;22say|F|20|1|transfer.neden|31|;26soz|T|1|1|ok.cik|3|u;26soz|T|2|4|soz.cik|3|;26soz|T|3|3|cik.soz|4|;26soz|T|4|3|cik.ok|4|;26soz|T|5|1|ok.cik.dikkat|5|ou;26soz|T|6|1|ok.cik|5|u;26soz|T|7|2|gorsel.muh.dikkat|6|gu;26soz|T|8|8|kavram.ok.dikkat|7|ou;26soz|T|9|0||7|;26soz|T|10|1|cik.transfer.dikkat|8|ou;26soz|T|11|1|cik.dikkat|8|o;26soz|T|12|1|kavram.ok|9|u;26soz|T|13|1|cik.kavram.dikkat|9|ou;26soz|T|14|2|gorsel.cik|10|gu;26soz|T|15|2|gorsel.muh|11|gu;26soz|T|16|2|gorsel.muh.dikkat|12|ogu;26soz|T|17|6|dil.dikkat|13|o;26soz|T|18|5|dil.dikkat|13|;26soz|T|19|12|dil.muh|14|gu;26soz|T|20|7|dil.kavram|14|;26soz|I|1|4|ok.cik|15|u;26soz|I|2|3|cik.neden|15|gu;26soz|I|3|3|ok.cik|16|u;26soz|I|4|2|cik.kanit.dikkat|16|ou;26soz|I|5|2|gorsel.kron.dikkat|17|ogu;26soz|I|6|2|neden.cik|17|gu;26soz|I|7|1|kavram.transfer|18|u;26soz|I|8|7|cik.ok|18|;26soz|I|9|6|kavram.cik|19|g;26soz|I|10|5|kanit.neden.dikkat|19|o;26soz|D|1|3|ok.cik.dikkat|20|o;26soz|D|2|4|kavram.ok|20|;26soz|D|3|2|ok.cik.dikkat|21|ou;26soz|D|4|1|kavram|21|;26soz|D|5|3|cik.ok|22|u;26soz|D|6|4|kavram.cik|22|;26soz|D|7|2|ok.cik.dikkat|23|ou;26soz|D|8|3|kavram|23|;26soz|D|9|1|ok.cik.dikkat|24|ou;26soz|D|10|3|ok.cik|24|;26soz|E|1|2|ok.cik|25|;26soz|E|2|1|ok.soz|26|;26soz|E|3|4|soz.ok.dikkat|26|o;26soz|E|4|8|soz.ok|27|;26soz|E|5|3|ok.cik|27|g;26soz|E|6|6|soz.ok|28|;26soz|E|7|9|ok.cik|28|;26soz|E|8|7|soz.ok|29|;26soz|E|9|3|ok.cik|29|;26soz|E|10|5|gorsel.cik|30|u;25soz|T|1|4|soz.cik|3|u;25soz|T|2|3|cik.soz|3|;25soz|T|3|3|cik.muh|4|;25soz|T|4|3|cik.ok|4|;25soz|T|5|10|dil.dikkat|5|og;25soz|T|6|8|kavram.ok|5|u;25soz|T|7|14|soz.kavram.dikkat|6|o;25soz|T|8|8|kavram.ok.dikkat|6|ou;25soz|T|9|1|ok.cik|7|gu;25soz|T|10|1|ok.cik|7|;25soz|T|11|1|cik|8|u;25soz|T|12|1|ok.cik|8|u;25soz|T|13|1|ok.cik|9|u;25soz|T|14|2|gorsel.cik.dikkat|10|ogu;25soz|T|15|2|gorsel.muh|11|gu;25soz|T|16|2|muh.gorsel|12|gu;25soz|T|17|6|dil.dikkat|13|o;25soz|T|18|5|dil.dikkat|13|;25soz|T|19|13|dil.muh|14|;25soz|T|20|11|dil.kavram|14|;25soz|I|1|1|kavram.cik|15|u;25soz|I|2|1|kavram.cik|15|;25soz|I|3|4|cik.neden|15|u;25soz|I|4|3|gorsel.cik|16|u;25soz|I|5|3|cik.kavram|17|;25soz|I|6|2|cik.dikkat|17|o;25soz|I|7|3|neden.cik|18|;25soz|I|8|2|kanit.neden|18|;25soz|I|9|6|gorsel.kron|19|gu;25soz|I|10|5|neden.cik|19|;25soz|D|1|1|ok.cik|20|;25soz|D|2|4|kavram|20|;25soz|D|3|4|cik.ok.dikkat|21|ou;25soz|D|4|4|transfer.cik|21|u;25soz|D|5|1|kavram.dikkat|22|;25soz|D|6|3|kavram|22|u;25soz|D|7|3|cik|23|;25soz|D|8|3|cik.transfer|23|;25soz|D|9|5|ok.cik|24|;25soz|D|10|2|ok.cik.dikkat|24|ou;25soz|E|1|2|ok.cik|25|;25soz|E|2|1|ok.soz.dikkat|25|o;25soz|E|3|1|ok.cik.dikkat|26|o;25soz|E|4|4|soz|26|;25soz|E|5|8|ok.soz.dikkat|27|o;25soz|E|6|9|ok.cik.dikkat|28|o;25soz|E|7|2|ok.cik.dikkat|28|o;25soz|E|8|6|ok.cik.dikkat|29|o;25soz|E|9|3|ok.cik|29|;25soz|E|10|6|gorsel.cik|30|g;24soz|T|1|4|soz.cik.dikkat|2|o;24soz|T|2|9|soz.transfer|2|u;24soz|T|3|3|cik.kavram|3|g;24soz|T|4|10|dil.dikkat|3|o;24soz|T|5|3|cik.dil|3|gu;24soz|T|6|3|cik.ok|4|;24soz|T|7|1|cik.transfer.dikkat|4|o;24soz|T|8|2|muh.dikkat|5|gu;24soz|T|9|1|ok.cik|6|;24soz|T|10|8|kavram.ok|6|u;24soz|T|11|1|kavram.ok|6|u;24soz|T|12|1|ok.muh.dikkat|7|ou;24soz|T|13|1|ok.cik.dikkat|7|ou;24soz|T|14|2|gorsel.cik.dikkat|8|ogu;24soz|T|15|2|gorsel.muh|9|gu;24soz|T|16|2|gorsel.muh|10|gu;24soz|T|17|6|dil.dikkat|11|;24soz|T|18|5|dil.dikkat|11|ou;24soz|T|19|7|dil.kavram.dikkat|11|o;24soz|T|20|11|dil.kavram.dikkat|11|o;24soz|I|1|5|kavram.transfer|12|;24soz|I|2|2|neden.gorsel.dikkat|12|ogu;24soz|I|3|3|kavram.cik|13|;24soz|I|4|3|kanit.neden.dikkat|13|o;24soz|I|5|1|kavram.ok|13|;24soz|I|6|2|cik|13|u;24soz|I|7|4|cik.neden|14|gu;24soz|I|8|2|cik.kanit|14|u;24soz|I|9|2|ok.cik|15|u;24soz|I|10|1|kavram.transfer|15|;24soz|D|1|2|ok.cik|16|u;24soz|D|2|1|ok.cik.dikkat|16|o;24soz|D|3|1|kavram|16|;24soz|D|4|6|ok.kavram|17|;24soz|D|5|2|ok.cik|17|;24soz|D|6|4|kavram|17|;24soz|D|7|2|cik.dikkat|17|ou;24soz|D|8|3|cik.dikkat|18|o;24soz|D|9|3|ok.cik|18|;24soz|D|10|5|ok.cik|18|;24soz|E|1|5|ok.cik|19|;24soz|E|2|7|ok.soz|19|;24soz|E|3|3|ok.cik.dikkat|19|o;24soz|E|4|1|gorsel.muh|20|;24soz|E|5|8|soz.ok.dikkat|20|o;24soz|E|6|6|ok.cik|20|;24soz|E|7|4|ok.cik.dikkat|21|o;24soz|E|8|2|ok.cik|21|;24soz|E|9|2|gorsel.dikkat|22|g;24soz|E|10|9|ok.cik.dikkat|23|o;23soz|T|1|1|ok.cik|2|gu;23soz|T|2|4|soz.dikkat|2|o;23soz|T|3|3|cik|3|;23soz|T|4|3|cik.soz|3|;23soz|T|5|3|cik|3|;23soz|T|6|1|ok.cik|3|;23soz|T|7|1|ok.cik|4|u;23soz|T|8|1|ok.cik|4|u;23soz|T|9|1|ok.cik.dikkat|4|o;23soz|T|10|1|kavram.ok|4|g;23soz|T|11|1|cik.dikkat|5|o;23soz|T|12|1|ok.muh.dikkat|5|o;23soz|T|13|8|kavram.ok.dikkat|5|ogu;23soz|T|14|2|gorsel.muh.dikkat|6|og;23soz|T|15|2|gorsel.muh.dikkat|7|o;23soz|T|16|2|gorsel.cik|8|gu;23soz|T|17|2|gorsel.muh|9|gu;23soz|T|18|6|dil.dikkat|10|o;23soz|T|19|5|dil.dikkat|10|;23soz|T|20|7|dil.kavram|10|u;23soz|I|1|4|neden.cik|11|u;23soz|I|2|4|neden.dikkat|11|og;23soz|I|3|4|ok.cik|12|;23soz|I|4|4|gorsel.cik|12|g;23soz|I|5|3|neden.cik|13|u;23soz|I|6|3|cik.ok|13|u;23soz|I|7|2|cik.kron.dikkat|14|ou;23soz|I|8|2|gorsel.kron.dikkat|14|ogu;23soz|I|9|4|cik.ok.dikkat|15|ogu;23soz|I|10|2|neden.cik.dikkat|15|ogu;23soz|D|1|4|ok.cik|16|;23soz|D|2|1|cik.dikkat|16|ou;23soz|D|3|1|kavram.dikkat|16|ou;23soz|D|4|2|ok.cik.dikkat|17|og;23soz|D|5|4|transfer.kavram.dikkat|17|o;23soz|D|6|2|cik.ok|17|;23soz|D|7|1|cik|17|u;23soz|D|8|4|ok.cik.dikkat|18|og;23soz|D|9|4|cik|18|;23soz|D|10|1|ok.cik.dikkat|18|o;23soz|E|1|2|ok.cik|19|;23soz|E|2|4|ok.soz|20|;23soz|E|3|1|cik.soz|20|;23soz|E|4|2|ok.cik|21|;23soz|E|5|2|ok.cik|21|;23soz|E|6|8|ok.soz|22|;23soz|E|7|8|soz.ok.dikkat|22|o;23soz|E|8|5|muh.dikkat|23|;23soz|E|9|4|ok.cik|23|;23soz|E|10|2|ok.cik|23|;22soz|T|1|4|soz.cik|3|;22soz|T|2|3|cik.dikkat|3|o;22soz|T|3|3|kavram.cik.dikkat|3|ou;22soz|T|4|1|ok.muh.dikkat|4|o;22soz|T|5|4|soz.cik.dikkat|4|ou;22soz|T|6|1|ok.cik.dikkat|4|ou;22soz|T|7|2|gorsel.cik|5|gu;22soz|T|8|8|kavram.ok.dikkat|5|o;22soz|T|9|2|gorsel.muh.dikkat|6|ogu;22soz|T|10|1|ok.muh|7|u;22soz|T|11|1|kavram.ok.dikkat|7|o;22soz|T|12|1|ok.cik|8|u;22soz|T|13|3|cik.ok|8|;22soz|T|14|10|dil.dikkat|8|;22soz|T|15|2|muh.gorsel|9|gu;22soz|T|16|2|gorsel.cik|9|gu;22soz|T|17|6|dil.dikkat|10|o;22soz|T|18|13|dil.muh|10|;22soz|T|19|12|dil.muh|10|;22soz|T|20|5|dil.dikkat|10|;22soz|I|1|4|cik.neden|11|;22soz|I|2|2|ok.cik.dikkat|11|ou;22soz|I|3|3|cik.neden|12|;22soz|I|4|2|cik.neden|12|;22soz|I|5|1|kavram.cik|12|;22soz|I|6|2|neden.gorsel.dikkat|13|o;22soz|I|7|1|transfer.kavram|13|;22soz|I|8|6|cik.ok|14|;22soz|I|9|1|kavram.cik|14|;22soz|I|10|5|kavram.gorsel|15|gu;22soz|D|1|1|ok.cik|16|u;22soz|D|2|4|cik.ok|16|u;22soz|D|3|2|kavram.ok|17|;22soz|D|4|1|ok.cik|17|;22soz|D|5|2|ok.cik.dikkat|17|ou;22soz|D|6|2|ok.cik|17|;22soz|D|7|4|cik.kavram|18|u;22soz|D|8|3|cik.dikkat|18|o;22soz|D|9|2|ok.cik|19|;22soz|D|10|4|transfer.cik.dikkat|19|ou;22soz|E|1|2|ok.cik|20|;22soz|E|2|0||20|;22soz|E|3|2|ok.cik|20|u;22soz|E|4|1|ok.muh|21|;22soz|E|5|1|soz.cik.dikkat|21|o;22soz|E|6|4|ok.dikkat|22|o;22soz|E|7|7|ok.soz|22|;22soz|E|8|2|ok.cik|22|;22soz|E|9|9|gorsel.cik|23|g;22soz|E|10|1|gorsel.muh|23|gu";
+// ── GEÇMİŞ LGS SORULARI: konu × beceri analizi (2022–2026, A kitapçığı) ──
+// Her soru için konu ve beceri ataması özgün analizdir; soru metinleri ve cevap anahtarı burada yoktur.
+// Biçim: "yy+oturum|ders|no|konu sırası (LGS_KONU_HARITASI)|beceriler|PDF sayfası|işaret (o: olumsuz kök, g: görsel/tablo, u: uzun metin)"
+const LGS_SORU_DERS = { M: "Matematik", F: "Fen Bilimleri", T: "Türkçe", I: "İnkılap Tarihi", D: "Din Kültürü", E: "İngilizce" };
+const LGS_SORU_OTURUM_DERS = { say: ["Matematik", "Fen Bilimleri"], soz: ["Türkçe", "İnkılap Tarihi", "Din Kültürü", "İngilizce"] };
+const LGS_KITAPCIK_SAYFA = { "22say": 33, "22soz": 25, "23say": 33, "23soz": 25, "24say": 33, "24soz": 25, "25say": 33, "25soz": 33, "26say": 33, "26soz": 33 };
+let LGS_SORU_ONBELLEK = null;
+function lgsSorular() {
+  if (LGS_SORU_ONBELLEK) return LGS_SORU_ONBELLEK;
+  LGS_SORU_ONBELLEK = LGS_SORU_ANALIZI_HAM.split(";").map(r => { const [k, dk, no, konu, bec, sayfa, fl] = r.split("|"); const ders = LGS_SORU_DERS[dk], ki = +konu;
+    return { kitapcik: k, yil: 2000 + +k.slice(0, 2), oturum: k.slice(2), ders, no: +no, konu: ki ? ((LGS_KONU_HARITASI[ders] || [])[ki - 1] || {}).konu || "" : "", bec: bec ? bec.split(".") : [], sayfa: +sayfa, olumsuz: fl.includes("o"), gorsel: fl.includes("g"), uzun: fl.includes("u") }; });
+  return LGS_SORU_ONBELLEK;
+}
+function lgsKitapcikAd(k) { return `${2000 + +k.slice(0, 2)} LGS ${k.slice(2) === "say" ? "Sayısal" : "Sözel"} Bölüm (A kitapçığı)`; }
+function lgsSoruIstatistik() {
+  const S = { beceri: {}, konu: {}, ders: {}, toplam: 0 };
+  lgsSorular().forEach(q => { S.toplam++;
+    const d = S.ders[q.ders] = S.ders[q.ders] || { sayi: 0, olumsuz: 0, gorsel: 0, uzun: 0, beceri: {} }; d.sayi++; if (q.olumsuz) d.olumsuz++; if (q.gorsel) d.gorsel++; if (q.uzun) d.uzun++;
+    const kk = q.ders + "|" + q.konu, k = q.konu ? (S.konu[kk] = S.konu[kk] || { ders: q.ders, konu: q.konu, sorular: [], beceri: {} }) : null; if (k) k.sorular.push(q);
+    q.bec.forEach(b => { S.beceri[b] = (S.beceri[b] || 0) + 1; d.beceri[b] = (d.beceri[b] || 0) + 1; if (k) k.beceri[b] = (k.beceri[b] || 0) + 1; }); });
+  return S;
+}
+function lgsSirala(o, n) { return Object.entries(o).sort((a, b) => b[1] - a[1]).slice(0, n || 99); }
+function lgsKonuGecmis(ders, konu) { const S = lgsSoruIstatistik(); return S.konu[ders + "|" + konu] || null; }
+// Öğrencinin geçmiş LGS denemesi: işaretler { "Türkçe": { 3: "y", 7: "b" } } (y: yanlış, b: boş; işaretsiz = doğru)
+function lgsDenemeAnaliz(kitapcik, isaret) {
+  const qs = lgsSorular().filter(q => q.kitapcik === kitapcik), B = {}, K = {}, D = {}, tip = { olumsuz: [0, 0], diger: [0, 0], gorsel: [0, 0] };
+  qs.forEach(q => { const i = ((isaret || {})[q.ders] || {})[q.no], dogru = !i;
+    const d = D[q.ders] = D[q.ders] || { d: 0, y: 0, b: 0 }; if (dogru) d.d++; else if (i === "y") d.y++; else d.b++;
+    q.bec.forEach(b => { const x = B[b] = B[b] || [0, 0]; x[1]++; if (!dogru) x[0]++; });
+    if (q.konu) { const kk = q.ders + "|" + q.konu, x = K[kk] = K[kk] || { ders: q.ders, konu: q.konu, hata: 0, sayi: 0, no: [] }; x.sayi++; if (!dogru) { x.hata++; x.no.push(q.no); } }
+    const t = q.olumsuz ? tip.olumsuz : tip.diger; t[1]++; if (!dogru) t[0]++; if (q.gorsel) { tip.gorsel[1]++; if (!dogru) tip.gorsel[0]++; } });
+  const zayif = Object.entries(B).filter(([b, x]) => x[1] >= 3 && x[0] > 0).map(([b, x]) => ({ id: b, hata: x[0], sayi: x[1], oran: Math.round(100 * x[0] / x[1]) })).sort((a, b) => b.oran - a.oran || b.hata - a.hata);
+  const net = Object.fromEntries(Object.entries(D).map(([d, x]) => [d, Math.round((x.d - x.y / 3) * 100) / 100]));
+  return { ders: D, net, zayif, konular: Object.values(K).filter(x => x.hata).sort((a, b) => b.hata - a.hata), tip };
+}
+let PDR_LGS_DENEME = {};
+async function lgsDenemeOku() { try { const r = await window.storage.get("pdr-lgs-deneme"); PDR_LGS_DENEME = (r && r.value && JSON.parse(r.value)) || {}; } catch (e) {} return PDR_LGS_DENEME; }
+async function lgsDenemeKaydet(v) { PDR_LGS_DENEME = v; try { await window.storage.set("pdr-lgs-deneme", JSON.stringify(v)); } catch (e) {} }
+function lgsDenemeOzetMetni(kayit) {
+  const a = lgsDenemeAnaliz(kayit.kitapcik, kayit.isaret), yuz = (x) => x[1] ? Math.round(100 * x[0] / x[1]) : 0;
+  return `${lgsKitapcikAd(kayit.kitapcik)} (${kayit.tarih}) — netler: ${Object.entries(a.net).map(([d, n]) => `${d} ${String(n).replace(".", ",")}`).join(", ")}. Zayıf beceriler: ${a.zayif.slice(0, 4).map(z => `${LGS_BECERI[z.id] ? LGS_BECERI[z.id][0] : z.id} (%${z.oran} hata, ${z.hata}/${z.sayi})`).join(", ") || "belirgin değil"}. Olumsuz soru kökünde hata %${yuz(a.tip.olumsuz)}, diğerlerinde %${yuz(a.tip.diger)}; görselli sorularda %${yuz(a.tip.gorsel)}. Hatalı konular: ${a.konular.slice(0, 6).map(k => `${k.konu} (${k.hata}/${k.sayi})`).join(", ") || "yok"}.`;
+}
+function LgsGecmisPaneli({ seciliAd, ogrAnahtar, onSayfaAc }) {
+  const [acik, setAcik] = useState(false), [kitapcik, setKitapcik] = useState("26soz"), [isaret, setIsaret] = useState({}), [kayitlar, setKayitlar] = useState(PDR_LGS_DENEME), [goster, setGoster] = useState(null), [mod, setMod] = useState("ozet");
+  useEffect(() => { lgsDenemeOku().then(v => setKayitlar({ ...v })); }, []);
+  const S = useMemo(() => lgsSoruIstatistik(), []), ogrKayit = (ogrAnahtar && kayitlar[ogrAnahtar]) || [];
+  const dersler = LGS_SORU_OTURUM_DERS[kitapcik.slice(2)], qs = lgsSorular().filter(q => q.kitapcik === kitapcik);
+  const cevir = (d, no) => setIsaret(s => { const x = { ...(s[d] || {}) }; x[no] = !x[no] ? "y" : x[no] === "y" ? "b" : undefined; if (!x[no]) delete x[no]; return { ...s, [d]: x }; });
+  async function kaydet() { const v = await lgsDenemeOku(), l = [...(v[ogrAnahtar] || []), { kitapcik, tarih: today(), isaret }]; await lgsDenemeKaydet({ ...v, [ogrAnahtar]: l }); setKayitlar({ ...PDR_LGS_DENEME }); setGoster(l.length - 1); setIsaret({}); setMod("ozet"); }
+  async function sil(i) { const v = await lgsDenemeOku(), l = (v[ogrAnahtar] || []).filter((x, j) => j !== i); await lgsDenemeKaydet({ ...v, [ogrAnahtar]: l }); setKayitlar({ ...PDR_LGS_DENEME }); setGoster(null); }
+  const yuz = (x) => x[1] ? Math.round(100 * x[0] / x[1]) : 0, btn = { padding: "6px 9px", borderRadius: 8, border: "1px solid #FDBA74", background: "#fff", color: "#9A3412", fontSize: 11.5, fontWeight: 800, cursor: "pointer" };
+  const sonuc = goster != null && ogrKayit[goster] ? ogrKayit[goster] : null, A = sonuc ? lgsDenemeAnaliz(sonuc.kitapcik, sonuc.isaret) : null;
+  return (
+    <div data-testid="lgs-gecmis" style={{ background: "#FFF7ED", border: "1px solid #FDBA74", borderRadius: 12, padding: "10px 12px", marginBottom: 14 }}>
+      <div onClick={() => setAcik(v => !v)} style={{ fontSize: 13, fontWeight: 900, color: "#9A3412", cursor: "pointer" }}>📝 Geçmiş LGS Soruları (2022–2026) {acik ? "▲" : "▼"}</div>
+      {acik && (<>
+        <div style={{ fontSize: 10.5, color: "#9A3412", margin: "3px 0 6px", lineHeight: 1.45 }}>Son 5 LGS'nin {S.toplam} sorusu tek tek incelendi: her sorunun konusu ve dayandığı beceriler belirlendi. 2023 sınavı yalnız 1. dönem konularını kapsar. Soru kitapçıkları programda değil, sizin cihazınızda açılır.</div>
+        <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+          <button data-testid="lgs-gecmis-ozet" onClick={() => setMod("ozet")} style={{ ...btn, flex: 1, background: mod === "ozet" ? "#FFEDD5" : "#fff" }}>📊 Ders özeti</button>
+          <button data-testid="lgs-gecmis-cozdur" onClick={() => setMod("cozdur")} style={{ ...btn, flex: 1, background: mod === "cozdur" ? "#FFEDD5" : "#fff" }}>🧑‍🎓 Öğrenciye çözdür</button>
+        </div>
+        {mod === "ozet" && Object.entries(S.ders).map(([d, x]) => (
+          <div key={d} data-gecmis-ders={d} style={{ borderTop: "1px dashed #FDBA74", padding: "5px 0", fontSize: 11.5, lineHeight: 1.45 }}>
+            <b>{d}</b> <span style={{ color: MUTED }}>· {x.sayi} soru · görsel/tablolu %{Math.round(100 * x.gorsel / x.sayi)} · olumsuz kök %{Math.round(100 * x.olumsuz / x.sayi)} · uzun metin %{Math.round(100 * x.uzun / x.sayi)}</span><br />
+            En çok istenen: {lgsSirala(x.beceri, 4).map(([b, n]) => `${LGS_BECERI[b] ? LGS_BECERI[b][0] : b} (${n})`).join(" · ")}
+          </div>))}
+        {mod === "cozdur" && (!seciliAd ? <div style={{ fontSize: 11.5, color: MUTED }}>Önce aşağıdan bir öğrenci seçin.</div> : (<>
+          <div style={{ fontSize: 11, color: "#7C2D12", marginBottom: 5, lineHeight: 1.45 }}>Öğrenciye geçmiş bir LGS'yi süre tutarak çözdürün. Cevap anahtarıyla kontrol ettikten sonra yanlışlarına bir kez (✗), boşlarına iki kez (○) dokunun; işaretsizler doğru sayılır.</div>
+          <div style={{ display: "flex", gap: 6, marginBottom: 6, alignItems: "center", flexWrap: "wrap" }}>
+            <select data-testid="lgs-kitapcik" value={kitapcik} onChange={e => { setKitapcik(e.target.value); setIsaret({}); }} style={{ padding: "6px", borderRadius: 8, border: "1px solid #FDBA74", fontSize: 12 }}>
+              {Object.keys(LGS_KITAPCIK_SAYFA).reverse().map(k => <option key={k} value={k}>{lgsKitapcikAd(k)}</option>)}
+            </select>
+            <button onClick={() => onSayfaAc && onSayfaAc(kitapcik, 2)} style={btn}>📄 Kitapçığı aç</button>
+          </div>
+          {dersler.map(d => (
+            <div key={d} style={{ marginBottom: 5 }}>
+              <div style={{ fontSize: 11, fontWeight: 800 }}>{d} <span style={{ color: MUTED, fontWeight: 400 }}>✗ {Object.values(isaret[d] || {}).filter(x => x === "y").length} · ○ {Object.values(isaret[d] || {}).filter(x => x === "b").length}</span></div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>{qs.filter(q => q.ders === d).map(q => { const i = (isaret[d] || {})[q.no]; return (
+                <button key={q.no} data-lgs-soru={d + "_" + q.no} onClick={() => cevir(d, q.no)} style={{ width: 30, padding: "4px 0", borderRadius: 6, fontSize: 11, fontWeight: 800, cursor: "pointer", border: `1px solid ${i === "y" ? "#B91C1C" : i === "b" ? "#64748B" : "#FDBA74"}`, background: i === "y" ? "#FEE2E2" : i === "b" ? "#F1F5F9" : "#fff", color: i === "y" ? "#B91C1C" : TEXT }}>{i === "y" ? "✗" : i === "b" ? "○" : q.no}</button>); })}</div>
+            </div>))}
+          <button data-testid="lgs-deneme-kaydet" onClick={kaydet} style={{ ...btn, width: "100%", background: "#EA580C", color: "#fff", border: "none", marginTop: 4 }}>✓ Kaydet ve beceri analizini çıkar</button>
+        </>))}
+        {seciliAd && ogrKayit.length > 0 && (
+          <div style={{ marginTop: 8 }}>
+            <div style={{ fontSize: 11.5, fontWeight: 800, color: "#9A3412" }}>👤 {seciliAd} — çözdüğü geçmiş LGS'ler</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 3 }}>{ogrKayit.map((k, i) => <button key={i} data-lgs-deneme-kayit={i} onClick={() => setGoster(g => g === i ? null : i)} style={{ ...btn, padding: "3px 8px", fontSize: 10.5, background: goster === i ? "#FFEDD5" : "#fff" }}>{k.kitapcik.slice(0, 2)} {k.kitapcik.slice(2) === "say" ? "Sayısal" : "Sözel"} · {k.tarih}</button>)}</div>
+          </div>)}
+        {A && (
+          <div data-testid="lgs-deneme-sonuc" style={{ marginTop: 6, background: "#fff", border: "1px solid #FDBA74", borderRadius: 10, padding: "8px 10px", fontSize: 11.5, lineHeight: 1.45 }}>
+            <div><b>Netler:</b> {Object.entries(A.net).map(([d, n]) => `${d} ${String(n).replace(".", ",")}`).join(" · ")}</div>
+            <div style={{ marginTop: 4 }}><b>En çok zorlandığı beceriler:</b></div>
+            {A.zayif.length ? A.zayif.slice(0, 4).map(z => <div key={z.id} data-zayif-beceri={z.id} style={{ marginLeft: 6 }}>• {LGS_BECERI[z.id] ? LGS_BECERI[z.id][1] : z.id}: <b style={{ color: z.oran >= 50 ? "#B91C1C" : "#B45309" }}>%{z.oran} hata</b> ({z.hata}/{z.sayi} soru){LGS_BECERI[z.id] ? <span style={{ color: MUTED }}> — {LGS_BECERI[z.id][4][0]}</span> : null}</div>) : <div style={{ marginLeft: 6, color: "#15803D" }}>Belirgin beceri zayıflığı yok.</div>}
+            <div style={{ marginTop: 4 }}><b>Soru tipine göre hata:</b> olumsuz kök %{yuz(A.tip.olumsuz)} · diğer %{yuz(A.tip.diger)} · görsel/tablolu %{yuz(A.tip.gorsel)}{yuz(A.tip.olumsuz) - yuz(A.tip.diger) >= 15 ? <span style={{ color: "#B91C1C" }}> → "değildir, ulaşılamaz" gibi kökleri kaçırıyor olabilir; soru kökünü daire içine alma alışkanlığı önerin.</span> : null}</div>
+            {A.konular.length > 0 && <div style={{ marginTop: 4 }}><b>Hatalı konular:</b> {A.konular.slice(0, 8).map(k => `${k.konu} (${k.hata}/${k.sayi})`).join(", ")}</div>}
+            <button onClick={() => sil(goster)} style={{ marginTop: 6, background: "none", border: "none", color: "#B91C1C", fontSize: 10.5, cursor: "pointer", padding: 0 }}>Bu kaydı sil</button>
+          </div>)}
+      </>)}
+    </div>
+  );
+}
+// Konu satırı: geçmiş LGS'de bu konudan çıkan sorular
+function LgsKonuGecmisSatiri({ ders, konu, onSayfaAc }) {
+  const [acik, setAcik] = useState(false), g = lgsKonuGecmis(ders, konu);
+  if (!g) return null;
+  return (
+    <div data-konu-gecmis style={{ marginTop: 3 }}>
+      <button onClick={() => setAcik(a => !a)} style={{ background: "none", border: "none", color: "#9A3412", fontSize: 11, fontWeight: 700, cursor: "pointer", padding: 0 }}>📝 2022–2026 LGS'de {g.sorular.length} soru · en çok: {lgsSirala(g.beceri, 2).map(([b, n]) => `${LGS_BECERI[b] ? LGS_BECERI[b][0] : b} (${n})`).join(", ")} {acik ? "▲" : "▼"}</button>
+      {acik && <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: 3 }}>{g.sorular.map(q => <button key={q.kitapcik + q.no} data-gecmis-soru={q.kitapcik + "_" + q.no} title={q.bec.map(b => LGS_BECERI[b] ? LGS_BECERI[b][0] : b).join(", ")} onClick={() => onSayfaAc && onSayfaAc(q.kitapcik, q.sayfa)} style={{ fontSize: 10, padding: "2px 6px", borderRadius: 6, border: "1px solid #FDBA74", background: "#fff", color: "#9A3412", cursor: "pointer" }}>{q.yil} · {q.no}. soru{q.gorsel ? " 📊" : ""}{q.olumsuz ? " ⚠" : ""}</button>)}
+        <span style={{ fontSize: 10, color: MUTED, width: "100%" }}>Soruya dokununca kitapçığın o sayfası açılır (kitapçığı bir kez yüklemeniz gerekir). 📊 görsel/tablolu · ⚠ olumsuz soru kökü</span></div>}
+    </div>
+  );
 }
 
 function KonuHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, konuHaritasiVerisi, setKonuHaritasiVerisi, kademe, aktifYil }) {
@@ -38211,6 +38335,8 @@ function KonuHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, kon
   const [acikKazanim, setAcikKazanim] = useState(null); // "ders|konu": konunun kazanım listesi açık
   const [lgsDurum, setLgsDurum] = useState({}); // ders → konu → islendi/simdi/sirada (tahmini)
   const [acikBeceri, setAcikBeceri] = useState(null); // "ders|konu|beceri"
+  const [lgsGosterici, setLgsGosterici] = useState(null);
+  const lgsSayfaAc = (k, sayfa) => setLgsGosterici({ kitap: "lgs" + k, kitapAd: lgsKitapcikAd(k), sayfa: sayfa || 2, aralik: [sayfa || 2, sayfa || 2], ofset: 0 });
   const [onkosulAcik, setOnkosulAcik] = useState(null); // "ders|konu": ön koşul kontrolü açık
   const [onkosulVeri, setOnkosulVeri] = useState(PDR_ONKOSUL_VERI);
   useEffect(() => { onkosulOku().then(v => setOnkosulVeri({ ...v })); }, []);
@@ -38268,6 +38394,8 @@ function KonuHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, kon
       {!liseMi && <PdrKazanimPaneli varsayilanSinif={((/(\d+)/.exec(String(seciliSinif || "")) || [])[1]) || "8"} />}
       {!liseMi && <LgsBuHaftaPaneli aktifYil={aktifYil} onDurum={setLgsDurum} />}
       {!liseMi && <LgsBeceriPaneli ogrVerisi={seciliAd ? ogrVerisi : null} seciliAd={seciliAd} />}
+      {!liseMi && <LgsGecmisPaneli seciliAd={seciliAd} ogrAnahtar={ogrAnahtar} onSayfaAc={lgsSayfaAc} />}
+      {lgsGosterici && <KitapSayfaGosterici {...lgsGosterici} onKapat={() => setLgsGosterici(null)} onKitapYukle={async (k, f) => { try { await pdrKitapKaydet(k, f, null); } catch (e) {} }} />}
 
       {liseMi && (
         <div style={{ display:"flex", gap:6, marginBottom:16 }}>
@@ -38384,6 +38512,7 @@ function KonuHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, kon
                               <span style={{ fontSize:10, color:"#0F766E", fontWeight:800, marginRight:3 }}>🧠 Becerileri:</span>
                               {ids.map(id => <LgsBeceriCip key={id} id={id} acik={ac === id} onClick={() => setAcikBeceri(a => a === on + id ? null : on + id)} />)}
                               {ac && <LgsBeceriKutu id={ac} />}
+                              <LgsKonuGecmisSatiri ders={ders} konu={k.konu} onSayfaAc={lgsSayfaAc} />
                             </div>); })()}
                           {!liseMi && onkosulKonuBecerileri(ders, k.konu).length > 0 && (() => { const ak = ders + "|" + k.konu, kayit = ogrAnahtar && onkosulVeri[ogrAnahtar] && onkosulVeri[ogrAnahtar][ak], eksik = kayit ? Object.values(kayit.sonuc || {}).filter(([d, t]) => d < t).length : 0; return (
                             <>
@@ -52739,6 +52868,7 @@ export default function App() {
       "pdr-porteus-norm": () => pdrPorteusNormYukle(),
       "pdr-cattell-norm": () => pdrCattellNormYukle(),
       "pdr-onkosul": () => onkosulOku(),
+      "pdr-lgs-deneme": () => lgsDenemeOku(),
       "pdr-gorsel-algi-norm": () => pdrGorselNormYukle(),
       "pdr-sinav-kaygisi": () => loadSinavKaygisi().then(setSinavKaygisi),
       // "pdr-rehber-gorundu" bilerek dahil edilmedi — bu sadece "ilk açılışta

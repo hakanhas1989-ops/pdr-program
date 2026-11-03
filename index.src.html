@@ -37928,11 +37928,11 @@ function onkosulKartHtml(ad, sinif, plan) {
   return `<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Köprü Planım</title><style>
 body{font-family:Arial,sans-serif;color:#222;margin:16px;font-size:12px;line-height:1.45}h1{font-size:18px;color:#5B21B6;margin:0 0 2px}h2{font-size:13px;color:#5B21B6;margin:14px 0 6px}
 table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:5px 6px;vertical-align:top;text-align:left}th{background:#EDE9FE;font-size:11px}.k{width:22px;text-align:center;font-size:15px}.not{color:#555;font-size:11px}
-.kutu{border:1.5px solid #C4B5FD;border-radius:10px;padding:8px 10px;margin:8px 0;background:#FAF5FF}@media print{body{margin:10mm}}</style></head><body>
+.sn{display:inline-block;font-size:10.5px;font-weight:700;color:#1D4ED8;background:#DBEAFE;border-radius:8px;padding:1px 6px}.kutu{border:1.5px solid #C4B5FD;border-radius:10px;padding:8px 10px;margin:8px 0;background:#FAF5FF}@media print{body{margin:10mm}}</style></head><body>
 <h1>🧱 Köprü Planım</h1><div class="not">${e(ad)}${sinif ? " · " + e(sinif) : ""} · ${e(t)}</div>
 <div class="kutu"><b>Kuralım:</b> Her çalışma gününde önce <b>20 dakika</b> aşağıdaki temel beceriye, sonra sınıfta işlenen güncel konuya çalışacağım. Bir beceri ≈ 2–3 gün. Tahmini süre: <b>${plan.hafta} hafta</b>.</div>
 <h2>Sırayla çalışacağım beceriler</h2><table><tr><th>#</th><th>Beceri</th><th>Ne çalışacağım?</th><th class="k">✓</th></tr>
-${plan.liste.map((x, i) => `<tr><td>${i + 1}</td><td><b>${e(x.ad)}</b><br><span class="not">${e(x.ders)} · ${e(x.nerede)}</span></td><td>${e(x.calisma)}</td><td class="k">☐</td></tr>`).join("")}</table>
+${plan.liste.map((x, i) => `<tr><td>${i + 1}</td><td><b>${e(x.ad)}</b><br><span class="sn">📘 ${e(onkosulSinifYaz(x.nerede))}</span> <span class="not">${e(x.ders)}</span></td><td>${e(x.calisma)}</td><td class="k">☐</td></tr>`).join("")}</table>
 <h2>"Anlamıyorum" dediğimde</h2><div>1) Neyi anlamadığımı tek cümleyle yazarım. 2) Bir basamak aşağı inerim (bu karttaki beceri). 3) Çözülmüş örneği adım adım incelerim. 4) Kolay bir soru denerim. 5) Kendi cümlelerimle anlatırım. Takılırsam soruyu işaretleyip öğretmenime / rehber öğretmenime getiririm.</div>
 <h2>Kontrol tarihi</h2><div>Planı bitirince kısa kontrolü tekrar çözeceğim: ____ / ____ / ________</div></body></html>`;
 }
@@ -37942,7 +37942,7 @@ function onkosulKonusmaHtml(ad, plan) {
 body{font-family:Arial,sans-serif;color:#222;margin:16px;font-size:12.5px;line-height:1.5}h1{font-size:17px;color:#5B21B6;margin:0 0 6px}h2{font-size:13px;color:#5B21B6;margin:12px 0 3px}.not{color:#555;font-size:11px}@media print{body{margin:10mm}}</style></head><body>
 <h1>🗣 Ön Koşul Psikoeğitimi — danışman konuşma rehberi</h1><div class="not">${e(ad || "")} · Öğrenciyle tane tane, örnek vererek konuşun; her bölümden sonra "Bunu kendi cümlelerinle anlatır mısın?" diye sorun.</div>
 ${ONKOSUL_PSIKOEGITIM.map(([b, m]) => `<h2>${e(b)}</h2><div>${e(m)}</div>`).join("")}
-${plan && plan.liste.length ? `<h2>Bu öğrencinin köprü becerileri</h2><div>${plan.liste.map((x, i) => `${i + 1}) ${e(x.ad)} (${e(x.nerede)})`).join("<br>")}</div>` : ""}
+${plan && plan.liste.length ? `<h2>Bu öğrencinin köprü becerileri</h2><div>${plan.liste.map((x, i) => `${i + 1}) ${e(x.ad)} — ${e(onkosulSinifYaz(x.nerede))}`).join("<br>")}</div>` : ""}
 <h2>Dikkat</h2><div>"Sen 6. sınıf düzeyindesin" gibi etiketleyen ifadeler yerine "Bu beceri 6. sınıfta öğretiliyor, birlikte sağlamlaştıralım" deyin. Başarıları (doğru sayısındaki artış) somut olarak gösterin.</div></body></html>`;
 }
 function onkosulFormHtml(ders, konu) {
@@ -37954,6 +37954,8 @@ body{font-family:Arial,sans-serif;color:#222;margin:16px;font-size:12.5px;line-h
 <h1>🧱 Ön Koşul Kontrolü — ${e(ders)}: ${e(konu)}</h1><div class="not">Ad Soyad: ______________________ Sınıf/No: ________ Tarih: ____/____/______ · Doğru seçeneği daire içine al. Bilmediğini boş bırak, tahmin etme.</div>
 ${sorular}<div class="anahtar"><b>Cevap anahtarı (danışman için)</b><br>${anahtar.join(" · ")}<div class="not">Sonucu programda Konu Haritası → konu → 🧱 Ön koşul kontrolü ekranında öğrencinin işaretlediği seçeneklere tıklayarak girin.</div></div></body></html>`;
 }
+function onkosulSinifYaz(nerede) { return String(nerede || "") + " konusu"; }
+function OnKosulSinifRozet({ nerede }) { return <span data-onkosul-sinif style={{ display:"inline-block", marginLeft:5, fontSize:10, fontWeight:800, borderRadius:8, padding:"1px 7px", color:"#1D4ED8", background:"#DBEAFE", whiteSpace:"nowrap" }}>📘 {onkosulSinifYaz(nerede)}</span>; }
 // Konu satırındaki kısa kontrol (tablette öğrenci çözer ya da kâğıttaki cevaplar girilir)
 function OnKosulKontrol({ ders, konu, ogrAnahtar, onKaydet }) {
   const ids = onkosulKonuBecerileri(ders, konu), [cevap, setCevap] = useState({}), [bitti, setBitti] = useState(false);
@@ -37972,7 +37974,7 @@ function OnKosulKontrol({ ders, konu, ogrAnahtar, onKaydet }) {
       <div style={{ fontSize:10.5, color:MUTED, marginBottom:6 }}>Öğrenci tablette çözebilir ya da kâğıt formdaki cevaplarını buradan işaretleyin. Bilmediğini boş bıraksın.</div>
       {ids.map(id => { const b = onkosulBeceri(id); return (
         <div key={id} style={{ borderTop:"1px dashed #DDD6FE", padding:"6px 0" }}>
-          <div style={{ fontSize:11.5, fontWeight:800 }}>{b.ad} <span style={{ fontWeight:400, color:MUTED, fontSize:10.5 }}>({b.nerede})</span>
+          <div style={{ fontSize:11.5, fontWeight:800 }}>{b.ad}<OnKosulSinifRozet nerede={b.nerede} />
             {bitti && (() => { const dg = b.sorular.filter((q, i) => cevap[id + "_" + i] === q.d).length, sv = dg >= 2 ? "hazir" : dg ? "pekistir" : "eksik"; return <span data-onkosul-sonuc={sv} style={{ marginLeft:6, fontSize:10, fontWeight:800, borderRadius:8, padding:"1px 6px", color:"#fff", background: sv === "hazir" ? "#15803D" : sv === "pekistir" ? "#B45309" : "#B91C1C" }}>{dg}/2 {sv === "hazir" ? "hazır" : sv === "pekistir" ? "pekiştir" : "eksik"}</span>; })()}</div>
           {b.sorular.map((q, i) => { const k = id + "_" + i; return (
             <div key={k} style={{ margin:"4px 0 0 4px" }}>
@@ -37997,12 +37999,13 @@ function OnKosulKopruPaneli({ ogrVeri, lgsDurum, ad, sinif }) {
     <div data-testid="onkosul-kopru" style={{ background:"#FAF5FF", border:"1px solid #C4B5FD", borderRadius:12, padding:"10px 12px", marginBottom:12 }}>
       <div style={{ fontSize:13, fontWeight:900, color:"#5B21B6", marginBottom:4 }}>🧱 Köprü Planı {p.liste.length ? <span style={{ fontSize:11, fontWeight:700 }}>· {p.liste.length} beceri · ≈{p.hafta} hafta</span> : null}</div>
       {!p.liste.length ? <div style={{ fontSize:12, color:"#15803D", fontWeight:700 }}>✓ Ölçülen {p.olculen} ön koşul becerisinin hepsi hazır. Zorluk konunun kendisinde olabilir; konuyu küçük adımlarla tekrar edin.</div> : <>
+        <div data-testid="onkosul-sinif-ozet" style={{ fontSize:11.5, color:"#1D4ED8", background:"#EFF6FF", borderRadius:8, padding:"4px 8px", marginBottom:6 }}>📘 Dönülecek sınıf konuları: {[...new Set(p.liste.map(x => x.nerede))].map(n => `${n} (${p.liste.filter(x => x.nerede === n).length})`).join(" · ")}</div>
         <div style={{ fontSize:11.5, color:"#4C1D95", marginBottom:6, lineHeight:1.45 }}>Her çalışma gününde <b>önce 20 dk</b> sıradaki temel beceri, <b>sonra</b> sınıfta işlenen güncel konu. Bir beceri ≈ 2–3 gün; plan bitince kontrolü tekrarlayın.</div>
         {p.liste.map((x, i) => (
           <div key={x.id} data-onkosul-kopru={x.id} style={{ display:"flex", gap:8, padding:"5px 0", borderTop: i ? "1px dashed #DDD6FE" : "none" }}>
             <span style={{ fontSize:11, fontWeight:900, color:"#5B21B6", width:14 }}>{i + 1}</span>
             <span style={{ flex:1, minWidth:0, fontSize:12 }}>
-              <b>{x.ad}</b> <span style={{ color:MUTED }}>· {x.ders} · {x.nerede}</span>
+              <b>{x.ad}</b><OnKosulSinifRozet nerede={x.nerede} /> <span style={{ color:MUTED }}>· {x.ders}</span>
               <span style={{ marginLeft:5, fontSize:9.5, fontWeight:800, borderRadius:8, padding:"1px 6px", color:"#fff", background: x.seviye === "eksik" ? "#B91C1C" : "#B45309" }}>{x.dogru}/{x.toplam} {x.seviye === "eksik" ? "eksik" : "pekiştir"}</span>
               {x.simdi && <span style={{ marginLeft:4, fontSize:9.5, fontWeight:800, borderRadius:8, padding:"1px 6px", color:"#fff", background:"#7C3AED" }}>📅 bu hafta derste gerekli</span>}
               <span style={{ display:"block", fontSize:10.5, color:MUTED }}>Gerektiren konu: {x.konular.join(", ")} · {x.tarih}</span>

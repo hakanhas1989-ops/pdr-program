@@ -16142,7 +16142,7 @@ const KS_ASISTAN_ARACLAR = {
     calistir: (g, ctx, o) => ksAsistanLgsBeceri(g, ctx, o),
   },
   akademik_takip: {
-    aciklama: "Öğrencinin akademik eksiklerini ve gelişimini zaman içinde izler (yerelde): Geçmiş LGS → Çözdür'de işaretlenen bütün denemeleri tarih sırasıyla karşılaştırıp süregelen / yeni beliren / gelişen beceri eksiklerini, tekrar eden hatalı konuları, soru tipi örüntülerini (olumsuz kök, görselli, kolay soruda hata) çıkarır; ön koşul kontrollerindeki eksikleri ve Konu Haritası'nda düşük kalan çok soru gelen konuları ekler; sıradaki adımı önerir. 'Hangi konularda/becerilerde eksiği var', 'gelişiyor mu', 'neye çalışmalı', akademik takip, görüşme öncesi akademik durum sorularında kullan.",
+    aciklama: "Öğrencinin akademik eksiklerini ve gelişimini zaman içinde izler (yerelde): Geçmiş LGS → Çözdür'de işaretlenen bütün denemeleri tarih sırasıyla karşılaştırıp süregelen / yeni beliren / gelişen beceri eksiklerini, tekrar eden hatalı konuları, soru tipi örüntülerini (olumsuz kök, görselli, kolay soruda hata) çıkarır; ön koşul kontrollerindeki eksikleri, Konu Haritası'nda düşük kalan çok soru gelen konuları, Net Haritası denemelerinde danışmanın işaretlediği yanlış türlerini (bilgi eksikliği, okuma/anlama, işlem, kodlama, zaman) ve tekrar eden zayıf kazanımları ekler; bunları birleştirip yorumlar ve sıradaki adımı önerir. 'Hangi konularda/becerilerde eksiği var', 'gelişiyor mu', 'neye çalışmalı', akademik takip, görüşme öncesi akademik durum sorularında kullan.",
     girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
     calistir: async (g, ctx, o) => { const t = await pdrAkademikTakip(ctx, o); return `AKADEMİK TAKİP (${ksAsistanEtiket(o)}):\n${t.metin}\nNot: Beceri eksikleri deneme sorularının beceri analizine dayanır; tek deneme yaklaşık bir göstergedir, iki ve daha fazla deneme eğilimi gösterir. Etiketleme yapma; eksikleri 'geliştirilecek beceri' olarak anlat, gelişenleri öğrenciye mutlaka söyle.`; },
   },
@@ -38666,7 +38666,21 @@ async function pdrAkademikTakip(ctx, o) {
     if (desen.length) sat.push(`SORU TİPİ ÖRÜNTÜLERİ: ${desen.join("; ")}.`);
     const g = tk(kayit[kayit.length - 1].tarih), bugun = tk(today());
     try { const gun = Math.round((new Date(bugun.slice(0, 4), +bugun.slice(4, 6) - 1, +bugun.slice(6, 8)) - new Date(g.slice(0, 4), +g.slice(4, 6) - 1, +g.slice(6, 8))) / 864e5); if (gun > 30) sat.push(`TAKİP: Son deneme ${gun} gün önce; ilerlemeyi görmek için yeni bir LGS/MEBİ denemesi çözdürülüp Çözdür'e işlenebilir.`); } catch (e) {}
-  } else sat.push("Geçmiş LGS → 🧑‍🎓 Çözdür'de işaretlenmiş denemesi yok (beceri/konu eksikleri deneme üzerinden henüz izlenmiyor).");
+  } else sat.push("Geçmiş LGS → 🧑‍🎓 Çözdür'de işaretlenmiş denemesi yok (geçmiş LGS/MEBİ soruları üzerinden beceri eksikleri henüz izlenmiyor).");
+  // Net Haritası denemeleri (PDF'ten okunan) ve danışmanın öğrenciyle işaretlediği yanlış türleri
+  const yanlisTur = {};
+  try { const nh = (ctx.netHaritasiKayitlari || []).filter(x => pdrAyniOgrenci(x.studentName, x.className, o.name, o.className, x.numara, o.numara)).sort((a, b) => pdrTarihMs(a.tarih) - pdrTarihMs(b.tarih));
+    const isaretli = nh.filter(k => k.hataAnalizi && Object.values(k.hataAnalizi).some(d => Object.values(d || {}).some(v => +v > 0)));
+    if (isaretli.length) {
+      const D = {}, ilkYari = isaretli.slice(0, Math.ceil(isaretli.length / 2)), sonYari = isaretli.slice(Math.ceil(isaretli.length / 2));
+      isaretli.forEach((k, i) => Object.entries(k.hataAnalizi).forEach(([ders, tur]) => Object.entries(tur || {}).forEach(([t, n]) => { n = +n || 0; if (!n) return; const x = (D[ders] = D[ders] || {})[t] = (D[ders] || {})[t] || { top: 0, ilk: 0, son: 0 }; x.top += n; if (isaretli.length > 1) { if (i < ilkYari.length) x.ilk += n; else x.son += n; } yanlisTur[t] = (yanlisTur[t] || 0) + n; })));
+      const toplam = Object.values(yanlisTur).reduce((a, b) => a + b, 0), genel = Object.entries(yanlisTur).sort((a, b) => b[1] - a[1]);
+      sat.push(`YANLIŞ TÜRLERİ (deneme sonuçlarında danışmanın öğrenciyle işaretlediği; ${isaretli.length} deneme, ${toplam} yanlış): ${genel.map(([t, n]) => `${t} %${Math.round(100 * n / toplam)} (${n})`).join(", ")}.`);
+      sat.push("Derslere göre: " + Object.entries(D).map(([d, tl]) => `${d}: ` + Object.entries(tl).sort((a, b) => b[1].top - a[1].top).map(([t, x]) => `${t} ${x.top}${isaretli.length > 1 && (x.ilk || x.son) ? ` (${x.ilk}→${x.son})` : ""}`).join(", ")).join(" | ") + (isaretli.length > 1 ? " [parantez: denemelerin ilk yarısı → son yarısı]" : "") + ".");
+      sonuc.yanlisTur = genel;
+    }
+    const kt = kazanimTrendVerisi(nh, 6); if (kt.length) sat.push(`NET HARİTASINDA TEKRAR EDEN ZAYIF KAZANIMLAR: ${kt.map(x => `${x.ders}: ${ksAsistanKisalt(x.kazanim, 60)} (${x.kezYanlis} denemede yanlış; başarı ${x.dizi.map(d => "%" + d.basari).join("→")})`).join("; ")}.`);
+  } catch (e) {}
   // Ön koşul kontrolleri
   try { const ov = await onkosulOku(), plan = onkosulKopruPlani(ov[anahtar] || {}, null);
     if (plan.olculen) { sonuc.onkosul = plan.liste; sat.push(plan.liste.length ? `ÖN KOŞUL EKSİKLERİ (önceki sınıflardan; ${plan.olculen} beceri ölçüldü): ${plan.liste.map(x => `${x.ad} — ${x.seviye === "eksik" ? "eksik" : "pekiştirilmeli"} (${onkosulSinifYaz(x.nerede)}, ölçüm ${x.tarih})`).join("; ")}.` : `ÖN KOŞUL: ölçülen ${plan.olculen} becerinin hepsi hazır.`); } } catch (e) {}
@@ -38675,6 +38689,17 @@ async function pdrAkademikTakip(ctx, o) {
       Object.entries(LGS_KONU_HARITASI).forEach(([d, ks]) => ks.forEach(k => { const y = konuDegeriAl(ogr[d], k.konu), b = lgsBeklenenSoru(k) || 0; if (y > 0 && y < 50 && b >= 1) l.push({ ders: d, konu: k.konu, y, b }); }));
       sonuc.dusukKonu = l.sort((a, b) => b.b - a.b || a.y - b.y).slice(0, 6);
       if (sonuc.dusukKonu.length) sat.push(`KONU HARİTASI'NDA DÜŞÜK (LGS'de çok soru gelen): ${sonuc.dusukKonu.map(x => `${x.konu} (${x.ders}, %${x.y}, ≈${lgsSayiYaz(x.b)} soru)`).join("; ")}.`); } } catch (e) {}
+  // Yanlış türleriyle diğer bulguları birleştir (danışmanın gözlemi + soru analizi)
+  try { const pay = (re) => { const t = Object.values(yanlisTur).reduce((a, b) => a + b, 0); return t ? Math.round(100 * Object.entries(yanlisTur).filter(([k]) => re.test(k)).reduce((a, [, n]) => a + n, 0) / t) : 0; };
+    const bag = [], okuma = pay(/okuma|anlama/i), bilgi = pay(/bilgi|konu|kelime/i), zaman = pay(/zaman/i), islem = pay(/işlem/i), kod = pay(/kodlama/i);
+    const olumsuzYuksek = sat.some(x => x.startsWith("SORU TİPİ") && /olumsuz soru kökünde/.test(x));
+    if (okuma >= 30) bag.push(`yanlışların %${okuma}'i okuma/anlama kaynaklı${olumsuzYuksek ? " ve geçmiş LGS'de olumsuz kökte hatası yüksek — ikisi aynı alışkanlığa işaret ediyor: kökü daire içine alma, 'değildir/yanlıştır'ı işaretleme" : " → soru kökünü kendi cümlesiyle söyleme, anahtar sözcüğü işaretleme"}`);
+    if (bilgi >= 40) bag.push(`yanlışların %${bilgi}'i bilgi/konu eksikliği → hatalı konular ve ön koşul eksikleri öncelikli${sonuc.onkosul && sonuc.onkosul.length ? "" : " (ön koşul kontrolü yapılmamışsa Konu Haritası'nda 🧱 ile yapılabilir)"}`);
+    if (zaman >= 20) bag.push(`yanlışların %${zaman}'i zaman yetersizliği → süre tutarak çözme, turlama tekniği (önce kolaylar)`);
+    if (islem >= 20) bag.push(`matematikte işlem hatası %${islem} → her işlemden sonra kısa kontrol, işlemi kâğıda açık yazma`);
+    if (kod >= 10) bag.push(`yanlış kodlama %${kod} → her 5 soruda bir optik kontrolü`);
+    if (bag.length) sat.push(`BİRLEŞİK YORUM (yanlış türleri + soru analizi): ${bag.join("; ")}.`);
+  } catch (e) {}
   // Önerilen sıradaki adım
   const odak = sonuc.surekli[0] || sonuc.yeni[0], adim = [];
   if (odak && LGS_BECERI[odak.id]) adim.push(`${odak.ad} için: ${LGS_BECERI[odak.id][4][0]}`);
@@ -38682,7 +38707,7 @@ async function pdrAkademikTakip(ctx, o) {
   if (sonuc.konular[0]) adim.push(`${sonuc.konular[0].konu} konusundaki yanlış soruları 🧭 Çözüm yolu ile birlikte çözün (soru_cozum_yolu)`);
   if (adim.length) sat.push(`ÖNERİLEN SIRADAKİ ADIM: ${adim.join("; ")}.`);
   // Öğrenci özeti için tek satır
-  if (sonuc.surekli.length || sonuc.yeni.length || sonuc.konular.length || sonuc.onkosul.length) kisa.push(`Akademik takip: ${[sonuc.surekli.length ? "süregelen beceri eksiği " + sonuc.surekli.slice(0, 2).map(x => x.ad).join(", ") : "", sonuc.yeni.length ? "zorlandığı beceri " + sonuc.yeni.slice(0, 2).map(x => x.ad).join(", ") : "", sonuc.gelisen.length ? "gelişen " + sonuc.gelisen.slice(0, 2).map(x => x.ad).join(", ") : "", sonuc.konular.length ? "hatalı konular " + sonuc.konular.slice(0, 3).map(x => x.konu).join(", ") : "", sonuc.onkosul.length ? sonuc.onkosul.length + " ön koşul eksiği" : ""].filter(Boolean).join("; ")} (ayrıntı: akademik_takip).`);
+  if (sonuc.surekli.length || sonuc.yeni.length || sonuc.konular.length || sonuc.onkosul.length || sonuc.yanlisTur) kisa.push(`Akademik takip: ${[sonuc.surekli.length ? "süregelen beceri eksiği " + sonuc.surekli.slice(0, 2).map(x => x.ad).join(", ") : "", sonuc.yeni.length ? "zorlandığı beceri " + sonuc.yeni.slice(0, 2).map(x => x.ad).join(", ") : "", sonuc.gelisen.length ? "gelişen " + sonuc.gelisen.slice(0, 2).map(x => x.ad).join(", ") : "", sonuc.konular.length ? "hatalı konular " + sonuc.konular.slice(0, 3).map(x => x.konu).join(", ") : "", sonuc.onkosul.length ? sonuc.onkosul.length + " ön koşul eksiği" : "", sonuc.yanlisTur ? "en sık yanlış türü " + sonuc.yanlisTur[0][0] : ""].filter(Boolean).join("; ")} (ayrıntı: akademik_takip).`);
   return { metin: sat.join("\n"), kisa: kisa.join(""), sonuc };
 }
 async function ksAsistanCozumYolu(g, ctx, o) {

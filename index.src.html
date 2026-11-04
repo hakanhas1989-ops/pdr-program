@@ -4393,9 +4393,35 @@ function pdrCozumIstem(soru, metin, gorselVar) {
   return `Ders: ${soru.ders}. Konu: ${soru.konu || "?"}. Soru ${soru.no}.${gorselVar ? " Sorunun görüntüsü ekte (şekiller görüntüde)." : " Sorunun şekli/görseli gönderilmedi; yalnız metne göre çalış, çözüm şekle bağlıysa ilgili adımda 'şekle bak' de."}\n\nSORU METNİ (PDF'ten çıkarıldı):\n${String(metin || "").slice(0, 3500)}\n\nŞu JSON'u üret:\n{"onkosul":["bu soruyu çözmek için bilinmesi gereken 2-4 temel bilgi/beceri"],"adimlar":[{"baslik":"kısa adım adı","aciklama":"öğrencinin yapacağı işlem (1-2 cümle)","soru":"öğrencinin kendine soracağı yönlendirici soru","ipucu":"bu adımda bakılacak yer: soru metninden BİREBİR alınmış 2-5 kelimelik kısa ifade ya da boş"}],"celdirici":"en çok yapılan hata/çeldirici ve neden yanlış (1 cümle)","cevap":"doğru seçenek harfi ve tek cümlelik gerekçe"}\n4-6 adım yaz. Son adım kontrol olsun.`;
 }
 // Model ya da kullanıcının yapıştırdığı yanıttan çözüm nesnesi çıkar (JSON değilse numaralı satırlardan adım üretir)
+// Yanıttaki LaTeX matematik yazımını okunur hâle getir ($2^{-3}$ → 2^(-3), \frac{1}{8} → 1/8)
+function pdrLatexSade(x) {
+  if (typeof x !== "string") return x;
+  return x.replace(/\f/g, "\\f").replace(/\t(?=imes|ext)/g, "\\t").replace(/\\left|\\right/g, "")
+    .replace(/\\[dt]?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, "($1)/($2)").replace(/\(([^()+\-*/ ]+)\)\/\(([^()+\-*/ ]+)\)/g, "$1/$2")
+    .replace(/\\sqrt\s*\{([^{}]*)\}/g, "√($1)").replace(/\\cdot/g, "·").replace(/\\times/g, "×").replace(/\\div/g, "÷").replace(/\\(le|leq)\b/g, "≤").replace(/\\(ge|geq)\b/g, "≥").replace(/\\neq\b/g, "≠").replace(/\\pi\b/g, "π").replace(/\\text\s*\{([^{}]*)\}/g, "$1")
+    .replace(/\^\{([^{}]*)\}/g, (m, a) => a.length > 1 ? "^(" + a + ")" : "^" + a).replace(/_\{([^{}]*)\}/g, "_$1").replace(/\$+/g, "").replace(/\\([a-zA-Z]+)/g, "$1");
+}
 function pdrCozumYanitCoz(t) {
+  const o = pdrCozumYanitCozHam(t), sade = (v) => Array.isArray(v) ? v.map(sade) : (v && typeof v === "object") ? Object.fromEntries(Object.entries(v).map(([k, w]) => [k, sade(w)])) : pdrLatexSade(v);
+  return sade(o);
+}
+function pdrCozumYanitCozHam(t) {
   const s = String(t || "").replace(/```json|```/g, ""), i = s.indexOf("{"), j = s.lastIndexOf("}");
-  if (i >= 0 && j > i) { try { const o = JSON.parse(s.slice(i, j + 1)); if (Array.isArray(o.adimlar) && o.adimlar.length) return o; } catch (e) {} }
+  if (i >= 0 && j > i) {
+    const ham = s.slice(i, j + 1);
+    // Uygulamalardan kopyalanan metinde görünmez boşluklar, akıllı tırnaklar, LaTeX ters bölüleri, sondaki virgüller olabilir
+    const onar = (x) => x.replace(/[\u00A0\u2000-\u200B\u202F\u205F\u3000\uFEFF]/g, " ").replace(/[\u201C\u201D\u201E\u201F\u2033]/g, '"')
+      .replace(/\\(?!["\\/bfnrtu])/g, "\\\\").replace(/,\s*([\]}])/g, "$1")
+      .replace(/"(?:[^"\\]|\\.)*"/g, m => m.replace(/[\n\r\t]/g, " "));
+    for (const aday of [ham, onar(ham)]) { try { const o = JSON.parse(aday); if (Array.isArray(o.adimlar) && o.adimlar.length) return o; } catch (e) {} }
+    // Son çare: alanları tek tek ayıkla
+    const al = (blok, ad) => { const m = blok.match(new RegExp('"' + ad + '"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"')); return m ? m[1].replace(/\\(.)/g, "$1").trim() : ""; };
+    const onarli = onar(ham), bloklar = onarli.split(/"baslik"\s*:/).slice(1).map(b => '"baslik":' + b);
+    if (bloklar.length >= 2) {
+      const ok = (onarli.match(/"onkosul"\s*:\s*\[([\s\S]*?)\]/) || [])[1] || "";
+      return { onkosul: (ok.match(/"((?:[^"\\]|\\.)*)"/g) || []).map(x => x.slice(1, -1)), adimlar: bloklar.map(b => ({ baslik: al(b, "baslik"), aciklama: al(b, "aciklama"), soru: al(b, "soru"), ipucu: al(b, "ipucu") })), celdirici: al(onarli, "celdirici"), cevap: al(onarli, "cevap") };
+    }
+  }
   const satir = s.split(/\n+/).map(x => x.trim()).filter(Boolean), adim = satir.filter(x => /^(\d+[\.\)]|[-•*])\s+/.test(x)).map(x => x.replace(/^(\d+[\.\)]|[-•*])\s+/, ""));
   if (adim.length >= 2) return { onkosul: [], adimlar: adim.slice(0, 8).map(x => { const [b, ...r] = x.split(/:\s+/); return r.length ? { baslik: b.replace(/\*+/g, ""), aciklama: r.join(": ").replace(/\*+/g, ""), soru: "", ipucu: "" } : { baslik: "Adım", aciklama: x.replace(/\*+/g, ""), soru: "", ipucu: "" }; }) };
   throw new Error("Yanıtta adımlar bulunamadı. Uygulamadan JSON biçiminde yanıt istemeyi deneyin.");

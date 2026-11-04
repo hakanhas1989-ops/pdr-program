@@ -4368,7 +4368,8 @@ async function pdrSoruCozumCiz(sf, vp, soru, cizimKanvas, ozel) {
   const isaretler = [];
   if (ozel && ozel.adimlar) {
     const norm = (t) => String(t || "").toLocaleLowerCase("tr").replace(/\s+/g, " ").trim();
-    ozel.adimlar.forEach((a, i) => { const ip = norm(a.ipucu); if (!ip) return; const parca = ip.split(" ").slice(0, 3).join(" ");
+    const notluAdim = new Set((Array.isArray(ozel.sekil_notlari) ? ozel.sekil_notlari : []).filter(n => n && Array.isArray(n.kutu)).map(n => parseInt(n.adim) || 0));
+    ozel.adimlar.forEach((a, i) => { const ip = norm(a.ipucu); if (!ip || notluAdim.has(i + 1)) return; const parca = ip.split(" ").slice(0, 3).join(" ");
       const o = satirlar.find(x => norm(x.str).includes(ip)) || satirlar.find(x => parca.length > 3 && norm(x.str).includes(parca));
       if (o) { const aranan = norm(o.str).includes(ip) ? ip : parca, k = norm(o.str).indexOf(aranan); isaretler.push({ no: i + 1, ...pdrSatirKutu(o, k, k + aranan.length) }); } });
   } else {
@@ -4381,7 +4382,60 @@ async function pdrSoruCozumCiz(sf, vp, soru, cizimKanvas, ozel) {
   isaretler.forEach(m => { const r = Math.max(8, m.h * 0.75), cxp = Math.max(r + 1, m.x - r - 3), cyp = m.y + m.h / 2;
     cx.strokeStyle = "#EA580C"; cx.lineWidth = Math.max(2, m.h * 0.14); cx.beginPath(); cx.moveTo(m.x, m.y + m.h * 1.15); cx.lineTo(m.x + Math.max(m.w, r * 2), m.y + m.h * 1.15); cx.stroke();
     cx.fillStyle = "#EA580C"; cx.beginPath(); cx.arc(cxp, cyp, r, 0, Math.PI * 2); cx.fill(); cx.fillStyle = "#fff"; cx.font = `bold ${Math.round(r * 1.3)}px Arial`; cx.textAlign = "center"; cx.textBaseline = "middle"; cx.fillText(String(m.no), cxp, cyp + 1); });
+  if (ozel && Array.isArray(ozel.sekil_notlari) && ozel.sekil_notlari.length) pdrSekilNotlariCiz(cx, ozel.sekil_notlari, bolge, W, H, cizimKanvas.__sayfa);
   return { bulundu, kok: !!kokSatir, veri: veri ? (/[Gg]rafi|[Tt]ablo|[Şş]ekil|[Gg]örsel|[Şş]ema|chart|table/.test(veri.str) ? "gorsel" : (["Matematik", "Fen Bilimleri"].includes(soru.ders) && /\d/.test(veri.str)) ? "sayi" : "metin") : null, oncul: !!oncul, metin: satirlar.map(o => o.str).join(" "), bolge };
+}
+// Şekil notları: yapay zekânın görüntü üzerinde verdiği konumlara (0-1000) daire / alt çizgi / çerçeve / ok ve kısa yapışkan not çizer
+const PDR_NOT_RENK = ["#EA580C", "#2563EB", "#16A34A", "#9333EA", "#DB2777", "#0891B2", "#CA8A04"];
+function pdrUstYaz(t) { const u = { "-": "⁻", "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹" };
+  return String(t == null ? "" : t).replace(/\^\(?(-?\d{1,3})\)?/g, (m, a) => [...a].map(c => u[c] || c).join("")); }
+function pdrSekilNotlariCiz(cx, notlar, bolge, W, H, sayfa) {
+  const bw = bolge.x1 - bolge.x0, bh = bolge.y1 - bolge.y0, fs = Math.max(10, Math.min(W * 0.017, bh * 0.05)), yer = [];
+  // Sayfadaki mürekkep (yazı/şekil) yoğunluğu: notları boş alanlara koymak için
+  let murekkep = null;
+  try { if (sayfa && sayfa.width) { const k = sayfa.width / W, adim = Math.max(2, Math.round(fs / 3)), gx = Math.ceil(bw / adim), gy = Math.ceil(bh / adim);
+    const veri = sayfa.getContext("2d").getImageData(Math.floor(bolge.x0 * k), Math.floor(bolge.y0 * k), Math.max(1, Math.floor(bw * k)), Math.max(1, Math.floor(bh * k))), iw = veri.width, ih = veri.height, d = veri.data;
+    const T = new Float32Array((gx + 1) * (gy + 1));
+    for (let j = 0; j < gy; j++) { let satir = 0; for (let i = 0; i < gx; i++) { const px = Math.min(iw - 1, Math.floor((i + 0.5) * adim * k)), py = Math.min(ih - 1, Math.floor((j + 0.5) * adim * k)), o = (py * iw + px) * 4;
+        satir += (d[o] + d[o + 1] + d[o + 2]) < 690 ? 1 : 0; T[(j + 1) * (gx + 1) + i + 1] = T[j * (gx + 1) + i + 1] + satir; } }
+    murekkep = (r) => { const i0 = Math.max(0, Math.min(gx, Math.floor((r.x - bolge.x0) / adim))), i1 = Math.max(0, Math.min(gx, Math.ceil((r.x + r.w - bolge.x0) / adim))), j0 = Math.max(0, Math.min(gy, Math.floor((r.y - bolge.y0) / adim))), j1 = Math.max(0, Math.min(gy, Math.ceil((r.y + r.h - bolge.y0) / adim)));
+      const alan = Math.max(1, (i1 - i0) * (j1 - j0)); return (T[j1 * (gx + 1) + i1] - T[j0 * (gx + 1) + i1] - T[j1 * (gx + 1) + i0] + T[j0 * (gx + 1) + i0]) / alan; }; } } catch (e) { murekkep = null; }
+  const cakis = (a) => yer.some(b => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h);
+  const sarmala = (t, n) => { const k = String(t).split(/\s+/), sat = []; let l = ""; k.forEach(w => { if ((l + " " + w).trim().length > n && l) { sat.push(l); l = w; } else l = (l + " " + w).trim(); }); if (l) sat.push(l); return sat.slice(0, 3); };
+  const gecerli = notlar.filter(n => n && Array.isArray(n.kutu) && n.kutu.length === 4 && n.kutu.every(v => isFinite(+v))).slice(0, 8);
+  const kutular = gecerli.map(n => { let [y1, x1, y2, x2] = n.kutu.map(v => Math.max(0, Math.min(1000, +v))); if (y2 < y1) [y1, y2] = [y2, y1]; if (x2 < x1) [x1, x2] = [x2, x1];
+    return { x: bolge.x0 + x1 / 1000 * bw, y: bolge.y0 + y1 / 1000 * bh, w: Math.max(fs * 0.8, (x2 - x1) / 1000 * bw), h: Math.max(fs * 0.8, (y2 - y1) / 1000 * bh) }; });
+  kutular.forEach(k => yer.push(k));   // notlar işaretlenen yerlerin üstüne binmesin
+  gecerli.forEach((n, i) => {
+    const k = kutular[i], adim = Math.max(1, parseInt(n.adim) || i + 1), renk = PDR_NOT_RENK[(adim - 1) % PDR_NOT_RENK.length], tur = String(n.tur || "daire"), lw = Math.max(2, fs * 0.16);
+    cx.save(); cx.strokeStyle = renk; cx.lineWidth = lw; cx.lineCap = "round";
+    if (tur === "alti") { cx.beginPath(); cx.moveTo(k.x, k.y + k.h + lw); cx.lineTo(k.x + k.w, k.y + k.h + lw); cx.stroke(); }
+    else if (tur === "kutu") { cx.beginPath(); if (cx.roundRect) cx.roundRect(k.x - lw * 2, k.y - lw * 2, k.w + lw * 4, k.h + lw * 4, fs * 0.3); else cx.rect(k.x - lw * 2, k.y - lw * 2, k.w + lw * 4, k.h + lw * 4); cx.stroke(); }
+    else if (tur !== "ok") { cx.beginPath(); cx.ellipse(k.x + k.w / 2, k.y + k.h / 2, k.w / 2 + fs * 0.45, k.h / 2 + fs * 0.4, 0, 0, Math.PI * 2); cx.stroke(); }
+    // Yapışkan not
+    const metin = pdrUstYaz(pdrLatexSade(String(n.not || "").trim())); if (!metin) { cx.restore(); return; }
+    cx.font = `bold ${Math.round(fs)}px Arial`; const sat = sarmala(metin, 24), rozet = fs * 1.25, pad = fs * 0.4;
+    const nw = Math.min(bw * 0.6, Math.max(...sat.map(l => cx.measureText(l).width)) + pad * 2 + rozet + pad), nh = sat.length * fs * 1.25 + pad * 2;
+    // Aday yerler: yanlar, üst, alt, çaprazlar ve biraz daha uzak halkalar; çakışmayan ve en az yazının üstüne binen seçilir
+    const g = fs * 1.1, adaylar = [];
+    [1, 2.2, 3.6].forEach((uz, halka) => { const d = g * uz;
+      [[k.x + k.w + d, k.y + k.h / 2 - nh / 2], [k.x - nw - d, k.y + k.h / 2 - nh / 2], [k.x + k.w / 2 - nw / 2, k.y - nh - d], [k.x + k.w / 2 - nw / 2, k.y + k.h + d],
+       [k.x + k.w + d * 0.6, k.y - nh - d * 0.6], [k.x - nw - d * 0.6, k.y - nh - d * 0.6], [k.x + k.w + d * 0.6, k.y + k.h + d * 0.6], [k.x - nw - d * 0.6, k.y + k.h + d * 0.6]]
+        .forEach(([x, y], sira) => adaylar.push({ x: Math.max(bolge.x0 + 2, Math.min(bolge.x1 - nw - 2, x)), y: Math.max(bolge.y0 + 2, Math.min(bolge.y1 - nh - 2, y)), w: nw, h: nh, ceza: halka * 0.08 + sira * 0.01 })); });
+    adaylar.forEach(a => { a.puan = (cakis(a) ? 10 : 0) + (murekkep ? murekkep(a) : 0) + a.ceza; });
+    let not = adaylar.sort((a, b) => a.puan - b.puan)[0];
+    yer.push(not);
+    // Notla yer arasında ok
+    const nx = Math.max(not.x, Math.min(not.x + nw, k.x + k.w / 2)), ny = Math.max(not.y, Math.min(not.y + nh, k.y + k.h / 2)), hx = Math.max(k.x, Math.min(k.x + k.w, nx)), hy = Math.max(k.y, Math.min(k.y + k.h, ny));
+    if (Math.hypot(hx - nx, hy - ny) > fs * 0.8) { cx.lineWidth = Math.max(1.5, lw * 0.7); cx.setLineDash(tur === "ok" ? [] : [fs * 0.35, fs * 0.25]); cx.beginPath(); cx.moveTo(nx, ny); cx.lineTo(hx, hy); cx.stroke(); cx.setLineDash([]);
+      const a = Math.atan2(hy - ny, hx - nx), u = fs * 0.55; cx.fillStyle = renk; cx.beginPath(); cx.moveTo(hx, hy); cx.lineTo(hx - u * Math.cos(a - 0.45), hy - u * Math.sin(a - 0.45)); cx.lineTo(hx - u * Math.cos(a + 0.45), hy - u * Math.sin(a + 0.45)); cx.closePath(); cx.fill(); }
+    cx.shadowColor = "rgba(0,0,0,0.18)"; cx.shadowBlur = fs * 0.4; cx.fillStyle = "#FEF9C3"; cx.beginPath(); if (cx.roundRect) cx.roundRect(not.x, not.y, nw, nh, fs * 0.35); else cx.rect(not.x, not.y, nw, nh); cx.fill(); cx.shadowBlur = 0;
+    cx.lineWidth = Math.max(1.5, lw * 0.6); cx.strokeStyle = renk; cx.stroke();
+    cx.fillStyle = renk; cx.beginPath(); cx.arc(not.x + pad + rozet / 2, not.y + nh / 2, rozet / 2, 0, Math.PI * 2); cx.fill();
+    cx.fillStyle = "#fff"; cx.textAlign = "center"; cx.textBaseline = "middle"; cx.font = `bold ${Math.round(fs * 0.9)}px Arial`; cx.fillText(String(adim), not.x + pad + rozet / 2, not.y + nh / 2 + 1);
+    cx.fillStyle = "#1F2937"; cx.textAlign = "left"; cx.font = `bold ${Math.round(fs)}px Arial`; sat.forEach((l, j) => cx.fillText(l, not.x + pad * 2 + rozet, not.y + pad + fs * 0.62 + j * fs * 1.25));
+    cx.restore();
+  });
 }
 function pdrCozumGenelAdimlar(soru, r) {
   const st = (KONU_STRATEJI[soru.ders] || {})[soru.konu] || (KONU_STRATEJI[soru.ders] || {})._ || "";
@@ -4403,7 +4457,7 @@ function pdrSoruResmi(kanvas, bolge, enFazla) {
 }
 const PDR_COZUM_SISTEM = "Sen 8. sınıf öğrencilerine LGS sorusu çözmeyi öğreten sabırlı bir öğretmensin. Amacın cevabı vermek değil, öğrenciye 'balık tutmayı' öğretmek: ön koşul bilgileri, soru kökünü anlama, verilenleri bulma ve adım adım akıl yürütme. Türkçe, kısa ve 8. sınıf düzeyinde yaz. SADECE JSON döndür.";
 function pdrCozumIstem(soru, metin, gorselVar) {
-  return `Ders: ${soru.ders}. Konu: ${soru.konu || "?"}. Soru ${soru.no}.${gorselVar ? " Sorunun görüntüsü ekte (şekiller görüntüde)." : " Sorunun şekli/görseli gönderilmedi; yalnız metne göre çalış, çözüm şekle bağlıysa ilgili adımda 'şekle bak' de."}\n\nSORU METNİ (PDF'ten çıkarıldı):\n${String(metin || "").slice(0, 3500)}\n\nŞu JSON'u üret:\n{"onkosul":["bu soruyu çözmek için bilinmesi gereken 2-4 temel bilgi/beceri"],"adimlar":[{"baslik":"kısa adım adı","aciklama":"öğrencinin yapacağı işlem (1-2 cümle)","soru":"öğrencinin kendine soracağı yönlendirici soru","ipucu":"bu adımda bakılacak yer: soru metninden BİREBİR alınmış 2-5 kelimelik kısa ifade ya da boş"}],"celdirici":"en çok yapılan hata/çeldirici ve neden yanlış (1 cümle)","cevap":"doğru seçenek harfi ve tek cümlelik gerekçe"}\n4-6 adım yaz. Son adım kontrol olsun.`;
+  return `Ders: ${soru.ders}. Konu: ${soru.konu || "?"}. Soru ${soru.no}.${gorselVar ? " Sorunun görüntüsü ekte (şekiller görüntüde)." : " Sorunun şekli/görseli gönderilmedi; yalnız metne göre çalış, çözüm şekle bağlıysa ilgili adımda 'şekle bak' de."}\n\nSORU METNİ (PDF'ten çıkarıldı):\n${String(metin || "").slice(0, 3500)}\n\nŞu JSON'u üret:\n{"onkosul":["bu soruyu çözmek için bilinmesi gereken 2-4 temel bilgi/beceri"],"adimlar":[{"baslik":"kısa adım adı","aciklama":"öğrencinin yapacağı işlem (1-2 cümle)","soru":"öğrencinin kendine soracağı yönlendirici soru","ipucu":"bu adımda bakılacak yer: soru metninden BİREBİR alınmış 2-5 kelimelik kısa ifade ya da boş"}],"celdirici":"en çok yapılan hata/çeldirici ve neden yanlış (1 cümle)","cevap":"doğru seçenek harfi ve tek cümlelik gerekçe","anahtar":"öğrencide 'aha!' dedirtecek tek cümlelik anahtar fikir (cevabı söylemeden)","sekil_notlari":[{"adim":1,"tur":"daire|alti|kutu|ok","kutu":[ymin,xmin,ymax,xmax],"not":"en fazla 6 kelimelik kısa anahtar not, örn. '8 = 2³ yaz' ya da 'çift kuvvet → +'"}]}\n4-6 adım yaz. Son adım kontrol olsun.${gorselVar ? "\nŞEKİL NOTLARI: Ekteki görüntünün üzerine çizilecek 3-6 not üret. 'kutu', notun gösterdiği yerin (şekildeki sayı, kenar, açı, grafik çubuğu, tablo hücresi, metindeki anahtar ifade) görüntü üzerindeki konumudur: [ymin, xmin, ymax, xmax], 0-1000 arası, görüntünün sol üstü 0,0. Kutu ilgili yeri tam ve dar çevrelesin. 'adim', notun ait olduğu adım numarası. tur: daire (sayı/nesneyi daire içine al), alti (ifadenin altını çiz), kutu (bölgeyi çerçevele), ok (dikkati oraya çek). Notlar öğrenciyi düşündüren ipuçları olsun; doğru seçeneği ya da sonucu ele vermesin." : "\nGörüntü olmadığı için sekil_notlari boş liste [] olsun."}`;
 }
 // Model ya da kullanıcının yapıştırdığı yanıttan çözüm nesnesi çıkar (JSON değilse numaralı satırlardan adım üretir)
 // Yanıttaki LaTeX matematik yazımını okunur hâle getir ($2^{-3}$ → 2^(-3), \frac{1}{8} → 1/8)
@@ -4482,7 +4536,7 @@ async function pdrCozumOzelIste(soru, metin, kanvas, bolge) {
   const sec = pdrAiSecili(), ucretsiz = sec.tur === "ucretsiz", resim = ucretsiz ? null : pdrSoruResmi(kanvas, bolge, 1400);
   const istem = pdrCozumIstem(soru, metin, !!resim);
   const content = resim ? [{ type: "image", source: { type: "base64", media_type: "image/jpeg", data: resim } }, { type: "text", text: istem }] : istem;
-  const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1500, system: PDR_COZUM_SISTEM, messages: [{ role: "user", content }] }) });
+  const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 2500, system: PDR_COZUM_SISTEM, messages: [{ role: "user", content }] }) });
   const d = await res.json(); if (d.error) throw new Error(d.error.message || d.error);
   const j2 = pdrCozumYanitCoz((d.content || []).map(b => b.text || "").join(""));
   j2.__model = sec.kisa + (ucretsiz ? " (ücretsiz, yalnız metin)" : ""); j2.__tarih = today(); return j2;
@@ -4497,6 +4551,8 @@ function KitapSayfaGosterici({ kitap, kitapAd, sayfa, aralik, ofset = 0, onKapat
   const [cozum, setCozum] = useState(null), [cozumAcik, setCozumAcik] = useState(false), [ozel, setOzel] = useState(null), [ozelDurum, setOzelDurum] = useState(""), [cevapGoster, setCevapGoster] = useState(false);
   const cozumAnahtar = soru ? `${kitap}|${soru.ders}|${soru.no}` : "";
   const [uyari, setUyari] = useState(""), [degisDurum, setDegisDurum] = useState("");
+  const [notGizle, setNotGizle] = useState(false);
+  async function notlariDegistir() { const g = !notGizle; setNotGizle(g); if (ozel && sfRef.current) { try { await pdrSoruCozumCiz(sfRef.current.sf, sfRef.current.vp, soru, cizim.current, g ? { ...ozel, sekil_notlari: [] } : ozel); } catch (e) {} } }
   // Yanlış PDF'i silip yenisini yükle (yalnız bu cihazdaki kopya; o kitapçığın kayıtlı çözüm yolları da silinir)
   async function pdfDegistir(f) { setDegisDurum("Kontrol ediliyor…");
     const u = await pdrKitapDosyaUyusmazlik(kitap, f); if (u) { setDegisDurum("⚠ " + u + " Dosya yüklenmedi."); return; }
@@ -4513,7 +4569,7 @@ function KitapSayfaGosterici({ kitap, kitapAd, sayfa, aralik, ofset = 0, onKapat
   async function disKopyala() { try { await navigator.clipboard.writeText(disHazirla().istem); setDisDurum("İstem panoya kopyalandı."); } catch (e) { setDisDurum("Kopyalanamadı; tarayıcı izin vermedi."); } }
   async function disKaydet() { try { const j = pdrCozumYanitCoz(disYanit); j.__model = "Dış uygulama (yapıştırıldı)"; j.__tarih = today(); setOzel(j); await pdrCozumKaydet(cozumAnahtar, j); await cozumAc(j); setDisAcik(false); setDisYanit(""); setDisDurum(""); } catch (e) { setDisDurum((e && e.message) || String(e)); } }
   async function cozumAc(ozelVeri, zorla) { if (cozumAcik && !ozelVeri && !zorla) { setCozumAcik(false); setCozum(null); const c = cizim.current; if (c) c.getContext("2d").clearRect(0, 0, c.width, c.height); return; }
-    setIsaretAcik(false); setIsaret(null);
+    setIsaretAcik(false); setIsaret(null); setNotGizle(false);
     try { const r = await pdrSoruCozumCiz(sfRef.current.sf, sfRef.current.vp, soru, cizim.current, ozelVeri || null); setCozum(r); setCozumAcik(true);
       if (!ozelVeri) { const kay = (await pdrCozumOku())[cozumAnahtar]; if (kay) { setOzel(kay); await pdrSoruCozumCiz(sfRef.current.sf, sfRef.current.vp, soru, cizim.current, kay); } } } catch (e) { setCozum({ hata: (e && e.message) || String(e) }); setCozumAcik(true); } }
   async function ozelIste() { if (!cozum || cozum.hata) return; setOzelDurum("hazirlaniyor"); setCevapGoster(false);
@@ -4544,7 +4600,7 @@ function KitapSayfaGosterici({ kitap, kitapAd, sayfa, aralik, ofset = 0, onKapat
         c.width = Math.floor(vp.width); c.height = Math.floor(vp.height); c.style.width = gen + "px"; c.style.height = (gen * vp.height / vp.width) + "px";
         const cx = c.getContext("2d", { alpha: false }); cx.fillStyle = "#fff"; cx.fillRect(0, 0, c.width, c.height); cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = "high";
         await sf.render({ canvasContext: cx, viewport: vp, intent: "print" }).promise;
-        sfRef.current = { sf, vp }; const cz = cizim.current; if (cz) { cz.width = c.width; cz.height = c.height; cz.style.width = c.style.width; cz.style.height = c.style.height; cz.getContext("2d").clearRect(0, 0, cz.width, cz.height); }
+        sfRef.current = { sf, vp }; const cz = cizim.current; if (cz) { cz.__sayfa = c; cz.width = c.width; cz.height = c.height; cz.style.width = c.style.width; cz.style.height = c.style.height; cz.getContext("2d").clearRect(0, 0, cz.width, cz.height); }
         if (!iptal) { setDurum("hazir"); setIsaret(null); setIsaretAcik(false); setCozum(null); setCozumAcik(false); }
       } catch (e) { if (!iptal) setDurum("hata:" + ((e && e.message) || e)); }
     })();
@@ -4578,18 +4634,25 @@ function KitapSayfaGosterici({ kitap, kitapAd, sayfa, aralik, ofset = 0, onKapat
               {(() => { const ids = soru.konu ? onkosulKonuBecerileri(soru.ders, soru.konu) : []; return (ozel && ozel.onkosul && ozel.onkosul.length) || ids.length ? (
                 <div data-cozum-onkosul style={{ background: "#FAF5FF", borderRadius: 8, padding: "5px 8px", margin: "5px 0" }}>
                   <b style={{ color: "#5B21B6" }}>🧱 Ön koşullar — bu soruyu çözmek için bilinmesi gerekenler</b>
-                  {ozel && ozel.onkosul ? ozel.onkosul.map((x, i) => <div key={"o" + i}>• {x}</div>) : null}
+                  {ozel && ozel.onkosul ? ozel.onkosul.map((x, i) => <div key={"o" + i}>• {pdrUstYaz(x)}</div>) : null}
                   {ids.map(id => { const b = onkosulBeceri(id); return <div key={id}>• {b.ad} <span style={{ fontSize: 10, fontWeight: 800, color: "#1D4ED8", background: "#DBEAFE", borderRadius: 7, padding: "0 6px" }}>📘 {onkosulSinifYaz(b.nerede)}</span></div>; })}
                   {ids.length > 0 && <div style={{ fontSize: 10.5, color: MUTED }}>Öğrenci bunlarda zorlanıyorsa Konu Haritası'nda bu konunun 🧱 Ön koşul kontrolünü yapın.</div>}
                 </div>) : null; })()}
+              {ozel && ozel.anahtar && <div data-cozum-anahtar style={{ background: "#FEF9C3", border: "1px solid #FACC15", borderRadius: 8, padding: "5px 8px", margin: "5px 0", fontWeight: 700, color: "#713F12" }}>💡 Anahtar fikir: <span style={{ fontWeight: 600 }}>{pdrUstYaz(ozel.anahtar)}</span></div>}
+              {(() => { const notlar = ozel && Array.isArray(ozel.sekil_notlari) ? ozel.sekil_notlari.filter(n => n && Array.isArray(n.kutu)) : [];
+                return ozel ? (notlar.length ? <div style={{ display: "flex", alignItems: "center", gap: 6, margin: "3px 0", flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 11, color: "#374151" }}>✏️ Soru üzerinde {notlar.length} not ve çizim var (renkli numaralar adımlarla eşleşir).</span>
+                    <button data-cozum-not-gizle onClick={notlariDegistir} style={{ padding: "2px 8px", borderRadius: 7, border: "1px solid #CBD5E1", background: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>{notGizle ? "Notları göster" : "Notları gizle"}</button></div>
+                  : <div style={{ fontSize: 10.5, color: MUTED, margin: "3px 0" }}>✏️ Bu kayıtta şekil üzerinde not yok. Şekil notları ve 💡 anahtar fikir için alttaki <b>Sil / yeniden hazırla</b> ile görselli bir modelden (Gemini ya da Claude) yeniden isteyin.</div>) : null; })()}
               <b style={{ color: "#9A3412" }}>🪜 Adım adım {ozel ? "(bu soruya özel)" : "(genel yöntem)"}</b>
-              {(ozel ? ozel.adimlar.map((a, i) => ({ no: i + 1, baslik: a.baslik, aciklama: a.aciklama, soru: a.soru })) : pdrCozumGenelAdimlar(soru, cozum)).map((a, i) => (
+              {(ozel ? ozel.adimlar.map((a, i) => ({ no: i + 1, baslik: a.baslik, aciklama: a.aciklama, soru: a.soru })) : pdrCozumGenelAdimlar(soru, cozum)).map((a, i) => { const adimNot = ozel && Array.isArray(ozel.sekil_notlari) ? ozel.sekil_notlari.filter(n => n && Array.isArray(n.kutu) && (parseInt(n.adim) || 0) === a.no) : [], renk = adimNot.length ? PDR_NOT_RENK[(a.no - 1) % PDR_NOT_RENK.length] : (a.no ? "#EA580C" : "#FDBA74"); return (
                 <div key={i} data-cozum-adim={i} style={{ display: "flex", gap: 7, margin: "4px 0" }}>
-                  <span style={{ flexShrink: 0, width: 20, height: 20, borderRadius: 10, background: a.no ? "#EA580C" : "#FDBA74", color: "#fff", fontWeight: 900, fontSize: 11, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{a.no || "•"}</span>
-                  <span><b>{a.baslik}:</b> {a.aciklama}{a.soru ? <span style={{ display: "block", color: "#7C2D12", fontStyle: "italic" }}>Kendine sor: {a.soru}</span> : null}</span>
-                </div>))}
-              {ozel && ozel.celdirici && <div style={{ marginTop: 4 }}><b>⚠ Dikkat (çeldirici):</b> {ozel.celdirici}</div>}
-              {ozel && ozel.cevap && <div style={{ marginTop: 4 }}>{cevapGoster ? <span><b>✅ Cevap:</b> {ozel.cevap}</span> : <button data-cozum-cevap onClick={() => setCevapGoster(true)} style={{ padding: "4px 9px", borderRadius: 7, border: "1px solid #FDBA74", background: "#FFF7ED", cursor: "pointer", fontSize: 11.5, fontWeight: 700 }}>Önce kendin dene — cevabı göster</button>}</div>}
+                  <span style={{ flexShrink: 0, width: 20, height: 20, borderRadius: 10, background: renk, color: "#fff", fontWeight: 900, fontSize: 11, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{a.no || "•"}</span>
+                  <span><b>{pdrUstYaz(a.baslik)}:</b> {pdrUstYaz(a.aciklama)}{a.soru ? <span style={{ display: "block", color: "#7C2D12", fontStyle: "italic" }}>Kendine sor: {pdrUstYaz(a.soru)}</span> : null}
+                    {adimNot.length > 0 && <span style={{ display: "block", fontSize: 11, color: renk, fontWeight: 700 }}>✏️ Şekilde: {adimNot.map(n => pdrUstYaz(n.not)).filter(Boolean).join(" · ")}</span>}</span>
+                </div>); })}
+              {ozel && ozel.celdirici && <div style={{ marginTop: 4 }}><b>⚠ Dikkat (çeldirici):</b> {pdrUstYaz(ozel.celdirici)}</div>}
+              {ozel && ozel.cevap && <div style={{ marginTop: 4 }}>{cevapGoster ? <span><b>✅ Cevap:</b> {pdrUstYaz(ozel.cevap)}</span> : <button data-cozum-cevap onClick={() => setCevapGoster(true)} style={{ padding: "4px 9px", borderRadius: 7, border: "1px solid #FDBA74", background: "#FFF7ED", cursor: "pointer", fontSize: 11.5, fontWeight: 700 }}>Önce kendin dene — cevabı göster</button>}</div>}
               {!ozel && <div style={{ marginTop: 6 }}>
                 <button data-cozum-ozel onClick={ozelIste} disabled={ozelDurum === "hazirlaniyor"} style={{ padding: "6px 10px", borderRadius: 8, border: "none", background: "#EA580C", color: "#fff", fontWeight: 800, fontSize: 12, cursor: "pointer" }}>{ozelDurum === "hazirlaniyor" ? "Hazırlanıyor…" : "🤖 Bu soruya özel adımları hazırla"}</button>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 5, flexWrap: "wrap" }}>

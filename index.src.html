@@ -4294,10 +4294,13 @@ const BECERI_ADIM = {
 };
 async function pdrSoruBolge(sf, vp, soru) {
   const tc = await sf.getTextContent(), lib = window.pdfjsLib, W = vp.width, H = vp.height;
-  const ogeler = tc.items.filter(it => it.str && it.str.trim()).map(it => { const t = lib.Util.transform(vp.transform, it.transform), h = Math.hypot(t[2], t[3]) || 10; return { str: it.str, x: t[4], y: t[5] - h, w: (it.width || 0) * vp.scale, h }; });
+  // Dikey (döndürülmüş) yazıları — sütun arasındaki "ÖLÇME, DEĞERLENDİRME…" gibi — dışarıda bırak
+  const ogeler = tc.items.filter(it => it.str && it.str.trim() && Math.abs(it.transform[1]) < 0.01 && Math.abs(it.transform[2]) < 0.01).map(it => { const t = lib.Util.transform(vp.transform, it.transform), h = Math.hypot(t[2], t[3]) || 10; return { str: it.str, x: t[4], y: t[5] - h, w: (it.width || 0) * vp.scale, h }; });
   // Sorunun bölgesi: "N." numarası ve aynı sütundaki bir sonraki soru numarası
   const noRe = (n) => new RegExp("^\\s*" + n + "\\.\\s*($|\\S)");
-  const yonerge = (o) => /Bu testte|Cevaplarınızı|DENEME|soru vardır/.test(o.str);
+  // Metin sözcük sözcük gelebilir: numaranın aynı satırdaki devamına da bak ("1." + "Bu testte…")
+  const satirDevami = (o) => o.str + " " + ogeler.filter(p => p !== o && Math.abs(p.y - o.y) < Math.max(3, o.h * 0.5) && p.x > o.x && p.x < o.x + W * 0.3).sort((p, q) => p.x - q.x).map(p => p.str).join(" ");
+  const yonerge = (o) => /Bu testte|Cevaplarınızı|Cevaplarinizi|DENEME|soru vardır|soru vardir/i.test(satirDevami(o));
   const adaylar = ogeler.filter(o => noRe(soru.no).test(o.str) && !yonerge(o) && (o.x < W * 0.2 || (o.x > W * 0.45 && o.x < W * 0.62)));
   let bolge = { x0: 0, x1: W, y0: 0, y1: H };
   if (adaylar.length) { const a = adaylar.sort((p, q) => p.y - q.y)[0], sol = a.x < W * 0.4, x0 = sol ? 0 : W * 0.48, x1 = sol ? W * 0.52 : W;
@@ -4306,7 +4309,7 @@ async function pdrSoruBolge(sf, vp, soru) {
     // Sütunun tamamına yayılan (tam genişlik) sorular için: bölgede karşı sütunda numara yoksa genişlet
     if (!ogeler.some(o => /^\s*\d{1,2}\.\s*($|\S)/.test(o.str) && o.y > bolge.y0 && o.y < bolge.y1 && (sol ? (o.x > W * 0.45 && o.x < W * 0.62) : o.x < W * 0.2)) && ogeler.some(o => o.y > bolge.y0 && o.y < bolge.y1 && (sol ? o.x > W * 0.55 : o.x < W * 0.4))) { bolge.x0 = 0; bolge.x1 = W; } }
   const tamGen = bolge.x0 === 0 && bolge.x1 === W, solMu = bolge.x0 === 0;
-  const icinde = ogeler.filter(o => o.y + o.h > bolge.y0 && o.y < bolge.y1 && (tamGen || (solMu ? o.x < W * 0.47 : o.x >= W * 0.47)));
+  const icinde = ogeler.filter(o => o.y + o.h > bolge.y0 && o.y < bolge.y1 && (tamGen || (solMu ? o.x < W * 0.47 : o.x >= W * 0.47)) && !(!tamGen && /^[-–‑]$/.test(o.str.trim()) && Math.abs(o.x - W * 0.47) < W * 0.03));
   // Sözcük sözcük gelen metni satırlara birleştir (çok sözcüklü ifadeleri bulabilmek için)
   const sirali = [...icinde].sort((a, b) => a.y - b.y || a.x - b.x), satirlar = [];
   sirali.forEach(o => { const s0 = satirlar.find(l => Math.abs(l.y - o.y) < Math.max(3, o.h * 0.45) && Math.abs((l.x + l.w) - o.x) < o.h * 3 + 40 && o.x >= l.x);

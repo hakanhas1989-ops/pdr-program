@@ -4242,6 +4242,19 @@ async function pdrKitapKaydet(k, blob, sayfa) { const db = await pdrKitapDb(); a
 async function pdrKitapOku(k) { try { const db = await pdrKitapDb(); return await new Promise(ok => { const t = db.transaction("kitap", "readonly").objectStore("kitap").get(k); t.onsuccess = () => ok(t.result || null); t.onerror = () => ok(null); }); } catch (e) { return null; } }
 async function pdrKitapSil(k) { try { const db = await pdrKitapDb(); await new Promise(ok => { const t = db.transaction("kitap", "readwrite"); t.objectStore("kitap").delete(k); t.oncomplete = ok; t.onerror = ok; }); } catch (e) {} }
 const PDR_KITAP_BELGE = {};
+// Yüklenen LGS / MEBİ PDF'i doğru kitapçık mı? (ilk sayfalardaki "N. DENEME", öğretim yılı, oturum)
+async function pdrKitapKimlikMetni(belge) { let t = ""; for (let i = 1; i <= Math.min(3, belge.numPages); i++) { try { const tc = await (await belge.getPage(i)).getTextContent(); t += " " + tc.items.map(x => x.str).join(" "); } catch (e) {} } return t.replace(/\s+/g, " "); }
+function pdrKitapUyusmazlik(k, metin) {
+  const m = String(k).match(/^m(\d{2})(\d{2})(\d)(say|soz)$/), l = String(k).match(/^(\d{2})(say|soz)$/), t = metin || "";
+  const oturumUyar = (ot) => { const say = /MATEMAT[İI]K|FEN B[İI]L[İI]MLER[İI]/i.test(t), soz = /T[ÜU]RK[ÇC]E|[İI]NKILAP|D[İI]N K[ÜU]LT[ÜU]R/i.test(t); if (ot === "say" && soz && !say) return "Bu dosya Sözel bölüm görünüyor; Sayısal bölüm PDF'ini seçin."; if (ot === "soz" && say && !soz) return "Bu dosya Sayısal bölüm görünüyor; Sözel bölüm PDF'ini seçin."; return null; };
+  if (m) { const no = +m[3], b = t.match(/DENEMELER[İI]\s*(\d{1,2})\s*\.\s*DENEME/) || t.match(/(\d{1,2})\s*\.\s*DENEME(?![a-zçğıöşü])/); if (b && +b[1] !== no) return `Bu dosya ${b[1]}. Deneme; burası ${no}. Deneme. Doğru PDF'i seçin.`; return oturumUyar(m[4]); }
+  if (l) { const yil = 2000 + +l[1], b = t.match(/(20\d{2})\s*[-–]\s*(20\d{2})\s*E[ĞG][İI]T[İI]M/i); if (b && +b[2] !== yil) return `Bu dosya ${b[1]}-${b[2]} (${b[2]} LGS); burası ${yil} LGS. Doğru PDF'i seçin.`; return oturumUyar(l[2]); }
+  return null;
+}
+async function pdrKitapDosyaUyusmazlik(k, dosya) {
+  try { if (!/^(m\d{5}|\d{2})(say|soz)$/.test(String(k))) return null; const lib = await pdrPdfJsYukle(), ilk = await dosya.arrayBuffer();
+    const belge = await lib.getDocument({ data: new Uint8Array(ilk) }).promise; const t = await pdrKitapKimlikMetni(belge); try { belge.destroy(); } catch (e) {} return pdrKitapUyusmazlik(k, t); } catch (e) { return null; }
+}
 // Büyük PDF'i belleğe almadan, gerektiği kadar parça okuyarak açar (pdf.js aralık aktarımı)
 async function pdrKitapBelge(k) {
   if (PDR_KITAP_BELGE[k]) return PDR_KITAP_BELGE[k];
@@ -4483,6 +4496,13 @@ function KitapSayfaGosterici({ kitap, kitapAd, sayfa, aralik, ofset = 0, onKapat
   const kanvas = useRef(null), cizim = useRef(null), sfRef = useRef(null), [isaret, setIsaret] = useState(null), [isaretAcik, setIsaretAcik] = useState(false);
   const [cozum, setCozum] = useState(null), [cozumAcik, setCozumAcik] = useState(false), [ozel, setOzel] = useState(null), [ozelDurum, setOzelDurum] = useState(""), [cevapGoster, setCevapGoster] = useState(false);
   const cozumAnahtar = soru ? `${kitap}|${soru.ders}|${soru.no}` : "";
+  const [uyari, setUyari] = useState(""), [degisDurum, setDegisDurum] = useState("");
+  // Yanlış PDF'i silip yenisini yükle (yalnız bu cihazdaki kopya; o kitapçığın kayıtlı çözüm yolları da silinir)
+  async function pdfDegistir(f) { setDegisDurum("Kontrol ediliyor…");
+    const u = await pdrKitapDosyaUyusmazlik(kitap, f); if (u) { setDegisDurum("⚠ " + u + " Dosya yüklenmedi."); return; }
+    try { await pdrKitapSil(kitap); delete PDR_KITAP_BELGE[kitap]; await onKitapYukle(kitap, f); delete PDR_KITAP_BELGE[kitap];
+      const t = await pdrCozumOku(); Object.keys(t).filter(x => x.startsWith(kitap + "|")).forEach(x => delete t[x]); PDR_COZUM_YOLU = t; try { await window.storage.set("pdr-cozum-yolu", JSON.stringify(t)); } catch (e) {}
+      setOzel(null); setUyari(""); setDegisDurum("✓ PDF değiştirildi."); setOlcek(x => x + 0.0001); } catch (e) { setDegisDurum("Değiştirilemedi: " + ((e && e.message) || e)); } }
   const [disAcik, setDisAcik] = useState(false), [disYanit, setDisYanit] = useState(""), [disDurum, setDisDurum] = useState(""), [yontem, setYontem] = useState(pdrCozumYontemOku());
   function disHazirla() { const c = kanvas.current; c.__vpW = sfRef.current.vp.width; return { resim: pdrSoruResmi(c, cozum.bolge, 1600), istem: pdrCozumDisIstem(soru, cozum.metin) }; }
   async function disPaylas() { try { const { resim, istem } = disHazirla(); const bl = await (await fetch("data:image/jpeg;base64," + resim)).blob(), dosya = new File([bl], `soru_${String(kitap).replace(/[^a-z0-9]/gi, "")}_${soru.ders.normalize("NFD").replace(/[^A-Za-z]/g, "").slice(0, 8)}_${soru.no}.jpg`, { type: "image/jpeg" });
@@ -4509,6 +4529,7 @@ function KitapSayfaGosterici({ kitap, kitapAd, sayfa, aralik, ofset = 0, onKapat
         const belge = await pdrKitapBelge(kitap);
         if (iptal) return;
         if (!belge) { setDurum("yok"); return; }
+        if (belge.__kimlik === undefined) { belge.__kimlik = null; pdrKitapKimlikMetni(belge).then(t => { belge.__kimlik = pdrKitapUyusmazlik(kitap, t) || ""; if (!iptal) setUyari(belge.__kimlik); }); } else setUyari(belge.__kimlik || "");
         setToplam(belge.numPages - ofset);
         const sf = await belge.getPage(Math.max(1, Math.min(belge.numPages, s + ofset)));
         const gen = Math.min(window.innerWidth - 24, 900) * olcek;
@@ -4542,11 +4563,13 @@ function KitapSayfaGosterici({ kitap, kitapAd, sayfa, aralik, ofset = 0, onKapat
         <button onClick={yazdir} disabled={durum !== "hazir"} style={btn}>🖨</button>
         {soru && s === sayfa && <button data-beceri-isaretle="1" onClick={isaretle} disabled={durum !== "hazir"} style={{ ...btn, background: isaretAcik ? "#FDE68A" : "#FEF3C7" }}>🔍 Beceriler</button>}
         {soru && s === sayfa && <button data-cozum-yolu="1" onClick={() => cozumAc()} disabled={durum !== "hazir"} style={{ ...btn, background: cozumAcik ? "#FED7AA" : "#FFEDD5" }}>🧭 Çözüm yolu</button>}
+        {(durum === "hazir" || durum.startsWith("hata")) && <label data-kitap-degistir="1" title="Yanlış PDF yüklendiyse doğrusunu seçin" style={{ ...btn, display: "inline-block" }}>🔄 PDF<input type="file" accept="application/pdf,.pdf" onChange={e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) pdfDegistir(f); }} style={{ display: "none" }} /></label>}
         <button data-kitap-kapat="1" onClick={onKapat} style={{ ...btn, background: "#FEE2E2" }}>✕</button>
       </div>
+      {(uyari || degisDurum) && <div data-kitap-uyari="1" style={{ background: uyari || degisDurum.startsWith("⚠") ? "#FEF3C7" : "#DCFCE7", color: "#78350F", fontSize: 12.5, fontWeight: 700, padding: "6px 10px", lineHeight: 1.45 }}>{uyari ? <>⚠ {uyari} Üstteki <b>🔄 PDF</b> düğmesiyle doğru dosyayı seçin.</> : degisDurum}</div>}
       <div style={{ flex: 1, overflow: "auto", padding: 12, textAlign: "center" }}>
         {durum === "yukleniyor" && <div style={{ color: "#CBD5E1", fontSize: 13, marginTop: 30 }}>Sayfa hazırlanıyor…</div>}
-        {durum === "yok" && <div style={{ color: "#fff", fontSize: 13.5, marginTop: 30, lineHeight: 1.6 }}>Bu kitabın PDF'i bu cihazda yüklü değil.<br /><label style={{ display: "inline-block", marginTop: 10, padding: "9px 14px", background: "#fff", color: "#0F172A", borderRadius: 9, fontWeight: 800, cursor: "pointer" }}>📂 {kitapAd} PDF'ini seç<input type="file" accept="application/pdf,.pdf" onChange={e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) onKitapYukle(kitap, f).then(() => { delete PDR_KITAP_BELGE[kitap]; setS(x => x); setOlcek(x => x + 0.0001); }); }} style={{ display: "none" }} /></label></div>}
+        {durum === "yok" && <div style={{ color: "#fff", fontSize: 13.5, marginTop: 30, lineHeight: 1.6 }}>Bu kitabın PDF'i bu cihazda yüklü değil.<br /><label style={{ display: "inline-block", marginTop: 10, padding: "9px 14px", background: "#fff", color: "#0F172A", borderRadius: 9, fontWeight: 800, cursor: "pointer" }}>📂 {kitapAd} PDF'ini seç<input type="file" accept="application/pdf,.pdf" onChange={e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) pdrKitapDosyaUyusmazlik(kitap, f).then(u => { if (u) { setDegisDurum("⚠ " + u + " Dosya yüklenmedi."); return; } setDegisDurum(""); return onKitapYukle(kitap, f).then(() => { delete PDR_KITAP_BELGE[kitap]; setS(x => x); setOlcek(x => x + 0.0001); }); }); }} style={{ display: "none" }} /></label></div>}
         {durum.startsWith("hata") && <div style={{ color: "#FCA5A5", fontSize: 13, marginTop: 30 }}>Sayfa açılamadı ({durum.slice(5)}).</div>}
         {cozumAcik && cozum && (
           <div data-cozum-aciklama="1" style={{ textAlign: "left", background: "#fff", borderRadius: 10, padding: "8px 10px", margin: "0 auto 8px", maxWidth: 900, fontSize: 12, lineHeight: 1.5 }}>

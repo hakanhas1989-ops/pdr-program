@@ -4380,26 +4380,64 @@ function pdrCozumGenelAdimlar(soru, r) {
 let PDR_COZUM_YOLU = null;
 async function pdrCozumOku() { if (PDR_COZUM_YOLU) return PDR_COZUM_YOLU; try { const r = await window.storage.get("pdr-cozum-yolu"); PDR_COZUM_YOLU = (r && r.value && JSON.parse(r.value)) || {}; } catch (e) { PDR_COZUM_YOLU = {}; } return PDR_COZUM_YOLU; }
 async function pdrCozumKaydet(k, v) { const t = await pdrCozumOku(); t[k] = v; PDR_COZUM_YOLU = t; try { await window.storage.set("pdr-cozum-yolu", JSON.stringify(t)); } catch (e) {} }
+// Sorunun bölgesini JPEG olarak kes (base64, başlıksız)
+function pdrSoruResmi(kanvas, bolge, enFazla) {
+  try { const sc = kanvas.width / (kanvas.__vpW || kanvas.width), t = document.createElement("canvas"), x0 = bolge.x0 * sc, y0 = bolge.y0 * sc, w = (bolge.x1 - bolge.x0) * sc, h = (bolge.y1 - bolge.y0) * sc, k = Math.min(1, (enFazla || 1400) / Math.max(w, h));
+    t.width = Math.max(1, w * k); t.height = Math.max(1, h * k); const cx = t.getContext("2d"); cx.fillStyle = "#fff"; cx.fillRect(0, 0, t.width, t.height); cx.drawImage(kanvas, x0, y0, w, h, 0, 0, t.width, t.height); return t.toDataURL("image/jpeg", 0.88).split(",")[1]; } catch (e) { return null; }
+}
+const PDR_COZUM_SISTEM = "Sen 8. sınıf öğrencilerine LGS sorusu çözmeyi öğreten sabırlı bir öğretmensin. Amacın cevabı vermek değil, öğrenciye 'balık tutmayı' öğretmek: ön koşul bilgileri, soru kökünü anlama, verilenleri bulma ve adım adım akıl yürütme. Türkçe, kısa ve 8. sınıf düzeyinde yaz. SADECE JSON döndür.";
+function pdrCozumIstem(soru, metin, gorselVar) {
+  return `Ders: ${soru.ders}. Konu: ${soru.konu || "?"}. Soru ${soru.no}.${gorselVar ? " Sorunun görüntüsü ekte (şekiller görüntüde)." : " Sorunun şekli/görseli gönderilmedi; yalnız metne göre çalış, çözüm şekle bağlıysa ilgili adımda 'şekle bak' de."}\n\nSORU METNİ (PDF'ten çıkarıldı):\n${String(metin || "").slice(0, 3500)}\n\nŞu JSON'u üret:\n{"onkosul":["bu soruyu çözmek için bilinmesi gereken 2-4 temel bilgi/beceri"],"adimlar":[{"baslik":"kısa adım adı","aciklama":"öğrencinin yapacağı işlem (1-2 cümle)","soru":"öğrencinin kendine soracağı yönlendirici soru","ipucu":"bu adımda bakılacak yer: soru metninden BİREBİR alınmış 2-5 kelimelik kısa ifade ya da boş"}],"celdirici":"en çok yapılan hata/çeldirici ve neden yanlış (1 cümle)","cevap":"doğru seçenek harfi ve tek cümlelik gerekçe"}\n4-6 adım yaz. Son adım kontrol olsun.`;
+}
+// Model ya da kullanıcının yapıştırdığı yanıttan çözüm nesnesi çıkar (JSON değilse numaralı satırlardan adım üretir)
+function pdrCozumYanitCoz(t) {
+  const s = String(t || "").replace(/```json|```/g, ""), i = s.indexOf("{"), j = s.lastIndexOf("}");
+  if (i >= 0 && j > i) { try { const o = JSON.parse(s.slice(i, j + 1)); if (Array.isArray(o.adimlar) && o.adimlar.length) return o; } catch (e) {} }
+  const satir = s.split(/\n+/).map(x => x.trim()).filter(Boolean), adim = satir.filter(x => /^(\d+[\.\)]|[-•*])\s+/.test(x)).map(x => x.replace(/^(\d+[\.\)]|[-•*])\s+/, ""));
+  if (adim.length >= 2) return { onkosul: [], adimlar: adim.slice(0, 8).map(x => { const [b, ...r] = x.split(/:\s+/); return r.length ? { baslik: b.replace(/\*+/g, ""), aciklama: r.join(": ").replace(/\*+/g, ""), soru: "", ipucu: "" } : { baslik: "Adım", aciklama: x.replace(/\*+/g, ""), soru: "", ipucu: "" }; }) };
+  throw new Error("Yanıtta adımlar bulunamadı. Uygulamadan JSON biçiminde yanıt istemeyi deneyin.");
+}
+function pdrCozumYontemOku() { try { return JSON.parse(localStorage.getItem("pdr_cozum_gemini") || "{}"); } catch (e) { return {}; } }
+function pdrCozumYontemYaz(v) { try { localStorage.setItem("pdr_cozum_gemini", JSON.stringify(v)); } catch (e) {} }
+const PDR_GEMINI_VARSAYILAN = { url: "https://pdr-gemini.hakanhas1989.workers.dev", model: "gemini-2.5-flash" };
 async function pdrCozumOzelIste(soru, metin, kanvas, bolge) {
-  const sec = pdrAiSecili(), ucretsiz = sec.tur === "ucretsiz";
-  let resim = null;
-  if (!ucretsiz) try { const sc = kanvas.width / (kanvas.__vpW || kanvas.width); const t = document.createElement("canvas"), x0 = bolge.x0 * sc, y0 = bolge.y0 * sc, w = (bolge.x1 - bolge.x0) * sc, h = (bolge.y1 - bolge.y0) * sc, k = Math.min(1, 1400 / Math.max(w, h)); t.width = Math.max(1, w * k); t.height = Math.max(1, h * k); t.getContext("2d").drawImage(kanvas, x0, y0, w, h, 0, 0, t.width, t.height); resim = t.toDataURL("image/jpeg", 0.85).split(",")[1]; } catch (e) {}
-  const sistem = "Sen 8. sınıf öğrencilerine LGS sorusu çözmeyi öğreten sabırlı bir öğretmensin. Amacın cevabı vermek değil, öğrenciye 'balık tutmayı' öğretmek: ön koşul bilgileri, soru kökünü anlama, verilenleri bulma ve adım adım akıl yürütme. Türkçe, kısa ve 8. sınıf düzeyinde yaz. SADECE JSON döndür.";
-  const istem = `Ders: ${soru.ders}. Konu: ${soru.konu || "?"}. Soru ${soru.no}. Aşağıda sorunun metni (PDF'ten çıkarıldı; şekiller görüntüde) var.\n\nSORU METNİ:\n${metin.slice(0, 3500)}\n\nŞu JSON'u üret:\n{"onkosul":["bu soruyu çözmek için bilinmesi gereken 2-4 temel bilgi/beceri"],"adimlar":[{"baslik":"kısa adım adı","aciklama":"öğrencinin yapacağı işlem (1-2 cümle)","soru":"öğrencinin kendine soracağı yönlendirici soru","ipucu":"bu adımda bakılacak yer: soru metninden BİREBİR alınmış 2-5 kelimelik kısa ifade ya da boş"}],"celdirici":"en çok yapılan hata/çeldirici ve neden yanlış (1 cümle)","cevap":"doğru seçenek harfi ve tek cümlelik gerekçe"}\n4-6 adım yaz. Son adım kontrol olsun.`;
-  const istem2 = ucretsiz ? istem + "\nNot: Sorunun şekli/görseli sana gönderilmedi; yalnız metne göre çalış. Çözüm şekle bağlıysa ilgili adımda 'şekle bak' diyerek öğrenciyi yönlendir." : istem;
-  const content = resim ? [{ type: "image", source: { type: "base64", media_type: "image/jpeg", data: resim } }, { type: "text", text: istem2 }] : istem2;
-  const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1500, system: sistem, messages: [{ role: "user", content }] }) });
+  const yon = pdrCozumYontemOku();
+  if (yon.gemini) {
+    const url = yon.url || PDR_GEMINI_VARSAYILAN.url, model = yon.model || PDR_GEMINI_VARSAYILAN.model, resim = pdrSoruResmi(kanvas, bolge, 1600);
+    if (typeof pdrAsistanKalkanaEkle === "function") pdrAsistanKalkanaEkle(url);
+    const content = [...(resim ? [{ type: "image", source: { type: "base64", media_type: "image/jpeg", data: resim } }] : []), { type: "text", text: pdrCozumIstem(soru, metin, !!resim) }];
+    let res; try { res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model, max_tokens: 2000, system: PDR_COZUM_SISTEM, messages: [{ role: "user", content }] }) }); }
+    catch (e) { throw new Error("Gemini sunucusuna (Cloudflare 'pdr-gemini' worker) ulaşılamadı. Worker kurulu mu?"); }
+    const d = await res.json().catch(() => ({})); if (!res.ok || d.error) throw new Error((d.error && (d.error.message || d.error)) || `HTTP ${res.status}`);
+    const j2 = pdrCozumYanitCoz((d.content || []).map(b => b.text || "").join("")); j2.__model = `Gemini (${model}, ücretsiz kota, görselli)`; j2.__tarih = today(); return j2;
+  }
+  const sec = pdrAiSecili(), ucretsiz = sec.tur === "ucretsiz", resim = ucretsiz ? null : pdrSoruResmi(kanvas, bolge, 1400);
+  const istem = pdrCozumIstem(soru, metin, !!resim);
+  const content = resim ? [{ type: "image", source: { type: "base64", media_type: "image/jpeg", data: resim } }, { type: "text", text: istem }] : istem;
+  const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1500, system: PDR_COZUM_SISTEM, messages: [{ role: "user", content }] }) });
   const d = await res.json(); if (d.error) throw new Error(d.error.message || d.error);
-  const t = (d.content || []).map(b => b.text || "").join("").replace(/```json|```/g, ""); const i = t.indexOf("{"), j = t.lastIndexOf("}");
-  const j2 = JSON.parse(t.slice(i, j + 1)); if (!Array.isArray(j2.adimlar)) throw new Error("beklenmeyen yanıt");
+  const j2 = pdrCozumYanitCoz((d.content || []).map(b => b.text || "").join(""));
   j2.__model = sec.kisa + (ucretsiz ? " (ücretsiz, yalnız metin)" : ""); j2.__tarih = today(); return j2;
+}
+// Dış uygulama (Gemini / ChatGPT / Claude uygulaması) için hazır metin
+function pdrCozumDisIstem(soru, metin) {
+  return `${PDR_COZUM_SISTEM}\n\nEkteki görsel bir LGS sorusudur.\n${pdrCozumIstem(soru, metin, true)}\n\nYanıtını yalnızca bu JSON olarak ver (açıklama ekleme).`;
 }
 function KitapSayfaGosterici({ kitap, kitapAd, sayfa, aralik, ofset = 0, onKapat, onKitapYukle, soru }) {
   const [s, setS] = useState(sayfa); const [olcek, setOlcek] = useState(1); const [durum, setDurum] = useState("yukleniyor"); const [toplam, setToplam] = useState(0);
   const kanvas = useRef(null), cizim = useRef(null), sfRef = useRef(null), [isaret, setIsaret] = useState(null), [isaretAcik, setIsaretAcik] = useState(false);
   const [cozum, setCozum] = useState(null), [cozumAcik, setCozumAcik] = useState(false), [ozel, setOzel] = useState(null), [ozelDurum, setOzelDurum] = useState(""), [cevapGoster, setCevapGoster] = useState(false);
   const cozumAnahtar = soru ? `${kitap}|${soru.ders}|${soru.no}` : "";
-  async function cozumAc(ozelVeri) { if (cozumAcik && !ozelVeri) { setCozumAcik(false); setCozum(null); const c = cizim.current; if (c) c.getContext("2d").clearRect(0, 0, c.width, c.height); return; }
+  const [disAcik, setDisAcik] = useState(false), [disYanit, setDisYanit] = useState(""), [disDurum, setDisDurum] = useState(""), [yontem, setYontem] = useState(pdrCozumYontemOku());
+  function disHazirla() { const c = kanvas.current; c.__vpW = sfRef.current.vp.width; return { resim: pdrSoruResmi(c, cozum.bolge, 1600), istem: pdrCozumDisIstem(soru, cozum.metin) }; }
+  async function disPaylas() { try { const { resim, istem } = disHazirla(); const bl = await (await fetch("data:image/jpeg;base64," + resim)).blob(), dosya = new File([bl], `soru_${String(kitap).replace(/[^a-z0-9]/gi, "")}_${soru.ders.normalize("NFD").replace(/[^A-Za-z]/g, "").slice(0, 8)}_${soru.no}.jpg`, { type: "image/jpeg" });
+      try { await navigator.clipboard.writeText(istem); } catch (e) {}
+      if (navigator.canShare && navigator.canShare({ files: [dosya] })) { await navigator.share({ files: [dosya], text: istem }); setDisDurum("Paylaşıldı. İstem panoya da kopyalandı; uygulamada görselin yanına yapıştırın."); }
+      else { const a = document.createElement("a"); a.href = URL.createObjectURL(bl); a.download = dosya.name; document.body.appendChild(a); a.click(); a.remove(); setDisDurum("Görsel indirildi, istem panoya kopyalandı. Uygulamada görseli ekleyip istemi yapıştırın."); } }
+    catch (e) { if (!(e && e.name === "AbortError")) setDisDurum("Paylaşılamadı: " + ((e && e.message) || e)); } }
+  async function disKopyala() { try { await navigator.clipboard.writeText(disHazirla().istem); setDisDurum("İstem panoya kopyalandı."); } catch (e) { setDisDurum("Kopyalanamadı; tarayıcı izin vermedi."); } }
+  async function disKaydet() { try { const j = pdrCozumYanitCoz(disYanit); j.__model = "Dış uygulama (yapıştırıldı)"; j.__tarih = today(); setOzel(j); await pdrCozumKaydet(cozumAnahtar, j); await cozumAc(j); setDisAcik(false); setDisYanit(""); setDisDurum(""); } catch (e) { setDisDurum((e && e.message) || String(e)); } }
+  async function cozumAc(ozelVeri, zorla) { if (cozumAcik && !ozelVeri && !zorla) { setCozumAcik(false); setCozum(null); const c = cizim.current; if (c) c.getContext("2d").clearRect(0, 0, c.width, c.height); return; }
     setIsaretAcik(false); setIsaret(null);
     try { const r = await pdrSoruCozumCiz(sfRef.current.sf, sfRef.current.vp, soru, cizim.current, ozelVeri || null); setCozum(r); setCozumAcik(true);
       if (!ozelVeri) { const kay = (await pdrCozumOku())[cozumAnahtar]; if (kay) { setOzel(kay); await pdrSoruCozumCiz(sfRef.current.sf, sfRef.current.vp, soru, cizim.current, kay); } } } catch (e) { setCozum({ hata: (e && e.message) || String(e) }); setCozumAcik(true); } }
@@ -4478,14 +4516,32 @@ function KitapSayfaGosterici({ kitap, kitapAd, sayfa, aralik, ofset = 0, onKapat
                 <button data-cozum-ozel onClick={ozelIste} disabled={ozelDurum === "hazirlaniyor"} style={{ padding: "6px 10px", borderRadius: 8, border: "none", background: "#EA580C", color: "#fff", fontWeight: 800, fontSize: 12, cursor: "pointer" }}>{ozelDurum === "hazirlaniyor" ? "Hazırlanıyor…" : "🤖 Bu soruya özel adımları hazırla"}</button>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 5, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 11, fontWeight: 700 }}>Model:</span>
-                  <select data-cozum-model value={pdrAiAyarOku().secim} onChange={e => { pdrAiAyarYaz({ ...pdrAiAyarOku(), secim: e.target.value }); setOzelDurum(x => x === "" ? " " : ""); }} style={{ fontSize: 11.5, padding: "3px 5px", borderRadius: 6, border: "1px solid #FDBA74", maxWidth: 260 }}>
+                  <select data-cozum-model value={yontem.gemini ? "__gemini" : pdrAiAyarOku().secim} onChange={e => { const v = e.target.value; const y = { ...yontem, gemini: v === "__gemini" }; pdrCozumYontemYaz(y); setYontem(y); if (v !== "__gemini") pdrAiAyarYaz({ ...pdrAiAyarOku(), secim: v }); setOzelDurum(x => x === "" ? " " : ""); }} style={{ fontSize: 11.5, padding: "3px 5px", borderRadius: 6, border: "1px solid #FDBA74", maxWidth: 260 }}>
+                    <option value="__gemini">🆓 Gemini (Google) — görselli, ücretsiz kota</option>
                     {pdrAiSecenekleri().map(m => <option key={m.id} value={m.id}>{m.ad}</option>)}
                   </select>
                 </div>
-                <div style={{ fontSize: 10, color: MUTED, marginTop: 3, lineHeight: 1.45 }}>{pdrAiSecili().tur === "ucretsiz" ? "🆓 Ücretsiz model seçili: yalnız soru metni gönderilir, şekil gönderilmez (ücretsiz modeller görseli okuyamaz). Şekilli Matematik/Fen sorularında Claude daha doğru sonuç verir. Ücretsiz model yanıt veremezse ve ayarlarda yedek açıksa Claude'a geçilir." : "Sorunun metni ve görüntüsü yapay zekâya gönderilir."} Öğrenci bilgisi gönderilmez. Sonuç kaydedilir; aynı soru için bir daha istenmez. Bu seçim programın genel yapay zekâ seçimidir (üst çubuktaki 🤖 ile aynı).</div>
+                {yontem.gemini && <div data-gemini-ayar style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 4, fontSize: 10.5 }}>
+                  <input value={yontem.url || PDR_GEMINI_VARSAYILAN.url} onChange={e => { const y = { ...yontem, url: e.target.value.trim() }; setYontem(y); pdrCozumYontemYaz(y); }} style={{ flex: 2, minWidth: 180, fontSize: 10.5, padding: "3px 5px", borderRadius: 6, border: "1px solid #FDBA74" }} title="Cloudflare'deki pdr-gemini worker adresi" />
+                  <input value={yontem.model || PDR_GEMINI_VARSAYILAN.model} onChange={e => { const y = { ...yontem, model: e.target.value.trim() }; setYontem(y); pdrCozumYontemYaz(y); }} style={{ flex: 1, minWidth: 110, fontSize: 10.5, padding: "3px 5px", borderRadius: 6, border: "1px solid #FDBA74" }} title="Gemini model adı (Google değiştirirse buradan güncellenir)" />
+                </div>}
+                <div style={{ fontSize: 10, color: MUTED, marginTop: 3, lineHeight: 1.45 }}>{yontem.gemini ? "🆓 Gemini: sorunun görüntüsü ve metni Google'ın ücretsiz Gemini API'sine (Cloudflare'deki pdr-gemini worker üzerinden) gönderilir; şekilli soruları okuyabilir. Ücretsiz kotada günlük istek sınırı vardır ve Google içeriği kendi geliştirmesi için kullanabilir." : pdrAiSecili().tur === "ucretsiz" ? "🆓 Ücretsiz model seçili: yalnız soru metni gönderilir, şekil gönderilmez (ücretsiz modeller görseli okuyamaz). Şekilli Matematik/Fen sorularında Claude daha doğru sonuç verir. Ücretsiz model yanıt veremezse ve ayarlarda yedek açıksa Claude'a geçilir." : "Sorunun metni ve görüntüsü yapay zekâya gönderilir."} Öğrenci bilgisi gönderilmez. Sonuç kaydedilir; aynı soru için bir daha istenmez.{yontem.gemini ? " Gemini seçimi yalnız çözüm yolu içindir." : " Bu seçim programın genel yapay zekâ seçimidir (üst çubuktaki 🤖 ile aynı)."}</div>
                 {ozelDurum.startsWith("hata") && <div style={{ color: "#B91C1C", fontSize: 11 }}>Hazırlanamadı: {ozelDurum.slice(5)}</div>}
+                <button data-cozum-dis onClick={() => setDisAcik(a => !a)} style={{ marginTop: 6, padding: "6px 10px", borderRadius: 8, border: "1px solid #EA580C", background: "#fff", color: "#C2410C", fontWeight: 800, fontSize: 12, cursor: "pointer" }}>📋 Ücretsiz uygulamada sor (Gemini / ChatGPT / Claude) {disAcik ? "▲" : "▼"}</button>
+                {disAcik && <div data-cozum-dis-panel style={{ marginTop: 5, background: "#FFF7ED", border: "1px dashed #FDBA74", borderRadius: 8, padding: "6px 8px", fontSize: 11.5, lineHeight: 1.5 }}>
+                  <div><b>1.</b> Sorunun görselini ve hazır istemi telefonunuzdaki ücretsiz Gemini, ChatGPT ya da Claude uygulamasına gönderin:</div>
+                  <div style={{ display: "flex", gap: 5, flexWrap: "wrap", margin: "4px 0" }}>
+                    <button data-cozum-paylas onClick={disPaylas} style={{ padding: "5px 9px", borderRadius: 7, border: "none", background: "#EA580C", color: "#fff", fontWeight: 800, fontSize: 11.5, cursor: "pointer" }}>📤 Görseli paylaş + istemi kopyala</button>
+                    <button data-cozum-kopyala onClick={disKopyala} style={{ padding: "5px 9px", borderRadius: 7, border: "1px solid #FDBA74", background: "#fff", fontWeight: 700, fontSize: 11.5, cursor: "pointer" }}>📋 Yalnız istemi kopyala</button>
+                  </div>
+                  <div><b>2.</b> Uygulamanın verdiği yanıtın tamamını kopyalayıp buraya yapıştırın:</div>
+                  <textarea data-cozum-yanit value={disYanit} onChange={e => setDisYanit(e.target.value)} rows={4} placeholder="Yanıtı buraya yapıştırın…" style={{ width: "100%", boxSizing: "border-box", fontSize: 11.5, borderRadius: 7, border: "1px solid #FDBA74", padding: 5, marginTop: 3 }} />
+                  <button data-cozum-yanit-kaydet onClick={disKaydet} disabled={!disYanit.trim()} style={{ marginTop: 4, padding: "5px 10px", borderRadius: 7, border: "none", background: "#C2410C", color: "#fff", fontWeight: 800, fontSize: 11.5, cursor: "pointer" }}>✓ Kaydet ve soru üzerinde göster</button>
+                  {disDurum && <div style={{ marginTop: 3, color: "#7C2D12" }}>{disDurum}</div>}
+                  <div style={{ fontSize: 10, color: MUTED, marginTop: 3 }}>Yalnız soru gönderilir; öğrenci bilgisi yoktur. Yanıt kaydedilir, aynı soru için tekrar sormanız gerekmez.</div>
+                </div>}
               </div>}
-              {ozel && <div style={{ fontSize: 10, color: MUTED, marginTop: 4 }}>{ozel.__model ? `Hazırlayan: ${ozel.__model}${ozel.__tarih ? " · " + ozel.__tarih : ""}. ` : ""}Numaralar soru üzerinde ilgili yeri gösterir. Yapay zekâ çözümüdür; öğrenciye vermeden önce göz atın. <button onClick={async () => { setOzel(null); await pdrCozumKaydet(cozumAnahtar, null); await cozumAc(); }} style={{ background: "none", border: "none", color: "#B91C1C", fontSize: 10, cursor: "pointer", padding: 0 }}>Sil / yeniden hazırla</button></div>}
+              {ozel && <div style={{ fontSize: 10, color: MUTED, marginTop: 4 }}>{ozel.__model ? `Hazırlayan: ${ozel.__model}${ozel.__tarih ? " · " + ozel.__tarih : ""}. ` : ""}Numaralar soru üzerinde ilgili yeri gösterir. Yapay zekâ çözümüdür; öğrenciye vermeden önce göz atın. <button onClick={async () => { setOzel(null); await pdrCozumKaydet(cozumAnahtar, null); await cozumAc(null, true); }} style={{ background: "none", border: "none", color: "#B91C1C", fontSize: 10, cursor: "pointer", padding: 0 }}>Sil / yeniden hazırla</button></div>}
               {!cozum.bulundu && <div style={{ fontSize: 10.5, color: MUTED }}>Soru numarası sayfada bulunamadı; işaretler tüm sayfaya göre yapıldı.</div>}
             </>)}
           </div>)}

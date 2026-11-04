@@ -4436,9 +4436,13 @@ async function pdrCozumOzelIste(soru, metin, kanvas, bolge) {
     if (typeof pdrAsistanKalkanaEkle === "function") pdrAsistanKalkanaEkle(url);
     const content = [...(resim ? [{ type: "image", source: { type: "base64", media_type: "image/jpeg", data: resim } }] : []), { type: "text", text: pdrCozumIstem(soru, metin, !!resim) }];
     let d = null;
-    for (let deneme = 0, yogun = 0; deneme < 4; deneme++) {
-      let res; try { res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model, max_tokens: 2000, system: PDR_COZUM_SISTEM, messages: [{ role: "user", content }] }) }); }
-      catch (e) { throw new Error("Gemini sunucusuna (Cloudflare 'pdr-gemini' worker) ulaşılamadı. Worker kurulu mu?"); }
+    for (let deneme = 0, yogun = 0, bagKoptu = false; deneme < 4; deneme++) {
+      // Yeni Gemini modelleri önce "düşünür"; düşünme de yanıt sınırından yer, bu yüzden sınır geniş tutulur
+      let res; try { res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model, max_tokens: 8000, system: PDR_COZUM_SISTEM, messages: [{ role: "user", content }] }) }); }
+      catch (e) {
+        if (!bagKoptu) { bagKoptu = true; deneme--; await new Promise(ok => setTimeout(ok, 1500)); continue; }
+        throw new Error("Gemini'ye bağlantı koptu. Yanıt beklenirken ekranı kapatmayın ya da başka uygulamaya geçmeyin (telefon bekleyen isteği keser); internetinizi kontrol edip tekrar deneyin. Sorun sürerse Cloudflare'de 'pdr-gemini' worker'ının açık olduğuna bakın.");
+      }
       d = await res.json().catch(() => ({}));
       if (res.ok && !d.error) break;
       const msj = String((d.error && (d.error.message || d.error)) || `HTTP ${res.status}`);

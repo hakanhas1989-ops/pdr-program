@@ -4381,15 +4381,18 @@ let PDR_COZUM_YOLU = null;
 async function pdrCozumOku() { if (PDR_COZUM_YOLU) return PDR_COZUM_YOLU; try { const r = await window.storage.get("pdr-cozum-yolu"); PDR_COZUM_YOLU = (r && r.value && JSON.parse(r.value)) || {}; } catch (e) { PDR_COZUM_YOLU = {}; } return PDR_COZUM_YOLU; }
 async function pdrCozumKaydet(k, v) { const t = await pdrCozumOku(); t[k] = v; PDR_COZUM_YOLU = t; try { await window.storage.set("pdr-cozum-yolu", JSON.stringify(t)); } catch (e) {} }
 async function pdrCozumOzelIste(soru, metin, kanvas, bolge) {
+  const sec = pdrAiSecili(), ucretsiz = sec.tur === "ucretsiz";
   let resim = null;
-  try { const sc = kanvas.width / (kanvas.__vpW || kanvas.width); const t = document.createElement("canvas"), x0 = bolge.x0 * sc, y0 = bolge.y0 * sc, w = (bolge.x1 - bolge.x0) * sc, h = (bolge.y1 - bolge.y0) * sc, k = Math.min(1, 1400 / Math.max(w, h)); t.width = Math.max(1, w * k); t.height = Math.max(1, h * k); t.getContext("2d").drawImage(kanvas, x0, y0, w, h, 0, 0, t.width, t.height); resim = t.toDataURL("image/jpeg", 0.85).split(",")[1]; } catch (e) {}
+  if (!ucretsiz) try { const sc = kanvas.width / (kanvas.__vpW || kanvas.width); const t = document.createElement("canvas"), x0 = bolge.x0 * sc, y0 = bolge.y0 * sc, w = (bolge.x1 - bolge.x0) * sc, h = (bolge.y1 - bolge.y0) * sc, k = Math.min(1, 1400 / Math.max(w, h)); t.width = Math.max(1, w * k); t.height = Math.max(1, h * k); t.getContext("2d").drawImage(kanvas, x0, y0, w, h, 0, 0, t.width, t.height); resim = t.toDataURL("image/jpeg", 0.85).split(",")[1]; } catch (e) {}
   const sistem = "Sen 8. sınıf öğrencilerine LGS sorusu çözmeyi öğreten sabırlı bir öğretmensin. Amacın cevabı vermek değil, öğrenciye 'balık tutmayı' öğretmek: ön koşul bilgileri, soru kökünü anlama, verilenleri bulma ve adım adım akıl yürütme. Türkçe, kısa ve 8. sınıf düzeyinde yaz. SADECE JSON döndür.";
   const istem = `Ders: ${soru.ders}. Konu: ${soru.konu || "?"}. Soru ${soru.no}. Aşağıda sorunun metni (PDF'ten çıkarıldı; şekiller görüntüde) var.\n\nSORU METNİ:\n${metin.slice(0, 3500)}\n\nŞu JSON'u üret:\n{"onkosul":["bu soruyu çözmek için bilinmesi gereken 2-4 temel bilgi/beceri"],"adimlar":[{"baslik":"kısa adım adı","aciklama":"öğrencinin yapacağı işlem (1-2 cümle)","soru":"öğrencinin kendine soracağı yönlendirici soru","ipucu":"bu adımda bakılacak yer: soru metninden BİREBİR alınmış 2-5 kelimelik kısa ifade ya da boş"}],"celdirici":"en çok yapılan hata/çeldirici ve neden yanlış (1 cümle)","cevap":"doğru seçenek harfi ve tek cümlelik gerekçe"}\n4-6 adım yaz. Son adım kontrol olsun.`;
-  const content = resim ? [{ type: "image", source: { type: "base64", media_type: "image/jpeg", data: resim } }, { type: "text", text: istem }] : istem;
+  const istem2 = ucretsiz ? istem + "\nNot: Sorunun şekli/görseli sana gönderilmedi; yalnız metne göre çalış. Çözüm şekle bağlıysa ilgili adımda 'şekle bak' diyerek öğrenciyi yönlendir." : istem;
+  const content = resim ? [{ type: "image", source: { type: "base64", media_type: "image/jpeg", data: resim } }, { type: "text", text: istem2 }] : istem2;
   const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1500, system: sistem, messages: [{ role: "user", content }] }) });
   const d = await res.json(); if (d.error) throw new Error(d.error.message || d.error);
   const t = (d.content || []).map(b => b.text || "").join("").replace(/```json|```/g, ""); const i = t.indexOf("{"), j = t.lastIndexOf("}");
-  const j2 = JSON.parse(t.slice(i, j + 1)); if (!Array.isArray(j2.adimlar)) throw new Error("beklenmeyen yanıt"); return j2;
+  const j2 = JSON.parse(t.slice(i, j + 1)); if (!Array.isArray(j2.adimlar)) throw new Error("beklenmeyen yanıt");
+  j2.__model = sec.kisa + (ucretsiz ? " (ücretsiz, yalnız metin)" : ""); j2.__tarih = today(); return j2;
 }
 function KitapSayfaGosterici({ kitap, kitapAd, sayfa, aralik, ofset = 0, onKapat, onKitapYukle, soru }) {
   const [s, setS] = useState(sayfa); const [olcek, setOlcek] = useState(1); const [durum, setDurum] = useState("yukleniyor"); const [toplam, setToplam] = useState(0);
@@ -4473,10 +4476,16 @@ function KitapSayfaGosterici({ kitap, kitapAd, sayfa, aralik, ofset = 0, onKapat
               {ozel && ozel.cevap && <div style={{ marginTop: 4 }}>{cevapGoster ? <span><b>✅ Cevap:</b> {ozel.cevap}</span> : <button data-cozum-cevap onClick={() => setCevapGoster(true)} style={{ padding: "4px 9px", borderRadius: 7, border: "1px solid #FDBA74", background: "#FFF7ED", cursor: "pointer", fontSize: 11.5, fontWeight: 700 }}>Önce kendin dene — cevabı göster</button>}</div>}
               {!ozel && <div style={{ marginTop: 6 }}>
                 <button data-cozum-ozel onClick={ozelIste} disabled={ozelDurum === "hazirlaniyor"} style={{ padding: "6px 10px", borderRadius: 8, border: "none", background: "#EA580C", color: "#fff", fontWeight: 800, fontSize: 12, cursor: "pointer" }}>{ozelDurum === "hazirlaniyor" ? "Hazırlanıyor…" : "🤖 Bu soruya özel adımları hazırla"}</button>
-                <div style={{ fontSize: 10, color: MUTED, marginTop: 3 }}>Sorunun metni ve görüntüsü yapay zekâya gönderilir (öğrenci bilgisi gönderilmez). Sonuç kaydedilir; aynı soru için bir daha istenmez.</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 5, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 11, fontWeight: 700 }}>Model:</span>
+                  <select data-cozum-model value={pdrAiAyarOku().secim} onChange={e => { pdrAiAyarYaz({ ...pdrAiAyarOku(), secim: e.target.value }); setOzelDurum(x => x === "" ? " " : ""); }} style={{ fontSize: 11.5, padding: "3px 5px", borderRadius: 6, border: "1px solid #FDBA74", maxWidth: 260 }}>
+                    {pdrAiSecenekleri().map(m => <option key={m.id} value={m.id}>{m.ad}</option>)}
+                  </select>
+                </div>
+                <div style={{ fontSize: 10, color: MUTED, marginTop: 3, lineHeight: 1.45 }}>{pdrAiSecili().tur === "ucretsiz" ? "🆓 Ücretsiz model seçili: yalnız soru metni gönderilir, şekil gönderilmez (ücretsiz modeller görseli okuyamaz). Şekilli Matematik/Fen sorularında Claude daha doğru sonuç verir. Ücretsiz model yanıt veremezse ve ayarlarda yedek açıksa Claude'a geçilir." : "Sorunun metni ve görüntüsü yapay zekâya gönderilir."} Öğrenci bilgisi gönderilmez. Sonuç kaydedilir; aynı soru için bir daha istenmez. Bu seçim programın genel yapay zekâ seçimidir (üst çubuktaki 🤖 ile aynı).</div>
                 {ozelDurum.startsWith("hata") && <div style={{ color: "#B91C1C", fontSize: 11 }}>Hazırlanamadı: {ozelDurum.slice(5)}</div>}
               </div>}
-              {ozel && <div style={{ fontSize: 10, color: MUTED, marginTop: 4 }}>Numaralar soru üzerinde ilgili yeri gösterir. Yapay zekâ çözümüdür; öğrenciye vermeden önce göz atın. <button onClick={async () => { setOzel(null); await pdrCozumKaydet(cozumAnahtar, null); await cozumAc(); }} style={{ background: "none", border: "none", color: "#B91C1C", fontSize: 10, cursor: "pointer", padding: 0 }}>Sil / yeniden hazırla</button></div>}
+              {ozel && <div style={{ fontSize: 10, color: MUTED, marginTop: 4 }}>{ozel.__model ? `Hazırlayan: ${ozel.__model}${ozel.__tarih ? " · " + ozel.__tarih : ""}. ` : ""}Numaralar soru üzerinde ilgili yeri gösterir. Yapay zekâ çözümüdür; öğrenciye vermeden önce göz atın. <button onClick={async () => { setOzel(null); await pdrCozumKaydet(cozumAnahtar, null); await cozumAc(); }} style={{ background: "none", border: "none", color: "#B91C1C", fontSize: 10, cursor: "pointer", padding: 0 }}>Sil / yeniden hazırla</button></div>}
               {!cozum.bulundu && <div style={{ fontSize: 10.5, color: MUTED }}>Soru numarası sayfada bulunamadı; işaretler tüm sayfaya göre yapıldı.</div>}
             </>)}
           </div>)}

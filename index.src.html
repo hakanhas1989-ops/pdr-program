@@ -4253,10 +4253,74 @@ async function pdrKitapBelge(k) {
   const belge = await lib.getDocument({ range: tr, length: blob.size, disableAutoFetch: true, disableStream: true, rangeChunkSize: 262144 }).promise;
   PDR_KITAP_BELGE[k] = belge; return belge;
 }
-function KitapSayfaGosterici({ kitap, kitapAd, sayfa, aralik, ofset = 0, onKapat, onKitapYukle }) {
+// ── Soru üzerinde beceri işaretleme (soru metni cihazdaki PDF'ten okunur; programa kaydedilmez) ──
+const BECERI_IPUCU = {
+  dikkat: { renk: "#DC2626", re: /değildir|değil\b|yoktur|ulaşılamaz|söylenemez|yanlış(tır)?|olamaz|getirilemez|desteklemez|gösteremez|kullanılmamıştır|ilişkilendirilemez|uyuşmamaktadır|uyuşmaz|çelişir|çelişmektedir|örtüşmez|beklenemez|yapılamaz|çıkarılamaz|değinilmemiştir|bahsedilmemiştir|dışarıda kalır|dışta kalır|bozmaktadır|kesinlikle|sırasıyla|\bNOT\b|CANNOT|\bnot\b/gi },
+  cik: { renk: "#7C3AED", re: /Buna göre|düşüncenin akışın\w*|anlam akışın\w*|kattığı anlam|gönderme|bilgilere göre|metne göre|metinden|ulaşılabilir|çıkarılabilir|söylenebilir|anlaşılır|yorum(u|lar)?|çıkarım|According to|it is understood|can be inferred/gi },
+  ok: { renk: "#0369A1", re: /Bu metinde|Bu parçada|Bu metin|metnin|parçanın|paragraf|asıl anlatılmak istenen|ana düşünce|konusu|dizelerde|şiirde|conversation|dialogue|text above|Read the/gi },
+  gorsel: { renk: "#0D9488", re: /[Gg]rafi[kğ]\w*|[Tt]ablo\w*|[Şş]ekil\s?\w*|[Gg]örsel\s?\d?\w*|[Şş]ema\w*|[Hh]arita\w*|[Dd]iyagram\w*|sayı doğrusu|koordinat|\bchart\b|\btable\b|\bgraph\b|timetable|planner/g },
+  muh: { renk: "#B45309", re: /hangileri\w*|\bI\.|\bII\.|\bIII\.|\bIV\.|olabilir|kaç farklı|en az|en fazla|en büyük|en küçük|eşittir|olduğuna göre|ise\b/g },
+  prob: { renk: "#C2410C", re: /en az|en fazla|kaç\s\w+|toplam\w*|kalan\w*|\d+\s?(cm|m|km|kg|g|L|mL|TL|dakika|saat|saniye|adet|m2|cm2|cm3|dm)\b/g },
+  temsil: { renk: "#9333EA", re: /cebirsel ifade\w*|denklem\w*|eşitsizli\w*|özdeş\w*|\bx\b|\by\b|eğim\w*|doğrusal/g },
+  uzam: { renk: "#2563EB", re: /katlan\w*|kesil\w*|açınım\w*|yansıma\w*|ötele\w*|döndür\w*|üstten|önden|görünüm\w*|çakış\w*|üst üste|yerleştiril\w*|dik\b|üçgen\w*|kare\w*|dikdörtgen\w*/g },
+  bsb: { renk: "#047857", re: /deney\w*|değişken\w*|hipotez\w*|düzenek\w*|gözlem\w*|ölçül\w*|bağımlı|bağımsız|kontrol\w*|sabit tutul\w*|etkinlik\w*|özdeş/g },
+  neden: { renk: "#BE185D", re: /neden\w*|sonuc\w*|sonucu\w*|çünkü|bu yüzden|bu nedenle|etkisi\w*|amacıyla|sebep\w*|yol açmış|sağlamış|için\b/g },
+  kron: { renk: "#92400E", re: /\b1[89]\d\d\b|\b20\d\d\b|önce\w*|sonra\w*|dönem\w*|yüzyıl\w*|ardından|sırasıyla/g },
+  kanit: { renk: "#4338CA", re: /kanıt\w*|kanıtlanabilir|nesnel|öznel|belge\w*|gösterebilir|gösteremez/g },
+  kavram: { renk: "#15803D", re: /“[^”]{2,40}”|"[^"]{2,40}"|kavram\w*|tanım\w*|denir|adı verilir/g },
+  soz: { renk: "#A16207", re: /sözcü\w*|kelime\w*|anlam\w*|deyim\w*|atasöz\w*|altı çizili|meaning|\bword\w*/gi },
+  dil: { renk: "#6D28D9", re: /fiilimsi\w*|isim-fiil|sıfat-fiil|zarf-fiil|öge\w*|özne\w*|yüklem\w*|nesne\w*|tümleç\w*|tamlayıcı\w*|çatı\w*|virgül\w*|noktalama\w*|yazım\w*|cümle türü|kesme işareti/gi },
+  transfer: { renk: "#0E7490", re: /günlük|durumlardan|örnek\w*|uygulama\w*|davranış\w*|hangisi bu|ilişkilendiril\w*/gi },
+  harita: { renk: "#0F766E", re: /harita\w*|cephe\w*|\bmap\b/gi },
+};
+const BECERI_ADIM = {
+  dikkat: "Soru kökündeki olumsuz/kısıtlayıcı ifadeyi (kırmızı) daire içine al; seçenekleri buna göre ele.",
+  ok: "Metni/diyaloğu baştan sona bir kez oku; her paragrafın ne anlattığını kenara 2-3 kelimeyle yaz.",
+  cik: "\"Buna göre\" kalıbı: cevap metinde açıkça yazmayabilir. Her seçeneği metne götür, dayanağı olmayanı ele.",
+  gorsel: "Görsel/tablo/grafikte önce başlığı, eksenleri ve birimleri oku; soruda istenen değeri görselden işaretle.",
+  muh: "Öncülleri (I, II, III) ya da koşulları tek tek dene; her birini 'doğru/yanlış' diye işaretleyip sonra seçeneğe geç.",
+  prob: "Verilenleri ve isteneni ayrı yaz; birimleri kontrol et; işlemi adım adım yap ve sonucu soruya geri koy.",
+  temsil: "Bilinmeyene harf ver, cümleyi ifadeye/denkleme çevir; gerekiyorsa tablo ya da grafikle göster.",
+  uzam: "Şekli kâğıda çiz; katlama/kesme/yerleştirmeyi adım adım canlandır, bilinen uzunlukları şeklin üzerine yaz.",
+  bsb: "Deneyde neyin değiştirildiğini (bağımsız), neyin ölçüldüğünü (bağımlı) ve neyin sabit tutulduğunu belirle.",
+  neden: "Olayın nedenini ve sonucunu ayır; soru kökü 'neden' mi 'sonuç' mu soruyor, işaretle.",
+  kron: "Olayları zaman sırasına koy; tarihleri ve 'önce/sonra' ifadelerini zaman şeridine yerleştir.",
+  kanit: "Hangi ifade kanıtlanabilir bilgi, hangisi kişisel görüş? Kaynağı ve kanıt ilişkisini kontrol et.",
+  kavram: "Tırnak içindeki ya da tanımı verilen kavramı kendi cümlenle açıkla; benzer kavramlarla karıştırma.",
+  soz: "Altı çizili sözcüğün bu cümledeki anlamını bağlamdan çıkar; yerine eş anlamlısını koyarak dene.",
+  dil: "İlgili dil bilgisi kuralını hatırla ve numaralı her cümlede tek tek uygula.",
+  transfer: "Bilgiyi verilen günlük duruma uygula: 'Bu kural/kavram bu örnekte nasıl görünür?' diye sor.",
+  harita: "Haritada lejantı oku; yerleri ve yönleri olaylarla eşleştir.",
+};
+async function pdrSoruBeceriIsaretle(sf, vp, soru, cizimKanvas) {
+  const tc = await sf.getTextContent(), lib = window.pdfjsLib, W = vp.width, H = vp.height;
+  const ogeler = tc.items.filter(it => it.str && it.str.trim()).map(it => { const t = lib.Util.transform(vp.transform, it.transform), h = Math.hypot(t[2], t[3]) || 10; return { str: it.str, x: t[4], y: t[5] - h, w: (it.width || 0) * vp.scale, h }; });
+  // Sorunun bölgesi: "N." numarası ve aynı sütundaki bir sonraki soru numarası
+  const noRe = (n) => new RegExp("^\\s*" + n + "\\.\\s*($|\\S)");
+  const yonerge = (o) => /Bu testte|Cevaplarınızı|DENEME|soru vardır/.test(o.str);
+  const adaylar = ogeler.filter(o => noRe(soru.no).test(o.str) && !yonerge(o) && (o.x < W * 0.2 || (o.x > W * 0.45 && o.x < W * 0.62)));
+  let bolge = { x0: 0, x1: W, y0: 0, y1: H };
+  if (adaylar.length) { const a = adaylar.sort((p, q) => p.y - q.y)[0], sol = a.x < W * 0.4, x0 = sol ? 0 : W * 0.48, x1 = sol ? W * 0.52 : W;
+    const sonraki = ogeler.filter(o => /^\s*\d{1,2}\.\s*($|\S)/.test(o.str) && !yonerge(o) && o.y > a.y + 5 && (sol ? o.x < W * 0.2 : (o.x > W * 0.45 && o.x < W * 0.62)) && +o.str.trim().split(".")[0] === soru.no + 1).sort((p, q) => p.y - q.y)[0];
+    bolge = { x0, x1, y0: a.y - 4, y1: sonraki ? sonraki.y - 4 : H };
+    // Sütunun tamamına yayılan (tam genişlik) sorular için: bölgede karşı sütunda numara yoksa genişlet
+    if (!ogeler.some(o => /^\s*\d{1,2}\.\s*($|\S)/.test(o.str) && o.y > bolge.y0 && o.y < bolge.y1 && (sol ? (o.x > W * 0.45 && o.x < W * 0.62) : o.x < W * 0.2)) && ogeler.some(o => o.y > bolge.y0 && o.y < bolge.y1 && (sol ? o.x > W * 0.55 : o.x < W * 0.4))) { bolge.x0 = 0; bolge.x1 = W; } }
+  const icinde = ogeler.filter(o => o.x + o.w > bolge.x0 && o.x < bolge.x1 && o.y + o.h > bolge.y0 && o.y < bolge.y1);
+  const istenen = [...new Set([...(soru.bec || []), ...(soru.olumsuz ? ["dikkat"] : [])])].filter(id => BECERI_IPUCU[id]);
+  const bulunan = Object.fromEntries(istenen.map(id => [id, []])), kutular = [];
+  icinde.forEach(o => { istenen.forEach(id => { const R = new RegExp(BECERI_IPUCU[id].re.source, BECERI_IPUCU[id].re.flags); let m; while ((m = R.exec(o.str))) { if (!m[0].trim()) { R.lastIndex++; continue; } const cw = o.w / Math.max(1, o.str.length); kutular.push({ id, x: o.x + m.index * cw, y: o.y, w: m[0].length * cw, h: o.h }); if (bulunan[id].length < 8 && !bulunan[id].includes(m[0].trim())) bulunan[id].push(m[0].trim()); } }); });
+  const c = cizimKanvas; c.width = Math.floor(W); c.height = Math.floor(H); const cx = c.getContext("2d"); cx.clearRect(0, 0, W, H);
+  cx.fillStyle = "rgba(15,23,42,0.35)"; cx.fillRect(0, 0, W, H); cx.clearRect(bolge.x0, bolge.y0, bolge.x1 - bolge.x0, bolge.y1 - bolge.y0);
+  const kat = Object.fromEntries(istenen.map((id, i) => [id, i]));
+  kutular.forEach(k => { const r = BECERI_IPUCU[k.id].renk, off = (kat[k.id] % 3) * Math.max(2, k.h * 0.12); cx.fillStyle = r + "22"; cx.fillRect(k.x, k.y, k.w, k.h * 1.1); cx.fillStyle = r; cx.fillRect(k.x, k.y + k.h * 1.12 + off, k.w, Math.max(2, k.h * 0.13)); });
+  return { istenen, bulunan, bolgeBulundu: adaylar.length > 0 };
+}
+function KitapSayfaGosterici({ kitap, kitapAd, sayfa, aralik, ofset = 0, onKapat, onKitapYukle, soru }) {
   const [s, setS] = useState(sayfa); const [olcek, setOlcek] = useState(1); const [durum, setDurum] = useState("yukleniyor"); const [toplam, setToplam] = useState(0);
-  const kanvas = useRef(null);
+  const kanvas = useRef(null), cizim = useRef(null), sfRef = useRef(null), [isaret, setIsaret] = useState(null), [isaretAcik, setIsaretAcik] = useState(false);
   useEffect(() => { setS(sayfa); }, [sayfa]);
+  async function isaretle() { if (isaretAcik) { setIsaretAcik(false); setIsaret(null); const c = cizim.current; if (c) c.getContext("2d").clearRect(0, 0, c.width, c.height); return; }
+    try { const r = await pdrSoruBeceriIsaretle(sfRef.current.sf, sfRef.current.vp, soru, cizim.current); setIsaret(r); setIsaretAcik(true); } catch (e) { setIsaret({ hata: (e && e.message) || String(e) }); setIsaretAcik(true); } }
   useEffect(() => {
     let iptal = false;
     (async () => {
@@ -4279,7 +4343,8 @@ function KitapSayfaGosterici({ kitap, kitapAd, sayfa, aralik, ofset = 0, onKapat
         c.width = Math.floor(vp.width); c.height = Math.floor(vp.height); c.style.width = gen + "px"; c.style.height = (gen * vp.height / vp.width) + "px";
         const cx = c.getContext("2d", { alpha: false }); cx.fillStyle = "#fff"; cx.fillRect(0, 0, c.width, c.height); cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = "high";
         await sf.render({ canvasContext: cx, viewport: vp, intent: "print" }).promise;
-        if (!iptal) setDurum("hazir");
+        sfRef.current = { sf, vp }; const cz = cizim.current; if (cz) { cz.width = c.width; cz.height = c.height; cz.style.width = c.style.width; cz.style.height = c.style.height; cz.getContext("2d").clearRect(0, 0, cz.width, cz.height); }
+        if (!iptal) { setDurum("hazir"); setIsaret(null); setIsaretAcik(false); }
       } catch (e) { if (!iptal) setDurum("hata:" + ((e && e.message) || e)); }
     })();
     return () => { iptal = true; };
@@ -4295,13 +4360,31 @@ function KitapSayfaGosterici({ kitap, kitapAd, sayfa, aralik, ofset = 0, onKapat
         <button onClick={() => setOlcek(x => Math.max(1, x - 0.5))} style={btn}>−</button>
         <button data-kitap-buyut="1" onClick={() => setOlcek(x => Math.min(4, x + 0.5))} style={btn}>+</button>
         <button onClick={yazdir} disabled={durum !== "hazir"} style={btn}>🖨</button>
+        {soru && s === sayfa && <button data-beceri-isaretle="1" onClick={isaretle} disabled={durum !== "hazir"} style={{ ...btn, background: isaretAcik ? "#FDE68A" : "#FEF3C7" }}>🔍 Beceriler</button>}
         <button data-kitap-kapat="1" onClick={onKapat} style={{ ...btn, background: "#FEE2E2" }}>✕</button>
       </div>
       <div style={{ flex: 1, overflow: "auto", padding: 12, textAlign: "center" }}>
         {durum === "yukleniyor" && <div style={{ color: "#CBD5E1", fontSize: 13, marginTop: 30 }}>Sayfa hazırlanıyor…</div>}
         {durum === "yok" && <div style={{ color: "#fff", fontSize: 13.5, marginTop: 30, lineHeight: 1.6 }}>Bu kitabın PDF'i bu cihazda yüklü değil.<br /><label style={{ display: "inline-block", marginTop: 10, padding: "9px 14px", background: "#fff", color: "#0F172A", borderRadius: 9, fontWeight: 800, cursor: "pointer" }}>📂 {kitapAd} PDF'ini seç<input type="file" accept="application/pdf,.pdf" onChange={e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) onKitapYukle(kitap, f).then(() => { delete PDR_KITAP_BELGE[kitap]; setS(x => x); setOlcek(x => x + 0.0001); }); }} style={{ display: "none" }} /></label></div>}
         {durum.startsWith("hata") && <div style={{ color: "#FCA5A5", fontSize: 13, marginTop: 30 }}>Sayfa açılamadı ({durum.slice(5)}).</div>}
-        <canvas ref={kanvas} style={{ display: durum === "hazir" ? "inline-block" : "none", background: "#fff", boxShadow: "0 4px 18px rgba(0,0,0,0.4)" }} />
+        {isaretAcik && isaret && (
+          <div data-beceri-aciklama="1" style={{ textAlign: "left", background: "#fff", borderRadius: 10, padding: "8px 10px", margin: "0 auto 8px", maxWidth: 900, fontSize: 12, lineHeight: 1.5 }}>
+            {isaret.hata ? <span style={{ color: "#B91C1C" }}>Metin okunamadı ({isaret.hata}). Bu PDF taranmış görüntü olabilir.</span> : (<>
+              <div style={{ fontWeight: 900, color: "#0F172A", marginBottom: 3 }}>🔍 {soru.ders} {soru.no}. soru — bu soru şu becerileri ölçüyor{soru.zorluk ? <span style={{ fontWeight: 700, color: LGS_ZORLUK_RENK[soru.zorluk] }}> · {LGS_ZORLUK_AD[soru.zorluk]}</span> : null}</div>
+              {!isaret.bolgeBulundu && <div style={{ fontSize: 10.5, color: MUTED }}>Soru numarası sayfada bulunamadı; işaretler tüm sayfaya uygulandı.</div>}
+              {isaret.istenen.map((id, i) => (
+                <div key={id} data-beceri-ipucu={id} style={{ borderLeft: `4px solid ${BECERI_IPUCU[id].renk}`, paddingLeft: 7, margin: "5px 0" }}>
+                  <b style={{ color: BECERI_IPUCU[id].renk }}>{LGS_BECERI[id] ? LGS_BECERI[id][1] : id}</b>
+                  <div>{isaret.bulunan[id].length ? <>İşaretli ifadeler: {isaret.bulunan[id].map((x, j) => <span key={j} style={{ borderBottom: `3px solid ${BECERI_IPUCU[id].renk}`, background: BECERI_IPUCU[id].renk + "18", margin: "0 3px", padding: "0 2px" }}>{x}</span>)}</> : <span style={{ color: MUTED }}>Belirgin bir ifade yok; bu beceri sorunun bütününde (kurgusunda) aranıyor.</span>}</div>
+                  <div style={{ color: "#334155" }}><b>Çözüm adımı {i + 1}:</b> {BECERI_ADIM[id]}</div>
+                </div>))}
+              <div style={{ fontSize: 10, color: MUTED }}>İşaretler, sorunun cihazınızdaki PDF metninden program tarafından bulunur; soru metni hiçbir yere gönderilmez. Konu-beceri analizi bir yorumdur.</div>
+            </>)}
+          </div>)}
+        <div style={{ position: "relative", display: durum === "hazir" ? "inline-block" : "none" }}>
+          <canvas ref={kanvas} style={{ display: "block", background: "#fff", boxShadow: "0 4px 18px rgba(0,0,0,0.4)" }} />
+          <canvas ref={cizim} data-beceri-cizim="1" style={{ position: "absolute", left: 0, top: 0, pointerEvents: "none" }} />
+        </div>
       </div>
     </div>
   );
@@ -38330,11 +38413,45 @@ function LgsGecmisPaneli({ seciliAd, ogrAnahtar, onSayfaAc }) {
     </div>
   );
 }
+// MEBİ zorluk grafiği: her deneme için kolay/orta/zor/çok zor yüzdeleri (yığılmış çubuk) + benzerlik çizgisi; karşılaştırma için gerçek LGS'ler
+function MebiZorlukGrafik() {
+  const [ders, setDers] = useState("Tümü"), [oturum, setOturum] = useState("hepsi");
+  const veri = useMemo(() => {
+    const sec = (q) => (ders === "Tümü" || q.ders === ders) && (oturum === "hepsi" || q.oturum === oturum) && q.zorluk;
+    const grup = (kaynak) => { const G = {}; lgsSorular().filter(q => q.kaynak === kaynak && sec(q)).forEach(q => { const anahtar = kaynak === "mebi" ? q.kitapcik.slice(1, 6) : String(q.yil); const g = G[anahtar] = G[anahtar] || { z: [0, 0, 0, 0, 0], n: 0, ot: 0, os: 0, q }; g.z[q.zorluk]++; g.n++; if (q.oran != null) { g.ot += q.oran; g.os++; } }); return Object.entries(G).sort((a, b) => a[0].localeCompare(b[0])); };
+    return { mebi: grup("mebi"), lgs: grup("lgs") };
+  }, [ders, oturum]);
+  const satirlar = [...veri.lgs.map(([k, g]) => ({ etiket: `LGS ${k}`, g, lgs: true })), ...veri.mebi.map(([k, g]) => ({ etiket: `${k[4]}. ${LGS_AY_AD[+k.slice(2, 4)].slice(0, 3)} ${k.slice(0, 2)}`, g, lgs: false }))];
+  const sol = 74, gen = 300, sh = 18, H = satirlar.length * (sh + 6) + 36, sel = { padding: "4px 6px", borderRadius: 7, border: "1px solid #93C5FD", fontSize: 11.5 };
+  return (
+    <div data-testid="mebi-grafik" style={{ background: "#fff", border: "1px solid #BFDBFE", borderRadius: 10, padding: "8px", marginBottom: 8 }}>
+      <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginBottom: 4 }}>
+        <b style={{ fontSize: 12, color: "#1E3A8A", flex: 1 }}>📊 Zorluk grafiği</b>
+        <select data-testid="mebi-grafik-ders" value={ders} onChange={e => setDers(e.target.value)} style={sel}>{["Tümü", "Türkçe", "Matematik", "Fen Bilimleri", "İnkılap Tarihi", "Din Kültürü", "İngilizce"].map(d => <option key={d}>{d}</option>)}</select>
+        <select value={oturum} onChange={e => setOturum(e.target.value)} style={sel}><option value="hepsi">Sayısal + Sözel</option><option value="say">Sayısal</option><option value="soz">Sözel</option></select>
+      </div>
+      <svg viewBox={`0 0 ${sol + gen + 46} ${H}`} style={{ width: "100%", maxWidth: 520, display: "block" }} role="img" aria-label="Deneme ve LGS'lere göre soru zorluk dağılımı">
+        {[0, 25, 50, 75, 100].map(t => <g key={t}><line x1={sol + gen * t / 100} x2={sol + gen * t / 100} y1={14} y2={H - 18} stroke="#E2E8F0" /><text x={sol + gen * t / 100} y={10} fontSize="8" textAnchor="middle" fill="#64748B">%{t}</text></g>)}
+        {satirlar.map((r, i) => { const y = 16 + i * (sh + 6); let x = sol; return (
+          <g key={r.etiket}>
+            <text x={sol - 4} y={y + sh * 0.7} fontSize="9" textAnchor="end" fill={r.lgs ? "#7C2D12" : "#1E3A8A"} fontWeight={r.lgs ? 700 : 500}>{r.etiket}</text>
+            {[1, 2, 3, 4].map(z => { const w = gen * r.g.z[z] / r.g.n, el = <rect key={z} x={x} y={y} width={w} height={sh} fill={LGS_ZORLUK_RENK[z]} opacity={r.lgs ? 0.75 : 1}><title>{`${r.etiket} · ${LGS_ZORLUK_AD[z]}: %${Math.round(100 * r.g.z[z] / r.g.n)} (${r.g.z[z]}/${r.g.n} soru)`}</title></rect>; x += w; return el; })}
+            <text x={sol + gen + 4} y={y + sh * 0.7} fontSize="8.5" fill="#334155">{`%${Math.round(100 * (r.g.z[3] + r.g.z[4]) / r.g.n)} zor`}</text>
+            {!r.lgs && r.g.os > 0 && <text x={sol + gen + 4} y={y + sh * 0.7 + 8} fontSize="7.5" fill="#1D4ED8">{`%${Math.round(r.g.ot / r.g.os)} benzer`}</text>}
+            {i === veri.lgs.length - 1 && <line x1={4} x2={sol + gen + 44} y1={y + sh + 3} y2={y + sh + 3} stroke="#94A3B8" strokeDasharray="3 2" />}
+          </g>); })}
+        {[1, 2, 3, 4].map((z, i) => <g key={z}><rect x={sol + i * 70} y={H - 12} width={9} height={9} fill={LGS_ZORLUK_RENK[z]} /><text x={sol + i * 70 + 12} y={H - 4.5} fontSize="8.5" fill="#334155">{LGS_ZORLUK_AD[z]}</text></g>)}
+      </svg>
+      <div style={{ fontSize: 10, color: MUTED, lineHeight: 1.4 }}>Üstte gerçek LGS'ler (2023 yalnız 1. dönem), altta MEBİ denemeleri sırayla. Sağdaki sayı zor + çok zor soru oranı; mavi sayı denemenin LGS'ye ortalama benzerliği. Yeni denemeler eklendikçe grafik kendiliğinden uzar.</div>
+    </div>
+  );
+}
 // MEBİ denemeleri: deneme ve ders bazında 2026 LGS'ye benzerlik ve zorluk; soru soru en benzer LGS sorusu
 function LgsMebiListesi({ onSayfaAc }) {
   const [acik, setAcik] = useState(null), kitapciklar = lgsKitapciklar("mebi"), lgs26 = useMemo(() => lgsSoruIstatistik("lgs", "26say"), []), lgs26s = useMemo(() => lgsSoruIstatistik("lgs", "26soz"), []);
   if (!kitapciklar.length) return <div data-testid="mebi-bos" style={{ fontSize: 11.5, color: "#1E3A8A", background: "#EFF6FF", borderRadius: 9, padding: "8px 10px", lineHeight: 1.45 }}>Henüz MEBİ denemesi eklenmedi. Deneme kitapçıklarını (ay bilgisiyle) gönderdiğinizde her soru konu, beceri ve zorluk bakımından incelenip gerçek LGS sorularıyla karşılaştırılacak; her sorunun yanında en çok benzediği LGS sorusu ve benzerlik yüzdesi görünecek.</div>;
   return (<div data-testid="mebi-liste">
+    <MebiZorlukGrafik />
     <div style={{ fontSize: 10.5, color: "#1E3A8A", marginBottom: 5, lineHeight: 1.45 }}>Benzerlik (0–100): her MEBİ sorusu aynı dersteki 450 gerçek LGS sorusuyla (2022–2026; eşitlikte 2026 öncelikli) tek tek karşılaştırıldı ve en benzeyeni seçildi. Puan: konu aynı mı (30) + soru kurgusu: öncüllü yapı, soru kökü, görsel, metin uzunluğu (25) + zorluk yakınlığı (15) + metin ve bağlam benzerliği (30). Zorluk, LGS sorularıyla aynı ölçütlerle ve LGS'deki sınırlara göre belirlendi. MEB'in resmî bir puanı değildir.</div>
     <div data-testid="mebi-trend" style={{ fontSize: 11, background: "#EFF6FF", borderRadius: 8, padding: "5px 8px", marginBottom: 6, lineHeight: 1.5 }}>{(() => { const l = kitapciklar.map(k => { const S = lgsSoruIstatistik("mebi", k); let t = 0, n = 0, z = 0, a = 0; Object.values(S.ders).forEach(x => { t += x.oranTop; n += x.oranSay; z += x.zor[3] + x.zor[4]; a += x.sayi; }); return { k, o: n ? Math.round(t / n) : 0, zor: a ? Math.round(100 * z / a) : 0 }; }); const L26 = (() => { let z = 0, a = 0; ["26say", "26soz"].forEach(k => Object.values(lgsSoruIstatistik("lgs", k).ders).forEach(x => { z += x.zor[3] + x.zor[4]; a += x.sayi; })); return a ? Math.round(100 * z / a) : 0; })();
       return <><b>Denemelere göre:</b> {[...l].reverse().map(x => <span key={x.k} style={{ display: "block" }}>{x.k[5]}. deneme ({LGS_AY_AD[+x.k.slice(3, 5)]}) {x.k.slice(-3) === "say" ? "sayısal" : "sözel"}: %{x.o} benzer · zor+çok zor %{x.zor}</span>)}<br /><span style={{ color: MUTED }}>2026 LGS'de zor+çok zor oranı: %{L26}</span></>; })()}</div>
@@ -38344,9 +38461,9 @@ function LgsMebiListesi({ onSayfaAc }) {
         {Object.entries(S.ders).map(([d, x]) => <div key={d} style={{ fontSize: 11, lineHeight: 1.45 }}>{d}: <b>LGS'ye benzerlik %{x.oranSay ? Math.round(x.oranTop / x.oranSay) : "—"}</b> · zorluk<LgsZorlukCubuk z={x.zor} sayi={x.sayi} /> <span style={{ color: MUTED }}>(2026 LGS<LgsZorlukCubuk z={(ref.ders[d] || {}).zor || [0, 0, 0, 0, 0]} sayi={(ref.ders[d] || {}).sayi || 1} />)</span></div>)}
         {ac && <div style={{ marginTop: 4 }}>{lgsSorular().filter(q => q.kitapcik === k).map(q => { const b = lgsSoruBul(q.benzer)[0]; return (
           <div key={q.ders + q.no} data-mebi-satir={q.ders + "_" + q.no} style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 11, padding: "2px 0", borderBottom: "1px solid #EFF6FF" }}>
-            <span onClick={() => onSayfaAc && onSayfaAc(k, q.sayfa)} style={{ width: 70, flexShrink: 0, cursor: "pointer", textDecoration: "underline" }}>{q.ders.split(" ")[0]} {q.no}</span>
+            <span onClick={() => onSayfaAc && onSayfaAc(k, q.sayfa, q)} style={{ width: 70, flexShrink: 0, cursor: "pointer", textDecoration: "underline" }}>{q.ders.split(" ")[0]} {q.no}</span>
             <span style={{ flex: 1, minWidth: 0 }}>{q.konu || "—"} <span style={{ color: LGS_ZORLUK_RENK[q.zorluk], fontWeight: 700 }}>· {LGS_ZORLUK_AD[q.zorluk]}</span></span>
-            {b ? <button onClick={() => onSayfaAc && onSayfaAc(b.kitapcik, b.sayfa)} style={{ fontSize: 10, padding: "1px 6px", borderRadius: 6, border: "1px solid #93C5FD", background: "#fff", color: "#1D4ED8", cursor: "pointer", flexShrink: 0 }}>≈ {b.yil} LGS {b.no} · %{q.oran}</button> : <span style={{ fontSize: 10, color: MUTED }}>{q.oran != null ? `%${q.oran}` : ""}</span>}
+            {b ? <button onClick={() => onSayfaAc && onSayfaAc(b.kitapcik, b.sayfa, b)} style={{ fontSize: 10, padding: "1px 6px", borderRadius: 6, border: "1px solid #93C5FD", background: "#fff", color: "#1D4ED8", cursor: "pointer", flexShrink: 0 }}>≈ {b.yil} LGS {b.no} · %{q.oran}</button> : <span style={{ fontSize: 10, color: MUTED }}>{q.oran != null ? `%${q.oran}` : ""}</span>}
           </div>); })}</div>}
       </div>); })}
   </div>);
@@ -38359,12 +38476,12 @@ function LgsKonuGecmisSatiri({ ders, konu, onSayfaAc }) {
     <div data-konu-gecmis style={{ marginTop: 3 }}>
       {g && <>
       <button onClick={() => setAcik(a => !a)} style={{ background: "none", border: "none", color: "#9A3412", fontSize: 11, fontWeight: 700, cursor: "pointer", padding: 0 }}>📝 2022–2026 LGS'de {g.sorular.length} soru · en çok: {lgsSirala(g.beceri, 2).map(([b, n]) => `${LGS_BECERI[b] ? LGS_BECERI[b][0] : b} (${n})`).join(", ")} {acik ? "▲" : "▼"}</button>
-      {acik && <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: 3 }}>{g.sorular.map(q => <button key={q.kitapcik + q.no} data-gecmis-soru={q.kitapcik + "_" + q.no} title={q.bec.map(b => LGS_BECERI[b] ? LGS_BECERI[b][0] : b).join(", ")} onClick={() => onSayfaAc && onSayfaAc(q.kitapcik, q.sayfa)} style={{ fontSize: 10, padding: "2px 6px", borderRadius: 6, border: `1px solid ${LGS_ZORLUK_RENK[q.zorluk]}`, borderLeft: `4px solid ${LGS_ZORLUK_RENK[q.zorluk]}`, background: "#fff", color: "#7C2D12", cursor: "pointer" }}>{q.yil} · {q.no}. soru · {LGS_ZORLUK_AD[q.zorluk]}{q.gorsel ? " 📊" : ""}{q.olumsuz ? " ⚠" : ""}</button>)}
+      {acik && <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: 3 }}>{g.sorular.map(q => <button key={q.kitapcik + q.no} data-gecmis-soru={q.kitapcik + "_" + q.no} title={q.bec.map(b => LGS_BECERI[b] ? LGS_BECERI[b][0] : b).join(", ")} onClick={() => onSayfaAc && onSayfaAc(q.kitapcik, q.sayfa, q)} style={{ fontSize: 10, padding: "2px 6px", borderRadius: 6, border: `1px solid ${LGS_ZORLUK_RENK[q.zorluk]}`, borderLeft: `4px solid ${LGS_ZORLUK_RENK[q.zorluk]}`, background: "#fff", color: "#7C2D12", cursor: "pointer" }}>{q.yil} · {q.no}. soru · {LGS_ZORLUK_AD[q.zorluk]}{q.gorsel ? " 📊" : ""}{q.olumsuz ? " ⚠" : ""}</button>)}
         <span style={{ fontSize: 10, color: MUTED, width: "100%" }}>Soruya dokununca kitapçığın o sayfası açılır (kitapçığı bir kez yüklemeniz gerekir). Renk zorluğu gösterir: <span style={{ color: LGS_ZORLUK_RENK[1] }}>kolay</span> · <span style={{ color: LGS_ZORLUK_RENK[2] }}>orta</span> · <span style={{ color: LGS_ZORLUK_RENK[3] }}>zor</span> · <span style={{ color: LGS_ZORLUK_RENK[4] }}>çok zor</span>. 📊 görsel/tablolu · ⚠ olumsuz soru kökü</span></div>}
       </>}
       {m && <div style={{ marginTop: 2 }}>
         <button onClick={() => setMAcik(a => !a)} style={{ background: "none", border: "none", color: "#1D4ED8", fontSize: 11, fontWeight: 700, cursor: "pointer", padding: 0 }}>📘 MEBİ denemelerinde {m.sorular.length} soru {mAcik ? "▲" : "▼"}</button>
-        {mAcik && <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: 3 }}>{m.sorular.map(q => <button key={q.kitapcik + q.no} data-mebi-soru={q.kitapcik + "_" + q.no} onClick={() => onSayfaAc && onSayfaAc(q.kitapcik, q.sayfa)} style={{ fontSize: 10, padding: "2px 6px", borderRadius: 6, border: `1px solid ${LGS_ZORLUK_RENK[q.zorluk]}`, borderLeft: `4px solid ${LGS_ZORLUK_RENK[q.zorluk]}`, background: "#fff", color: "#1E3A8A", cursor: "pointer" }}>{q.sira}. deneme · {q.no}. · {LGS_ZORLUK_AD[q.zorluk]}{q.oran != null ? ` · LGS'ye %${q.oran}` : ""}</button>)}</div>}
+        {mAcik && <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: 3 }}>{m.sorular.map(q => <button key={q.kitapcik + q.no} data-mebi-soru={q.kitapcik + "_" + q.no} onClick={() => onSayfaAc && onSayfaAc(q.kitapcik, q.sayfa, q)} style={{ fontSize: 10, padding: "2px 6px", borderRadius: 6, border: `1px solid ${LGS_ZORLUK_RENK[q.zorluk]}`, borderLeft: `4px solid ${LGS_ZORLUK_RENK[q.zorluk]}`, background: "#fff", color: "#1E3A8A", cursor: "pointer" }}>{q.sira}. deneme · {q.no}. · {LGS_ZORLUK_AD[q.zorluk]}{q.oran != null ? ` · LGS'ye %${q.oran}` : ""}</button>)}</div>}
       </div>}
     </div>
   );
@@ -38379,7 +38496,7 @@ function KonuHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, kon
   const [lgsDurum, setLgsDurum] = useState({}); // ders → konu → islendi/simdi/sirada (tahmini)
   const [acikBeceri, setAcikBeceri] = useState(null); // "ders|konu|beceri"
   const [lgsGosterici, setLgsGosterici] = useState(null);
-  const lgsSayfaAc = (k, sayfa) => setLgsGosterici({ kitap: (k[0] === "m" ? "" : "lgs") + k, kitapAd: lgsKitapcikAd(k), sayfa: sayfa || 2, aralik: [sayfa || 2, sayfa || 2], ofset: 0 });
+  const lgsSayfaAc = (k, sayfa, q) => setLgsGosterici({ kitap: (k[0] === "m" ? "" : "lgs") + k, kitapAd: lgsKitapcikAd(k), sayfa: sayfa || 2, aralik: [sayfa || 2, sayfa || 2], ofset: 0, soru: q ? { ders: q.ders, no: q.no, bec: q.bec, olumsuz: q.olumsuz, zorluk: q.zorluk } : null });
   const [onkosulAcik, setOnkosulAcik] = useState(null); // "ders|konu": ön koşul kontrolü açık
   const [onkosulVeri, setOnkosulVeri] = useState(PDR_ONKOSUL_VERI);
   useEffect(() => { onkosulOku().then(v => setOnkosulVeri({ ...v })); }, []);

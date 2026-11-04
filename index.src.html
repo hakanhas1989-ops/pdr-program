@@ -4402,16 +4402,25 @@ function pdrCozumYanitCoz(t) {
 }
 function pdrCozumYontemOku() { try { return JSON.parse(localStorage.getItem("pdr_cozum_gemini") || "{}"); } catch (e) { return {}; } }
 function pdrCozumYontemYaz(v) { try { localStorage.setItem("pdr_cozum_gemini", JSON.stringify(v)); } catch (e) {} }
-const PDR_GEMINI_VARSAYILAN = { url: "https://pdr-gemini.hakanhas1989.workers.dev", model: "gemini-2.5-flash" };
+const PDR_GEMINI_VARSAYILAN = { url: "https://pdr-gemini.hakanhas1989.workers.dev", model: "gemini-3.8-flash" };
 async function pdrCozumOzelIste(soru, metin, kanvas, bolge) {
   const yon = pdrCozumYontemOku();
   if (yon.gemini) {
-    const url = yon.url || PDR_GEMINI_VARSAYILAN.url, model = yon.model || PDR_GEMINI_VARSAYILAN.model, resim = pdrSoruResmi(kanvas, bolge, 1600);
+    let model = yon.model || PDR_GEMINI_VARSAYILAN.model; const url = yon.url || PDR_GEMINI_VARSAYILAN.url, resim = pdrSoruResmi(kanvas, bolge, 1600);
     if (typeof pdrAsistanKalkanaEkle === "function") pdrAsistanKalkanaEkle(url);
     const content = [...(resim ? [{ type: "image", source: { type: "base64", media_type: "image/jpeg", data: resim } }] : []), { type: "text", text: pdrCozumIstem(soru, metin, !!resim) }];
-    let res; try { res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model, max_tokens: 2000, system: PDR_COZUM_SISTEM, messages: [{ role: "user", content }] }) }); }
-    catch (e) { throw new Error("Gemini sunucusuna (Cloudflare 'pdr-gemini' worker) ulaşılamadı. Worker kurulu mu?"); }
-    const d = await res.json().catch(() => ({})); if (!res.ok || d.error) throw new Error((d.error && (d.error.message || d.error)) || `HTTP ${res.status}`);
+    let d = null;
+    for (let deneme = 0; deneme < 2; deneme++) {
+      let res; try { res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model, max_tokens: 2000, system: PDR_COZUM_SISTEM, messages: [{ role: "user", content }] }) }); }
+      catch (e) { throw new Error("Gemini sunucusuna (Cloudflare 'pdr-gemini' worker) ulaşılamadı. Worker kurulu mu?"); }
+      d = await res.json().catch(() => ({}));
+      if (res.ok && !d.error) break;
+      const msj = String((d.error && (d.error.message || d.error)) || `HTTP ${res.status}`);
+      // Google eski modeli kapattıysa önerdiği yeni modele bir kez geç ve kaydet
+      const yeni = (msj.match(/use\s+(?:models\/)?(gemini-[a-z0-9.\-]*[a-z0-9])/i) || [])[1];
+      if (deneme === 0 && yeni && yeni !== model) { model = yeni; pdrCozumYontemYaz({ ...pdrCozumYontemOku(), model: yeni }); continue; }
+      throw new Error(msj);
+    }
     const j2 = pdrCozumYanitCoz((d.content || []).map(b => b.text || "").join("")); j2.__model = `Gemini (${model}, ücretsiz kota, görselli)`; j2.__tarih = today(); return j2;
   }
   const sec = pdrAiSecili(), ucretsiz = sec.tur === "ucretsiz", resim = ucretsiz ? null : pdrSoruResmi(kanvas, bolge, 1400);
@@ -4445,7 +4454,7 @@ function KitapSayfaGosterici({ kitap, kitapAd, sayfa, aralik, ofset = 0, onKapat
     try { const r = await pdrSoruCozumCiz(sfRef.current.sf, sfRef.current.vp, soru, cizim.current, ozelVeri || null); setCozum(r); setCozumAcik(true);
       if (!ozelVeri) { const kay = (await pdrCozumOku())[cozumAnahtar]; if (kay) { setOzel(kay); await pdrSoruCozumCiz(sfRef.current.sf, sfRef.current.vp, soru, cizim.current, kay); } } } catch (e) { setCozum({ hata: (e && e.message) || String(e) }); setCozumAcik(true); } }
   async function ozelIste() { if (!cozum || cozum.hata) return; setOzelDurum("hazirlaniyor"); setCevapGoster(false);
-    try { const c = kanvas.current; c.__vpW = sfRef.current.vp.width; const j = await pdrCozumOzelIste(soru, cozum.metin, c, cozum.bolge); setOzel(j); await pdrCozumKaydet(cozumAnahtar, j); await cozumAc(j); setOzelDurum(""); } catch (e) { setOzelDurum("hata:" + ((e && e.message) || e)); } }
+    try { const c = kanvas.current; c.__vpW = sfRef.current.vp.width; const j = await pdrCozumOzelIste(soru, cozum.metin, c, cozum.bolge); setOzel(j); await pdrCozumKaydet(cozumAnahtar, j); await cozumAc(j); setOzelDurum(""); } catch (e) { setOzelDurum("hata:" + ((e && e.message) || e)); } setYontem(pdrCozumYontemOku()); }
   useEffect(() => { setS(sayfa); }, [sayfa]);
   async function isaretle() { setCozumAcik(false); setCozum(null); if (isaretAcik) { setIsaretAcik(false); setIsaret(null); const c = cizim.current; if (c) c.getContext("2d").clearRect(0, 0, c.width, c.height); return; }
     try { const r = await pdrSoruBeceriIsaretle(sfRef.current.sf, sfRef.current.vp, soru, cizim.current); setIsaret(r); setIsaretAcik(true); } catch (e) { setIsaret({ hata: (e && e.message) || String(e) }); setIsaretAcik(true); } }

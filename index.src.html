@@ -4429,33 +4429,41 @@ function pdrCozumYanitCozHam(t) {
 function pdrCozumYontemOku() { try { return JSON.parse(localStorage.getItem("pdr_cozum_gemini") || "{}"); } catch (e) { return {}; } }
 function pdrCozumYontemYaz(v) { try { localStorage.setItem("pdr_cozum_gemini", JSON.stringify(v)); } catch (e) {} }
 const PDR_GEMINI_VARSAYILAN = { url: "https://pdr-gemini.hakanhas1989.workers.dev", model: "gemini-3.8-flash" };
+// Seçilen model meşgulse sırayla denenecek yedekler (en yeniden eskiye; hafif "lite" modeller daha az yoğundur)
+const PDR_GEMINI_YEDEK = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-flash-latest", "gemini-flash-lite-latest"];
 async function pdrCozumOzelIste(soru, metin, kanvas, bolge) {
   const yon = pdrCozumYontemOku();
   if (yon.gemini) {
     let model = yon.model || PDR_GEMINI_VARSAYILAN.model; const url = yon.url || PDR_GEMINI_VARSAYILAN.url, resim = pdrSoruResmi(kanvas, bolge, 1600);
     if (typeof pdrAsistanKalkanaEkle === "function") pdrAsistanKalkanaEkle(url);
     const content = [...(resim ? [{ type: "image", source: { type: "base64", media_type: "image/jpeg", data: resim } }] : []), { type: "text", text: pdrCozumIstem(soru, metin, !!resim) }];
-    let d = null;
-    for (let deneme = 0, yogun = 0, bagKoptu = false; deneme < 4; deneme++) {
-      // Yeni Gemini modelleri önce "düşünür"; düşünme de yanıt sınırından yer, bu yüzden sınır geniş tutulur
-      let res; try { res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model, max_tokens: 8000, system: PDR_COZUM_SISTEM, messages: [{ role: "user", content }] }) }); }
-      catch (e) {
-        if (!bagKoptu) { bagKoptu = true; deneme--; await new Promise(ok => setTimeout(ok, 1500)); continue; }
-        throw new Error("Gemini'ye bağlantı koptu. Yanıt beklenirken ekranı kapatmayın ya da başka uygulamaya geçmeyin (telefon bekleyen isteği keser); internetinizi kontrol edip tekrar deneyin. Sorun sürerse Cloudflare'de 'pdr-gemini' worker'ının açık olduğuna bakın.");
+    // Seçilen model yoğun / kapalı / kotası dolu ise sırayla yedek modellere geçilir
+    const sira = [model, ...PDR_GEMINI_YEDEK.filter(m => m !== model)], denenen = [];
+    let d = null, bagKoptu = false, sonHata = "";
+    modelDongu: for (let mi = 0; mi < sira.length && mi < 7; mi++) {
+      model = sira[mi]; denenen.push(model);
+      for (let yogun = 0; yogun < 2; ) {
+        // Yeni Gemini modelleri önce "düşünür"; düşünme de yanıt sınırından yer, bu yüzden sınır geniş tutulur
+        let res; try { res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model, max_tokens: 8000, system: PDR_COZUM_SISTEM, messages: [{ role: "user", content }] }) }); }
+        catch (e) {
+          if (!bagKoptu) { bagKoptu = true; await new Promise(ok => setTimeout(ok, 1500)); continue; }
+          throw new Error("Gemini'ye bağlantı koptu. Yanıt beklenirken ekranı kapatmayın ya da başka uygulamaya geçmeyin (telefon bekleyen isteği keser); internetinizi kontrol edip tekrar deneyin. Sorun sürerse Cloudflare'de 'pdr-gemini' worker'ının açık olduğuna bakın.");
+        }
+        d = await res.json().catch(() => ({}));
+        if (res.ok && !d.error) break modelDongu;
+        const msj = String((d.error && (d.error.message || d.error)) || `HTTP ${res.status}`); sonHata = msj;
+        // Google eski modeli kapattıysa önerdiği yeni modeli sıranın başına al ve kaydet
+        const yeni = (msj.match(/use\s+(?:models\/)?(gemini-[a-z0-9.\-]*[a-z0-9])/i) || [])[1];
+        if (yeni && !denenen.includes(yeni)) { const eski = sira.indexOf(yeni, mi + 1); if (eski > 0) sira.splice(eski, 1); sira.splice(mi + 1, 0, yeni); if (mi === 0) pdrCozumYontemYaz({ ...pdrCozumYontemOku(), model: yeni }); continue modelDongu; }
+        // Model bulunamadı / kapatıldı / kotası doldu → sıradaki model
+        if (res.status === 404 || res.status === 429 || /not found|no longer available|not supported|kota/i.test(msj)) continue modelDongu;
+        // Geçici yoğunluk → bir kez bekleyip aynı modeli dene, olmazsa sıradaki model
+        if (/high demand|overloaded|UNAVAILABLE|try again later/i.test(msj) || res.status === 503 || res.status === 500) { yogun++; if (yogun < 2) await new Promise(ok => setTimeout(ok, pdrCozumOzelIste.__bekle || 3000)); continue; }
+        throw new Error(msj);
       }
-      d = await res.json().catch(() => ({}));
-      if (res.ok && !d.error) break;
-      const msj = String((d.error && (d.error.message || d.error)) || `HTTP ${res.status}`);
-      // Google eski modeli kapattıysa önerdiği yeni modele bir kez geç ve kaydet
-      const yeni = (msj.match(/use\s+(?:models\/)?(gemini-[a-z0-9.\-]*[a-z0-9])/i) || [])[1];
-      if (deneme === 0 && yeni && yeni !== model) { model = yeni; pdrCozumYontemYaz({ ...pdrCozumYontemOku(), model: yeni }); continue; }
-      // Google sunucusu geçici yoğunsa birkaç saniye bekleyip yeniden dene
-      if (/high demand|overloaded|UNAVAILABLE|try again later/i.test(msj) || res.status === 503) {
-        if (yogun < 2) { yogun++; await new Promise(ok => setTimeout(ok, (pdrCozumOzelIste.__bekle || 4000) * yogun)); continue; }
-        throw new Error("Google'ın Gemini sunucusu şu an çok yoğun (geçici bir durum). Birkaç dakika sonra tekrar deneyin ya da aşağıdaki 📋 Ücretsiz uygulamada sor yolunu kullanın.");
-      }
-      throw new Error(msj);
+      d = null;
     }
+    if (!d || d.error) throw new Error("Google'ın ücretsiz Gemini modellerinin hepsi şu an yoğun ya da kotası dolu (" + denenen.join(", ") + "). Birkaç dakika sonra tekrar deneyin ya da aşağıdaki 📋 Ücretsiz uygulamada sor yolunu kullanın." + (sonHata ? " [Son yanıt: " + sonHata.slice(0, 160) + "]" : ""));
     const j2 = pdrCozumYanitCoz((d.content || []).map(b => b.text || "").join("")); j2.__model = `Gemini (${model}, ücretsiz kota, görselli)`; j2.__tarih = today(); return j2;
   }
   const sec = pdrAiSecili(), ucretsiz = sec.tur === "ucretsiz", resim = ucretsiz ? null : pdrSoruResmi(kanvas, bolge, 1400);

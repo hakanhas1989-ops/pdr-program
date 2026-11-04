@@ -16140,6 +16140,11 @@ const KS_ASISTAN_ARACLAR = {
     girdi: '{"ogrenci": "isteğe bağlı", "sinif": "isteğe bağlı", "konu": "isteğe bağlı", "beceri": "isteğe bağlı"}', yontem: "hepsi",
     calistir: (g, ctx, o) => ksAsistanLgsBeceri(g, ctx, o),
   },
+  soru_cozum_yolu: {
+    aciklama: "Geçmiş LGS ve MEBİ deneme sorularının çözüm yolu (yerelde): bir soru için konu, ölçtüğü beceriler, zorluk, ön koşul becerileri ve kaydedilmiş 🧭 Çözüm yolu (💡 anahtar fikir, adımlar, soru üzerindeki notlar, çeldirici, cevap) ya da yoksa konunun genel çözüm yöntemi. ogrenci verirsen öğrencinin Geçmiş LGS → Çözdür'de işaretlediği yanlış/boş soruları tek tek bu bilgilerle listeler (görüşmede soru üzerinden çalışmak, 'balık tutmayı öğretmek' için). Sorunun kendi metni burada yoktur; danışman soruyu programda Geçmiş LGS'den açıp 🧭 Çözüm yolu ile gösterebilir. kitapcik: '2024 sayısal', '2026 sözel', 'MEBİ 5 sayısal' ya da kod (24say, m26035say). 'Şu sorunun çözümü', 'yanlış yaptığı soruları nasıl çalışalım', 'çözüm yolu' sorularında kullan.",
+    girdi: '{"ogrenci": "isteğe bağlı", "sinif": "isteğe bağlı", "kitapcik": "isteğe bağlı", "ders": "isteğe bağlı", "no": "isteğe bağlı soru no", "adet": 8}', yontem: "hepsi",
+    calistir: (g, ctx, o) => ksAsistanCozumYolu(g, ctx, o),
+  },
   onkosul_plani: {
     aciklama: "Ön koşul köprüsü (yerelde hesaplanır): Öğrenci bir dersi/konuyu yapamıyorsa nedeni önceki sınıflardan gelen ön koşul becerilerinin eksikliği olabilir. ogrenci verirsen Konu Haritası'nda yapılan kısa ön koşul kontrollerinin sonuçlarını ve eksik becerilerden oluşan sıralı köprü planını (süre, ne çalışmalı) verir. konu/ders verirsen o 8. sınıf LGS konusunun ön koşul becerilerini verir; ikisi de yoksa bu hafta derste işlenen konuların ön koşullarını verir. Ayrıca öğrenciye anlatım (psikoeğitim) ilkelerini içerir. 'Öğrenci X konusunu anlamıyor', 'temel eksik', 'önceki sınıf konusu', 'ön koşul' sorularında kullan.",
     girdi: '{"ogrenci": "isteğe bağlı", "sinif": "isteğe bağlı", "konu": "isteğe bağlı", "ders": "isteğe bağlı"}', yontem: "hepsi",
@@ -17681,8 +17686,8 @@ const KS_ARAC_GRUPLARI = {
     araclar: ["risk_analizi", "risk_kaydet", "ekranda_risk", "risk_kapat", "sevk_kaydet", "sevk_sonuc"] },
   mudahale: { re: /mudahale|plan|program|hedef|uyum|izlem|takip/,
     araclar: ["mudahale_plani", "mudahale_kaydet", "ekranda_mudahale", "mudahale_durum", "mudahale_programi_ara", "mudahale_programi_kaydet", "uyum_kaydet", "seans_hazirlik"] },
-  akademik: { re: /deneme|net|lgs|yks|puan|yuzdelik|okul|lise|tercih|taban|konu|ders|calisma|karne|yazili|yil sonu|not ortalam|sinav|on kosul|onkosul|anlamiyor|yapamiyor|temel eksik|kopru plan|beceri/,
-    araclar: ["deneme_kaydet", "deneme_analizi", "konu_guncelle", "lgs_konu_onceligi", "onkosul_plani", "lgs_beceri", "hedef_okul", "hedef_okul_kaydet", "lise_taban_puanlari", "sinav_rehberi", "not_kaydet"] },
+  akademik: { re: /deneme|net|lgs|yks|puan|yuzdelik|okul|lise|tercih|taban|konu|ders|calisma|karne|yazili|yil sonu|not ortalam|sinav|on kosul|onkosul|anlamiyor|yapamiyor|temel eksik|kopru plan|beceri|cozum yolu|cozumu|yanlis yaptig|soruyu|sorulari|mebi/,
+    araclar: ["deneme_kaydet", "deneme_analizi", "konu_guncelle", "lgs_konu_onceligi", "onkosul_plani", "lgs_beceri", "soru_cozum_yolu", "hedef_okul", "hedef_okul_kaydet", "lise_taban_puanlari", "sinav_rehberi", "not_kaydet"] },
   ogrenci: { re: /ekle|yeni ogrenci|nakil|kaydet|devamsiz|profil|kariyer|ilgi|meslek|d2/,
     araclar: ["ogrenci_ekle", "devamsizlik_kaydet", "profil_puanla", "profil2_guncelle"] },
   hatirlatma: { re: /hatirla|randevu|takvim|yarin|haftaya|gun sonra|unutma/,
@@ -17801,6 +17806,7 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - Danışmanın kendi Kütüphanesi (yüklediği kitap, makale, yönetmelik, genelge — tam metin): "kütüphanede/yüklediğim kaynakta … ne diyor", mevzuat, süre/madde sorusu ya da kuramsal bir soru geldiğinde önce kutuphane_ara, ayrıntı için kutuphane_oku kullan; yanıtta kaynağın adını ve bölümünü belirt, kaynakta olmayanı kaynaktaymış gibi söyleme.
 - Müdahale Programları kütüphanesindeki kitaplar (8 kitap, tam metin) senin başvuru kaynağın: bir konu/beceri için etkinlik, oturum ya da program önerirken, grup ya da bireysel çalışma planlarken veya danışman bir kitap/oturum sorduğunda önce program_ara, ayrıntı için program_oturumu kullan. Önerinde kitabın adını, oturum numarasını ve PDF sayfasını belirt; kitapta olmayan bir şeyi kitaptaymış gibi söyleme.
 - LGS'nin ölçtüğü beceriler, bir konunun hangi becerileri istediği ya da öğrencinin hangi beceriyi geliştirmesi gerektiği sorulduğunda lgs_beceri kullan.
+- Geçmiş LGS / MEBİ sorusunun çözümü, öğrencinin yanlış yaptığı soruların nasıl çalışılacağı ya da çözüm yolu sorulduğunda soru_cozum_yolu kullan; cevabı doğrudan vermek yerine öğrenciye adım adım düşündürmeyi öner.
 - Öğrenci bir konuyu anlamadığında/yapamadığında, 'temel eksik' ya da 'önceki sınıf konusu' konuşulduğunda onkosul_plani kullan: eksik ön koşul becerilerini ve köprü planını (önce 20 dk temel, sonra güncel konu) öğrenciyi etiketlemeden anlat.
 - Görüşmede birlikte okunacak bir metin, öykü ya da şiir istendiğinde ya da bir duyguyu/konuyu açmak için kaynak arandığında metin_oner kullan (Türkçe ders kitaplarındaki metinler, danışmanlık temalarına göre dizinli). Önerinde kitabın adını ve sayfasını belirt; danışman sayfayı 📖 Metinle Çalışma ekranından açabilir.
 - LGS'ye hazırlık, "hangi konuya öncelik vermeli", "LGS'de en çok hangi konudan soru çıkıyor", "kaç net artırabilir" gibi sorularda lgs_konu_onceligi kullan; kazanılabilir neti "en fazla/yaklaşık" diye temkinli söyle.
@@ -38604,6 +38610,49 @@ function LgsBeceriPaneli({ ogrVerisi, seciliAd }) {
     </div>
   );
 }
+// Serbest yazılmış kitapçık adını koda çevirir: "2024 sayısal" → 24say, "MEBİ 5 sözel" → m26035soz
+function lgsKitapcikCoz(t) {
+  const x = ksSade(String(t || "")); if (!x) return null; const ham = String(t).trim();
+  if (/^(m\d{5}|\d{2})(say|soz)$/.test(ham)) return ham;
+  const ot = /soz|turkce|inkilap|din|ingiliz/.test(x) ? "soz" : /say|mat|fen/.test(x) ? "say" : null, l = lgsKitapciklar();
+  if (/mebi|deneme/.test(x)) { const n = (x.match(/(\d{1,2})\s*\.?\s*(deneme)?/) || [])[1]; const ad = l.filter(k => k[0] === "m" && (!n || k[5] === String(+n)) && (!ot || k.endsWith(ot))); return ad[0] || null; }
+  const y = (x.match(/20(\d{2})|\b(\d{2})\b/) || []); const yy = y[1] || y[2]; if (!yy) return null; const ad = l.filter(k => k.startsWith(yy) && (!ot || k.endsWith(ot))); return ad[0] || null;
+}
+async function ksAsistanCozumYolu(g, ctx, o) {
+  const kay = await pdrCozumOku(), sade = (x) => ksSade(String(x || ""));
+  const soruMetni = (q, durum) => {
+    const c = kay[`${q.kitapcik}|${q.ders}|${q.no}`], ok = q.konu ? onkosulKonuBecerileri(q.ders, q.konu).map(id => onkosulBeceri(id)) : [];
+    const st = (KONU_STRATEJI[q.ders] || {})[q.konu] || (KONU_STRATEJI[q.ders] || {})._ || "";
+    const r = [`■ ${lgsKitapcikAd(q.kitapcik)} · ${q.ders} ${q.no}. soru${durum ? ` (${durum})` : ""} — konu: ${q.konu || "?"}; zorluk: ${LGS_ZORLUK_AD[q.zorluk] || "?"}; beceriler: ${q.bec.map(b => LGS_BECERI[b] ? LGS_BECERI[b][1] : b).join(", ")}${q.olumsuz ? "; kökte olumsuz ifade var" : ""}${q.gorsel ? "; görselli/tablolu" : ""}${q.oran ? `; 2026 LGS'ye benzerlik %${q.oran}` : ""}`];
+    if (ok.length) r.push(`  Ön koşullar (önceki sınıflar): ${ok.map(b => `${b.ad} (${onkosulSinifYaz(b.nerede)})`).join(", ")}`);
+    if (c && Array.isArray(c.adimlar)) {
+      if (c.onkosul && c.onkosul.length) r.push(`  Bu soruya özel ön koşullar: ${c.onkosul.join("; ")}`);
+      if (c.anahtar) r.push(`  💡 Anahtar fikir: ${c.anahtar}`);
+      r.push("  Adımlar: " + c.adimlar.map((a, i) => `${i + 1}) ${a.baslik}: ${a.aciklama}${a.soru ? ` [Kendine sor: ${a.soru}]` : ""}`).join(" "));
+      const notlar = (c.sekil_notlari || []).filter(pdrNotGecerli).map(n => n.not).filter(Boolean); if (notlar.length) r.push(`  Soru üzerindeki notlar: ${notlar.join(" · ")}`);
+      if (c.celdirici) r.push(`  Çeldirici: ${c.celdirici}`); if (c.cevap) r.push(`  Cevap (danışman için; öğrenciye önce kendisi denesin): ${c.cevap}`);
+      r.push(`  (Kaydedilmiş çözüm yolu: ${c.__model || "?"}, ${c.__tarih || ""}; yapay zekâ çözümüdür, cevap anahtarıyla kontrol edin.)`);
+    } else r.push(`  Kayıtlı özel çözüm yolu yok. Genel yöntem: ${(st || "soru kökünü oku, verilenleri bul, seçenekleri ele, kontrol et").replace(/\.\s*$/, "")}. Özel adımlar ve soru üzerinde notlar için programda soruyu açıp 🧭 Çözüm yolu → 🤖 kullanılabilir.`);
+    return r.join("\n");
+  };
+  const adet = Math.max(1, Math.min(20, parseInt(g.adet) || 8));
+  if (o) {
+    const v = await lgsDenemeOku(), l = (v[pdrOgrAnahtar(o.name, o.className, o.numara)] || []).slice().reverse();
+    const k0 = g.kitapcik ? lgsKitapcikCoz(g.kitapcik) : null, secili = k0 ? l.filter(x => x.kitapcik === k0) : l;
+    if (!secili.length) return l.length ? `Öğrencinin ${g.kitapcik} için Çözdür kaydı yok. Kayıtlı olanlar: ${l.map(x => lgsKitapcikAd(x.kitapcik)).join(", ")}.` : "Öğrencinin Geçmiş LGS → 🧑‍🎓 Çözdür'de işaretlenmiş denemesi yok. Danışman öğrencinin çözdüğü LGS/MEBİ denemesindeki yanlış ve boşları orada işaretlerse soru soru çözüm yolu çıkarılabilir.";
+    const b = []; let say = 0;
+    secili.slice(0, 2).forEach(x => { const qs = lgsSorular().filter(q => q.kitapcik === x.kitapcik && (!g.ders || sade(q.ders).includes(sade(g.ders))));
+      const hatali = qs.map(q => ({ q, i: ((x.isaret || {})[q.ders] || {})[q.no] })).filter(y => y.i).sort((a, c) => (c.q.zorluk <= 2) - (a.q.zorluk <= 2) || a.q.zorluk - c.q.zorluk);
+      b.push(`${lgsKitapcikAd(x.kitapcik)} (${x.tarih}) — ${hatali.length} yanlış/boş. Önce kolay/orta olup kaçırılanlar (en hızlı kazanç) listelenir:`);
+      hatali.forEach(y => { if (say < adet) { b.push(soruMetni(y.q, y.i === "y" ? "yanlış" : "boş")); say++; } }); });
+    if (say >= adet) b.push(`(İlk ${adet} soru gösterildi; adet artırılabilir ya da ders verilebilir.)`);
+    return b.join("\n\n");
+  }
+  const k = lgsKitapcikCoz(g.kitapcik); if (!k) return "Kitapçık anlaşılamadı. Örnek: '2024 sayısal', '2026 sözel', 'MEBİ 5 sayısal'. Kayıtlı kitapçıklar: " + lgsKitapciklar().map(lgsKitapcikAd).join(", ");
+  const qs = lgsSorular().filter(q => q.kitapcik === k && (!g.ders || sade(q.ders).includes(sade(g.ders))) && (!g.no || q.no === +g.no));
+  if (!qs.length) return `${lgsKitapcikAd(k)} içinde bu ders/numarada soru bulunamadı.`;
+  return qs.slice(0, adet).map(q => soruMetni(q)).join("\n\n") + (qs.length > adet ? `\n\n(${qs.length} sorudan ilk ${adet} gösterildi; ders ve no ile daraltılabilir.)` : "");
+}
 async function ksAsistanLgsBeceri(g, ctx, o) {
   const b = [], sade = (x) => ksSade(String(x || ""));
   if (g.konu) {
@@ -41274,6 +41323,7 @@ const PDR_ASISTAN_ARAC_AD = {
   metin_oner: "Ders kitabından metin önerisi",
   onkosul_plani: "Ön koşul köprü planı",
   lgs_beceri: "LGS beceri haritası",
+  soru_cozum_yolu: "Soru çözüm yolu",
   ogrenci_ara: "Öğrenci arandı", ogrenci_ozeti: "Öğrenci özeti", gorusme_notlari: "Görüşme notları okundu",
   risk_analizi: "Risk analizi (kapalı sistem)", seans_hazirlik: "Seans hazırlığı (kapalı sistem)", mudahale_plani: "Müdahale planı önerisi (kapalı sistem)",
   deneme_analizi: "Deneme analizi (kapalı sistem)", profil_analizi: "Profil analizi (kapalı sistem)", supervizyon: "Süpervizyon raporu (kapalı sistem)",

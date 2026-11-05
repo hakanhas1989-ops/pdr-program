@@ -14744,6 +14744,45 @@ function ksAsistanGirdi(ctx, o) {
     kademe: ksKademeTahmin(sinif, ogrKademe),
   };
 }
+// ── Kapsamlı değerlendirme için eksik bilgi: kayıtlarda ve notlarda olmayan, danışmana sorulması gereken alanlar ──
+// Yerelde, yapay zekâsız çıkarılır; asistan bunlardan en önemli 2-3 tanesini danışmana soru olarak sorar.
+function pdrDegerlendirmeEksikleri(ctx, o) {
+  const G = ksAsistanGirdi(ctx, o), notlar = G.gorusmeler || [], e = [];
+  const metin = ksSade(notlar.map(r => String(pdrKayitMetni(r) || "") + " " + (r.ozelNot || "")).join(" ")), son = notlar.slice().sort((a, b) => ksTarihSirala(b, a))[0];
+  const sonMetin = son ? ksSade(String(pdrKayitMetni(son) || "")) : "", var_ = (re, t = metin) => re.test(t);
+  // 1) Güvenlik: notta risk işareti var ama açık risk kaydı yoksa — en önce sorulur
+  const RISK = /intihar|olmek ist|olsem|yasamak istem|kendine zarar|kendini kes|jilet|istismar|taciz|dokun(du|uyor)|siddet gor|dayak|dov(u|ul)|madde kullan|uyusturucu|alkol|evden kac/;
+  if (var_(RISK, sonMetin || metin) && !(G.riskler || []).length) e.push({ o: 0, alan: "Güvenlik", soru: "Notta risk işareti geçiyor; risk düzeyi değerlendirildi mi (düşünce/plan/araç, ne sıklıkta), aile ya da okul idaresi bilgilendirildi mi?", neden: "Risk işareti varken güvenlik değerlendirmesi her şeyden önce gelir; risk kaydı açılması gerekebilir." });
+  if (var_(/zorbalik|zorba|alay ed|dalga gec|lakap tak|itip kak|tehdit/, sonMetin || metin) && !(G.riskler || []).length) e.push({ o: 0.5, alan: "Zorbalık", soru: "Zorbalık ne sıklıkta ve ne türde (sözel, fiziksel, dışlama, siber); kim tarafından yapılıyor, öğretmen/idare biliyor mu?", neden: "Zorbalığın türü ve sürekliliği, okul düzeyinde önlem ve risk kaydı gerekip gerekmediğini belirler." });
+  // 2) Sorunun süresi ve başlangıcı
+  if (notlar.length && !var_(/ne zaman|zamandir|haftadir|aydir|yildir|ay once|hafta once|basladi|baslamis|beri|gecen (yil|donem|ay|hafta)|eskiden|onceden/)) e.push({ o: 1, alan: "Süre ve başlangıç", soru: "Bu durum ne zamandır devam ediyor; başlamasından önce bir olay ya da değişiklik (taşınma, ayrılık, kayıp, sınıf/öğretmen değişikliği) oldu mu?", neden: "Ani başlangıç bir tetikleyiciye, uzun süreli seyir yerleşik bir örüntüye işaret eder; müdahale buna göre değişir." });
+  // 3) Aile / ev
+  if (/geçmiyor/.test(ksAsistanAileEv(ctx, o, 3) || "")) e.push({ o: 2, alan: "Aile ve ev", soru: "Öğrenci evde kimlerle yaşıyor, kaç kardeşi var; ailede son dönemde bir değişiklik var mı?", neden: "Aile yapısı ve ev ortamı, sorunun nedeni ve veliyle nasıl çalışılacağı için temel bilgidir." });
+  // 4) Veli ve öğretmen görüşü
+  const veli = notlar.some(r => /veli/i.test(r.meetingType || "")), ogretmen = notlar.some(r => /öğretmen|ogretmen/i.test(r.meetingType || ""));
+  if (!veli) e.push({ o: 3, alan: "Veli görüşü", soru: "Veliyle görüşüldü mü? Veli bu durumu evde nasıl gözlemliyor?", neden: "Davranışın evde de olup olmadığı, sorunun okula mı özgü yoksa genel mi olduğunu gösterir." });
+  if (!ogretmen) e.push({ o: 4, alan: "Öğretmen görüşü", soru: "Sınıf öğretmeni ya da rehber öğretmen dışındaki öğretmenler derste ne gözlemliyor (katılım, arkadaş ilişkisi, değişim)?", neden: "Öğretmen gözlemi, öğrencinin anlattığını sınıf içi davranışla karşılaştırmayı sağlar." });
+  // 5) Güçlü yanlar ve öğrencinin kendi hedefi
+  if (notlar.length && !var_(/guclu|seviyor|sever|ilgi|basarili|yetenek|hobi|keyif|iyi oldugu|istekli/)) e.push({ o: 5, alan: "Güçlü yanlar", soru: "Öğrencinin güçlü yanları, sevdiği şeyler ve iyi gittiği alanlar neler?", neden: "Çözüm odaklı planda müdahale öğrencinin kaynakları üzerine kurulur." });
+  if (notlar.length && !var_(/istiyor|isterim|hedef|amac|beklenti|degismesini|olmak ist|yapmak ist/)) e.push({ o: 6, alan: "Öğrencinin beklentisi", soru: "Öğrenci bu konuda ne değişsin istiyor; görüşmeden beklentisi ne?", neden: "Öğrencinin kendi hedefi olmadan yapılan plan genelde işbirliği bulmaz." });
+  // 6) Arkadaş ilişkileri
+  if (notlar.length && !var_(/arkadas|akran|sinif ortami|yalniz|dislan|grup/)) e.push({ o: 7, alan: "Arkadaş ilişkileri", soru: "Okulda yakın arkadaşı var mı, sınıfla ilişkisi nasıl?", neden: "Sosyal destek hem risk hem koruyucu etken olarak değerlendirmeyi değiştirir." });
+  // 7) Akademik durum
+  const akademik = (G.denemeGirilen || []).length || (ctx.netHaritasiKayitlari || []).some(x => pdrAyniOgrenci(x.studentName, x.className, o.name, o.className));
+  if (!akademik && !var_(/not ortalama|yazili|deneme|net|ders basari|karne/)) e.push({ o: 8, alan: "Akademik durum", soru: "Derslerdeki durumu nasıl; son dönemde notlarında ya da deneme netlerinde düşüş var mı?", neden: "Akademik değişim çoğu zaman duygusal sorunun ilk görünen belirtisidir." });
+  // 8) Ölçüm ve yaşam düzeni
+  let olcum = ""; try { olcum = pdrOgrOlcumMetni(ctx, o); } catch (x) {}
+  if (!olcum) e.push({ o: 9, alan: "İyi oluş puanı", soru: "Öğrenci kendini 0-10 arasında kaç puan iyi hissediyor (bu görüşmede sorduysanız)?", neden: "Sayısal başlangıç puanı, sonraki görüşmelerde değişimi görmeyi sağlar." });
+  let yasam = ""; try { yasam = pdrOgrYasamMetni(ctx, o); } catch (x) {}
+  if (!yasam && !var_(/uyku|uyuyor|yatiyor|ekran|telefon|oyun oyna|kahvalti/)) e.push({ o: 10, alan: "Yaşam düzeni", soru: "Uyku saatleri, günlük ekran süresi ve kahvaltı düzeni nasıl?", neden: "Uyku ve ekran düzeni dikkat, duygu durumu ve derslerle doğrudan ilişkilidir." });
+  // 9) İzlem planı
+  if (son && !var_(/takip|bir sonraki|tekrar gor|haftaya|plan|odev|gorev|anlastik|kararlastir/, sonMetin)) e.push({ o: 11, alan: "İzlem", soru: "Son görüşmenin sonunda bir sonraki adım ya da tarih konuşuldu mu?", neden: "İzlem tarihi olmayan görüşme sürecin kopmasına yol açar." });
+  return e.sort((a, b) => a.o - b.o);
+}
+function pdrDegerlendirmeEksikMetni(ctx, o, adet = 5) {
+  let l = []; try { l = pdrDegerlendirmeEksikleri(ctx, o); } catch (x) { return ""; } if (!l.length) return "";
+  return `KAPSAMLI DEĞERLENDİRME İÇİN EKSİK BİLGİ (kayıtlarda ve notlarda geçmiyor; önem sırasıyla — danışmana sor, tahmin etme):\n` + l.slice(0, adet).map((x, i) => `${i + 1}. [${x.alan}${x.o === 0 ? " — ÖNCE BU" : ""}] ${x.soru} (Neden: ${x.neden})`).join("\n");
+}
 function ksAsistanGunFarki(tarih) {
   const a = ksTarihAnahtar(tarih); if (a === "00000000") return null;
   const d = new Date(+a.slice(0, 4), +a.slice(4, 6) - 1, +a.slice(6, 8));
@@ -15460,15 +15499,17 @@ const KS_ASISTAN_ARACLAR = {
     calistir: (g, ctx, o) => {
       const n = Math.max(1, Math.min(10, parseInt(g.adet) || 5));
       const l = (ctx.records || []).filter(x => pdrAyniOgrenci(x.studentName, x.className, o.name, o.className)).sort((a, b) => ksTarihSirala(b, a)).slice(0, n);
-      return l.length ? l.map(x => `• ${x.date}${x.topic ? " · " + x.topic : ""}${x.meetingType && x.meetingType !== "Öğrenci" ? " · " + x.meetingType + " görüşmesi" : ""}: ${ksAsistanKisalt(pdrOgrNotMetni(x, o), 1500)}`).join("\n") : "Bu öğrenci için görüşme notu yok.";
+      if (!l.length) return "Bu öğrenci için görüşme notu yok.";
+      const ek = pdrDegerlendirmeEksikMetni(ctx, o);
+      return l.map(x => `• ${x.date}${x.topic ? " · " + x.topic : ""}${x.meetingType && x.meetingType !== "Öğrenci" ? " · " + x.meetingType + " görüşmesi" : ""}: ${ksAsistanKisalt(pdrOgrNotMetni(x, o), 1500)}`).join("\n") + (ek ? "\n\n" + ek : "");
     },
   },
   risk_analizi: { aciklama: "Kapalı sistemle risk analizi yapar (kaydetmez).", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
     calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); const r = pdrKapaliRiskAnalizi({ riskTuru: "", oncelik: "Orta", aciklama: "" }, G.gorusmeler, G.profil1, G.kademe, ksDenemeOzetHesapla(G.denemeGirilen, G.sinavTuru), G.ek); return (r.acil ? "⚠ KRİTİK — acil müdahale gerekiyor.\n" : "") + r.metin; } },
   seans_hazirlik: { aciklama: "Bir sonraki görüşme için kapalı sistemle hazırlık notu çıkarır.", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
-    calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); return pdrKapaliSeansHazirlik({ gorusmeler: G.gorusmeler, mudahaleler: G.mudahaleler, riskler: G.riskler, denemeAvg: G.denemeGirilen.length ? (G.denemeGirilen.reduce((t, d) => t + d.toplam, 0) / G.denemeGirilen.length).toFixed(1) : null, etkinlikHavuzu: typeof ogrenciEtkinlikHavuzu === "function" ? ogrenciEtkinlikHavuzu(o.className, G.kademe) : [], kademe: G.kademe, profil1: G.profil1 }) + pdrFormEkBlok(ctx, o, "hazirlik") + ((m) => m ? "\n\n" + m : "")(pdrOgrOlcumMetni(ctx, o)) + ((m) => m ? "\n\n" + m : "")(pdrOgrYasamMetni(ctx, o)) + ((m) => m ? "\n\n" + m : "")(pdrOgrHedefMetni(ctx, o)); } },
+    calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); return pdrKapaliSeansHazirlik({ gorusmeler: G.gorusmeler, mudahaleler: G.mudahaleler, riskler: G.riskler, denemeAvg: G.denemeGirilen.length ? (G.denemeGirilen.reduce((t, d) => t + d.toplam, 0) / G.denemeGirilen.length).toFixed(1) : null, etkinlikHavuzu: typeof ogrenciEtkinlikHavuzu === "function" ? ogrenciEtkinlikHavuzu(o.className, G.kademe) : [], kademe: G.kademe, profil1: G.profil1 }) + pdrFormEkBlok(ctx, o, "hazirlik") + ((m) => m ? "\n\n" + m : "")(pdrDegerlendirmeEksikMetni(ctx, o, 4)) + ((m) => m ? "\n\n" + m : "")(pdrOgrOlcumMetni(ctx, o)) + ((m) => m ? "\n\n" + m : "")(pdrOgrYasamMetni(ctx, o)) + ((m) => m ? "\n\n" + m : "")(pdrOgrHedefMetni(ctx, o)); } },
   mudahale_plani: { aciklama: "Kapalı sistemle müdahale planı önerir (kaydetmez).", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
-    calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); return pdrKapaliMudahalePlani({ ek: G.ek, gorusmeler: G.gorusmeler, kademe: G.kademe, profil1: G.profil1, programlar: typeof MUDAHALE_PROGRAMLARI !== "undefined" ? MUDAHALE_PROGRAMLARI : null }) + pdrFormEkBlok(ctx, o, "takip"); } },
+    calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); return pdrKapaliMudahalePlani({ ek: G.ek, gorusmeler: G.gorusmeler, kademe: G.kademe, profil1: G.profil1, programlar: typeof MUDAHALE_PROGRAMLARI !== "undefined" ? MUDAHALE_PROGRAMLARI : null }) + pdrFormEkBlok(ctx, o, "takip") + ((m) => m ? "\n\n" + m : "")(pdrDegerlendirmeEksikMetni(ctx, o, 4)); } },
   deneme_analizi: { aciklama: "Kapalı sistemle deneme sonuçlarını analiz eder.", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
     calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); return pdrKapaliDenemeAnalizi({ gorusmeler: G.gorusmeler, girilen: G.denemeGirilen, dersListesi: G.dersListesi, sinavTuru: G.sinavTuru, kademe: G.kademe }) + ((m) => m ? "\n\n" + m : "")(pdrOgrHedefMetni(ctx, o)); } },
   profil_analizi: { aciklama: "Notlardan 8 boyutlu profil puanı çıkarır ve kapalı sistemle profil analizi yapar (kaydetmez).", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
@@ -17827,6 +17868,7 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - Öğrenciyi değerlendirirken (risk, müdahale, seans hazırlığı, çalışma programı, veli yazısı) öğrenci özeti/dosyasındaki KAYNAŞTIRMA / TANI, SINIF, AİLE VE EV (kardeş sayısı, evde kimlerle yaşadığı) ve SOSYOMETRİ satırlarını dikkate al: tanı varsa önerileri ona göre uyarla (BEP, sınav/ödev uyarlaması, RAM süreci), hiç seçilmeyen öğrencide akran ilişkisini ele al. Tanıyı etiket gibi kullanma, tanı koyma; kayıtta tanı yoksa tanı varmış gibi konuşma.
 - Veri girişi: deneme netleri → deneme_kaydet; Profil 1 boyut puanları → profil_puanla; kariyer hedefi, ilgi, aile notu, d2 → profil2_guncelle; devamsızlık → devamsizlik_kaydet; yeni öğrenci → ogrenci_ekle (önce ogrenci_ara); konu tamamlama yüzdesi → konu_guncelle; risk kapatma → risk_kapat; plan durumu → mudahale_durum; hatırlatmayı bitirme → hatirlatma_tamamla. Hepsi onay ister; danışmanın söylediği değerleri aynen ver, tahmin etme.
 - Danışman öğrencinin yazılı sınav puanını ya da yıl sonu not ortalamasını söylerse not_kaydet kullan (birden çok dersi tek çağrıda ver). Sayıları aynen yaz; hangi yazılı olduğu belli değilse yazili alanını boş bırak, program boş olana yazar.
+- SORU SORARAK DERİNLEŞTİR: Görüşme notunu okuyup değerlendirdiğinde, seans hazırlığı ya da müdahale planı yaptığında araç sonucunda "KAPSAMLI DEĞERLENDİRME İÇİN EKSİK BİLGİ" bölümü varsa, önce eldeki bilgiyle değerlendirmeni yap, sonra yanıtın sonunda "Daha kapsamlı değerlendirebilmem için şunları bilmem gerekiyor:" diye en önemli 2-3 soruyu sor (her birinin yanında bir cümleyle neden önemli olduğunu söyle). "ÖNCE BU" işaretli güvenlik sorusu varsa onu ilk sırada ve açıkça sor. Bütün listeyi sıralama; bu görüşmeyle en ilgili olanları seç. Aynı sohbette zaten sorduğun ya da danışmanın cevapladığı soruyu tekrar sorma. Danışman cevap verince değerlendirmeyi bu bilgiyle güncelle ve kalıcı olması gereken bilgiyi (aile → profil2_guncelle, iyi oluş puanı → ilgili kayıt, görüşmeye ek → gorusme_duzelt) kaydetmeyi ONAYLA birlikte öner. Danışman "soru sorma" derse o sohbette sorma.
 - Danışman bir yanıtı ya da bu sohbeti öğrencinin dosyasına kaydetmek/göndermek isterse asistan_notu_kaydet kullan (kapsam: son ya da hepsi). Kaydedilecek metni yeniden yazma; program yanıtları aynen kaydeder.
 - Danışmanın kendi Kütüphanesi (yüklediği kitap, makale, yönetmelik, genelge — tam metin): "kütüphanede/yüklediğim kaynakta … ne diyor", mevzuat, süre/madde sorusu ya da kuramsal bir soru geldiğinde önce kutuphane_ara, ayrıntı için kutuphane_oku kullan; yanıtta kaynağın adını ve bölümünü belirt, kaynakta olmayanı kaynaktaymış gibi söyleme.
 - Müdahale Programları kütüphanesindeki kitaplar (8 kitap, tam metin) senin başvuru kaynağın: bir konu/beceri için etkinlik, oturum ya da program önerirken, grup ya da bireysel çalışma planlarken veya danışman bir kitap/oturum sorduğunda önce program_ara, ayrıntı için program_oturumu kullan. Önerinde kitabın adını, oturum numarasını ve PDF sayfasını belirt; kitapta olmayan bir şeyi kitaptaymış gibi söyleme.

@@ -4320,7 +4320,9 @@ async function pdrSoruBolge(sf, vp, soru) {
     const sonraki = ogeler.filter(o => /^\s*\d{1,2}\.\s*($|\S)/.test(o.str) && !yonerge(o) && o.y > a.y + 5 && (sol ? o.x < W * 0.2 : (o.x > W * 0.45 && o.x < W * 0.62)) && +o.str.trim().split(".")[0] === soru.no + 1).sort((p, q) => p.y - q.y)[0];
     bolge = { x0, x1, y0: a.y - 4, y1: sonraki ? sonraki.y - 4 : H };
     // Sütunun tamamına yayılan (tam genişlik) sorular için: bölgede karşı sütunda numara yoksa genişlet
-    if (!ogeler.some(o => /^\s*\d{1,2}\.\s*($|\S)/.test(o.str) && o.y > bolge.y0 && o.y < bolge.y1 && (sol ? (o.x > W * 0.45 && o.x < W * 0.62) : o.x < W * 0.2)) && ogeler.some(o => o.y > bolge.y0 && o.y < bolge.y1 && (sol ? o.x > W * 0.55 : o.x < W * 0.4))) { bolge.x0 = 0; bolge.x1 = W; } }
+    // Ölçüt: yazı sütun arasındaki boşluğa da taşıyorsa (iki sütunlu sayfada orası boştur) soru tam genişliktir
+    const arayaTasan = ogeler.some(o => o.y > bolge.y0 && o.y < bolge.y1 && o.str.trim().length > 1 && o.x < W * 0.505 && o.x + o.w > W * 0.495);
+    if (arayaTasan && !ogeler.some(o => /^\s*\d{1,2}\.\s*($|\S)/.test(o.str) && o.y > bolge.y0 && o.y < bolge.y1 && (sol ? (o.x > W * 0.45 && o.x < W * 0.62) : o.x < W * 0.2)) && ogeler.some(o => o.y > bolge.y0 && o.y < bolge.y1 && (sol ? o.x > W * 0.55 : o.x < W * 0.4))) { bolge.x0 = 0; bolge.x1 = W; } }
   const tamGen = bolge.x0 === 0 && bolge.x1 === W, solMu = bolge.x0 === 0;
   const icinde = ogeler.filter(o => o.y + o.h > bolge.y0 && o.y < bolge.y1 && (tamGen || (solMu ? o.x < W * 0.47 : o.x >= W * 0.47)) && !(!tamGen && /^[-–‑]$/.test(o.str.trim()) && Math.abs(o.x - W * 0.47) < W * 0.03));
   // Sözcük sözcük gelen metni satırlara birleştir (çok sözcüklü ifadeleri bulabilmek için)
@@ -4635,7 +4637,7 @@ function KitapSayfaGosterici({ kitap, kitapAd, sayfa, aralik, ofset = 0, onKapat
         <button onClick={yazdir} disabled={durum !== "hazir"} style={btn}>🖨</button>
         {soru && s === sayfa && <button data-beceri-isaretle="1" onClick={isaretle} disabled={durum !== "hazir"} style={{ ...btn, background: isaretAcik ? "#FDE68A" : "#FEF3C7" }}>🔍 Beceriler</button>}
         {soru && s === sayfa && <button data-cozum-yolu="1" onClick={() => cozumAc()} disabled={durum !== "hazir"} style={{ ...btn, background: cozumAcik ? "#FED7AA" : "#FFEDD5" }}>🧭 Çözüm yolu</button>}
-        {(durum === "hazir" || durum.startsWith("hata")) && <label data-kitap-degistir="1" title="Yanlış PDF yüklendiyse doğrusunu seçin" style={{ ...btn, display: "inline-block" }}>🔄 PDF<input type="file" accept="application/pdf,.pdf" onChange={e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) pdfDegistir(f); }} style={{ display: "none" }} /></label>}
+        {(durum === "hazir" || durum.startsWith("hata")) && <label data-kitap-degistir="1" title="Yanlış PDF yüklendiyse doğrusunu seçin" style={{ ...btn, display: "inline-block", color: "#0F172A", fontWeight: 800, whiteSpace: "nowrap" }}>🔄 PDF<input type="file" accept="application/pdf,.pdf" onChange={e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) pdfDegistir(f); }} style={{ display: "none" }} /></label>}
         <button data-kitap-kapat="1" onClick={onKapat} style={{ ...btn, background: "#FEE2E2" }}>✕</button>
       </div>
       {(uyari || degisDurum) && <div data-kitap-uyari="1" style={{ background: uyari || degisDurum.startsWith("⚠") ? "#FEF3C7" : "#DCFCE7", color: "#78350F", fontSize: 12.5, fontWeight: 700, padding: "6px 10px", lineHeight: 1.45 }}>{uyari ? <>⚠ {uyari} Üstteki <b>🔄 PDF</b> düğmesiyle doğru dosyayı seçin.</> : degisDurum}</div>}

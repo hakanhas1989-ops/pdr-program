@@ -21621,7 +21621,15 @@ async function ksEkranFormDoldur(o, sab, g, on) {
 // ── Grup görüşmesi notunu öğrenciye bölme ──
 function pdrSadeKelimeler(t) { return ksSade(t).split(/[^\p{L}\p{N}]+/u).filter(Boolean); }
 function pdrAdKokleri(ad) { return String(ad || "").split(/\s+/).filter(w => w && !w.includes("*")).map(w => ksSade(w).replace(/[^\p{L}]/gu, "")).filter(w => w.length >= 3); }
-function pdrCumleler(t) { return String(t || "").replace(/([.!?…])\s+/g, "$1\n").split(/\n+/).map(s => s.trim()).filter(Boolean); }
+// Cümlelere böl: noktadan sonra boşluk unutulmuşsa ("istiyor.Alihan") ya da satır sonu "\n" yazı olarak kalmışsa ("istiyor.nAlihan") da böl
+function pdrCumleler(t) { return String(t || "").replace(/([.!?…])n(?=[A-ZÇĞİÖŞÜ][a-zçğıöşü])/g, "$1\n").replace(/([.!?…])(?=[A-ZÇĞİÖŞÜ][a-zçğıöşü])/g, "$1\n").replace(/([.!?…])\s+/g, "$1\n").split(/\n+/).map(s => s.trim()).filter(Boolean); }
+// Ad kökü cümlede geçiyor mu — okul adının parçası olan adları saymaz ("Mehmet Emin Horoz Meslek Lisesi", "Hüseyin Yıldız Anadolu Lisesi")
+const PDR_OKUL_SOZ_RE = /^(lise|lises|mtal|meslek|anadolu|ortaokul|okul|kolej|imam|fen$|sosyal$|teknik|ilkokul)/;
+// Tam eşleşme 1 puan, ek almış hâli ("Ali" → "Ali'nin") 0,5 puan: "Alihan" adı "Ali"den çok "Alihan"a aittir
+function pdrKokSayisi(tk, kok) {
+  const okulDegil = (i) => !tk.slice(i + 1, i + 5).some(x => PDR_OKUL_SOZ_RE.test(x));
+  return kok.reduce((p, k) => p + (tk.some((t, i) => t === k && okulDegil(i)) ? 1 : tk.some((t, i) => t.startsWith(k) && t.length - k.length <= 4 && okulDegil(i)) ? 0.5 : 0), 0);
+}
 // Cümleler, adı geçen öğrenciye; adsız cümleler bir önceki adı geçen öğrenciye bağlanır.
 // "Öğrenciler / hepsi / birlikte" gibi cümleler ortak sayılır.
 function pdrGrupNotBol(metin, benAd, digerAdlar) {
@@ -21629,7 +21637,7 @@ function pdrGrupNotBol(metin, benAd, digerAdlar) {
   const kendi = [], ortak = []; let son = -1;
   pdrCumleler(metin).forEach(c => {
     const tk = pdrSadeKelimeler(c);
-    const puan = kat.map(kk => kk.filter(k => tk.some(t => t === k || (t.startsWith(k) && t.length - k.length <= 4))).length);
+    const puan = kat.map(kk => pdrKokSayisi(tk, kk));
     const mx = Math.max(0, ...puan);
     if (mx > 0) {
       const idx = puan.map((p, i) => p === mx ? i : -1).filter(i => i >= 0);
@@ -21663,7 +21671,7 @@ function pdrOgrNotMetni(r, o, sade) {
 function pdrNottaAdiGecenCumleler(metin, ad) {
   const kok = pdrAdKokleri(ad);
   if (!kok.length) return [];
-  return pdrCumleler(metin).filter(c => { const tk = pdrSadeKelimeler(c); return kok.some(k => tk.some(t => t === k || (t.startsWith(k) && t.length - k.length <= 4))); });
+  return pdrCumleler(metin).filter(c => pdrKokSayisi(pdrSadeKelimeler(c), kok) > 0);
 }
 function pdrOgrNotMetniTemel(r, o, sade) {
   const tam = pdrKayitMetni(r);
@@ -52048,7 +52056,9 @@ function RecordCard({ rec, records, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz,
               <label style={{ fontSize: 11, fontWeight: 600, color: MUTED, display: "block", marginBottom: 4 }}>BU ÖĞRENCİYE ÖZEL NOT (İSTEĞE BAĞLI)</label>
               <div style={{ fontSize: 10.5, color: MUTED, lineHeight: 1.45, marginBottom: 5 }}>Yukarıdaki not grup için ortak kalır. Bu öğrencinin kendi anlatımını ya da onunla ilgili gözlemini buraya yaz. Ortak notta olmayan bir yargıyı (ör. "zorbalık yaptı") ancak kendin biliyorsan yaz.</div>
               <button data-testid="ozel-not-taslak" onClick={() => {
-                const c = pdrNottaAdiGecenCumleler(editForm.raw || editForm.summary, rec.studentName);
+                const metin = editForm.raw || editForm.summary, bol = pdrGrupNotBol(metin, rec.studentName, rec.grupKatilimcilari || []);
+                // Adı geçen cümle ve onu izleyen (başka öğrencinin adı geçene kadar) cümleler bu öğrencinindir
+                const c = bol.kendi ? pdrCumleler(bol.kendi) : pdrNottaAdiGecenCumleler(metin, rec.studentName);
                 if (!c.length) { setOzelNotUyari("Notta bu öğrencinin adının geçtiği bir cümle yok. Özel notu kendin yazabilirsin."); return; }
                 setOzelNotUyari("Taslak yalnızca notta adının geçtiği cümlelerden alındı; yeni bilgi eklenmedi. Kontrol edip düzenle.");
                 setEditForm(f => ({ ...f, ozelNot: (f.ozelNot ? f.ozelNot + "\n" : "") + "Ortak notta bu öğrenciyle ilgili: " + c.join(" ") }));

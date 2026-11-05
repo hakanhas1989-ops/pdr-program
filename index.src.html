@@ -16154,6 +16154,17 @@ const KS_ASISTAN_ARACLAR = {
     girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
     calistir: async (g, ctx, o) => { const t = await pdrAkademikTakip(ctx, o); return `AKADEMİK TAKİP (${ksAsistanEtiket(o)}):\n${t.metin}\nNot: Beceri eksikleri deneme sorularının beceri analizine dayanır; tek deneme yaklaşık bir göstergedir, iki ve daha fazla deneme eğilimi gösterir. Etiketleme yapma; eksikleri 'geliştirilecek beceri' olarak anlat, gelişenleri öğrenciye mutlaka söyle.`; },
   },
+  lgs_tahmin: {
+    aciklama: "Gelecek LGS için konu konu beklenen soru sayısı tahmini (geçmiş tam kapsamlı LGS'lerin ortalaması, ders toplamına dengelenmiş), soru tipi beklentisi (görsel, olumsuz kök, zorluk, beceriler), istenen konu için 'buna benzer soru çıkabilir' kalıbı (en sık kurgu + örnek LGS ve MEBİ soruları) ve geriye dönük test (tahmin o yıl tutsaydı ne olurdu / kaydedilen tahmin ile gerçekleşen karşılaştırması). '2027 LGS'de ne çıkar', 'hangi konudan kaç soru beklenir', 'tahmin tuttu mu' sorularında kullan. Kesin bilgi değil, istatistiksel beklentidir.",
+    girdi: '{"ders": "isteğe bağlı", "konu": "isteğe bağlı", "test_yili": "isteğe bağlı, karşılaştırılacak geçmiş yıl"}', yontem: "hepsi",
+    calistir: async (g, ctx) => { const Y = lgsSonrakiYil(), kay = await lgsTahminOku(), t = kay[Y] ? { yil: Y, yillar: kay[Y].yillar, ders: kay[Y].ders } : lgsYilTahmini(Y), sade = (x) => ksSade(String(x || ""));
+      if (g.ders) Object.keys(t.ders).forEach(d => { if (!sade(d).includes(sade(g.ders))) delete t.ders[d]; });
+      const ty = parseInt(g.test_yili) || Math.max(...LGS_SORU_YILLARI), kar = lgsTahminKarsilastir(kay[ty] ? { yil: ty, ders: kay[ty].ders } : lgsYilTahmini(ty));
+      const r = [lgsTahminMetni(t, kar), kay[Y] ? `(Bu tahmin ${kay[Y].tarih} tarihinde kaydedildi.)` : "(Tahmin henüz kaydedilmedi; Geçmiş LGS → 🔮 Tahmin'de kilitlenebilir.)"];
+      const tip = lgsTipBeklentisi(); Object.entries(tip).filter(([d]) => t.ders[d]).forEach(([d, x]) => r.push(`${d} soru tipi beklentisi: görselli ≈ %${x.gorsel}, olumsuz kök ≈ %${x.olumsuz}, beceriler: ${x.beceri.map(b => LGS_BECERI[b] ? LGS_BECERI[b][1] : b).join(", ")}.`));
+      if (g.konu) Object.keys(t.ders).forEach(d => { const k = (LGS_KONU_HARITASI[d] || []).find(x => sade(x.konu).includes(sade(g.konu))); if (!k) return; const kal = lgsKonuKalibi(d, k.konu); if (kal) r.push(`BUNA BENZER SORU ÇIKABİLİR — ${d} / ${k.konu}: en sık kurgu ${kal.beceri.map(b => LGS_BECERI[b] ? LGS_BECERI[b][1] : b).join(", ")}; görselli %${kal.gorsel}, olumsuz kök %${kal.olumsuz}; örnek LGS soruları: ${kal.ornekLgs.map(q => q.yil + " · " + q.no).join(", ")}${kal.ornekMebi.length ? "; LGS'ye en benzer MEBİ soruları: " + kal.ornekMebi.map(q => `MEBİ ${q.sira} · ${q.no}${q.oran ? " %" + q.oran : ""}`).join(", ") : ""}.`); });
+      return r.join("\n") + "\nNot: Bu, geçmiş sınavlara dayalı istatistiksel bir beklentidir; MEB konu dağılımını her yıl değiştirebilir."; },
+  },
   soru_cozum_yolu: {
     aciklama: "Geçmiş LGS ve MEBİ deneme sorularının çözüm yolu (yerelde): bir soru için konu, ölçtüğü beceriler, zorluk, ön koşul becerileri ve kaydedilmiş 🧭 Çözüm yolu (💡 anahtar fikir, adımlar, soru üzerindeki notlar, çeldirici, cevap) ya da yoksa konunun genel çözüm yöntemi. ogrenci verirsen öğrencinin Geçmiş LGS → Çözdür'de işaretlediği yanlış/boş soruları tek tek bu bilgilerle listeler (görüşmede soru üzerinden çalışmak, 'balık tutmayı öğretmek' için). Sorunun kendi metni burada yoktur; danışman soruyu programda Geçmiş LGS'den açıp 🧭 Çözüm yolu ile gösterebilir. kitapcik: '2024 sayısal', '2026 sözel', 'MEBİ 5 sayısal' ya da kod (24say, m26035say). 'Şu sorunun çözümü', 'yanlış yaptığı soruları nasıl çalışalım', 'çözüm yolu' sorularında kullan.",
     girdi: '{"ogrenci": "isteğe bağlı", "sinif": "isteğe bağlı", "kitapcik": "isteğe bağlı", "ders": "isteğe bağlı", "no": "isteğe bağlı soru no", "adet": 8}', yontem: "hepsi",
@@ -17700,8 +17711,8 @@ const KS_ARAC_GRUPLARI = {
     araclar: ["risk_analizi", "risk_kaydet", "ekranda_risk", "risk_kapat", "sevk_kaydet", "sevk_sonuc"] },
   mudahale: { re: /mudahale|plan|program|hedef|uyum|izlem|takip/,
     araclar: ["mudahale_plani", "mudahale_kaydet", "ekranda_mudahale", "mudahale_durum", "mudahale_programi_ara", "mudahale_programi_kaydet", "uyum_kaydet", "seans_hazirlik"] },
-  akademik: { re: /deneme|net|lgs|yks|puan|yuzdelik|okul|lise|tercih|taban|konu|ders|calisma|karne|yazili|yil sonu|not ortalam|sinav|on kosul|onkosul|anlamiyor|yapamiyor|temel eksik|kopru plan|beceri|cozum yolu|cozumu|yanlis yaptig|soruyu|sorulari|mebi|eksik|zorlan|gelis|akademik|takip/,
-    araclar: ["deneme_kaydet", "deneme_analizi", "konu_guncelle", "lgs_konu_onceligi", "akademik_takip", "onkosul_plani", "lgs_beceri", "soru_cozum_yolu", "hedef_okul", "hedef_okul_kaydet", "lise_taban_puanlari", "sinav_rehberi", "not_kaydet"] },
+  akademik: { re: /deneme|net|lgs|yks|puan|yuzdelik|okul|lise|tercih|taban|konu|ders|calisma|karne|yazili|yil sonu|not ortalam|sinav|on kosul|onkosul|anlamiyor|yapamiyor|temel eksik|kopru plan|beceri|cozum yolu|cozumu|yanlis yaptig|soruyu|sorulari|mebi|eksik|zorlan|gelis|akademik|takip|tahmin|beklen|cikar mi|2027/,
+    araclar: ["deneme_kaydet", "deneme_analizi", "konu_guncelle", "lgs_konu_onceligi", "akademik_takip", "onkosul_plani", "lgs_beceri", "lgs_tahmin", "soru_cozum_yolu", "hedef_okul", "hedef_okul_kaydet", "lise_taban_puanlari", "sinav_rehberi", "not_kaydet"] },
   ogrenci: { re: /ekle|yeni ogrenci|nakil|kaydet|devamsiz|profil|kariyer|ilgi|meslek|d2/,
     araclar: ["ogrenci_ekle", "devamsizlik_kaydet", "profil_puanla", "profil2_guncelle"] },
   hatirlatma: { re: /hatirla|randevu|takvim|yarin|haftaya|gun sonra|unutma/,
@@ -17820,6 +17831,7 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - Danışmanın kendi Kütüphanesi (yüklediği kitap, makale, yönetmelik, genelge — tam metin): "kütüphanede/yüklediğim kaynakta … ne diyor", mevzuat, süre/madde sorusu ya da kuramsal bir soru geldiğinde önce kutuphane_ara, ayrıntı için kutuphane_oku kullan; yanıtta kaynağın adını ve bölümünü belirt, kaynakta olmayanı kaynaktaymış gibi söyleme.
 - Müdahale Programları kütüphanesindeki kitaplar (8 kitap, tam metin) senin başvuru kaynağın: bir konu/beceri için etkinlik, oturum ya da program önerirken, grup ya da bireysel çalışma planlarken veya danışman bir kitap/oturum sorduğunda önce program_ara, ayrıntı için program_oturumu kullan. Önerinde kitabın adını, oturum numarasını ve PDF sayfasını belirt; kitapta olmayan bir şeyi kitaptaymış gibi söyleme.
 - LGS'nin ölçtüğü beceriler, bir konunun hangi becerileri istediği ya da öğrencinin hangi beceriyi geliştirmesi gerektiği sorulduğunda lgs_beceri kullan.
+- Gelecek LGS'de hangi konudan kaç soru beklendiği, neye benzer soru çıkabileceği ya da önceki tahminin tutup tutmadığı sorulduğunda lgs_tahmin kullan; bunun istatistiksel beklenti olduğunu belirt.
 - Öğrencinin hangi konu ve becerilerde eksiği olduğu, gelişip gelişmediği, neye çalışması gerektiği ya da akademik durumu sorulduğunda akademik_takip kullan (denemeler zaman içinde karşılaştırılır; gelişeni de söyle).
 - Geçmiş LGS / MEBİ sorusunun çözümü, öğrencinin yanlış yaptığı soruların nasıl çalışılacağı ya da çözüm yolu sorulduğunda soru_cozum_yolu kullan; cevabı doğrudan vermek yerine öğrenciye adım adım düşündürmeyi öner.
 - Öğrenci bir konuyu anlamadığında/yapamadığında, 'temel eksik' ya da 'önceki sınıf konusu' konuşulduğunda onkosul_plani kullan: eksik ön koşul becerilerini ve köprü planını (önce 20 dk temel, sonra güncel konu) öğrenciyi etiketlemeden anlat.
@@ -38834,6 +38846,108 @@ function lgsDenemeOzetMetni(kayit) {
   const a = lgsDenemeAnaliz(kayit.kitapcik, kayit.isaret), yuz = (x) => x[1] ? Math.round(100 * x[0] / x[1]) : 0;
   return `${lgsKitapcikAd(kayit.kitapcik)} (${kayit.tarih}) — netler: ${Object.entries(a.net).map(([d, n]) => `${d} ${String(n).replace(".", ",")}`).join(", ")}. Zayıf beceriler: ${a.zayif.slice(0, 4).map(z => `${LGS_BECERI[z.id] ? LGS_BECERI[z.id][0] : z.id} (%${z.oran} hata, ${z.hata}/${z.sayi})`).join(", ") || "belirgin değil"}. Olumsuz soru kökünde hata %${yuz(a.tip.olumsuz)}, diğerlerinde %${yuz(a.tip.diger)}; görselli sorularda %${yuz(a.tip.gorsel)}. Zorluğa göre hata: ${[1, 2, 3, 4].filter(i => a.zorluk[i][1]).map(i => `${LGS_ZORLUK_AD[i]} %${yuz(a.zorluk[i])} (${a.zorluk[i][0]}/${a.zorluk[i][1]})`).join(", ")}. Hatalı konular: ${a.konular.slice(0, 6).map(k => `${k.konu} (${k.hata}/${k.sayi})`).join(", ") || "yok"}.`;
 }
+// ── LGS tahmini ve gerçekleşenle karşılaştırma ──
+// Yöntem: bir yılın konu dağılımı, ondan ÖNCEKİ tam kapsamlı LGS'lerin basit ortalamasıyla tahmin edilir ve ders toplamına dengelenir.
+// Geriye dönük testte (2024, 2025, 2026) basit ortalama, son yıllara ağırlık veren ve MEBİ konu dağılımını katan seçeneklerden daha isabetli çıktı.
+// Tahmin kaydedilince (kilitlenince) o hâliyle saklanır; sınav olunca "ne bekliyorduk, ne oldu" bu kayıtla karşılaştırılır.
+let PDR_LGS_TAHMIN = null;
+async function lgsTahminOku() { if (PDR_LGS_TAHMIN) return PDR_LGS_TAHMIN; try { const r = await window.storage.get("pdr-lgs-tahmin"); PDR_LGS_TAHMIN = (r && r.value && JSON.parse(r.value)) || {}; } catch (e) { PDR_LGS_TAHMIN = {}; } return PDR_LGS_TAHMIN; }
+async function lgsTahminKaydet(v) { PDR_LGS_TAHMIN = v; try { await window.storage.set("pdr-lgs-tahmin", JSON.stringify(v)); } catch (e) {} }
+const LGS_YARIM_KAPSAM_YILLARI = [2020, 2023];   // yalnız 1. dönem konuları; ortalamaya katılmaz
+function lgsSonrakiYil() { return Math.max(...LGS_SORU_YILLARI) + 1; }
+function lgsKonuYilSoru(k, y) { const i = LGS_SORU_YILLARI.indexOf(y); return i >= 0 && k && Array.isArray(k.yillar) && typeof k.yillar[i] === "number" ? k.yillar[i] : (i >= 0 ? 0 : null); }
+// Y yılı için tahmin: { ders: [{ konu, beklenen, tahmin (tam sayı), gelmeOrani, yilSay }] }
+function lgsYilTahmini(Y) {
+  const yillar = LGS_SORU_YILLARI.filter(y => y < Y && !LGS_YARIM_KAPSAM_YILLARI.includes(y)), sonuc = {};
+  Object.entries(LGS_KONU_HARITASI).forEach(([d, ks]) => {
+    const l = ks.map(k => { const v = yillar.map(y => lgsKonuYilSoru(k, y) || 0); return { konu: k.konu, beklenen: v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0, gelmeOrani: v.length ? v.filter(x => x > 0).length / v.length : 0, yilSay: v.length }; });
+    const top = l.reduce((a, x) => a + x.beklenen, 0) || 1, hedef = LGS_DERS_SORU[d] || Math.round(top);
+    l.forEach(x => { x.beklenen = x.beklenen * hedef / top; x.tahmin = Math.floor(x.beklenen); });
+    // En büyük kalan yöntemiyle ders toplamına tamamla
+    let eksik = hedef - l.reduce((a, x) => a + x.tahmin, 0); [...l].sort((a, b) => (b.beklenen - b.tahmin) - (a.beklenen - a.tahmin)).forEach(x => { if (eksik > 0) { x.tahmin++; eksik--; } });
+    sonuc[d] = l.sort((a, b) => b.beklenen - a.beklenen);
+  });
+  return { yil: Y, yillar, ders: sonuc };
+}
+// Tahmin ile gerçekleşeni karşılaştır (Y yılının verisi programdaysa)
+function lgsTahminKarsilastir(tahmin) {
+  const Y = tahmin.yil; if (!LGS_SORU_YILLARI.includes(Y)) return null;
+  const ders = {}; let n = 0, tam = 0, yakin = 0, hata = 0;
+  Object.entries(tahmin.ders).forEach(([d, l]) => { const ks = LGS_KONU_HARITASI[d] || [];
+    ders[d] = l.map(x => { const g = lgsKonuYilSoru(ks.find(k => k.konu === x.konu), Y) || 0, e = Math.abs(x.beklenen - g); n++; hata += e; if (x.tahmin === g) tam++; if (Math.abs(x.tahmin - g) <= 1) yakin++; return { ...x, gercek: g, fark: g - x.tahmin }; }); });
+  const tum = Object.entries(ders).flatMap(([d, l]) => l.map(x => ({ ...x, ders: d })));
+  return { yil: Y, ders, n, tam, yakin, mae: n ? hata / n : 0, surpriz: tum.filter(x => Math.abs(x.fark) >= 2).sort((a, b) => Math.abs(b.fark) - Math.abs(a.fark)).slice(0, 8) };
+}
+// Soru tipi beklentisi (soru düzeyinde analiz edilen LGS'lerden): görsel, olumsuz kök, zorluk, beceriler
+function lgsTipBeklentisi() {
+  const qs = lgsSorular().filter(q => q.kaynak === "lgs"), r = {};
+  Object.keys(LGS_DERS_SORU).forEach(d => { const x = qs.filter(q => q.ders === d); if (!x.length) return; const yil = [...new Set(x.map(q => q.yil))].sort(), c = {};
+    x.forEach(q => q.bec.forEach(b => c[b] = (c[b] || 0) + 1)); const z = [0, 0, 0, 0, 0]; x.forEach(q => z[q.zorluk]++);
+    const son = x.filter(q => q.yil === yil[yil.length - 1]);
+    r[d] = { yillar: yil, gorsel: Math.round(100 * x.filter(q => q.gorsel).length / x.length), olumsuz: Math.round(100 * x.filter(q => q.olumsuz).length / x.length), sonGorsel: son.length ? Math.round(100 * son.filter(q => q.gorsel).length / son.length) : null,
+      zor: z.map(v => Math.round(100 * v / x.length)), beceri: Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([b]) => b) }; });
+  return r;
+}
+// Bir konuda "buna benzer soru çıkabilir": geçmişteki en sık soru kurgusu + örnek LGS ve MEBİ soruları
+function lgsKonuKalibi(d, konu) {
+  const l = lgsSorular().filter(q => q.ders === d && q.konu === konu), lg = l.filter(q => q.kaynak === "lgs").sort((a, b) => b.yil - a.yil || a.no - b.no), mb = l.filter(q => q.kaynak === "mebi");
+  if (!lg.length && !mb.length) return null;
+  const c = {}; lg.forEach(q => q.bec.forEach(b => c[b] = (c[b] || 0) + 1));
+  const sonYilMebi = mb.length ? Math.max(...mb.map(q => q.yil * 100 + q.ay)) : 0, guncelMebi = mb.filter(q => q.yil * 100 + q.ay > sonYilMebi - 100);
+  return { lgsSay: lg.length, beceri: Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([b]) => b), gorsel: lg.length ? Math.round(100 * lg.filter(q => q.gorsel).length / lg.length) : 0, olumsuz: lg.length ? Math.round(100 * lg.filter(q => q.olumsuz).length / lg.length) : 0,
+    zorluk: lg.length ? Math.round(10 * lg.reduce((a, q) => a + (q.zorluk || 2), 0) / lg.length) / 10 : 0, ornekLgs: [...new Set(lg.map(q => q.yil))].slice(0, 3).map(y => lg.find(q => q.yil === y)), ornekMebi: [...guncelMebi].sort((a, b) => (b.oran || 0) - (a.oran || 0)).slice(0, 2) };
+}
+function lgsTahminMetni(t, kar) {
+  const s = [`${t.yil} LGS TAHMİNİ (yöntem: ${t.yillar.join(", ")} LGS'lerinin konu ortalaması, ders toplamına dengelenmiş; 2020 ve 2023 yalnız 1. dönem konularını kapsadığı için katılmadı).`];
+  Object.entries(t.ders).forEach(([d, l]) => s.push(`${d}: ` + l.filter(x => x.tahmin > 0 || x.beklenen >= 0.3).map(x => `${x.konu} ${x.tahmin} (ort. ${lgsSayiYaz(x.beklenen)}${x.gelmeOrani >= 0.85 ? ", her yıl geliyor" : x.gelmeOrani < 0.5 ? ", bazı yıllar hiç gelmedi" : ""})`).join("; ")));
+  if (kar) s.push(`GERİYE DÖNÜK TEST — ${kar.yil}: soru sayısı tam tutan konu ${kar.tam}/${kar.n}, en fazla 1 soru şaşan ${kar.yakin}/${kar.n} (ortalama sapma ${lgsSayiYaz(kar.mae)} soru).${kar.surpriz.length ? " Sürprizler: " + kar.surpriz.map(x => `${x.ders} ${x.konu} (beklenen ${x.tahmin}, gelen ${x.gercek})`).join("; ") : ""}`);
+  return s.join("\n");
+}
+
+function LgsTahminPaneli({ onSayfaAc }) {
+  const Y = lgsSonrakiYil(), [kayit, setKayit] = useState(PDR_LGS_TAHMIN), [ders, setDers] = useState("Matematik"), [testYil, setTestYil] = useState(Math.max(...LGS_SORU_YILLARI)), [acikKonu, setAcikKonu] = useState(null);
+  useEffect(() => { lgsTahminOku().then(v => setKayit({ ...v })); }, []);
+  const tahmin = useMemo(() => lgsYilTahmini(Y), [Y]), tip = useMemo(() => lgsTipBeklentisi(), []);
+  const kilitli = kayit && kayit[Y];
+  // Kaydedilmiş tahminler: gerçekleşen yıllar için "ne bekliyorduk ne oldu"; kayıt yoksa geriye dönük hesap
+  const testler = useMemo(() => LGS_SORU_YILLARI.filter(y => !LGS_YARIM_KAPSAM_YILLARI.includes(y) && LGS_SORU_YILLARI.filter(z => z < y && !LGS_YARIM_KAPSAM_YILLARI.includes(z)).length >= 3).slice(0, 4), []);
+  const kar = useMemo(() => { const k = kayit && kayit[testYil]; return lgsTahminKarsilastir(k ? { yil: testYil, ders: k.ders, yillar: k.yillar } : lgsYilTahmini(testYil)); }, [testYil, kayit]);
+  async function kilitle() { const v = { ...(await lgsTahminOku()) }; v[Y] = { tarih: today(), yillar: tahmin.yillar, ders: tahmin.ders, tip }; await lgsTahminKaydet(v); setKayit({ ...v }); }
+  const btn = { padding: "4px 9px", borderRadius: 8, border: "1px solid #C4B5FD", background: "#fff", fontSize: 11.5, fontWeight: 700, cursor: "pointer" };
+  const gT = kilitli ? kilitli.ders : tahmin.ders, kd = gT[ders] || [], tp = tip[ders];
+  return (<div data-testid="lgs-tahmin" style={{ fontSize: 11.5 }}>
+    <div style={{ background: "#F5F3FF", border: "1px solid #C4B5FD", borderRadius: 10, padding: "7px 9px", marginBottom: 7, lineHeight: 1.5 }}>
+      <b style={{ color: "#5B21B6" }}>🔮 {Y} LGS tahmini</b> — {tahmin.yillar.join(", ")} LGS'lerinin konu ortalamasıyla (2020 ve 2023 yarım kapsamlı olduğu için hariç). {kilitli ? <span data-testid="tahmin-kilitli" style={{ color: "#15803D", fontWeight: 700 }}>📌 {kilitli.tarih} tarihinde kaydedildi; {Y} LGS'den sonra bu kayıtla karşılaştırılacak.</span> : <span>Sınavdan sonra "ne bekliyorduk, ne oldu" karşılaştırması için tahmini şimdi kaydedin.</span>}
+      <div style={{ marginTop: 4 }}><button data-testid="tahmin-kilitle" onClick={kilitle} style={{ ...btn, background: kilitli ? "#fff" : "#EDE9FE" }}>📌 {kilitli ? "Tahmini güncelle ve yeniden kaydet" : "Tahmini kaydet (kilitle)"}</button></div>
+    </div>
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 6 }}>{Object.keys(gT).map(d => <button key={d} data-tahmin-ders={d} onClick={() => { setDers(d); setAcikKonu(null); }} style={{ ...btn, background: ders === d ? "#EDE9FE" : "#fff" }}>{d}</button>)}</div>
+    {tp && <div data-testid="tahmin-tip" style={{ background: "#fff", border: "1px solid #E9D5FF", borderRadius: 9, padding: "5px 8px", marginBottom: 6, lineHeight: 1.5 }}><b>Soru tipi beklentisi ({tp.yillar[0]}–{tp.yillar[tp.yillar.length - 1]} LGS'lerine göre):</b> görselli/tablolu soru ≈ %{tp.gorsel}{tp.sonGorsel != null ? ` (son yıl %${tp.sonGorsel})` : ""}, kökte olumsuz ifade ≈ %{tp.olumsuz}; en çok istenen beceriler: {tp.beceri.map(b => LGS_BECERI[b] ? LGS_BECERI[b][1] : b).join(", ")}.</div>}
+    <div style={{ fontWeight: 800, color: "#5B21B6", margin: "4px 0" }}>Konulara göre beklenen soru sayısı — bir konuya dokunun: "buna benzer soru çıkabilir"</div>
+    {kd.filter(x => x.tahmin > 0 || x.beklenen >= 0.2).map(x => { const ac = acikKonu === x.konu, kal = ac ? lgsKonuKalibi(ders, x.konu) : null; return (
+      <div key={x.konu} data-tahmin-konu={x.konu} style={{ borderTop: "1px dashed #DDD6FE", padding: "4px 0" }}>
+        <div onClick={() => setAcikKonu(ac ? null : x.konu)} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+          <span style={{ width: 26, height: 22, borderRadius: 6, background: x.tahmin >= 3 ? "#7C3AED" : x.tahmin >= 1 ? "#A78BFA" : "#E9D5FF", color: x.tahmin >= 1 ? "#fff" : "#5B21B6", fontWeight: 900, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{x.tahmin}</span>
+          <span style={{ flex: 1 }}><b>{x.konu}</b> <span style={{ color: MUTED }}>ort. {lgsSayiYaz(x.beklenen)}{x.gelmeOrani >= 0.85 ? " · her yıl geliyor" : x.gelmeOrani < 0.5 ? " · bazı yıllar hiç gelmedi" : ""}</span></span><span style={{ color: "#7C3AED" }}>{ac ? "▲" : "▼"}</span></div>
+        {ac && (kal ? <div data-testid="tahmin-kalip" style={{ background: "#FAF5FF", borderRadius: 8, padding: "5px 8px", marginTop: 4, lineHeight: 1.5 }}>
+          <div><b>Muhtemel soru kurgusu</b> (geçmiş {kal.lgsSay} LGS sorusuna göre): {kal.beceri.map(b => LGS_BECERI[b] ? LGS_BECERI[b][1] : b).join(", ") || "—"} becerileri; görselli olma ihtimali %{kal.gorsel}{kal.olumsuz ? `, kökte olumsuz ifade %${kal.olumsuz}` : ""}; ortalama zorluk {kal.zorluk >= 3.3 ? "zor" : kal.zorluk >= 2.5 ? "orta-zor" : kal.zorluk >= 1.8 ? "orta" : "kolay"}.</div>
+          {kal.ornekLgs.length > 0 && <div style={{ marginTop: 3 }}>Örnek LGS soruları: {kal.ornekLgs.map(q => <button key={q.kitapcik + q.no} data-tahmin-ornek={q.kitapcik + "_" + q.no} onClick={() => onSayfaAc && onSayfaAc(q.kitapcik, q.sayfa, q)} style={{ ...btn, padding: "1px 6px", fontSize: 10.5, margin: "1px 3px 1px 0", color: ["#9CA3AF", "#16A34A", "#2563EB", "#EA580C", "#B91C1C"][q.zorluk] }}>{q.yil} · {q.no}</button>)}</div>}
+          {kal.ornekMebi.length > 0 && <div style={{ marginTop: 2 }}>LGS'ye en benzer MEBİ soruları: {kal.ornekMebi.map(q => <button key={q.kitapcik + q.no} onClick={() => onSayfaAc && onSayfaAc(q.kitapcik, q.sayfa, q)} style={{ ...btn, padding: "1px 6px", fontSize: 10.5, margin: "1px 3px 1px 0", color: "#1D4ED8" }}>MEBİ {q.sira} · {q.no}{q.oran ? ` %${q.oran}` : ""}</button>)}</div>}
+          <div style={{ color: MUTED, marginTop: 2 }}>Öğrenciyle bu örnekleri 🧭 Çözüm yolu ile çalışmak, aynı kurgudaki yeni soruya hazırlar.</div>
+        </div> : <div style={{ color: MUTED, marginTop: 3 }}>Bu konuda soru düzeyinde analiz edilmiş örnek yok.</div>)}
+      </div>); })}
+    <div data-testid="tahmin-test" style={{ marginTop: 9, background: "#F0FDF4", border: "1px solid #86EFAC", borderRadius: 10, padding: "7px 9px", lineHeight: 1.5 }}>
+      <b style={{ color: "#166534" }}>📏 Ne bekliyorduk, ne oldu?</b> {kayit && kayit[testYil] ? `(${kayit[testYil].tarih} tarihli kayıtlı tahmin)` : "(geriye dönük test: o yıldan önceki LGS'lerle yapılan tahmin)"}
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", margin: "4px 0" }}>{testler.map(y => <button key={y} data-tahmin-test={y} onClick={() => setTestYil(y)} style={{ ...btn, borderColor: "#86EFAC", background: testYil === y ? "#DCFCE7" : "#fff" }}>{y}</button>)}</div>
+      {kar && <>
+        <div data-testid="tahmin-isabet"><b>{kar.yil} LGS:</b> soru sayısı tam tutan konu <b>{kar.tam}/{kar.n}</b> (%{Math.round(100 * kar.tam / kar.n)}); en fazla 1 soru şaşan <b>{kar.yakin}/{kar.n}</b> (%{Math.round(100 * kar.yakin / kar.n)}); konu başına ortalama sapma {lgsSayiYaz(kar.mae)} soru.</div>
+        {kar.surpriz.length > 0 && <div style={{ marginTop: 3 }}><b>Sürprizler</b> (2+ soru fark): {kar.surpriz.map(x => `${x.konu} (${x.ders.split(" ")[0]}: beklenen ${x.tahmin}, gelen ${x.gercek})`).join(" · ")}</div>}
+        <div style={{ marginTop: 3 }}>{ders}: {(kar.ders[ders] || []).filter(x => x.tahmin || x.gercek).map(x => <span key={x.konu} style={{ display: "inline-block", margin: "1px 6px 1px 0", color: x.fark === 0 ? "#166534" : Math.abs(x.fark) === 1 ? "#B45309" : "#B91C1C" }}>{x.konu} {x.tahmin}→{x.gercek}</span>)}</div>
+      </>}
+      <div style={{ color: MUTED, marginTop: 3 }}>{Y} LGS yapılıp sorular programa eklendiğinde burada {Y} de çıkar ve kaydettiğiniz tahminle karşılaştırılır.</div>
+    </div>
+  </div>);
+}
+
 function LgsGecmisPaneli({ seciliAd, ogrAnahtar, onSayfaAc }) {
   const [takip, setTakip] = useState(null);
   const [acik, setAcik] = useState(false), [kitapcik, setKitapcik] = useState("26soz"), [isaret, setIsaret] = useState({}), [kayitlar, setKayitlar] = useState(PDR_LGS_DENEME), [goster, setGoster] = useState(null), [mod, setMod] = useState("ozet");
@@ -38853,6 +38967,7 @@ function LgsGecmisPaneli({ seciliAd, ogrAnahtar, onSayfaAc }) {
         <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
           <button data-testid="lgs-gecmis-ozet" onClick={() => setMod("ozet")} style={{ ...btn, flex: 1, background: mod === "ozet" ? "#FFEDD5" : "#fff" }}>📊 Ders özeti</button>
           <button data-testid="lgs-gecmis-mebi" onClick={() => setMod("mebi")} style={{ ...btn, flex: 1, background: mod === "mebi" ? "#FFEDD5" : "#fff" }}>📘 MEBİ</button>
+          <button data-testid="lgs-gecmis-tahmin" onClick={() => setMod("tahmin")} style={{ ...btn, flex: 1, background: mod === "tahmin" ? "#FFEDD5" : "#fff" }}>🔮 Tahmin</button>
           <button data-testid="lgs-gecmis-cozdur" onClick={() => setMod("cozdur")} style={{ ...btn, flex: 1, background: mod === "cozdur" ? "#FFEDD5" : "#fff" }}>🧑‍🎓 Çözdür</button>
         </div>
         {mod === "ozet" && Object.entries(S.ders).map(([d, x]) => (
@@ -38863,6 +38978,7 @@ function LgsGecmisPaneli({ seciliAd, ogrAnahtar, onSayfaAc }) {
           </div>))}
         {mod === "ozet" && <div style={{ fontSize: 10, color: MUTED, marginTop: 4, lineHeight: 1.4 }}>Zorluk: MEB soru başına doğru oranı yayımlamadığı için her soru metin yükü, öncüllü yapı (I-II-III), işlem adımı, olumsuz kök, görsel ve beceri sayısına göre derecelendirildi; ders içi oranlar MEB'in açıkladığı ders ortalamalarına göre ayarlandı (Matematik en zor, Din Kültürü en kolay).</div>}
         {mod === "mebi" && <LgsMebiListesi onSayfaAc={onSayfaAc} />}
+        {mod === "tahmin" && <LgsTahminPaneli onSayfaAc={onSayfaAc} />}
         {mod === "cozdur" && (!seciliAd ? <div style={{ fontSize: 11.5, color: MUTED }}>Önce aşağıdan bir öğrenci seçin.</div> : (<>
           <div style={{ fontSize: 11, color: "#7C2D12", marginBottom: 5, lineHeight: 1.45 }}>Öğrenciye geçmiş bir LGS'yi süre tutarak çözdürün. Cevap anahtarıyla kontrol ettikten sonra yanlışlarına bir kez (✗), boşlarına iki kez (○) dokunun; işaretsizler doğru sayılır.</div>
           <div style={{ display: "flex", gap: 6, marginBottom: 6, alignItems: "center", flexWrap: "wrap" }}>
@@ -41428,6 +41544,7 @@ const PDR_ASISTAN_ARAC_AD = {
   lgs_beceri: "LGS beceri haritası",
   soru_cozum_yolu: "Soru çözüm yolu",
   akademik_takip: "Akademik takip",
+  lgs_tahmin: "LGS tahmini",
   ogrenci_ara: "Öğrenci arandı", ogrenci_ozeti: "Öğrenci özeti", gorusme_notlari: "Görüşme notları okundu",
   risk_analizi: "Risk analizi (kapalı sistem)", seans_hazirlik: "Seans hazırlığı (kapalı sistem)", mudahale_plani: "Müdahale planı önerisi (kapalı sistem)",
   deneme_analizi: "Deneme analizi (kapalı sistem)", profil_analizi: "Profil analizi (kapalı sistem)", supervizyon: "Süpervizyon raporu (kapalı sistem)",
@@ -53517,6 +53634,7 @@ export default function App() {
       "pdr-porteus-norm": () => pdrPorteusNormYukle(),
       "pdr-cattell-norm": () => pdrCattellNormYukle(),
       "pdr-onkosul": () => onkosulOku(),
+      "pdr-lgs-tahmin": () => { PDR_LGS_TAHMIN = null; return lgsTahminOku(); },
       "pdr-lgs-deneme": () => lgsDenemeOku(),
       "pdr-cozum-yolu": () => { PDR_COZUM_YOLU = null; return pdrCozumOku(); },
       "pdr-gorsel-algi-norm": () => pdrGorselNormYukle(),

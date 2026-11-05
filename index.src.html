@@ -38856,18 +38856,28 @@ async function lgsTahminKaydet(v) { PDR_LGS_TAHMIN = v; try { await window.stora
 const LGS_YARIM_KAPSAM_YILLARI = [2020, 2023];   // yalnız 1. dönem konuları; ortalamaya katılmaz
 function lgsSonrakiYil() { return Math.max(...LGS_SORU_YILLARI) + 1; }
 function lgsKonuYilSoru(k, y) { const i = LGS_SORU_YILLARI.indexOf(y); return i >= 0 && k && Array.isArray(k.yillar) && typeof k.yillar[i] === "number" ? k.yillar[i] : (i >= 0 ? 0 : null); }
+// Y LGS'sinden önceki öğretim yılının MEBİ denemelerinde konu başına soru sayısı (Eylül Y-1 – Haziran Y)
+function lgsMebiKonuSayisi(Y) {
+  const l = lgsSorular().filter(q => q.kaynak === "mebi" && q.konu && q.yil * 100 + q.ay >= (Y - 1) * 100 + 9 && q.yil * 100 + q.ay <= Y * 100 + 6), r = {};
+  l.forEach(q => { const d = r[q.ders] = r[q.ders] || { _top: 0 }; d[q.konu] = (d[q.konu] || 0) + 1; d._top++; });
+  return { var: l.length > 0, deneme: new Set(l.map(q => q.kitapcik.slice(0, -3))).size, ders: r };
+}
 // Y yılı için tahmin: { ders: [{ konu, beklenen, tahmin (tam sayı), gelmeOrani, yilSay }] }
-function lgsYilTahmini(Y) {
+// mebiAgirlik > 0 ise o yılın MEBİ konu payı da katılır (karşılaştırma için ikinci yöntem)
+function lgsYilTahmini(Y, mebiAgirlik = 0) {
+  const mebi = mebiAgirlik ? lgsMebiKonuSayisi(Y) : null;
   const yillar = LGS_SORU_YILLARI.filter(y => y < Y && !LGS_YARIM_KAPSAM_YILLARI.includes(y)), sonuc = {};
   Object.entries(LGS_KONU_HARITASI).forEach(([d, ks]) => {
-    const l = ks.map(k => { const v = yillar.map(y => lgsKonuYilSoru(k, y) || 0); return { konu: k.konu, beklenen: v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0, gelmeOrani: v.length ? v.filter(x => x > 0).length / v.length : 0, yilSay: v.length }; });
+    const md = mebi && mebi.ders[d], l = ks.map(k => { const v = yillar.map(y => lgsKonuYilSoru(k, y) || 0); let b = v.length ? v.reduce((a, c) => a + c, 0) / v.length : 0;
+      if (md && md._top) b = (1 - mebiAgirlik) * b + mebiAgirlik * (LGS_DERS_SORU[d] || 10) * (md[k.konu] || 0) / md._top;
+      return { konu: k.konu, beklenen: b, gelmeOrani: v.length ? v.filter(x => x > 0).length / v.length : 0, yilSay: v.length, mebi: md ? (md[k.konu] || 0) : null }; });
     const top = l.reduce((a, x) => a + x.beklenen, 0) || 1, hedef = LGS_DERS_SORU[d] || Math.round(top);
     l.forEach(x => { x.beklenen = x.beklenen * hedef / top; x.tahmin = Math.floor(x.beklenen); });
     // En büyük kalan yöntemiyle ders toplamına tamamla
     let eksik = hedef - l.reduce((a, x) => a + x.tahmin, 0); [...l].sort((a, b) => (b.beklenen - b.tahmin) - (a.beklenen - a.tahmin)).forEach(x => { if (eksik > 0) { x.tahmin++; eksik--; } });
     sonuc[d] = l.sort((a, b) => b.beklenen - a.beklenen);
   });
-  return { yil: Y, yillar, ders: sonuc };
+  return { yil: Y, yillar, ders: sonuc, mebi: !!(mebi && mebi.var) };
 }
 // Tahmin ile gerçekleşeni karşılaştır (Y yılının verisi programdaysa)
 function lgsTahminKarsilastir(tahmin) {
@@ -38900,6 +38910,7 @@ function lgsKonuKalibi(d, konu) {
 function lgsTahminMetni(t, kar) {
   const s = [`${t.yil} LGS TAHMİNİ (yöntem: ${t.yillar.join(", ")} LGS'lerinin konu ortalaması, ders toplamına dengelenmiş; 2020 ve 2023 yalnız 1. dönem konularını kapsadığı için katılmadı).`];
   Object.entries(t.ders).forEach(([d, l]) => s.push(`${d}: ` + l.filter(x => x.tahmin > 0 || x.beklenen >= 0.3).map(x => `${x.konu} ${x.tahmin} (ort. ${lgsSayiYaz(x.beklenen)}${x.gelmeOrani >= 0.85 ? ", her yıl geliyor" : x.gelmeOrani < 0.5 ? ", bazı yıllar hiç gelmedi" : ""})`).join("; ")));
+  const mb = lgsMebiKonuSayisi(t.yil); if (mb.var) s.push(`Bu öğretim yılının ${mb.deneme} MEBİ denemesinde konu dağılımı: ` + Object.entries(mb.ders).map(([d, x]) => `${d}: ` + Object.entries(x).filter(([k]) => k !== "_top").sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, n]) => `${k} ${n}`).join(", ")).join(" | ") + ".");
   if (kar) s.push(`GERİYE DÖNÜK TEST — ${kar.yil}: soru sayısı tam tutan konu ${kar.tam}/${kar.n}, en fazla 1 soru şaşan ${kar.yakin}/${kar.n} (ortalama sapma ${lgsSayiYaz(kar.mae)} soru).${kar.surpriz.length ? " Sürprizler: " + kar.surpriz.map(x => `${x.ders} ${x.konu} (beklenen ${x.tahmin}, gelen ${x.gercek})`).join("; ") : ""}`);
   return s.join("\n");
 }
@@ -38907,17 +38918,21 @@ function lgsTahminMetni(t, kar) {
 function LgsTahminPaneli({ onSayfaAc }) {
   const Y = lgsSonrakiYil(), [kayit, setKayit] = useState(PDR_LGS_TAHMIN), [ders, setDers] = useState("Matematik"), [testYil, setTestYil] = useState(Math.max(...LGS_SORU_YILLARI)), [acikKonu, setAcikKonu] = useState(null);
   useEffect(() => { lgsTahminOku().then(v => setKayit({ ...v })); }, []);
-  const tahmin = useMemo(() => lgsYilTahmini(Y), [Y]), tip = useMemo(() => lgsTipBeklentisi(), []);
+  const tahmin = useMemo(() => lgsYilTahmini(Y), [Y]), tip = useMemo(() => lgsTipBeklentisi(), []), mebiBuYil = useMemo(() => lgsMebiKonuSayisi(Y), [Y]), tahminMebi = useMemo(() => mebiBuYil.var ? lgsYilTahmini(Y, 0.25) : null, [Y, mebiBuYil]);
   const kilitli = kayit && kayit[Y];
   // Kaydedilmiş tahminler: gerçekleşen yıllar için "ne bekliyorduk ne oldu"; kayıt yoksa geriye dönük hesap
   const testler = useMemo(() => LGS_SORU_YILLARI.filter(y => !LGS_YARIM_KAPSAM_YILLARI.includes(y) && LGS_SORU_YILLARI.filter(z => z < y && !LGS_YARIM_KAPSAM_YILLARI.includes(z)).length >= 3).slice(0, 4), []);
   const kar = useMemo(() => { const k = kayit && kayit[testYil]; return lgsTahminKarsilastir(k ? { yil: testYil, ders: k.ders, yillar: k.yillar } : lgsYilTahmini(testYil)); }, [testYil, kayit]);
-  async function kilitle() { const v = { ...(await lgsTahminOku()) }; v[Y] = { tarih: today(), yillar: tahmin.yillar, ders: tahmin.ders, tip }; await lgsTahminKaydet(v); setKayit({ ...v }); }
+  // Aynı yıl için "LGS ortalaması + o yılın MEBİ'leri" yöntemi (MEBİ verisi varsa) — hangisi daha iyi tahmin ediyor?
+  const karMebi = useMemo(() => { const k = kayit && kayit[testYil]; if (k && k.dersMebi) return lgsTahminKarsilastir({ yil: testYil, ders: k.dersMebi }); const t = lgsYilTahmini(testYil, 0.25); return t.mebi ? lgsTahminKarsilastir(t) : null; }, [testYil, kayit]);
+  async function kilitle() { const v = { ...(await lgsTahminOku()) }; v[Y] = { tarih: today(), yillar: tahmin.yillar, ders: tahmin.ders, tip, ...(tahminMebi ? { dersMebi: tahminMebi.ders, mebiDeneme: mebiBuYil.deneme } : {}) }; await lgsTahminKaydet(v); setKayit({ ...v }); }
   const btn = { padding: "4px 9px", borderRadius: 8, border: "1px solid #C4B5FD", background: "#fff", fontSize: 11.5, fontWeight: 700, cursor: "pointer" };
   const gT = kilitli ? kilitli.ders : tahmin.ders, kd = gT[ders] || [], tp = tip[ders];
   return (<div data-testid="lgs-tahmin" style={{ fontSize: 11.5 }}>
     <div style={{ background: "#F5F3FF", border: "1px solid #C4B5FD", borderRadius: 10, padding: "7px 9px", marginBottom: 7, lineHeight: 1.5 }}>
       <b style={{ color: "#5B21B6" }}>🔮 {Y} LGS tahmini</b> — {tahmin.yillar.join(", ")} LGS'lerinin konu ortalamasıyla (2020 ve 2023 yarım kapsamlı olduğu için hariç). {kilitli ? <span data-testid="tahmin-kilitli" style={{ color: "#15803D", fontWeight: 700 }}>📌 {kilitli.tarih} tarihinde kaydedildi; {Y} LGS'den sonra bu kayıtla karşılaştırılacak.</span> : <span>Sınavdan sonra "ne bekliyorduk, ne oldu" karşılaştırması için tahmini şimdi kaydedin.</span>}
+      {mebiBuYil.var ? <div data-testid="tahmin-mebi" style={{ marginTop: 3 }}>📘 Bu öğretim yılının <b>{mebiBuYil.deneme} MEBİ denemesi</b> eklendi: her konunun yanında MEBİ'de kaç soru çıktığı görünür; kayıtta "LGS + MEBİ" yöntemiyle ikinci bir tahmin de saklanır, sınavdan sonra hangisinin daha iyi tuttuğuna bakılır.{kilitli && !kilitli.dersMebi ? <b style={{ color: "#B45309" }}> Kayıtlı tahmin MEBİ'lerden önce yapılmış — yeniden kaydedin.</b> : null}</div>
+        : <div style={{ marginTop: 3, color: MUTED }}>Bu öğretim yılının MEBİ denemeleri eklendiğinde her konuda MEBİ'de kaç soru çıktığı ve "LGS + MEBİ" yöntemiyle ikinci bir tahmin de gösterilir.</div>}
       <div style={{ marginTop: 4 }}><button data-testid="tahmin-kilitle" onClick={kilitle} style={{ ...btn, background: kilitli ? "#fff" : "#EDE9FE" }}>📌 {kilitli ? "Tahmini güncelle ve yeniden kaydet" : "Tahmini kaydet (kilitle)"}</button></div>
     </div>
     <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 6 }}>{Object.keys(gT).map(d => <button key={d} data-tahmin-ders={d} onClick={() => { setDers(d); setAcikKonu(null); }} style={{ ...btn, background: ders === d ? "#EDE9FE" : "#fff" }}>{d}</button>)}</div>
@@ -38927,7 +38942,7 @@ function LgsTahminPaneli({ onSayfaAc }) {
       <div key={x.konu} data-tahmin-konu={x.konu} style={{ borderTop: "1px dashed #DDD6FE", padding: "4px 0" }}>
         <div onClick={() => setAcikKonu(ac ? null : x.konu)} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
           <span style={{ width: 26, height: 22, borderRadius: 6, background: x.tahmin >= 3 ? "#7C3AED" : x.tahmin >= 1 ? "#A78BFA" : "#E9D5FF", color: x.tahmin >= 1 ? "#fff" : "#5B21B6", fontWeight: 900, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{x.tahmin}</span>
-          <span style={{ flex: 1 }}><b>{x.konu}</b> <span style={{ color: MUTED }}>ort. {lgsSayiYaz(x.beklenen)}{x.gelmeOrani >= 0.85 ? " · her yıl geliyor" : x.gelmeOrani < 0.5 ? " · bazı yıllar hiç gelmedi" : ""}</span></span><span style={{ color: "#7C3AED" }}>{ac ? "▲" : "▼"}</span></div>
+          <span style={{ flex: 1 }}><b>{x.konu}</b> <span style={{ color: MUTED }}>ort. {lgsSayiYaz(x.beklenen)}{x.gelmeOrani >= 0.85 ? " · her yıl geliyor" : x.gelmeOrani < 0.5 ? " · bazı yıllar hiç gelmedi" : ""}</span>{mebiBuYil.var && <span style={{ marginLeft: 5, fontSize: 10.5, color: "#1D4ED8", fontWeight: 700 }}>· MEBİ'de {((mebiBuYil.ders[ders] || {})[x.konu]) || 0}</span>}</span><span style={{ color: "#7C3AED" }}>{ac ? "▲" : "▼"}</span></div>
         {ac && (kal ? <div data-testid="tahmin-kalip" style={{ background: "#FAF5FF", borderRadius: 8, padding: "5px 8px", marginTop: 4, lineHeight: 1.5 }}>
           <div><b>Muhtemel soru kurgusu</b> (geçmiş {kal.lgsSay} LGS sorusuna göre): {kal.beceri.map(b => LGS_BECERI[b] ? LGS_BECERI[b][1] : b).join(", ") || "—"} becerileri; görselli olma ihtimali %{kal.gorsel}{kal.olumsuz ? `, kökte olumsuz ifade %${kal.olumsuz}` : ""}; ortalama zorluk {kal.zorluk >= 3.3 ? "zor" : kal.zorluk >= 2.5 ? "orta-zor" : kal.zorluk >= 1.8 ? "orta" : "kolay"}.</div>
           {kal.ornekLgs.length > 0 && <div style={{ marginTop: 3 }}>Örnek LGS soruları: {kal.ornekLgs.map(q => <button key={q.kitapcik + q.no} data-tahmin-ornek={q.kitapcik + "_" + q.no} onClick={() => onSayfaAc && onSayfaAc(q.kitapcik, q.sayfa, q)} style={{ ...btn, padding: "1px 6px", fontSize: 10.5, margin: "1px 3px 1px 0", color: ["#9CA3AF", "#16A34A", "#2563EB", "#EA580C", "#B91C1C"][q.zorluk] }}>{q.yil} · {q.no}</button>)}</div>}
@@ -38940,6 +38955,7 @@ function LgsTahminPaneli({ onSayfaAc }) {
       <div style={{ display: "flex", gap: 4, flexWrap: "wrap", margin: "4px 0" }}>{testler.map(y => <button key={y} data-tahmin-test={y} onClick={() => setTestYil(y)} style={{ ...btn, borderColor: "#86EFAC", background: testYil === y ? "#DCFCE7" : "#fff" }}>{y}</button>)}</div>
       {kar && <>
         <div data-testid="tahmin-isabet"><b>{kar.yil} LGS:</b> soru sayısı tam tutan konu <b>{kar.tam}/{kar.n}</b> (%{Math.round(100 * kar.tam / kar.n)}); en fazla 1 soru şaşan <b>{kar.yakin}/{kar.n}</b> (%{Math.round(100 * kar.yakin / kar.n)}); konu başına ortalama sapma {lgsSayiYaz(kar.mae)} soru.</div>
+        {karMebi && <div data-testid="tahmin-isabet-mebi" style={{ marginTop: 2 }}>LGS + o yılın MEBİ'leri yöntemiyle: tam tutan {karMebi.tam}/{karMebi.n} (%{Math.round(100 * karMebi.tam / karMebi.n)}), en fazla 1 şaşan {karMebi.yakin}/{karMebi.n}; ortalama sapma {lgsSayiYaz(karMebi.mae)}. <b>{karMebi.mae < kar.mae ? "MEBİ'yi katmak tahmini iyileştirdi." : "Yalnız LGS ortalaması daha isabetli."}</b></div>}
         {kar.surpriz.length > 0 && <div style={{ marginTop: 3 }}><b>Sürprizler</b> (2+ soru fark): {kar.surpriz.map(x => `${x.konu} (${x.ders.split(" ")[0]}: beklenen ${x.tahmin}, gelen ${x.gercek})`).join(" · ")}</div>}
         <div style={{ marginTop: 3 }}>{ders}: {(kar.ders[ders] || []).filter(x => x.tahmin || x.gercek).map(x => <span key={x.konu} style={{ display: "inline-block", margin: "1px 6px 1px 0", color: x.fark === 0 ? "#166534" : Math.abs(x.fark) === 1 ? "#B45309" : "#B91C1C" }}>{x.konu} {x.tahmin}→{x.gercek}</span>)}</div>
       </>}

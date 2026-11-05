@@ -16237,7 +16237,7 @@ const KS_ASISTAN_ARACLAR = {
     calistir: (g, ctx, o) => pdrHedefOkulMetni(ctx, o, String(g.okul || "").trim()),
   },
   hedef_okul_kaydet: {
-    aciklama: "Öğrencinin hedef okullarına okul ekler ya da çıkarır (ONAY GEREKİR; en fazla 3 hedef). okul: programdaki taban listesindeki okul adı (kısmi olabilir), program: isteğe bağlı alan adı; cikar: true ise çıkarır.",
+    aciklama: "Öğrencinin hedef okullarına okul ekler ya da çıkarır (ONAY GEREKİR; en fazla 5 hedef). okul: programdaki taban listesindeki okul adı (kısmi olabilir), program: isteğe bağlı alan adı; cikar: true ise çıkarır.",
     girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "okul": "Yaşar Acar", "program": "isteğe bağlı", "cikar": false}', ogrenciIster: true, yazma: true, yontem: "hepsi",
     onayOzeti: (g, ctx, o) => { const b = pdrOkulBul(g.okul); const s = b.find(x => g.program && ksSade(x.alan).includes(ksSade(g.program))) || b.sort((a, c) => (c.taban || 0) - (a.taban || 0))[0]; return `🎯 Hedef okul ${g.cikar ? "çıkarma" : "ekleme"}\nÖğrenci: ${ksAsistanEtiket(o)}\n${s ? `${s.okul} — ${s.alan} (${s.ilce})` : "⚠ Okul taban listesinde bulunamadı."}`; },
     calistir: async (g, ctx, o) => {
@@ -21875,12 +21875,13 @@ function pdrNotTespitleri(metin, katilimcilar, ogrenciler) {
     return okullar.length || netler.length ? { k, okullar, net: netler.length ? netler[0] : null } : null;
   }).filter(Boolean);
 }
+const PDR_HEDEF_OKUL_EN_FAZLA = 5;   // öğrenci başına tutulan hedef okul sayısı
 function pdrHedefEkle(ogr, okul, alan, kaynak) {
   const l = pdrTabanListesi();
   const s = (alan && l.find(x => x.okul === okul && x.alan === alan)) || l.filter(x => x.okul === okul).sort((a, b) => (b.taban || 0) - (a.taban || 0))[0];
   if (!s) return ogr;
   const eski = (ogr.hedefOkullar || []).filter(h => h.okul !== s.okul);
-  return { ...ogr, hedefOkullar: [...eski, { okul: s.okul, alan: s.alan, ilce: s.ilce, tarih: today(), kaynak: kaynak || "elle" }].slice(-3) };
+  return { ...ogr, hedefOkullar: [...eski, { okul: s.okul, alan: s.alan, ilce: s.ilce, tarih: today(), kaynak: kaynak || "elle" }].slice(-PDR_HEDEF_OKUL_EN_FAZLA) };
 }
 
 // Öğrenci özet kartı: 🎯 Hedef okul
@@ -21920,7 +21921,7 @@ function PdrHedefOkulKarti({ hedefler, denemeGirilen, notNetleri, onKaydet }) {
             </button>
           ))}
           {ara.trim().length >= 2 && !sonuc.length && <div style={{ fontSize: 11.5, color: MUTED, marginTop: 4 }}>Programdaki listede yok (İstanbul'un 5 ilçesi ve en yüksek puanlı liseler var).</div>}
-          {hedefler.length >= 3 && <div style={{ fontSize: 11, color: MUTED, marginTop: 4 }}>En fazla 3 hedef tutulur; yeni eklenen en eskinin yerine geçer.</div>}
+          {hedefler.length >= PDR_HEDEF_OKUL_EN_FAZLA && <div style={{ fontSize: 11, color: MUTED, marginTop: 4 }}>En fazla {PDR_HEDEF_OKUL_EN_FAZLA} hedef tutulur; yeni eklenen en eskinin yerine geçer.</div>}
         </div>
       )}
       <div style={{ fontSize: 10, color: MUTED, marginTop: 6 }}>Yaklaşık hesap: net → puan ±15-20 puan; 2026 tabanları.</div>

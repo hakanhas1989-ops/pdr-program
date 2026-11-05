@@ -4333,6 +4333,8 @@ async function pdrSoruBolge(sf, vp, soru) {
   satirlar.forEach(l => l.parcalar.sort((a, b) => a.bas - b.bas));
   return { ogeler, bolge, icinde, satirlar, bulundu: adaylar.length > 0, W, H };
 }
+// Seçeneklerin başladığı yükseklik ("A)" ile başlayan ilk satır): işaret ve notlar seçeneklere konmaz, cevap ele verilmesin
+function pdrSecenekY(satirlar) { const l = (satirlar || []).filter(x => /^\s*A\s*\)/.test(x.str)); return l.length ? Math.min(...l.map(x => x.y)) - 2 : Infinity; }
 // Satırdaki [bas, son) karakter aralığının ekrandaki kutusu
 function pdrSatirKutu(l, bas, son) {
   const p1 = [...l.parcalar].reverse().find(p => p.bas <= bas) || l.parcalar[0], p2 = [...l.parcalar].reverse().find(p => p.bas < son) || p1;
@@ -4371,8 +4373,9 @@ async function pdrSoruCozumCiz(sf, vp, soru, cizimKanvas, ozel) {
   if (ozel && ozel.adimlar) {
     const norm = (t) => String(t || "").toLocaleLowerCase("tr").replace(/\s+/g, " ").trim();
     const notluAdim = new Set((Array.isArray(ozel.sekil_notlari) ? ozel.sekil_notlari : []).filter(pdrNotGecerli).map(n => parseInt(n.adim) || 0));
+    const secY = pdrSecenekY(satirlar), govde = satirlar.filter(x => x.y < secY);
     ozel.adimlar.forEach((a, i) => { const ip = norm(a.ipucu); if (!ip || notluAdim.has(i + 1)) return; const parca = ip.split(" ").slice(0, 3).join(" ");
-      const o = satirlar.find(x => norm(x.str).includes(ip)) || satirlar.find(x => parca.length > 3 && norm(x.str).includes(parca));
+      const o = govde.find(x => norm(x.str).includes(ip)) || govde.find(x => parca.length > 3 && norm(x.str).includes(parca));
       if (o) { const aranan = norm(o.str).includes(ip) ? ip : parca, k = norm(o.str).indexOf(aranan); isaretler.push({ no: i + 1, ...pdrSatirKutu(o, k, k + aranan.length) }); } });
   } else {
     if (kokSatir) isaretler.push({ no: 1, ...kokSatir });
@@ -4406,16 +4409,19 @@ function pdrSekilNotlariCiz(cx, notlar, bolge, W, H, sayfa, satirlar) {
   const sarmala = (t, n) => { const k = String(t).split(/\s+/), sat = []; let l = ""; k.forEach(w => { if ((l + " " + w).trim().length > n && l) { sat.push(l); l = w; } else l = (l + " " + w).trim(); }); if (l) sat.push(l); return sat.slice(0, 3); };
   // Yazılı yerler PDF metninden birebir bulunur (en kesin konum); bulunamazsa yapay zekânın görüntü konumu kullanılır
   const norm = (t) => String(t || "").toLocaleLowerCase("tr").replace(/[“”"'’‘«»]/g, "").replace(/\s+/g, " ").trim();
-  const metindeBul = (ifade) => { const ip = norm(ifade); if (!ip || !satirlar) return null; const kel = ip.split(" ");
+  const secY = pdrSecenekY(satirlar), govde = (satirlar || []).filter(x => x.y < secY);
+  // Yazı satırlarının kapladığı alan oranı (notun metni örtmemesi için; piksel örneklemesi ince yazıyı kaçırabilir)
+  const metinOrani = (r) => { let a = 0; (satirlar || []).forEach(l => { const w = Math.min(r.x + r.w, l.x + l.w) - Math.max(r.x, l.x), h = Math.min(r.y + r.h, l.y + l.h) - Math.max(r.y, l.y); if (w > 0 && h > 0) a += w * h; }); return Math.min(1, a / Math.max(1, r.w * r.h)); };
+  const metindeBul = (ifade) => { const ip = norm(ifade); if (!ip || !govde.length) return null; const kel = ip.split(" ");
     for (let n = kel.length; n >= Math.min(2, kel.length); n--) { for (let bas = 0; bas + n <= kel.length; bas += Math.max(1, n === kel.length ? 1 : n)) { const parca = kel.slice(bas, bas + n).join(" "); if (parca.length < 3) continue;
-        const l = satirlar.find(x => norm(x.str).includes(parca)); if (l) { const k = norm(l.str).indexOf(parca); return pdrSatirKutu(l, k, k + parca.length); } } }
+        const l = govde.find(x => norm(x.str).includes(parca)); if (l) { const k = norm(l.str).indexOf(parca); return pdrSatirKutu(l, k, k + parca.length); } } }
     return null; };
   const gecerli = [], kutular = [];
   notlar.filter(pdrNotGecerli).slice(0, 8).forEach(n => {
     let kt = metindeBul(n.ifade);
     if (!kt && Array.isArray(n.kutu) && n.kutu.length === 4 && n.kutu.every(v => isFinite(+v))) { let [y1, x1, y2, x2] = n.kutu.map(v => Math.max(0, Math.min(1000, +v))); if (y2 < y1) [y1, y2] = [y2, y1]; if (x2 < x1) [x1, x2] = [x2, x1];
       kt = { x: bolge.x0 + x1 / 1000 * bw, y: bolge.y0 + y1 / 1000 * bh, w: (x2 - x1) / 1000 * bw, h: (y2 - y1) / 1000 * bh }; }
-    if (!kt) return; kt.w = Math.max(fs * 0.8, kt.w); kt.h = Math.max(fs * 0.8, kt.h);
+    if (!kt || kt.y >= secY) return; kt.w = Math.max(fs * 0.8, kt.w); kt.h = Math.max(fs * 0.8, kt.h);
     gecerli.push({ ...n, tur: n.tur || (n.ifade ? "alti" : "daire") }); kutular.push(kt); });
   kutular.forEach(k => yer.push(k));   // notlar işaretlenen yerlerin üstüne binmesin
   gecerli.forEach((n, i) => {
@@ -4437,7 +4443,7 @@ function pdrSekilNotlariCiz(cx, notlar, bolge, W, H, sayfa, satirlar) {
     // Soru sütununun dışı (karartılmış komşu sütun / kenar boşluğu): yazı yoğun sözel sorularda notlar metni örtmesin
     const ty = Math.max(bolge.y0 + 2, Math.min(bolge.y1 - nh - 2, k.y + k.h / 2 - nh / 2));
     [[bolge.x1 + fs * 0.6, ty], [bolge.x0 - nw - fs * 0.6, ty]].forEach(([x, y]) => { if (x >= 2 && x + nw <= W - 2) [0, -1, 1, -2, 2].forEach((d, sira) => adaylar.push({ x, y: Math.max(bolge.y0 + 2, Math.min(bolge.y1 - nh - 2, y + d * nh * 1.15)), w: nw, h: nh, ceza: 0.1 + Math.abs(d) * 0.04 + sira * 0.001, disari: true })); });
-    adaylar.forEach(a => { a.puan = (cakis(a) ? 10 : 0) + (a.disari ? 0 : (murekkep ? murekkep(a) : 0)) + a.ceza; });
+    adaylar.forEach(a => { const mk = murekkep ? murekkep(a) : 0; a.puan = (cakis(a) ? 10 : 0) + metinOrani(a) * 3 + (a.disari ? mk * 0.3 : mk) + a.ceza; });
     let not = adaylar.sort((a, b) => a.puan - b.puan)[0];
     yer.push(not);
     // Notla yer arasında ok
@@ -4475,7 +4481,7 @@ const PDR_SOZEL_DERS = ["Türkçe", "İnkılap Tarihi", "Din Kültürü", "İngi
 // Not geçerli mi: görüntü konumu (kutu) ya da metinden birebir ifade olmalı
 function pdrNotGecerli(n) { return !!n && ((Array.isArray(n.kutu) && n.kutu.length === 4 && n.kutu.every(v => isFinite(+v))) || !!String(n.ifade || "").trim()); }
 function pdrCozumIstem(soru, metin, gorselVar) {
-  return `Ders: ${soru.ders}. Konu: ${soru.konu || "?"}. Soru ${soru.no}.${gorselVar ? " Sorunun görüntüsü ekte (şekiller görüntüde)." : " Sorunun şekli/görseli gönderilmedi; yalnız metne göre çalış, çözüm şekle bağlıysa ilgili adımda 'şekle bak' de."}\n\nSORU METNİ (PDF'ten çıkarıldı):\n${String(metin || "").slice(0, 3500)}\n\nŞu JSON'u üret:\n{"onkosul":["bu soruyu çözmek için bilinmesi gereken 2-4 temel bilgi/beceri"],"adimlar":[{"baslik":"kısa adım adı","aciklama":"öğrencinin yapacağı işlem (1-2 cümle)","soru":"öğrencinin kendine soracağı yönlendirici soru","ipucu":"bu adımda bakılacak yer: soru metninden BİREBİR alınmış 2-5 kelimelik kısa ifade ya da boş"}],"celdirici":"en çok yapılan hata/çeldirici ve neden yanlış (1 cümle)","cevap":"doğru seçenek harfi ve tek cümlelik gerekçe","anahtar":"öğrencide 'aha!' dedirtecek tek cümlelik anahtar fikir (cevabı söylemeden)","sekil_notlari":[{"adim":1,"tur":"daire|alti|kutu|ok","ifade":"notun gösterdiği yer yazıysa soru metninden BİREBİR 2-8 kelime, değilse boş","kutu":[ymin,xmin,ymax,xmax],"not":"en fazla 6 kelimelik kısa anahtar not"}]}\n4-6 adım yaz. Son adım kontrol olsun.\nNOTLAR: Sorunun üzerine çizilecek 3-6 kısa not üret; öğrencide 'aha!' etkisi yaratacak, çözümü anlamayı sağlayacak anahtar bilgiler olsun. Notlar düşündüren ipuçlarıdır; doğru seçeneği ya da sonucu ele vermesin. 'adim', notun ait olduğu adım numarası. tur: daire (sayı/sözcük/nesneyi daire içine al), alti (ifadenin altını çiz), kutu (bölgeyi çerçevele), ok (dikkati oraya çek).${PDR_SOZEL_DERS.includes(soru.ders) ? "\nBu sözel bir soru: notların çoğu METİNDEKİ ifadelere olsun ve 'ifade' alanını mutlaka doldur (metinden birebir kopyala). Örnek not türleri: konu/ana fikir cümlesini göster ('Ana fikir burada'), anlam ilişkisi kuran bağlaçlar ('ama' → asıl düşünce sonra gelir, 'çünkü' → neden), kökteki olumsuz/kısıtlayıcı ifade ('DEĞİLDİR → yanlışı ara'), anahtar kavram ve tanımı, tarih/sıralama ipucu (kronoloji), öncüllerdeki kritik sözcük, şiirde/diyalogda kilit sözcük, İngilizcede anahtar kelimenin anlamı ('suggest = öner'), grafik/tablo başlığı." : "\nSayısal soru: notlar şekildeki sayı, kenar, açı, grafik çubuğu, tablo hücresi ya da metindeki koşul ifadesine olsun; örn. '8 = 2³ yaz', 'çift kuvvet → +', 'dik açı → Pisagor'."}${gorselVar ? "\n'kutu', notun gösterdiği yerin ekteki görüntüdeki konumudur: [ymin, xmin, ymax, xmax], 0-1000 arası, görüntünün sol üstü 0,0; ilgili yeri tam ve dar çevrelesin. Yazılı bir yer için 'ifade'yi de doldur." : "\nGörüntü gönderilmedi: 'kutu' alanını boş bırak, notları yalnız metindeki ifadelere bağla ('ifade' zorunlu)."}`;
+  return `Ders: ${soru.ders}. Konu: ${soru.konu || "?"}. Soru ${soru.no}.${gorselVar ? " Sorunun görüntüsü ekte (şekiller görüntüde)." : " Sorunun şekli/görseli gönderilmedi; yalnız metne göre çalış, çözüm şekle bağlıysa ilgili adımda 'şekle bak' de."}\n\nSORU METNİ (PDF'ten çıkarıldı):\n${String(metin || "").slice(0, 3500)}\n\nŞu JSON'u üret:\n{"onkosul":["bu soruyu çözmek için bilinmesi gereken 2-4 temel bilgi/beceri"],"adimlar":[{"baslik":"kısa adım adı","aciklama":"öğrencinin yapacağı işlem (1-2 cümle)","soru":"öğrencinin kendine soracağı yönlendirici soru","ipucu":"bu adımda bakılacak yer: soru metninden BİREBİR alınmış 2-5 kelimelik kısa ifade ya da boş"}],"celdirici":"en çok yapılan hata/çeldirici ve neden yanlış (1 cümle)","cevap":"doğru seçenek harfi ve tek cümlelik gerekçe","anahtar":"öğrencide 'aha!' dedirtecek tek cümlelik anahtar fikir (cevabı söylemeden)","sekil_notlari":[{"adim":1,"tur":"daire|alti|kutu|ok","ifade":"notun gösterdiği yer yazıysa soru metninden BİREBİR 2-8 kelime, değilse boş","kutu":[ymin,xmin,ymax,xmax],"not":"en fazla 6 kelimelik kısa anahtar not"}]}\n4-6 adım yaz. Son adım kontrol olsun.\nNOTLAR: Sorunun üzerine çizilecek 3-6 kısa not üret; öğrencide 'aha!' etkisi yaratacak, çözümü anlamayı sağlayacak anahtar bilgiler olsun. Notlar düşündüren ipuçlarıdır; doğru seçeneği ya da sonucu ele vermesin. 'ipucu' ve 'ifade' alanlarını SEÇENEKLERDEN (A, B, C, D) alma; yalnız soru metninden, görselden ya da soru kökünden al. 'adim', notun ait olduğu adım numarası. tur: daire (sayı/sözcük/nesneyi daire içine al), alti (ifadenin altını çiz), kutu (bölgeyi çerçevele), ok (dikkati oraya çek).${PDR_SOZEL_DERS.includes(soru.ders) ? "\nBu sözel bir soru: notların çoğu METİNDEKİ ifadelere olsun ve 'ifade' alanını mutlaka doldur (metinden birebir kopyala). Örnek not türleri: konu/ana fikir cümlesini göster ('Ana fikir burada'), anlam ilişkisi kuran bağlaçlar ('ama' → asıl düşünce sonra gelir, 'çünkü' → neden), kökteki olumsuz/kısıtlayıcı ifade ('DEĞİLDİR → yanlışı ara'), anahtar kavram ve tanımı, tarih/sıralama ipucu (kronoloji), öncüllerdeki kritik sözcük, şiirde/diyalogda kilit sözcük, İngilizcede anahtar kelimenin anlamı ('suggest = öner'), grafik/tablo başlığı." : "\nSayısal soru: notlar şekildeki sayı, kenar, açı, grafik çubuğu, tablo hücresi ya da metindeki koşul ifadesine olsun; örn. '8 = 2³ yaz', 'çift kuvvet → +', 'dik açı → Pisagor'."}${gorselVar ? "\n'kutu', notun gösterdiği yerin ekteki görüntüdeki konumudur: [ymin, xmin, ymax, xmax], 0-1000 arası, görüntünün sol üstü 0,0; ilgili yeri tam ve dar çevrelesin. Yazılı bir yer için 'ifade'yi de doldur." : "\nGörüntü gönderilmedi: 'kutu' alanını boş bırak, notları yalnız metindeki ifadelere bağla ('ifade' zorunlu)."}`;
 }
 // Model ya da kullanıcının yapıştırdığı yanıttan çözüm nesnesi çıkar (JSON değilse numaralı satırlardan adım üretir)
 // Yanıttaki LaTeX matematik yazımını okunur hâle getir ($2^{-3}$ → 2^(-3), \frac{1}{8} → 1/8)

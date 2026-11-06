@@ -5539,7 +5539,7 @@ function KazanimlarSekmesi({ kademe }) {
 // Görüşme "Konu" alanı için standart liste — Risk türleriyle aynı, böylece
 // İstatistik'teki "Konulara Göre" dağılımı ve Excel çıktısı tutarlı/anlamlı
 // kategorilere göre gruplanır (serbest metin yerine).
-const KONU_LISTESI = ["Davranış","Akademik","Aile","Akran / Zorbalık","Duygusal","Devamsızlık","Öz Zarar","Sağlık","Madde Kullanımı","Teknoloji / Ekran Bağımlılığı","Ekonomik Güçlük","Yas / Kayıp","Travma","Özel Öğrenme Güçlüğü","Sınav Kaygısı","Kariyer / Gelecek Planlama","Genel Sohbet","Diğer"];
+const KONU_LISTESI = ["Davranış","Akademik","Aile","Akran / Zorbalık","Duygusal","Devamsızlık","Öz Zarar","Sağlık","Madde Kullanımı","Teknoloji / Ekran Bağımlılığı","Ekonomik Güçlük","Yas / Kayıp","Travma","Özel Öğrenme Güçlüğü","Özel Eğitim","Sınav Kaygısı","Kariyer / Gelecek Planlama","Genel Sohbet","Diğer"];
 // Bazı ana konuların altında, kaydı daha spesifik hale getiren İSTEĞE BAĞLI
 // bir alt konu seçimi. İstatistikler/raporlar hep ANA konuya göre sayar
 // (r.topic değişmiyor) — alt konu (r.altKonu) sadece ek, görsel bir detay.
@@ -5563,6 +5563,7 @@ const KONU_ALT_SECENEKLERI = {
   "Yas / Kayıp": ["Ölüm","Boşanma / Ayrılık Kaybı","Diğer"],
   "Travma": ["Fiziksel","Duygusal","Cinsel","Tanık Olma","Diğer"],
   "Özel Öğrenme Güçlüğü": ["Okuma","Yazma","Matematik","Dikkat","Öğrenme Stratejileri Geliştirme","Diğer"],
+  "Özel Eğitim": ["BEP Toplantısı","BEP Hazırlama / Güncelleme","RAM Yönlendirme / Rapor","Kaynaştırma / Uyum","Destek Eğitim Odası","Sınav ve Ölçme Uyarlaması","Veli Bilgilendirme","Diğer"],
   "Kariyer / Gelecek Planlama": ["Meslek Seçimi","Lise Tercihi","Üniversite Tercihi","Yetenek / İlgi Keşfi","Diğer"],
 };
 // Görüşme kaydının konu etiketini (varsa alt konusuyla birlikte) gösterir.
@@ -17868,6 +17869,7 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - Öğrenciyi değerlendirirken (risk, müdahale, seans hazırlığı, çalışma programı, veli yazısı) öğrenci özeti/dosyasındaki KAYNAŞTIRMA / TANI, SINIF, AİLE VE EV (kardeş sayısı, evde kimlerle yaşadığı) ve SOSYOMETRİ satırlarını dikkate al: tanı varsa önerileri ona göre uyarla (BEP, sınav/ödev uyarlaması, RAM süreci), hiç seçilmeyen öğrencide akran ilişkisini ele al. Tanıyı etiket gibi kullanma, tanı koyma; kayıtta tanı yoksa tanı varmış gibi konuşma.
 - Veri girişi: deneme netleri → deneme_kaydet; Profil 1 boyut puanları → profil_puanla; kariyer hedefi, ilgi, aile notu, d2 → profil2_guncelle; devamsızlık → devamsizlik_kaydet; yeni öğrenci → ogrenci_ekle (önce ogrenci_ara); konu tamamlama yüzdesi → konu_guncelle; risk kapatma → risk_kapat; plan durumu → mudahale_durum; hatırlatmayı bitirme → hatirlatma_tamamla. Hepsi onay ister; danışmanın söylediği değerleri aynen ver, tahmin etme.
 - Danışman öğrencinin yazılı sınav puanını ya da yıl sonu not ortalamasını söylerse not_kaydet kullan (birden çok dersi tek çağrıda ver). Sayıları aynen yaz; hangi yazılı olduğu belli değilse yazili alanını boş bırak, program boş olana yazar.
+- BİLGİ KAYNAĞINI AYIR: Görüşme notlarında her bilginin KİMDEN geldiğini (öğrenci, anne/baba/veli, hangi dersin öğretmeni, danışmanın kendi gözlemi) ayırt et. Türkçede öznesi düşmüş cümlenin ("…dile getirmiştir", "…belirtti") öznesi, aksi söylenmedikçe bir önceki cümlede konuşan kişidir. Değerlendirmede önemli bulguları kaynağıyla yaz ("Anneye göre öğrendiklerini çabuk unutuyor", "Matematik öğretmeni: çarpım tablosu ve dört işlemde eksik") ve kaynaklar arasındaki farkları/uyuşmazlıkları belirt (ör. veli "sözelde iyi" derken öğretmen görüşü). Kaynak gerçekten belirsizse tahmin etme, danışmana sor.
 - SORU SORARAK DERİNLEŞTİR: Görüşme notunu okuyup değerlendirdiğinde, seans hazırlığı ya da müdahale planı yaptığında araç sonucunda "KAPSAMLI DEĞERLENDİRME İÇİN EKSİK BİLGİ" bölümü varsa, önce eldeki bilgiyle değerlendirmeni yap, sonra yanıtın sonunda "Daha kapsamlı değerlendirebilmem için şunları bilmem gerekiyor:" diye en önemli 2-3 soruyu sor (her birinin yanında bir cümleyle neden önemli olduğunu söyle). "ÖNCE BU" işaretli güvenlik sorusu varsa onu ilk sırada ve açıkça sor. Bütün listeyi sıralama; bu görüşmeyle en ilgili olanları seç. Aynı sohbette zaten sorduğun ya da danışmanın cevapladığı soruyu tekrar sorma. Danışman cevap verince değerlendirmeyi bu bilgiyle güncelle ve kalıcı olması gereken bilgiyi (aile → profil2_guncelle, iyi oluş puanı → ilgili kayıt, görüşmeye ek → gorusme_duzelt) kaydetmeyi ONAYLA birlikte öner. Danışman "soru sorma" derse o sohbette sorma.
 - Danışman bir yanıtı ya da bu sohbeti öğrencinin dosyasına kaydetmek/göndermek isterse asistan_notu_kaydet kullan (kapsam: son ya da hepsi). Kaydedilecek metni yeniden yazma; program yanıtları aynen kaydeder.
 - Danışmanın kendi Kütüphanesi (yüklediği kitap, makale, yönetmelik, genelge — tam metin): "kütüphanede/yüklediğim kaynakta … ne diyor", mevzuat, süre/madde sorusu ya da kuramsal bir soru geldiğinde önce kutuphane_ara, ayrıntı için kutuphane_oku kullan; yanıtta kaynağın adını ve bölümünü belirt, kaynakta olmayanı kaynaktaymış gibi söyleme.
@@ -19223,6 +19225,8 @@ ${PDR_KISALTMALAR}
 GOREV - GORUSME NOTU OZETI: Danismanin anlattigi gorusme notunu kisa ve net ozete donustur. Basliklar (sadece ilgililer): Ogrenci durumu (BDT: bilissel-duygusal-davranissal oruntu), Gorusmede one cikan (baglanma, otomatik dusunceler, stres-basa cikma, sosyal dinamikler, varolussel temalar), Yapilan/planlanan, Takip notu. Max 5-6 cumle. Sade PDR dili. JSON veya markdown kullanma.
 
 BUGUNUN TARIHI: ${pdrBugunBaglam()}
+
+BILGI KAYNAGI KURALI: Notta her bilginin kimden geldigini (ogrenci, anne/baba/veli, hangi dersin ogretmeni, danismanin gozlemi) ayirt et. Oznesi dusmus cumlenin ("...dile getirmistir") oznesi, aksi soylenmedikce bir onceki cumlede konusan kisidir. Ozette bulgulari kaynagiyla yaz ("Anneye gore...", "Matematik ogretmenine gore...").
 
 ONEMLI GENEL KURAL: Asagida 5 ayri tespit bolumu var (Hatirlatma, BDT, Bireyi Tanima, Uyum Izleme, Gecmis Yil Ortalamasi). Not uzun olabilir ve ana konu (ornegin kaygi/bir olay) notun cogunu kaplayabilir - bu durumda arka planda gecen, tek cumlede bahsedilmis bilgiler (aile yapisi, gecmis saglik/psikolojik oykusu, uyum belirtileri gibi) kolayca atlanir. HER bolum icin notun TAMAMINI, sadece ana konuyu degil, bastan sona BAGIMSIZ olarak yeniden tara - bir bilgi ana hikayenin icine gomulu, yan cumlede geciyor diye atlama.
 

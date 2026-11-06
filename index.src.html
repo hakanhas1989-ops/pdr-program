@@ -17551,10 +17551,10 @@ Teknopark İstanbul MTAL|mtal|Siber Güvenlik|469.518|1.31|473.594|1.36
 Teknopark İstanbul MTAL|mtal|Bilişim Teknolojileri|458.212|2.25|468.103|1.80`,
 };
 // Özel yetenek sınavıyla öğrenci alan İstanbul okulları (LGS puanı gerekmez). Kaynak: MEB "Yetenek Sınavı ile Öğrenci Alan Okullara
-// Başvuru Kılavuzu" İstanbul satırları (2025 tam liste; 2026 kılavuzunda doğrulanan satırlar aynı). Satır: ilçe|okul|tür|alan|pansiyon
+// Başvuru Kılavuzu 2026" (2026-2027 eğitim-öğretim yılı) İstanbul satırları. Satır: ilçe|okul|tür|alan|pansiyon
 const KS_OZEL_YETENEK_OKULLARI = `Ataşehir|İstanbul Prof. Faik Somer Spor Lisesi|spor|Basketbol|Yok
 Esenyurt|Esenyurt Spor Lisesi|spor|Spor Alanı|Kız/Erkek
-Beykoz|TFF Meral-Celal Aras Spor Lisesi|spor|Futbol (Hazırlık +4 Yıl)|Erkek
+Beykoz|TFF Meral-Celal Aras Spor Lisesi|spor|Futbol|Erkek
 Büyükçekmece|Ruhi Sarıalp Spor Lisesi|spor|Spor Alanı|Yok
 Kadıköy|Kadıköy Spor Lisesi|spor|Spor Alanı|Yok
 Küçükçekmece|Toki Atakent Spor Lisesi|spor|Spor Alanı|Yok
@@ -17594,10 +17594,12 @@ Fatih|Fatih Kız Anadolu İmam Hatip Lisesi|aihlp|Geleneksel ve Çağdaş Görse
 Üsküdar|Hakkı Demir Anadolu İmam Hatip Lisesi|aihlp|Geleneksel ve Çağdaş Görsel Sanatlar Programı (erkek)|Erkek
 Üsküdar|Hakkı Demir Anadolu İmam Hatip Lisesi|aihlp|Musiki Programı (erkek)|Erkek
 Ataşehir|Ataşehir Kız Anadolu İmam Hatip Lisesi|aihlp|Geleneksel ve Çağdaş Görsel Sanatlar Programı (kız)|Yok
-Sancaktepe|Rabia Kız Anadolu İmam Hatip Lisesi|aihlp|Geleneksel ve Çağdaş Görsel Sanatlar Programı (kız)|Yok
+Sancaktepe|Rabia Kız Anadolu İmam Hatip Lisesi|aihlp|Geleneksel ve Çağdaş Görsel Sanatlar Programı (kız)|Kız
+Üsküdar|İTO Marmara Anadolu İmam Hatip Lisesi|aihlp|Geleneksel ve Çağdaş Görsel Sanatlar Programı (kız)|Kız
 Üsküdar|Ayşe Hümeyra Ökten Kız Anadolu İmam Hatip Lisesi|aihlp|Geleneksel ve Çağdaş Görsel Sanatlar Programı (kız)|Yok
 Pendik|Koca Yusuf Anadolu İmam Hatip Lisesi|aihlp|Spor Programı (erkek)|Erkek
-Sarıyer|Yaşar Dedeman Anadolu İmam Hatip Lisesi|aihlp|Spor Programı (erkek)|Yok`;
+Sarıyer|Yaşar Dedeman Anadolu İmam Hatip Lisesi|aihlp|Spor Programı (erkek)|Yok
+Bağcılar|Bağcılar Spor Anadolu İmam Hatip Lisesi|aihlp|Spor Programı (erkek)|Yok`;
 const KS_OZEL_YETENEK_TUR_AD = { spor: "Spor Lisesi", gsl: "Güzel Sanatlar Lisesi", aihlp: "AİHL yetenek programı" };
 const KS_OZEL_YETENEK_BILGI = "Özel yetenek sınavıyla alır, LGS puanı gerekmez. Yerleştirme puanı = yetenek sınavı %70 + ortaokul başarı puanı (OBP) %30; yetenek sınavından en az 50 almak gerekir. Başvuru haziranda e-Okul'dan (en fazla 3 tercih), sınavlar temmuz başında okulda yapılır (2026: başvuru 1-26 Haziran, sınav 1-12 Temmuz). Kılavuz her yıl mayıs-haziranda yenilenir; tarih ve kontenjanı yeni kılavuzdan kontrol edin.";
 function ksOzelYetenekSatirlar() {

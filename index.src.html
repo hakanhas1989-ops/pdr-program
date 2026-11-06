@@ -3945,7 +3945,7 @@ function OogMudahaleEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, oogM
             <input data-testid="omp-ara" value={arama} onChange={e => setArama(e.target.value)} placeholder="Öğrenci ara (en az 2 harf)…" style={giris} />
             {arama.trim().length >= 2 && (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
-                {kayitliListesi.filter(o => o.name.toLocaleLowerCase("tr").includes(arama.toLocaleLowerCase("tr"))).slice(0, 15).map(o => (
+                {kayitliListesi.filter(o => pdrAdAra(o.name, arama)).slice(0, 15).map(o => (
                   <button key={pdrOgrAnahtar(o.name, o.className, o.numara)} onClick={() => { setSeciliAd(o.name); if (setAktifOgrenci) setAktifOgrenci({ name: o.name, className: o.className || "", numara: o.numara || "" }); setArama(""); }} style={{ ...dugme(ACCENT, false), borderRadius: 16, padding: "4px 10px" }}>{o.name} <span style={{ color: MUTED }}>{o.className}</span></button>
                 ))}
               </div>
@@ -5001,7 +5001,7 @@ function MudahaleKutuphanesiEkrani({ kayitliListesi, records, aktifOgrenci, setA
             <input value={ogrenciArama} onChange={e=>setOgrenciArama(e.target.value)} placeholder="Öğrenci ara…" style={{ width:"100%", padding:"7px 10px", border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius:8, fontSize:12.5, boxSizing:"border-box", marginBottom:8 }} />
             {ogrenciArama.trim().length >= 2 && (
               <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:8 }}>
-                {kayitliListesi.filter(o=>o.name.toLocaleLowerCase("tr").includes(ogrenciArama.toLocaleLowerCase("tr"))).slice(0,15).map(o=>(
+                {kayitliListesi.filter(o=>pdrAdAra(o.name, ogrenciArama)).slice(0,15).map(o=>(
                   <button key={pdrOgrAnahtar(o.name,o.className,o.numara)} onClick={()=>{ setSeciliAd(o.name); if(setAktifOgrenci) setAktifOgrenci({name:o.name, className:o.className||""}); setOgrenciArama(""); }} style={{padding:"4px 10px", borderRadius:16, border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", background:"#fff", color:MUTED, fontSize:11, cursor:"pointer"}}>{o.name}</button>
                 ))}
               </div>
@@ -5296,7 +5296,7 @@ function DevamsizlikEkrani({ ogrenciler, setOgrenciler, kademe, aktifYil, setTab
               style={{ width:"100%", padding:"8px 10px", border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius:8, fontSize:12.5, boxSizing:"border-box", marginBottom:8 }} />
             {manuelArama.trim().length >= 2 && (
               <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:10, maxHeight:150, overflowY:"auto" }}>
-                {yilOgrencileri.filter(o => o.studentName.toLocaleLowerCase("tr").includes(manuelArama.toLocaleLowerCase("tr"))).slice(0,15).map(o => (
+                {yilOgrencileri.filter(o => pdrAdAra(o.studentName, manuelArama)).slice(0,15).map(o => (
                   <button key={pdrOgrAnahtar(o.studentName,o.className,o.numara)} onClick={()=>{ setManuelSecili(o); setManuelArama(""); }} style={{
                     padding:"5px 11px", borderRadius:16, border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", background:"#fff", color:MUTED, fontSize:11.5, cursor:"pointer"
                   }}>{o.studentName} <span style={{fontSize:10}}>({o.className})</span></button>
@@ -20667,7 +20667,7 @@ function UyumIzlemeEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, uyumI
   }, [aktifOgrenci?.name, aktifOgrenci?.className, aktifOgrenci?.numara, ogrenciListesi]);
 
   const sonuclar = (arama.trim().length >= 2)
-    ? ogrenciListesi.filter(o => (o.studentName.toLocaleLowerCase("tr").includes(arama.toLocaleLowerCase("tr"))
+    ? ogrenciListesi.filter(o => (pdrAdAra(o.studentName, arama)
         || (o.className||"").toLocaleLowerCase("tr").includes(arama.toLocaleLowerCase("tr"))
         || o.numara.includes(arama))).slice(0,8)
     : [];
@@ -23294,7 +23294,7 @@ function DegerlendirmeEkrani({ onTransfer, onClose, records, profiles, profiles2
                 {degOgrenciArama.trim().length >= 2 ? (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
                     {kayitliListesi.filter(o =>
-                      o.name.toLocaleLowerCase("tr").includes(degOgrenciArama.toLocaleLowerCase("tr")) ||
+                      pdrAdAra(o.name, degOgrenciArama) ||
                       o.className?.toLocaleLowerCase("tr").includes(degOgrenciArama.toLocaleLowerCase("tr")) ||
                       o.numara?.includes(degOgrenciArama)
                     ).slice(0, 20).map(o => (
@@ -23863,6 +23863,18 @@ function pdrAnonimKimlik(adSoyad, sinif, numara) {
   const kimlik = [ad, soyadBaslari].filter(Boolean).join(" ");
   const sinifNo = [sinif, numara ? `No:${numara}` : ""].filter(Boolean).join(", ");
   return sinifNo ? `${kimlik} (${sinifNo})` : kimlik;
+}
+// Öğrenci adı araması: ad, ikinci ad ya da soyadıyla, kelime sırası fark
+// etmeden ve Türkçe harf yazılmasa da (yilmaz → Yılmaz) bulur. Yazılan her
+// kelime adın içinde geçmeli: "ali kaya" → "Ali Rıza Kaya" bulunur.
+function pdrAraNorm(s) {
+  return String(s == null ? "" : s).toLocaleLowerCase("tr").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/ı/g, "i").replace(/ş/g, "s").replace(/ğ/g, "g").replace(/ü/g, "u").replace(/ö/g, "o").replace(/ç/g, "c")
+    .replace(/\s+/g, " ").trim();
+}
+function pdrAdAra(ad, q) {
+  const a = pdrAraNorm(ad), k = pdrAraNorm(q).split(" ").filter(Boolean);
+  return k.every(w => a.includes(w));
 }
 function pdrSozlukOku(sozluk, name, className, numara) {
   if (!sozluk) return undefined;
@@ -35709,7 +35721,7 @@ KURALLAR:
             {ogrenciArama.trim().length >= 2 ? (
               <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
                 {kayitliListesi.filter(o =>
-                  o.name.toLocaleLowerCase("tr").includes(ogrenciArama.toLocaleLowerCase("tr")) ||
+                  pdrAdAra(o.name, ogrenciArama) ||
                   o.className?.toLocaleLowerCase("tr").includes(ogrenciArama.toLocaleLowerCase("tr")) ||
                   o.numara?.includes(ogrenciArama)
                 ).slice(0,20).map(o => (
@@ -36669,7 +36681,7 @@ ${kademe ? "Planı öğrencinin yaş/gelişim dönemine uygun şekilde oluştur.
       {/* Öğrenci seç */}
       <input data-asistan="mud-ara" placeholder="Öğrenci ara..." value={aramaMetni} onChange={e=>setAramaMetni(e.target.value)} style={{...inp, marginBottom:8}} />
       <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:14}}>
-        {kayitliListesi.filter(o=>o.name.toLocaleLowerCase("tr").includes(aramaMetni.toLocaleLowerCase("tr")) || o.numara?.includes(aramaMetni)).slice(0,15).map(o=>{
+        {kayitliListesi.filter(o=>pdrAdAra(o.name, aramaMetni) || o.numara?.includes(aramaMetni)).slice(0,15).map(o=>{
           const s=seciliAd===o.name;
           return <button key={pdrOgrAnahtar(o.name, o.className, o.numara)} data-asistan="mud-sonuc" data-ad={o.name} data-sinif={o.className||""} onClick={()=>{setSeciliAd(o.name); if(setAktifOgrenci) setAktifOgrenci({ name:o.name, className:o.className||"" });}} style={{padding:"4px 10px",borderRadius:16,border:`2px solid ${s?ACCENT:BORDER}`,background:s?ACCENT_LIGHT:CARD,color:s?ACCENT:MUTED,fontSize:11,fontWeight:s?700:500,cursor:"pointer"}}>{o.name}</button>;
         })}
@@ -37326,7 +37338,7 @@ function HatirlaticiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, hati
   let aktifler = (hatirlatmalar||[]).filter(h => !h.tamamlandi);
   if (filtreMetni.trim()) {
     const f = filtreMetni.toLocaleLowerCase("tr");
-    aktifler = aktifler.filter(h => h.studentName?.toLocaleLowerCase("tr").includes(f) || h.className?.toLocaleLowerCase("tr").includes(f));
+    aktifler = aktifler.filter(h => pdrAdAra(h.studentName, f) || h.className?.toLocaleLowerCase("tr").includes(f));
   }
   // Her hatırlatmaya kalan gün + kategori ekleyip, kategori içinde tarihe göre sırala
   const zenginlestirilmis = aktifler.map(h => { const eTarih = pdrHatirlatmaEfektifTarih(h); return { ...h, _efektifTarih: eTarih, _kalanGun: pdrKalanGunHesapla(eTarih), _kategori: pdrHatirlatmaKategori(pdrKalanGunHesapla(eTarih)) }; })
@@ -37440,7 +37452,7 @@ function HatirlaticiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, hati
               {ogrenciArama.trim().length >= 2 && (
                 <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:10 }}>
                   {kayitliListesi.filter(o =>
-                    o.name.toLocaleLowerCase("tr").includes(ogrenciArama.toLocaleLowerCase("tr")) ||
+                    pdrAdAra(o.name, ogrenciArama) ||
                     o.className?.toLocaleLowerCase("tr").includes(ogrenciArama.toLocaleLowerCase("tr"))
                   ).slice(0,20).map(o => (
                     <button key={pdrOgrAnahtar(o.name, o.className, o.numara)} data-asistan="hat-sonuc" data-ad={o.name} data-sinif={o.className||""} onClick={() => { setSeciliAd(o.name); setAktifOgrenci({ name:o.name, className:o.className||"" }); setOgrenciArama(""); }} style={{
@@ -39329,7 +39341,7 @@ function KonuHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, kon
           {ogrenciArama.trim().length >= 2 && (
             <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:16 }}>
               {kayitliListesi.filter(o =>
-                o.name.toLocaleLowerCase("tr").includes(ogrenciArama.toLocaleLowerCase("tr")) ||
+                pdrAdAra(o.name, ogrenciArama) ||
                 o.className?.toLocaleLowerCase("tr").includes(ogrenciArama.toLocaleLowerCase("tr"))
               ).slice(0,20).map(o => (
                 <button key={pdrOgrAnahtar(o.name, o.className, o.numara)} onClick={() => { setSeciliAd(o.name); setAktifOgrenci({ name:o.name, className:o.className||"" }); setOgrenciArama(""); }} style={{
@@ -39962,7 +39974,7 @@ Sade, somut, öğretmenin doğrudan kullanabileceği şekilde yaz. Markdown kull
           {ogrenciArama.trim().length >= 2 && (
             <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:16 }}>
               {kayitliListesi.filter(o =>
-                o.name.toLocaleLowerCase("tr").includes(ogrenciArama.toLocaleLowerCase("tr")) ||
+                pdrAdAra(o.name, ogrenciArama) ||
                 o.className?.toLocaleLowerCase("tr").includes(ogrenciArama.toLocaleLowerCase("tr"))
               ).slice(0,20).map(o => (
                 <button key={pdrOgrAnahtar(o.name, o.className, o.numara)} onClick={() => { setSeciliAd(o.name); setAktifOgrenci({ name:o.name, className:o.className||"" }); setOgrenciArama(""); }} style={{
@@ -40343,7 +40355,7 @@ function SevkTakipEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, sevkle
     if (gosterFiltre === "Bekliyor") return s.sonucBekleniyor;
     if (gosterFiltre === "Tamamlandı") return !s.sonucBekleniyor;
     return true;
-  }).filter(s => !aramaMetni || s.studentName?.toLocaleLowerCase("tr").includes(aramaMetni.toLocaleLowerCase("tr")) || s.numara?.toString().includes(aramaMetni));
+  }).filter(s => !aramaMetni || pdrAdAra(s.studentName, aramaMetni) || s.numara?.toString().includes(aramaMetni));
 
   const sevkYerleri = ["RAM","Psikolog","Psikiyatrist","Özel Eğitim","Sosyal Hizmetler","Rehberlik Araştırma","Diğer"];
 
@@ -40360,7 +40372,7 @@ function SevkTakipEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, sevkle
         {/* Öğrenci seç */}
         <label style={lbl}>ÖĞRENCİ</label>
         <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
-          {kayitliListesi.filter(o=>o.name.toLocaleLowerCase("tr").includes(aramaMetni.toLocaleLowerCase("tr")) || o.numara?.includes(aramaMetni)).slice(0,12).map(o=>{
+          {kayitliListesi.filter(o=>pdrAdAra(o.name, aramaMetni) || o.numara?.includes(aramaMetni)).slice(0,12).map(o=>{
             const s=form.studentName===o.name && (form.className||"")===(o.className||"");
             return <button key={pdrOgrAnahtar(o.name, o.className, o.numara)} onClick={()=>{setForm(f=>({...f,studentName:o.name,className:o.className||""})); if(setAktifOgrenci) setAktifOgrenci({ name:o.name, className:o.className||"" });}} style={{padding:"4px 10px",borderRadius:16,border:`2px solid ${s?ACCENT:BORDER}`,background:s?ACCENT_LIGHT:CARD,color:s?ACCENT:MUTED,fontSize:11,fontWeight:s?700:500,cursor:"pointer"}}>{o.name}</button>;
           })}
@@ -40626,7 +40638,7 @@ MEB resmi yazı formatında veli mektubu yaz. T.C. başlığı, tarih, konu, say
 
       <input placeholder="Öğrenci ara..." value={aramaMetni} onChange={e=>setAramaMetni(e.target.value)} style={{width:"100%",padding:"9px 11px",border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)",borderRadius:9,fontSize:13,boxSizing:"border-box",marginBottom:8}} />
       <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:12}}>
-        {kayitliListesi.filter(o=>o.name.toLocaleLowerCase("tr").includes(aramaMetni.toLocaleLowerCase("tr")) || o.numara?.includes(aramaMetni)).slice(0,12).map(o=>{
+        {kayitliListesi.filter(o=>pdrAdAra(o.name, aramaMetni) || o.numara?.includes(aramaMetni)).slice(0,12).map(o=>{
           const s=seciliAd===o.name;
           return <button key={pdrOgrAnahtar(o.name, o.className, o.numara)} onClick={()=>setSeciliAd(o.name)} style={{padding:"4px 10px",borderRadius:16,border:`2px solid ${s?ACCENT:BORDER}`,background:s?ACCENT_LIGHT:CARD,color:s?ACCENT:MUTED,fontSize:11,fontWeight:s?700:500,cursor:"pointer"}}>{o.name}</button>;
         })}
@@ -42659,7 +42671,7 @@ function AsistanEkrani({
                 <input value={notArama} onChange={e => setNotArama(e.target.value)} placeholder="Başka öğrenci ara… (en az 2 harf)" style={{ width: "100%", boxSizing: "border-box", padding: "7px 9px", border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12.5 }} />
                 {notArama.trim().length >= 2 && (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
-                    {(kayitliListesi || []).filter(o => ksSade(o.name + " " + (o.className || "")).includes(ksSade(notArama.trim()))).slice(0, 12).map(o => <button key={o.name + o.className + (o.numara || "")} onClick={() => notaKaydet(i, { name: o.name, className: o.className || "", numara: o.numara || "" })} style={{ padding: "5px 10px", borderRadius: 14, border: `1px solid ${BORDER}`, background: "#fff", color: TEXT, fontSize: 11.5, cursor: "pointer" }}>{o.name}{o.className ? " · " + o.className : ""}</button>)}
+                    {(kayitliListesi || []).filter(o => pdrAdAra(o.name + " " + (o.className || ""), notArama)).slice(0, 12).map(o => <button key={o.name + o.className + (o.numara || "")} onClick={() => notaKaydet(i, { name: o.name, className: o.className || "", numara: o.numara || "" })} style={{ padding: "5px 10px", borderRadius: 14, border: `1px solid ${BORDER}`, background: "#fff", color: TEXT, fontSize: 11.5, cursor: "pointer" }}>{o.name}{o.className ? " · " + o.className : ""}</button>)}
                   </div>
                 )}
               </div>
@@ -43180,7 +43192,7 @@ Bu soruyu tüm verileri ve Dr. Ayşe Kara'nın değerlendirmelerini göz önünd
       {(!seciliAd || degistir) && <>
       <input placeholder="Öğrenci ara..." value={aramaMetni} onChange={e=>setAramaMetni(e.target.value)} style={{...inp, marginBottom:8}} />
       <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:14}}>
-        {kayitliListesi.filter(o=>o.name.toLocaleLowerCase("tr").includes(aramaMetni.toLocaleLowerCase("tr")) || o.numara?.includes(aramaMetni)).slice(0,15).map(o=>{
+        {kayitliListesi.filter(o=>pdrAdAra(o.name, aramaMetni) || o.numara?.includes(aramaMetni)).slice(0,15).map(o=>{
           const s=seciliAd===o.name && (!seciliSinif || (o.className||"")===seciliSinif);
           return <button key={pdrOgrAnahtar(o.name, o.className, o.numara)} onClick={()=>ogrenciSec(o)} style={{padding:"4px 10px",borderRadius:16,border:`2px solid ${s?"#1a1a2e":BORDER}`,background:s?"#1a1a2e":CARD,color:s?"#fff":MUTED,fontSize:11,fontWeight:s?700:500,cursor:"pointer"}}>{o.name}</button>;
         })}
@@ -43892,7 +43904,7 @@ function OgrenciYonetim({
 
   const filtreliListe = useMemo(() => tumOgrenciler.filter(o =>
     !aramaDebounce ||
-    o.studentName?.toLocaleLowerCase("tr").includes(aramaDebounce.toLocaleLowerCase("tr")) ||
+    pdrAdAra(o.studentName, aramaDebounce) ||
     o.className?.toLocaleLowerCase("tr").includes(aramaDebounce.toLocaleLowerCase("tr")) ||
     o.numara?.includes(aramaDebounce)
   ), [tumOgrenciler, aramaDebounce]);
@@ -46814,7 +46826,7 @@ function DenemeTabip({ denemeler, setDenemeler, kayitliListesi, aktifOgrenci, se
   const [kaydedildi, setKaydedildi] = useState(false);
 
   const filtreliListe = kayitliListesi.filter(o =>
-    o.name.toLocaleLowerCase("tr").includes(aramaMetni.toLocaleLowerCase("tr")) ||
+    pdrAdAra(o.name, aramaMetni) ||
     o.className?.toLocaleLowerCase("tr").includes(aramaMetni.toLocaleLowerCase("tr")) ||
     o.numara?.includes(aramaMetni)
   );
@@ -49176,7 +49188,7 @@ function ProfilMerkez({
   }, [seciliAd, profiles, profiles2]);
 
   const filtreliListe = kayitliListesi.filter(o =>
-    o.name.toLocaleLowerCase("tr").includes(aramaMetni.toLocaleLowerCase("tr")) || o.className?.toLocaleLowerCase("tr").includes(aramaMetni.toLocaleLowerCase("tr")) || o.numara?.includes(aramaMetni)
+    pdrAdAra(o.name, aramaMetni) || o.className?.toLocaleLowerCase("tr").includes(aramaMetni.toLocaleLowerCase("tr")) || o.numara?.includes(aramaMetni)
   );
 
   // AI: görüşme notlarından puan
@@ -54939,7 +54951,7 @@ export default function App() {
   // Seçili kademeye ait görüşmeler (ilkokul seçiliyken ortaokul görüşmeleri sayılmaz/listelenmez; veri silinmez)
   const kademeRecords = records.filter(r => pdrKademeUyumlu(r.className, kademe));
   const filtered = kademeRecords.filter(r =>
-    r.studentName.toLocaleLowerCase("tr").includes(search.toLocaleLowerCase("tr")) || r.className?.toLocaleLowerCase("tr").includes(search.toLocaleLowerCase("tr"))
+    pdrAdAra(r.studentName, search) || r.className?.toLocaleLowerCase("tr").includes(search.toLocaleLowerCase("tr"))
   );
   const byStudent = filtered.reduce((acc, r) => { acc[r.studentName] = acc[r.studentName] || []; acc[r.studentName].push(r); return acc; }, {});
   const byDate = filtered.reduce((acc, r) => { acc[r.date] = acc[r.date] || []; acc[r.date].push(r); return acc; }, {});
@@ -55525,17 +55537,17 @@ function pdrBaslangicSekmesi() {
         const sonuclar = q.length < 2 ? [] : (() => {
           const bulunanlar = [];
           (ogrenciler || []).forEach(o => {
-            if ((o.studentName || "").toLocaleLowerCase("tr").includes(q) || (o.className || "").toLocaleLowerCase("tr").includes(q) || (o.numara || "").toString().includes(q)) {
+            if (pdrAdAra((o.studentName || ""), q) || (o.className || "").toLocaleLowerCase("tr").includes(q) || (o.numara || "").toString().includes(q)) {
               bulunanlar.push({ tip: "👤", baslik: o.studentName, alt: [o.className, o.numara ? `No: ${o.numara}` : ""].filter(Boolean).join(" · "), git: () => { setAktifOgrenci({ name: o.studentName, className: o.className, numara: o.numara }); setTab("yeni"); } });
             }
           });
           (riskListesi || []).forEach(r => {
-            if ((r.studentName || "").toLocaleLowerCase("tr").includes(q) || (r.riskTuru || "").toLocaleLowerCase("tr").includes(q) || (r.aciklama || "").toLocaleLowerCase("tr").includes(q) || (r.numara || "").toString().includes(q)) {
+            if (pdrAdAra((r.studentName || ""), q) || (r.riskTuru || "").toLocaleLowerCase("tr").includes(q) || (r.aciklama || "").toLocaleLowerCase("tr").includes(q) || (r.numara || "").toString().includes(q)) {
               bulunanlar.push({ tip: "⚠", baslik: r.studentName, alt: `Risk: ${r.riskTuru || "belirtilmemiş"}`, git: () => { setAktifOgrenci({ name: r.studentName, className: r.className, numara: r.numara }); setTab("risk"); } });
             }
           });
           (hatirlatmalar || []).forEach(h => {
-            if ((h.studentName || "").toLocaleLowerCase("tr").includes(q) || (h.metin || "").toLocaleLowerCase("tr").includes(q) || (h.numara || "").toString().includes(q)) {
+            if (pdrAdAra((h.studentName || ""), q) || (h.metin || "").toLocaleLowerCase("tr").includes(q) || (h.numara || "").toString().includes(q)) {
               bulunanlar.push({ tip: "🔔", baslik: h.studentName || "Hatırlatma", alt: h.metin || "", git: () => { setAktifOgrenci(h.studentName ? { name: h.studentName, className: h.className, numara: h.numara } : null); setTab("hatirlatici"); } });
             }
           });
@@ -55739,7 +55751,7 @@ function pdrBaslangicSekmesi() {
                     {notOgrenciArama.trim().length >= 2 ? (
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom:8 }}>
                         {kayitliListesi.filter(o =>
-                          o.name.toLocaleLowerCase("tr").includes(notOgrenciArama.toLocaleLowerCase("tr")) ||
+                          pdrAdAra(o.name, notOgrenciArama) ||
                           o.className?.toLocaleLowerCase("tr").includes(notOgrenciArama.toLocaleLowerCase("tr")) ||
                           o.numara?.includes(notOgrenciArama)
                         ).slice(0, 20).map(o => (
@@ -55799,7 +55811,7 @@ function pdrBaslangicSekmesi() {
                           {kayitliListesi.filter(o =>
                             !pdrAyniOgrenci(o.name, o.className, form.studentName, form.className, o.numara, form.numara) &&
                             !digerKatilimcilar.some(k => pdrAyniOgrenci(k.name, k.className, o.name, o.className, k.numara, o.numara)) &&
-                            (o.name.toLocaleLowerCase("tr").includes(katilimciArama.toLocaleLowerCase("tr")) ||
+                            (pdrAdAra(o.name, katilimciArama) ||
                              o.className?.toLocaleLowerCase("tr").includes(katilimciArama.toLocaleLowerCase("tr")) ||
                              o.numara?.includes(katilimciArama))
                           ).slice(0,15).map(o => (
@@ -56853,7 +56865,7 @@ function pdrBaslangicSekmesi() {
                   {riskOgrenciArama.trim().length >= 2 ? (
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                       {kayitliListesi.filter(o =>
-                        o.name.toLocaleLowerCase("tr").includes(riskOgrenciArama.toLocaleLowerCase("tr")) ||
+                        pdrAdAra(o.name, riskOgrenciArama) ||
                         o.className?.toLocaleLowerCase("tr").includes(riskOgrenciArama.toLocaleLowerCase("tr")) ||
                         o.numara?.includes(riskOgrenciArama)
                       ).slice(0, 20).map(o => {

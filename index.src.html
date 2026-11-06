@@ -15634,7 +15634,7 @@ const KS_ASISTAN_ARACLAR = {
     calistir: (g) => ksAlanBilgisi(g),
   },
   lise_taban_puanlari: {
-    aciklama: "İstanbul liselerinin 2026 LGS taban puanlarını ve yüzdelik dilimlerini getirir (2025 karşılaştırmalı). Ayrıntılı ilçeler: Beylikdüzü, Esenyurt, Başakşehir, Büyükçekmece, Avcılar, Beyoğlu, Küçükçekmece, Çatalca, Silivri, Fatih, Zeytinburnu, Beşiktaş, Şişli (Mecidiyeköy, Nişantaşı), Eyüpsultan, Kağıthane; ayrıca İstanbul'un en yüksek puanlı liseleri. Yalnız LGS puanıyla alan programlar (OBP ile alanlar yok). ilce ve okul_turu (fen | anadolu | sosyal | aihl | mtal) ile süzülür. puan, net (90 üzerinden toplam net) ya da yuzdelik verilirse okulları hedef / gerçekçi / güvenli diye ayırır; net → puan → yüzdelik dönüşümü yaklaşıktır. Bir öğrencinin netiyle tercih konuşulacaksa önce deneme_analizi ile ortalama netini al, sonra bu araca net olarak ver.",
+    aciklama: "İstanbul liselerinin 2026 LGS taban puanlarını ve yüzdelik dilimlerini getirir (2025 karşılaştırmalı). Ayrıntılı ilçeler: Beylikdüzü, Esenyurt, Başakşehir, Büyükçekmece, Avcılar, Beyoğlu, Küçükçekmece, Çatalca, Silivri, Fatih, Zeytinburnu, Beşiktaş, Şişli (Mecidiyeköy, Nişantaşı), Eyüpsultan, Kağıthane; ayrıca İstanbul'un en yüksek puanlı liseleri. Yalnız LGS puanıyla alan programlar (OBP ile alanlar yok). ilce ve okul_turu (fen | anadolu | sosyal | aihl | mtal) ile süzülür. okul_turu spor ya da güzel sanatlar verilirse İstanbul'un yetenek sınavıyla öğrenci alan okullarını (spor liseleri, güzel sanatlar liseleri, yetenek programlı AİHL) ve yerleştirme kuralını getirir; bunların LGS tabanı yoktur. puan, net (90 üzerinden toplam net) ya da yuzdelik verilirse okulları hedef / gerçekçi / güvenli diye ayırır; net → puan → yüzdelik dönüşümü yaklaşıktır. Bir öğrencinin netiyle tercih konuşulacaksa önce deneme_analizi ile ortalama netini al, sonra bu araca net olarak ver.",
     girdi: '{"ilce": "Beylikdüzü", "okul_turu": "isteğe bağlı", "net": 72, "puan": "isteğe bağlı", "yuzdelik": "isteğe bağlı"}', yontem: "hepsi",
     calistir: (g) => ksLiseTaban(g || {}),
   },
@@ -17550,6 +17550,59 @@ Validebağ Fen Lisesi|fen|İngilizce (5 yıl)|477.820|0.77|477.210|1.05
 Teknopark İstanbul MTAL|mtal|Siber Güvenlik|469.518|1.31|473.594|1.36
 Teknopark İstanbul MTAL|mtal|Bilişim Teknolojileri|458.212|2.25|468.103|1.80`,
 };
+// Özel yetenek sınavıyla öğrenci alan İstanbul okulları (LGS puanı gerekmez). Kaynak: MEB "Yetenek Sınavı ile Öğrenci Alan Okullara
+// Başvuru Kılavuzu" İstanbul satırları (2025 tam liste; 2026 kılavuzunda doğrulanan satırlar aynı). Satır: ilçe|okul|tür|alan|pansiyon
+const KS_OZEL_YETENEK_OKULLARI = `Ataşehir|İstanbul Prof. Faik Somer Spor Lisesi|spor|Basketbol|Yok
+Esenyurt|Esenyurt Spor Lisesi|spor|Spor Alanı|Kız/Erkek
+Beykoz|TFF Meral-Celal Aras Spor Lisesi|spor|Futbol (Hazırlık +4 Yıl)|Erkek
+Büyükçekmece|Ruhi Sarıalp Spor Lisesi|spor|Spor Alanı|Yok
+Kadıköy|Kadıköy Spor Lisesi|spor|Spor Alanı|Yok
+Küçükçekmece|Toki Atakent Spor Lisesi|spor|Spor Alanı|Yok
+Sultanbeyli|Naim Süleymanoğlu Spor Lisesi|spor|Spor Alanı|Yok
+Zeytinburnu|İstanbul TBF Basketbol Spor Lisesi|spor|Basketbol|Yok
+Ataşehir|Aydın Doğan Güzel Sanatlar Lisesi|gsl|Görsel Sanatlar|Yok
+Ataşehir|Aydın Doğan Güzel Sanatlar Lisesi|gsl|Müzik|Yok
+Bağcılar|Bağcılar Hikmet Barutçugil Güzel Sanatlar Lisesi|gsl|Görsel Sanatlar|Yok
+Bağcılar|Bağcılar Hikmet Barutçugil Güzel Sanatlar Lisesi|gsl|Tiyatro|Yok
+Bağcılar|Bağcılar Hikmet Barutçugil Güzel Sanatlar Lisesi|gsl|Türk Müziği (Türk Halk Müziği)|Yok
+Bakırköy|Bakırköy Göksel Baktagir Güzel Sanatlar Lisesi|gsl|Görsel Sanatlar|Yok
+Bakırköy|Bakırköy Göksel Baktagir Güzel Sanatlar Lisesi|gsl|Müzik|Yok
+Bakırköy|Bakırköy Göksel Baktagir Güzel Sanatlar Lisesi|gsl|Türk Müziği (Türk Halk Müziği)|Yok
+Başakşehir|Başakşehir İTÜ İsmail Dede Efendi Güzel Sanatlar Lisesi|gsl|Tiyatro (Hazırlık +4 Yıl)|Yok
+Başakşehir|Başakşehir İTÜ İsmail Dede Efendi Güzel Sanatlar Lisesi|gsl|Görsel Sanatlar (Hazırlık +4 Yıl)|Yok
+Başakşehir|Başakşehir İTÜ İsmail Dede Efendi Güzel Sanatlar Lisesi|gsl|Müzik (Hazırlık +4 Yıl)|Yok
+Başakşehir|Başakşehir İTÜ İsmail Dede Efendi Güzel Sanatlar Lisesi|gsl|Türk Müziği (Türk Sanat Müziği) (Hazırlık +4 Yıl)|Yok
+Beşiktaş|İstanbul Üniversitesi Itri Güzel Sanatlar Lisesi|gsl|Türk Müziği (Türk Halk Müziği) (Hazırlık +4 Yıl)|Yok
+Beşiktaş|İstanbul Üniversitesi Itri Güzel Sanatlar Lisesi|gsl|Türk Müziği (Türk Sanat Müziği) (Hazırlık +4 Yıl)|Yok
+Beylikdüzü|Beylikdüzü Aşık Veysel Güzel Sanatlar Lisesi|gsl|Görsel Sanatlar|Yok
+Beylikdüzü|Beylikdüzü Aşık Veysel Güzel Sanatlar Lisesi|gsl|Müzik|Yok
+Beyoğlu|Beyoğlu Mustafa Kandıralı Güzel Sanatlar Lisesi|gsl|Türk Müziği (Türk Halk Müziği)|Yok
+Beyoğlu|Beyoğlu Mustafa Kandıralı Güzel Sanatlar Lisesi|gsl|Türk Müziği (Türk Sanat Müziği)|Yok
+Kadıköy|İstanbul Avni Akyol Güzel Sanatlar Lisesi|gsl|Görsel Sanatlar|Yok
+Kadıköy|İstanbul Avni Akyol Güzel Sanatlar Lisesi|gsl|Müzik|Yok
+Küçükçekmece|Alaeddin Yavaşça Güzel Sanatlar Lisesi|gsl|Görsel Sanatlar|Yok
+Küçükçekmece|Alaeddin Yavaşça Güzel Sanatlar Lisesi|gsl|Müzik|Yok
+Pendik|Marmara Üniversitesi Abdülkadir Meragi Güzel Sanatlar Lisesi|gsl|Görsel Sanatlar (Hazırlık +4 Yıl)|Yok
+Pendik|Marmara Üniversitesi Abdülkadir Meragi Güzel Sanatlar Lisesi|gsl|Türk Müziği (Türk Halk Müziği) (Hazırlık +4 Yıl)|Yok
+Pendik|Marmara Üniversitesi Abdülkadir Meragi Güzel Sanatlar Lisesi|gsl|Türk Müziği (Türk Sanat Müziği) (Hazırlık +4 Yıl)|Yok
+Üsküdar|Ahmet Ratıp Paşa Güzel Sanatlar Lisesi|gsl|Görsel Sanatlar|Yok
+Üsküdar|Ahmet Ratıp Paşa Güzel Sanatlar Lisesi|gsl|Müzik|Yok
+Üsküdar|Ahmet Ratıp Paşa Güzel Sanatlar Lisesi|gsl|Tiyatro|Yok
+Zeytinburnu|Zeytinburnu Güzel Sanatlar Lisesi|gsl|Görsel Sanatlar|Yok
+Zeytinburnu|Zeytinburnu Güzel Sanatlar Lisesi|gsl|Müzik|Yok
+Fatih|Fatih Kız Anadolu İmam Hatip Lisesi|aihlp|Geleneksel ve Çağdaş Görsel Sanatlar Programı (kız)|Yok
+Üsküdar|Hakkı Demir Anadolu İmam Hatip Lisesi|aihlp|Geleneksel ve Çağdaş Görsel Sanatlar Programı (erkek)|Erkek
+Üsküdar|Hakkı Demir Anadolu İmam Hatip Lisesi|aihlp|Musiki Programı (erkek)|Erkek
+Ataşehir|Ataşehir Kız Anadolu İmam Hatip Lisesi|aihlp|Geleneksel ve Çağdaş Görsel Sanatlar Programı (kız)|Yok
+Sancaktepe|Rabia Kız Anadolu İmam Hatip Lisesi|aihlp|Geleneksel ve Çağdaş Görsel Sanatlar Programı (kız)|Yok
+Üsküdar|Ayşe Hümeyra Ökten Kız Anadolu İmam Hatip Lisesi|aihlp|Geleneksel ve Çağdaş Görsel Sanatlar Programı (kız)|Yok
+Pendik|Koca Yusuf Anadolu İmam Hatip Lisesi|aihlp|Spor Programı (erkek)|Erkek
+Sarıyer|Yaşar Dedeman Anadolu İmam Hatip Lisesi|aihlp|Spor Programı (erkek)|Yok`;
+const KS_OZEL_YETENEK_TUR_AD = { spor: "Spor Lisesi", gsl: "Güzel Sanatlar Lisesi", aihlp: "AİHL yetenek programı" };
+const KS_OZEL_YETENEK_BILGI = "Özel yetenek sınavıyla alır, LGS puanı gerekmez. Yerleştirme puanı = yetenek sınavı %70 + ortaokul başarı puanı (OBP) %30; yetenek sınavından en az 50 almak gerekir. Başvuru haziranda e-Okul'dan (en fazla 3 tercih), sınavlar temmuz başında okulda yapılır (2026: başvuru 1-26 Haziran, sınav 1-12 Temmuz). Kılavuz her yıl mayıs-haziranda yenilenir; tarih ve kontenjanı yeni kılavuzdan kontrol edin.";
+function ksOzelYetenekSatirlar() {
+  return KS_OZEL_YETENEK_OKULLARI.split("\n").map(sat => { const [ilce, okul, tur, alan, pansiyon] = sat.split("|"); return { ilce, okul, tur, alan, pansiyon, taban: null, yuzdelik: null, ozel: true }; });
+}
 // Yaklaşık net → puan → yüzdelik (2025-2026 sonuçlarından derlenmiş, ±; o yılın soru zorluğuna ve ortalamalara göre değişir)
 const KS_LGS_NET_PUAN = [[90, 500, 0.01], [85, 482, 0.3], [80, 462, 1.2], [75, 442, 3.5], [70, 422, 7], [65, 400, 12], [60, 380, 18], [55, 355, 25], [50, 330, 34], [45, 305, 43], [40, 280, 53], [30, 235, 70], [20, 195, 85]];
 const KS_TABAN_TUR_AD = { fen: "Fen Lisesi", anadolu: "Anadolu Lisesi", sosyal: "Sosyal Bilimler Lisesi", aihl: "Anadolu İmam Hatip", mtal: "Mesleki ve Teknik" };
@@ -17583,6 +17636,12 @@ function ksYuzdelikPuanTahmin(y) {
 function ksLiseTaban(g) {
   const sade = (x) => ksSade(String(x || ""));
   const ilceG = sade(g.ilce), turG = sade(g.okul_turu || g.tur);
+  if (/spor|guzel|sanat|yetenek|muzik|resim|tiyatro|gorsel/.test(turG)) {
+    const l = ksOzelYetenekSatirlar().filter(x => !ilceG || sade(x.ilce).includes(ilceG) || ilceG.includes(sade(x.ilce)))
+      .filter(x => /spor/.test(turG) ? x.tur === "spor" || /spor/i.test(x.alan) : /guzel|sanat|muzik|resim|tiyatro|gorsel/.test(turG) ? x.tur !== "spor" && !/spor/i.test(x.alan) : true);
+    if (!l.length) return `Bu ölçüte uyan yetenek sınavlı okul kayıtlı değil.${ilceG ? " İlçeyi boş bırakıp tekrar dene." : ""}`;
+    return "İSTANBUL — YETENEK SINAVIYLA ÖĞRENCİ ALAN OKULLAR\n" + l.map(x => `• ${x.okul} — ${x.alan} [${KS_OZEL_YETENEK_TUR_AD[x.tur]}, ${x.ilce}${x.pansiyon && x.pansiyon !== "Yok" ? ", pansiyon: " + x.pansiyon : ""}]`).join("\n") + "\n\n" + KS_OZEL_YETENEK_BILGI;
+  }
   const turAnahtar = !turG ? "" : turG.includes("fen") ? "fen" : turG.includes("sosyal") ? "sosyal" : (turG.includes("imam") || turG.includes("aihl")) ? "aihl" : (turG.includes("mesleki") || turG.includes("mtal") || turG.includes("teknik")) ? "mtal" : turG.includes("anadolu") ? "anadolu" : "";
   let satirlar = ksTabanSatirlar();
   const ilceler = Object.keys(KS_LISE_TABAN_2026);
@@ -21702,7 +21761,7 @@ function pdrKelimeEslesir(a, t) {
   if (a.length >= 4 && t.startsWith(a) && t.length - a.length <= 5) return true;          // ek almış: "acar'ı" → "acari"
   return Math.min(a.length, t.length) >= 3 && Math.max(a.length, t.length) >= 4 && pdrDuzeltmeUzakligi(a, t) <= 1; // yazım hatası: "acr"
 }
-function pdrTabanListesi() { try { return typeof ksTabanSatirlar === "function" ? ksTabanSatirlar() : []; } catch (e) { return []; } }
+function pdrTabanListesi() { try { return (typeof ksTabanSatirlar === "function" ? ksTabanSatirlar() : []).concat(typeof ksOzelYetenekSatirlar === "function" ? ksOzelYetenekSatirlar() : []); } catch (e) { return []; } }
 // Metinde adı geçen okullar (taban listesindeki okul adları; yazım hatasına toleranslı)
 function pdrNottakiOkullar(metin) {
   const cumleler = pdrCumleler(metin).map(pdrSadeKelimeler);
@@ -21749,7 +21808,7 @@ function pdrNottakiOkullar(metin) {
 function pdrOkulBul(q) {
   const l = pdrTabanListesi(); const s = ksSade(String(q || "").trim());
   if (!s) return [];
-  const dogrudan = l.filter(x => ksSade(x.okul + " " + x.alan).includes(s));
+  const dogrudan = l.filter(x => ksSade(x.okul + " " + x.alan + (x.ozel ? " yetenek sinavi " + (KS_OZEL_YETENEK_TUR_AD[x.tur] || "") : "")).includes(s));
   if (dogrudan.length) return dogrudan;
   const ad = pdrNottakiOkullar(q);
   return l.filter(x => ad.includes(x.okul));
@@ -21796,6 +21855,7 @@ function pdrHedefOkulAnaliz(hedefler, denemeGirilen, notNetleri) {
   const l = pdrTabanListesi(), guncel = pdrOgrGuncelNet(denemeGirilen, notNetleri), ay = pdrLgsAyKaldi();
   const satirlar = (hedefler || []).map(h => {
     const s = l.find(x => x.okul === h.okul && x.alan === h.alan) || l.filter(x => x.okul === h.okul).sort((a, b) => (b.taban || 0) - (a.taban || 0))[0];
+    if (s && s.ozel) return { h, s, ozel: true };
     if (!s || s.taban == null) return { h, s: null };
     const gereken = ksPuanNetTahmin(s.taban);
     const simdi = guncel ? guncel.ort : null;
@@ -21812,6 +21872,7 @@ function pdrHedefOkulMetniYap(a, baslik) {
   b.push(a.guncel ? `Şu anki net: ${a.guncel.kaynak === "deneme" ? `son deneme ${v(a.guncel.son)}${a.guncel.n > 1 ? `, son ${a.guncel.n} deneme ort. ${v(a.guncel.ort)}` : ""}` : `notta geçen ${v(a.guncel.son)} net (${a.guncel.tarih || "?"}; Deneme sekmesine ders netleri girilmemiş)`}` : "Şu anki net: kayıt yok (deneme ya da notta net geçmiyor).");
   a.satirlar.forEach(x => {
     if (!x.s) { b.push(`• ${x.h.okul}: taban verisi bulunamadı`); return; }
+    if (x.ozel) { b.push(`• ${x.s.okul} — ${x.s.alan} (${x.s.ilce}, ${KS_OZEL_YETENEK_TUR_AD[x.s.tur] || "yetenek sınavı"}): ${KS_OZEL_YETENEK_BILGI} OBP'nin %30 etkisi olduğundan ders notlarını yüksek tutmak da önemli.`); return; }
     b.push(`• ${x.s.okul} — ${x.s.alan} (${x.s.ilce}): 2026 taban ${v(x.s.taban.toFixed(3))}${x.s.yuzdelik != null ? ` (%${v(x.s.yuzdelik)})` : ""} → gereken ≈ ${v(x.gereken)} net` +
       (x.fark !== null ? `; fark ${x.fark > 0 ? "≈ " + v(x.fark) + " net" : "yok"} — ${x.durum}${x.aylik ? `; LGS'ye ~${a.ay} ay: ayda ≈ ${v(x.aylik)} net artış` : ""}` : ""));
   });
@@ -21915,9 +21976,11 @@ function PdrHedefOkulKarti({ hedefler, denemeGirilen, notNetleri, onKaydet }) {
             <div style={{ fontSize: 12.5, fontWeight: 800, color: TEXT }}>{x.h.okul}<span style={{ fontWeight: 500, color: MUTED }}> · {x.s ? x.s.alan : ""}</span></div>
             <button data-testid="hedef-cikar" onClick={() => { if (window.confirm(`${x.h.okul} hedeflerden çıkarılsın mı?`)) onKaydet(hedefler.filter(h => h !== x.h)); }} style={{ background: "none", border: "none", color: MUTED, cursor: "pointer", fontSize: 13 }}>✕</button>
           </div>
-          {x.s ? (
+          {x.ozel ? (
+            <div data-testid="hedef-ozel" style={{ fontSize: 11.5, color: TEXT, lineHeight: 1.5 }}>🎭 <b>Yetenek sınavıyla alır</b> (LGS puanı gerekmez) · yerleştirme: yetenek sınavı %70 + OBP %30, en az 50 puan · başvuru haziran (e-Okul, en fazla 3 tercih), sınav temmuz başı · ilçe {x.s.ilce}</div>
+          ) : x.s ? (
             <div style={{ fontSize: 11.5, color: TEXT, lineHeight: 1.5 }}>
-              Taban {v(x.s.taban.toFixed(1))}{x.s.yuzdelik != null ? ` (%${v(x.s.yuzdelik)})` : ""} → gereken ≈ <b>{v(x.gereken)} net</b>
+              Taban {x.s.taban != null ? v(x.s.taban.toFixed(1)) : "?"}{x.s.yuzdelik != null ? ` (%${v(x.s.yuzdelik)})` : ""} → gereken ≈ <b>{v(x.gereken)} net</b>
               {x.fark !== null && <> · fark <b>{x.fark > 0 ? "≈ " + v(x.fark) : "yok"}</b> · {x.durum}{x.aylik ? ` · ayda ≈ ${v(x.aylik)} net` : ""}</>}
             </div>
           ) : <div style={{ fontSize: 11.5, color: MUTED }}>Taban verisi bulunamadı.</div>}
@@ -21929,14 +21992,14 @@ function PdrHedefOkulKarti({ hedefler, denemeGirilen, notNetleri, onKaydet }) {
           <input data-testid="hedef-ara" value={ara} onChange={e => setAra(e.target.value)} placeholder="Okul adı yaz (örn. Yaşar Acar)" style={{ width: "100%", padding: "8px 10px", border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 13, boxSizing: "border-box" }} />
           {sonuc.map((s, i) => (
             <button key={i} data-testid="hedef-sonuc" onClick={() => { const y = pdrHedefEkle({ hedefOkullar: hedefler }, s.okul, s.alan, "elle").hedefOkullar; onKaydet(y); setAra(""); setAcik(false); }} style={{ display: "block", width: "100%", textAlign: "left", marginTop: 4, padding: "6px 9px", borderRadius: 8, border: `1px solid ${BORDER}`, background: "#fff", cursor: "pointer", fontSize: 12 }}>
-              <b>{s.okul}</b> · {s.alan} <span style={{ color: MUTED }}>({s.ilce}, {s.taban != null ? v(s.taban.toFixed(1)) : "?"})</span>
+              <b>{s.okul}</b> · {s.alan} <span style={{ color: MUTED }}>({s.ilce}, {s.ozel ? "🎭 yetenek sınavı" : s.taban != null ? v(s.taban.toFixed(1)) : "?"})</span>
             </button>
           ))}
-          {ara.trim().length >= 2 && !sonuc.length && <div style={{ fontSize: 11.5, color: MUTED, marginTop: 4 }}>Programdaki listede yok (İstanbul'un 5 ilçesi ve en yüksek puanlı liseler var).</div>}
+          {ara.trim().length >= 2 && !sonuc.length && <div style={{ fontSize: 11.5, color: MUTED, marginTop: 4 }}>Programdaki listede yok (İstanbul'un 5 ilçesi, en yüksek puanlı liseler ve İstanbul'un yetenek sınavıyla öğrenci alan okulları var).</div>}
           {hedefler.length >= PDR_HEDEF_OKUL_EN_FAZLA && <div style={{ fontSize: 11, color: MUTED, marginTop: 4 }}>En fazla {PDR_HEDEF_OKUL_EN_FAZLA} hedef tutulur; yeni eklenen en eskinin yerine geçer.</div>}
         </div>
       )}
-      <div style={{ fontSize: 10, color: MUTED, marginTop: 6 }}>Yaklaşık hesap: net → puan ±15-20 puan; 2026 tabanları.</div>
+      <div style={{ fontSize: 10, color: MUTED, marginTop: 6 }}>Yaklaşık hesap: net → puan ±15-20 puan; 2026 tabanları. Spor / güzel sanatlar için okul adı ya da "spor", "güzel sanatlar" yazın.</div>
     </div>
   );
 }

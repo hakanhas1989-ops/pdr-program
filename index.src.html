@@ -15508,7 +15508,7 @@ const KS_ASISTAN_ARACLAR = {
   risk_analizi: { aciklama: "Kapalı sistemle risk analizi yapar (kaydetmez).", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
     calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); const r = pdrKapaliRiskAnalizi({ riskTuru: "", oncelik: "Orta", aciklama: "" }, G.gorusmeler, G.profil1, G.kademe, ksDenemeOzetHesapla(G.denemeGirilen, G.sinavTuru), G.ek); return (r.acil ? "⚠ KRİTİK — acil müdahale gerekiyor.\n" : "") + r.metin; } },
   seans_hazirlik: { aciklama: "Bir sonraki görüşme için kapalı sistemle hazırlık notu çıkarır.", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
-    calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); return pdrKapaliSeansHazirlik({ gorusmeler: G.gorusmeler, mudahaleler: G.mudahaleler, riskler: G.riskler, denemeAvg: G.denemeGirilen.length ? (G.denemeGirilen.reduce((t, d) => t + d.toplam, 0) / G.denemeGirilen.length).toFixed(1) : null, etkinlikHavuzu: typeof ogrenciEtkinlikHavuzu === "function" ? ogrenciEtkinlikHavuzu(o.className, G.kademe) : [], kademe: G.kademe, profil1: G.profil1 }) + pdrFormEkBlok(ctx, o, "hazirlik") + ((m) => m ? "\n\n" + m : "")(pdrDegerlendirmeEksikMetni(ctx, o, 4)) + ((m) => m ? "\n\n" + m : "")(pdrOgrOlcumMetni(ctx, o)) + ((m) => m ? "\n\n" + m : "")(pdrOgrYasamMetni(ctx, o)) + ((m) => m ? "\n\n" + m : "")(pdrOgrHedefMetni(ctx, o)); } },
+    calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); return pdrKapaliSeansHazirlik({ gorusmeler: G.gorusmeler, mudahaleler: G.mudahaleler, riskler: G.riskler, denemeAvg: G.denemeGirilen.length ? (G.denemeGirilen.reduce((t, d) => t + d.toplam, 0) / G.denemeGirilen.length).toFixed(1) : null, etkinlikHavuzu: typeof ogrenciEtkinlikHavuzu === "function" ? ogrenciEtkinlikHavuzu(o.className, G.kademe) : [], kademe: G.kademe, profil1: G.profil1 }) + pdrFormEkBlok(ctx, o, "hazirlik") + ((m) => m ? "\n\n" + m : "")(pdrDegerlendirmeEksikMetni(ctx, o, 4)) + ((m) => m ? "\n\n" + m : "")(pdrOgrOlcumMetni(ctx, o)) + ((m) => m ? "\n\n" + m : "")(pdrOgrYasamMetni(ctx, o)) + ((m) => m ? "\n\n" + m : "")(pdrOgrHedefMetni(ctx, o)) + ((m) => m ? "\n\n" + m : "")(pdrLgsOnFormMetni(ctx, o)); } },
   mudahale_plani: { aciklama: "Kapalı sistemle müdahale planı önerir (kaydetmez).", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
     calistir: (g, ctx, o) => { const G = ksAsistanGirdi(ctx, o); return pdrKapaliMudahalePlani({ ek: G.ek, gorusmeler: G.gorusmeler, kademe: G.kademe, profil1: G.profil1, programlar: typeof MUDAHALE_PROGRAMLARI !== "undefined" ? MUDAHALE_PROGRAMLARI : null }) + pdrFormEkBlok(ctx, o, "takip") + ((m) => m ? "\n\n" + m : "")(pdrDegerlendirmeEksikMetni(ctx, o, 4)); } },
   deneme_analizi: { aciklama: "Kapalı sistemle deneme sonuçlarını analiz eder.", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
@@ -16584,7 +16584,7 @@ function ksAsistanOgrenciDosyasi(ctx, o) {
     if (gor.length > 6) b.push(`  (daha eski ${gor.length - 6} görüşme var; gerekirse gorusme_notlari ile adet artır)`);
   } else b.push("\nGÖRÜŞMELER: kayıt yok.");
   try { const om = pdrOgrOlcumMetni(ctx, o); if (om) b.push("\n" + om); } catch (e) {}
-  try { const hm = pdrOgrHedefMetni(ctx, o); if (hm) b.push("\n" + hm); const ym = pdrOgrYasamMetni(ctx, o); if (ym) b.push("\n" + ym); } catch (e) {}
+  try { const hm = pdrOgrHedefMetni(ctx, o); if (hm) b.push("\n" + hm); const ym = pdrOgrYasamMetni(ctx, o); if (ym) b.push("\n" + ym); const lf = pdrLgsOnFormMetni(ctx, o); if (lf) b.push("\n" + lf); } catch (e) {}
   try { if (pdrFormOgrKayitlari(ctx.records, o).length) b.push("\nGÖRÜŞME FORMLARI:\n" + ksAsistanKisalt(pdrFormAnalizMetni(ctx.records, o, "takip").replace(/^📈 SEANSLAR ARASI TAKİP\n/, ""), 1200)); } catch (e) {}
   // Akademik
   const ogrDen = pdrSozlukOku(ctx.denemeler, ad, sinif, no) || pdrSozlukOku(ctx.denemeler, ad, sinif) || {};
@@ -21921,19 +21921,20 @@ function pdrYasamTara(metin) {
   return l;
 }
 // Son 120 günün notlarından (grup notunda yalnız öğrencinin kısmı) tür başına en yeni bulgu
-function pdrYasamDuzeni(kayitlar, o) {
+function pdrYasamDuzeni(kayitlar, o, formKayit) {
   const sinir = Date.now() - 120 * 86400000, gor = {};
   (kayitlar || []).filter(r => pdrTarihMs(r.date) >= sinir).sort((a, b) => pdrTarihMs(b.date) - pdrTarihMs(a.date)).forEach(r => {
     pdrYasamTara(pdrOgrNotMetni(r, o, true)).forEach(x => { if (!gor[x.tur]) gor[x.tur] = { ...x, tarih: r.date, kim: r.meetingType && r.meetingType !== "Öğrenci" ? r.meetingType : "" }; });
   });
+  try { if (formKayit && pdrTarihMs(formKayit.tarih) >= sinir) lgsOnYasamBulgulari(formKayit).forEach(x => { if (!gor[x.tur] || pdrTarihMs(x.tarih) > pdrTarihMs(gor[x.tur].tarih)) gor[x.tur] = x; }); } catch (e) {}
   return ["uyku", "ekran", "kahvalti"].filter(k => gor[k]).map(k => ({ ...gor[k], oneri: PDR_YASAM_ONERI[k] }));
 }
 function pdrYasamMetni(l) {
   if (!l.length) return "";
-  return "🌙 YAŞAM DÜZENİ (notlardan, son 4 ay)\n" + l.map(x => `• ${x.baslik} — ${x.tarih}${x.kim ? " (" + x.kim.toLocaleLowerCase("tr") + " görüşmesi)" : ""}: "${x.kanit}"\n  ${x.oneri}`).join("\n");
+  return "🌙 YAŞAM DÜZENİ (notlardan ve LGS ön görüşme formundan, son 4 ay)\n" + l.map(x => `• ${x.baslik} — ${x.tarih}${x.kim ? " (" + x.kim.toLocaleLowerCase("tr") + " görüşmesi)" : ""}: "${x.kanit}"\n  ${x.oneri}`).join("\n");
 }
 function pdrOgrYasamMetni(ctx, o) {
-  try { return pdrYasamMetni(pdrYasamDuzeni((ctx.records || []).filter(r => pdrAyniOgrenci(r.studentName, r.className, o.name, o.className, r.numara, o.numara)), o)); } catch (e) { return ""; }
+  try { return pdrYasamMetni(pdrYasamDuzeni((ctx.records || []).filter(r => pdrAyniOgrenci(r.studentName, r.className, o.name, o.className, r.numara, o.numara)), o, lgsOnSonKayit(ctx.testKayitlari, o.name, o.className, o.numara))); } catch (e) { return ""; }
 }
 function pdrOgrHedefMetni(ctx, o) {
   try { const ogr = pdrOgrKaydi(ctx, o); if (!ogr || !(ogr.hedefOkullar || []).length) return ""; return pdrHedefOkulMetni(ctx, o); } catch (e) { return ""; }
@@ -22006,14 +22007,14 @@ function PdrHedefOkulKarti({ hedefler, denemeGirilen, notNetleri, onKaydet }) {
   );
 }
 // Öğrenci özet kartı: 🌙 Yaşam düzeni uyarısı
-function PdrYasamKarti({ kayitlar, ogrenci }) {
+function PdrYasamKarti({ kayitlar, ogrenci, formKayit }) {
   const [acik, setAcik] = useState(false);
-  const l = pdrYasamDuzeni(kayitlar, { name: ogrenci });
+  const l = pdrYasamDuzeni(kayitlar, { name: ogrenci }, formKayit);
   if (!l.length) return null;
   return (
     <div data-testid="yasam-karti" style={{ background: "#EEF2FB", border: "1px solid #C9D3EE", borderRadius: 14, padding: "12px 14px", marginBottom: 12 }}>
       <div onClick={() => setAcik(x => !x)} style={{ cursor: "pointer" }}>
-        <div style={{ fontSize: 10, color: MUTED, fontWeight: 700, letterSpacing: 0.3 }}>🌙 YAŞAM DÜZENİ · notlardan {acik ? "▲" : "▼"}</div>
+        <div style={{ fontSize: 10, color: MUTED, fontWeight: 700, letterSpacing: 0.3 }}>🌙 YAŞAM DÜZENİ · {formKayit ? "notlardan ve formdan" : "notlardan"} {acik ? "▲" : "▼"}</div>
         <div style={{ fontSize: 13, fontWeight: 800, color: "#34508F", marginTop: 2 }}>{l.map(x => x.baslik).join(" · ")}</div>
       </div>
       {acik && l.map((x, i) => (
@@ -34605,6 +34606,7 @@ function testSonucOzeti(k) {
     }
     case "nitel": return k.not ? "Nitel değerlendirme (nota bakınız)" : "—";
     case "net_kontrol": return v.ozet || "—";
+    case "lgs_on_form": return v.ozet || "—";
     case "beier_form_a": {
       const maddeler = v.maddeler || [];
       const cevaplanan = maddeler.filter(m => m.cevap && m.cevap.trim()).length;
@@ -40901,7 +40903,7 @@ function YilSecimEkrani({ yillar, setYillar, aktifYil, setAktifYil, ogrenciler, 
 }
 
 // ── Özet Kartı Bileşeni (Seans Öncesi Hazırlık) ─────────────────────────────
-function OzetKarti({ ogrenci, ogrenciSinif, ogrRec, ogrP1, ogrP2, ogrRisk, denemeGirilen, denemeAvg, mudahalePlan, hazirlikNotlari, setHazirlikNotlari, ilerlemeNotlari, setIlerlemeNotlari, setTab, devamsizlikGecmisi, onDevamsizlikGuncelle, kademe, olayKayitlari, onOlayEkle, hedefOkullar, notNetleri, onHedefKaydet }) {
+function OzetKarti({ ogrenci, ogrenciSinif, ogrRec, ogrP1, ogrP2, ogrRisk, denemeGirilen, denemeAvg, mudahalePlan, hazirlikNotlari, setHazirlikNotlari, ilerlemeNotlari, setIlerlemeNotlari, setTab, devamsizlikGecmisi, onDevamsizlikGuncelle, kademe, olayKayitlari, onOlayEkle, hedefOkullar, notNetleri, onHedefKaydet, ogrNumara, testKayitlari, setTestKayitlari, profiles2, setProfiles2 }) {
   const [hazirlikAiLoading, setHazirlikAiLoading] = useState(false);
   const [ucretsizEtkinlikAlan, setUcretsizEtkinlikAlan] = useState(null);
   const [ucretsizEtkinlikArama, setUcretsizEtkinlikArama] = useState("");
@@ -41180,7 +41182,8 @@ Kısa ve pratik yaz, Markdown kullanma.`}]
           {/* 🎯 Hedef okul (LGS) ve 🌙 yaşam düzeni uyarısı */}
           {kademe === "ortaokul" && onHedefKaydet && <PdrHedefOkulKarti hedefler={hedefOkullar || []} denemeGirilen={denemeGirilen} notNetleri={notNetleri || []} onKaydet={onHedefKaydet} />}
           <PdrOlcumKarti kayitlar={ogrRec} />
-          <PdrYasamKarti kayitlar={ogrRec} ogrenci={ogrenci} />
+          {kademe === "ortaokul" && setTestKayitlari && <LgsOnFormKarti ogrAd={ogrenci} ogrSinif={ogrenciSinif} ogrNumara={ogrNumara} testKayitlari={testKayitlari || {}} setTestKayitlari={setTestKayitlari} hedefOkullar={hedefOkullar || []} onHedefKaydet={onHedefKaydet} profiles2={profiles2} setProfiles2={setProfiles2} />}
+          <PdrYasamKarti kayitlar={ogrRec} ogrenci={ogrenci} formKayit={lgsOnSonKayit(testKayitlari, ogrenci, ogrenciSinif, ogrNumara)} />
           {/* Son görüşme */}
           {sonGorusme && (
             <div style={{background:CARD,border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)",borderLeft:`4px solid ${ACCENT}`,borderRadius:10,padding:12,marginBottom:10}}>
@@ -44762,6 +44765,7 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
               olayKayitlari={pdrSeciliOgr(tumOgrenciler, seciliOgrenci, aktifOgrenci, "studentName")?.olayKayitlari || []}
               hedefOkullar={pdrSeciliOgr(tumOgrenciler, seciliOgrenci, aktifOgrenci, "studentName")?.hedefOkullar || []}
               notNetleri={pdrSeciliOgr(tumOgrenciler, seciliOgrenci, aktifOgrenci, "studentName")?.notNetleri || []}
+              ogrNumara={seciliOgrenciNumara} testKayitlari={testKayitlari} setTestKayitlari={setTestKayitlari} profiles2={profiles2} setProfiles2={setProfiles2}
               onHedefKaydet={async (liste) => {
                 const updated = ogrenciler.map(o => pdrAyniOgrenci(o.studentName, o.className, seciliOgrenci, seciliOgrenciSinif, o.numara, seciliOgrenciNumara) ? { ...o, hedefOkullar: liste } : o);
                 setOgrenciler(updated);
@@ -46097,6 +46101,371 @@ function LgsAylikProgramKarti({ ogrenciler, denemeler, aktifYil }) {
   </div>);
 }
 // ===== LGS ÇALIŞMA PROGRAMI BİTİŞ =====
+// ===== LGS ÖN GÖRÜŞME FORMU BAŞLANGIÇ =====
+// Öğrencinin görüşmeden önce doldurduğu 2 sayfalık form (hedef lise, dersler, ortam, kurs, uyku-ekran, çalışma
+// yöntemi, ilgi-meslek, duygular). Ekranda doldurulur ya da kâğıdın fotoğrafı yapay zekâyla okunur. Fotoğraf
+// gönderilmeden ÖNCE telefonda, ad-soyad ve sınıfın yazdığı renkli üst şerit kesilir (öğrenci adı AI'ya gitmez).
+const LGS_ON_DERSLER = ["Türkçe", "Matematik", "Fen Bilimleri", "İnkılap Tarihi", "Din Kültürü", "İngilizce"];
+const LGS_ON_GUNLER = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"];
+// tip: metin | uzun | tek (tek seçim) | cok (çoklu seçim) | evet (kutucuk) | olcek (1-5)
+const LGS_ON_BOLUMLER = [
+  { b: "Hedef lisem", r: "#D97706", a: [
+    ["hedef1", "metin", "1. tercih lise"], ["hedef2", "metin", "2. tercih lise"], ["hedef3", "metin", "3. tercih lise"], ["hicDusunmedim", "evet", "Hedef lise hiç düşünmedim"],
+    ["taban", "metin", "1. tercihin taban puanı (öğrencinin yazdığı)"], ["yuzdelik", "metin", "1. tercihin yüzdelik dilimi (öğrencinin yazdığı)"], ["gerekNet", "metin", "1. tercih için gereken net (öğrencinin yazdığı)"], ["hedefBilmiyor", "evet", "Taban/net için 'Bilmiyorum' işaretli"],
+    ["sonNet", "metin", "Son deneme neti"], ["ortNet", "metin", "Deneme ortalaması"], ["uzaklik", "metin", "Hedefe kaç net uzak (öğrenciye göre)"],
+    ["hedefKim", "tek", "Hedefi kim belirledi", ["Ben", "Ailem", "Birlikte", "Öğretmenim"]], ["hedefEmin", "tek", "Hedefinden ne kadar emin", ["Çok eminim", "Biraz eminim", "Kararsızım"]],
+    ["hedefNeden", "cok", "Neden bu lise", ["Puanı yüksek", "Eve yakın", "Arkadaşlarım", "Bölümleri", "Ailem istiyor", "Diğer"]], ["hedefNedenDiger", "metin", "Neden (diğer)"]] },
+  { b: "Derslerim", r: "#7C3AED", a: [
+    ...LGS_ON_DERSLER.flatMap((d, i) => [[`d${i}_zorluk`, "tek", `${d}: zorluk`, ["Kolay", "Orta", "Zor"]], [`d${i}_sevdigim`, "evet", `${d}: en sevdiğim`], [`d${i}_y1`, "metin", `${d}: 1. yazılı`], [`d${i}_y2`, "metin", `${d}: 2. yazılı`]]),
+    ["ort7", "metin", "7. sınıf yıl sonu ortalaması"], ["zorKonular", "metin", "En zorlandığı konular"]] },
+  { b: "Çalışma ortamım", r: "#16A34A", a: [
+    ["oda", "tek", "Kendi çalışma odası", ["Var, sadece benim", "Kardeşimle ortak", "Yok"]],
+    ["yer", "cok", "En çok nerede çalışmayı seviyor", ["Odamda masada", "Yatakta", "Salon / mutfak masası", "Kütüphanede", "Dershane / etütte", "Okulda", "Diğer"]], ["yerDiger", "metin", "Yer (diğer)"],
+    ["calisirken", "cok", "Çalışırken", ["Sessizlik isterim", "Müzik dinlerim", "TV açık olur", "Yanımda biri olsun isterim"]], ["dagitan", "metin", "Evde dikkatini en çok dağıtan"]] },
+  { b: "Dershane / kurs / özel ders", r: "#0891B2", a: [
+    ["kurs", "cok", "Gittiği", ["Dershane", "Okul kursu (DYK)", "Özel ders", "Online ders / platform", "Etüt merkezi", "Hiçbiri"]],
+    ...LGS_ON_GUNLER.map((g, i) => [`kg${i}`, "metin", `Kurs saati: ${g}`]),
+    ["kursMemnun", "tek", "Kurstan memnun", ["Evet", "Kısmen", "Hayır"]], ["yolSure", "metin", "Kursa yolda geçen süre (dk)"]] },
+  { b: "Günlük düzenim", r: "#DB2777", a: [
+    ["yatisOkul", "metin", "Okul günleri yatış saati"], ["kalkisOkul", "metin", "Okul günleri kalkış saati"], ["yatisHs", "metin", "Hafta sonu yatış saati"], ["kalkisHs", "metin", "Hafta sonu kalkış saati"],
+    ["kahvalti", "tek", "Kahvaltı", ["Her gün", "Bazen", "Yapmıyorum"]], ["gunduzUyku", "tek", "Gündüz uykusu gelir", ["Sık", "Bazen", "Hayır"]],
+    ["telefon", "tek", "Kendi telefonu", ["Var", "Ailemle ortak", "Yok"]], ["tablet", "tek", "Tablet / bilgisayar", ["Var", "Yok"]],
+    ["ekran", "tek", "Günlük ders dışı ekran süresi", ["1 saatten az", "1–2 saat", "2–4 saat", "4 saatten çok"]], ["ekranEnCok", "cok", "Ekranda en çok", ["Sosyal medya", "Oyun", "Video / dizi", "Mesajlaşma"]],
+    ["telefonCalisirken", "tek", "Ders çalışırken telefon", ["Başka odada", "Yanımda sessiz", "Yanımda açık"]], ["sporGun", "metin", "Haftada kaç gün spor / hareket"], ["sorumluluk", "metin", "Evdeki sorumlulukları"]] },
+  { b: "Duygularım", r: "#9333EA", a: [
+    ["kaygi", "olcek", "LGS kaygısı (1 rahat – 5 çok kaygılı)"], ["motivasyon", "olcek", "Çalışma isteği (1 hiç – 5 çok istekli)"],
+    ["destek", "cok", "Zorlandığında destek aldığı", ["Annem / babam", "Kardeşim", "Öğretmenim", "Arkadaşım", "Kimse"]], ["aileKonusma", "tek", "Ailesiyle sınav konuşmak", ["Rahatlatıyor", "Fark etmiyor", "Geriyor"]]] },
+  { b: "Nasıl ders çalışıyorum?", r: "#2563EB", a: [
+    ["saatOkul", "metin", "Okul günleri günde kaç saat çalışır"], ["saatHs", "metin", "Hafta sonu günde kaç saat çalışır"], ["saatHafta", "metin", "Haftada toplam kaç saat"], ["gunlukSoru", "metin", "Günde ortalama kaç soru"],
+    ["aylikDeneme", "tek", "Ayda kaç deneme", ["0", "1–2", "3–4", "5+"]], ["program", "tek", "Çalışma programı", ["Yazılı programım var", "Kafamda var", "Yok, aklıma geldikçe"]], ["verimliSaat", "metin", "En verimli saati"],
+    ["yanlis", "cok", "Yanlış yaptığı soruyu", ["Çözümünden incelerim", "Hata defterime yazarım", "Öğretmene sorarım", "Bakmadan geçerim"]],
+    ["zorlanma", "cok", "En çok zorlandığı şey", ["Başlamak", "Dikkatimi toplamak", "Öğrendiğimi unutmak", "Süreyi yetiştirmek", "İsteksizlik", "Sınav kaygısı", "Konuyu anlamak"]],
+    ["nasilCalisir", "uzun", "Bir derse nasıl çalıştığını anlatması"]] },
+  { b: "Ben kimim? İlgilerim ve meslek hayalim", r: "#059669", a: [
+    ["ilgi", "metin", "İlgi alanları ve hobiler"], ["sporSanat", "metin", "Yaptığı spor / sanat / kulüp"], ["meslek1", "metin", "Düşündüğü meslek 1"], ["meslek2", "metin", "Düşündüğü meslek 2"],
+    ["meslekNeden", "metin", "Neden bu meslek"], ["aileMeslek", "metin", "Ailesinin onun için düşündüğü"], ["aileAyni", "tek", "Ailenin düşüncesi kendisininkiyle aynı mı", ["Evet", "Hayır", "Bilmiyorum"]]] },
+  { b: "Son söz", r: "#B45309", a: [["soz", "metin", "Bu yıl kendine vereceği söz"], ["konusmak", "uzun", "Rehber öğretmenle konuşmak istediği konu"]] },
+  { b: "Rehber öğretmen için", r: "#475569", ogretmen: true, a: [
+    ["oHedefBiliyor", "tek", "Hedef puan/neti biliyor", ["Evet", "Kısmen", "Hayır"]], ["oUyum", "tek", "Hedef–net uyumu", ["Gerçekçi", "Zorlayıcı", "Uzak"]],
+    ["oOncelik", "cok", "Öncelikli konular", ["Çalışma yöntemi", "Zaman / program", "Uyku–ekran", "Motivasyon", "Kaygı", "Kariyer", "Aile"]], ["oNot", "uzun", "Not"]] },
+];
+const LGS_ON_ALAN = Object.fromEntries(LGS_ON_BOLUMLER.flatMap(b => b.a.map(([id, tip, etiket, sec]) => [id, { id, tip, etiket, sec: sec || null }])));
+function lgsOnSaat(v) {
+  const m = String(v || "").match(/(\d{1,2})(?:\s*[:.,]\s*(\d{2}))?/); if (!m) return null;
+  let h = +m[1], dk = +(m[2] || 0); if (h > 24 || dk > 59) return null;
+  if (h === 12 || h === 24) h = 0;          // "12'de yatıyorum" = gece yarısı
+  return h * 60 + dk;
+}
+// Gece yarısından sonraki dakika (yatış için): 22:30 → -90, 00:30 → 30
+function lgsOnYatisDk(v) { const d = lgsOnSaat(v); if (d === null) return null; return d >= 18 * 60 ? d - 1440 : d; }
+function lgsOnSayi(v) { const m = String(v || "").replace(",", ".").match(/\d+(?:\.\d+)?/); return m ? +m[0] : null; }
+// Öğrencinin yazdığı hedef bilgisini programdaki 2026 tabanıyla karşılaştırır
+function lgsOnHedefKontrol(v) {
+  const ad = String(v.hedef1 || "").trim(); if (!ad) return null;
+  let s = null; try { const l = pdrOkulBul(ad); s = l.length ? l.slice().sort((a, b) => (b.taban || 0) - (a.taban || 0))[0] : null; } catch (e) {}
+  if (!s) return { ad, bulunamadi: true };
+  if (s.ozel) return { ad: s.okul, s, ozel: true };
+  const yazTaban = lgsOnSayi(v.taban), yazYuz = lgsOnSayi(v.yuzdelik), yazNet = lgsOnSayi(v.gerekNet);
+  const gercekNet = s.taban != null ? ksPuanNetTahmin(s.taban) : null;
+  const tabanDogru = yazTaban !== null && s.taban != null ? Math.abs(yazTaban - s.taban) <= 15 : null;
+  const yuzDogru = yazYuz !== null && s.yuzdelik != null ? Math.abs(yazYuz - s.yuzdelik) <= Math.max(1, s.yuzdelik * 0.35) : null;
+  const netDogru = yazNet !== null && gercekNet !== null ? Math.abs(yazNet - gercekNet) <= 5 : null;
+  const bilgi = [tabanDogru, yuzDogru, netDogru].filter(x => x !== null);
+  const durum = v.hedefBilmiyor && !bilgi.length ? "bilmiyor" : !bilgi.length ? "boş" : bilgi.every(Boolean) ? "doğru" : bilgi.some(Boolean) ? "kısmen" : "yanlış";
+  return { ad: s.okul, s, yazTaban, yazYuz, yazNet, gercekNet, tabanDogru, yuzDogru, netDogru, durum };
+}
+// Görüşmede dikkat edilecek noktalar (kural tabanlı)
+function lgsOnTespitler(v) {
+  const t = [], cok = (id) => Array.isArray(v[id]) ? v[id] : [];
+  const hk = lgsOnHedefKontrol(v);
+  if (!String(v.hedef1 || "").trim()) t.push("Hedef lisesi yok — tercih ve hedef konuşulmalı.");
+  else if (hk && !hk.ozel && !hk.bulunamadi && hk.durum !== "doğru") t.push(`Hedef lisenin puanını ${hk.durum === "bilmiyor" || hk.durum === "boş" ? "bilmiyor" : hk.durum === "kısmen" ? "kısmen biliyor" : "yanlış biliyor"} (2026 taban ${String(hk.s.taban).replace(".", ",")}${hk.s.yuzdelik != null ? `, %${String(hk.s.yuzdelik).replace(".", ",")}` : ""}${hk.gercekNet != null ? `, ≈ ${String(hk.gercekNet).replace(".", ",")} net` : ""}).`);
+  const son = lgsOnSayi(v.ortNet) ?? lgsOnSayi(v.sonNet);
+  if (hk && hk.gercekNet != null && son !== null) { const f = +(hk.gercekNet - son).toFixed(1); if (f > 0) t.push(`Hedef için ≈ ${String(f).replace(".", ",")} net artış gerekiyor${f > 20 ? " — çok zorlayıcı, B planı da konuşulmalı" : ""}.`); }
+  if (v.hedefKim === "Ailem") t.push("Hedefi ailesi belirlemiş — öğrencinin kendi isteği konuşulmalı.");
+  if (v.hedefEmin === "Kararsızım") t.push("Hedefinden emin değil.");
+  const yat = lgsOnYatisDk(v.yatisOkul); if (yat !== null && yat >= -30) t.push(`Okul günleri geç yatıyor (${v.yatisOkul}).`);
+  const kalk = lgsOnSaat(v.kalkisOkul); if (yat !== null && kalk !== null) { const uyku = (kalk - yat) / 60; if (uyku > 0 && uyku < 8) t.push(`Okul günleri ≈ ${String(+uyku.toFixed(1)).replace(".", ",")} saat uyuyor (önerilen 8–10).`); }
+  if (["2–4 saat", "4 saatten çok"].includes(v.ekran)) t.push(`Ders dışı ekran süresi ${v.ekran}${cok("ekranEnCok").length ? ` (en çok ${cok("ekranEnCok").join(", ").toLocaleLowerCase("tr")})` : ""}.`);
+  if (v.telefonCalisirken === "Yanımda açık") t.push("Ders çalışırken telefon yanında ve açık.");
+  if (v.kahvalti === "Yapmıyorum") t.push("Kahvaltı yapmıyor.");
+  if (v.gunduzUyku === "Sık") t.push("Gündüz sık uykusu geliyor.");
+  if (v.oda === "Yok" || cok("calisirken").includes("TV açık olur")) t.push(`Çalışma ortamı uygun değil${v.oda === "Yok" ? " (kendi çalışma alanı yok)" : ""}${cok("calisirken").includes("TV açık olur") ? " (TV açıkken çalışıyor)" : ""}.`);
+  if (v.program === "Yok, aklıma geldikçe") t.push("Yazılı bir çalışma programı yok.");
+  const hafta = lgsOnSayi(v.saatHafta) ?? ((lgsOnSayi(v.saatOkul) !== null || lgsOnSayi(v.saatHs) !== null) ? (lgsOnSayi(v.saatOkul) || 0) * 5 + (lgsOnSayi(v.saatHs) || 0) * 2 : null);
+  if (hafta !== null && hafta < 10) t.push(`Haftalık çalışma süresi düşük (≈ ${hafta} saat).`);
+  if (cok("yanlis").includes("Bakmadan geçerim")) t.push("Yanlış yaptığı soruları incelemiyor.");
+  if (v.aylikDeneme === "0") t.push("Deneme çözmüyor.");
+  if (cok("zorlanma").length) t.push(`En çok zorlandığı: ${cok("zorlanma").join(", ").toLocaleLowerCase("tr")}.`);
+  const zor = LGS_ON_DERSLER.filter((d, i) => v[`d${i}_zorluk`] === "Zor"); if (zor.length) t.push(`Zor bulduğu dersler: ${zor.join(", ")}.`);
+  if (+v.kaygi >= 4) t.push(`LGS kaygısı yüksek (${v.kaygi}/5).`);
+  if (v.motivasyon && +v.motivasyon <= 2) t.push(`Çalışma isteği düşük (${v.motivasyon}/5).`);
+  if (cok("destek").includes("Kimse")) t.push("Zorlandığında destek aldığı kimse yok.");
+  if (v.aileKonusma === "Geriyor") t.push("Ailesiyle sınav konuşmak onu geriyor.");
+  if (v.aileAyni === "Hayır") t.push("Ailesinin meslek beklentisi kendisininkinden farklı.");
+  return t;
+}
+function lgsOnOzetMetni(v) {
+  const c = (id) => Array.isArray(v[id]) ? v[id].join(", ") : (v[id] || "");
+  const p = [];
+  const hk = lgsOnHedefKontrol(v);
+  const hedefler = ["hedef1", "hedef2", "hedef3"].map(k => v[k]).filter(x => String(x || "").trim());
+  p.push(`Hedef: ${hedefler.length ? hedefler.join(" / ") : "yok"}${v.taban || v.yuzdelik || v.gerekNet ? ` (yazdığı: ${[v.taban ? "taban " + v.taban : "", v.yuzdelik ? "%" + v.yuzdelik : "", v.gerekNet ? v.gerekNet + " net" : ""].filter(Boolean).join(", ")})` : v.hedefBilmiyor ? " (puanını bilmiyor)" : ""}${hk && hk.ozel ? " — yetenek sınavıyla alır" : ""}.`);
+  if (v.sonNet || v.ortNet) p.push(`Net: son ${v.sonNet || "—"}, ortalama ${v.ortNet || "—"}.`);
+  const zk = (z) => LGS_ON_DERSLER.filter((d, i) => v[`d${i}_zorluk`] === z);
+  if (zk("Zor").length || zk("Kolay").length) p.push(`Dersler: zor ${zk("Zor").join(", ") || "—"}; kolay ${zk("Kolay").join(", ") || "—"}${LGS_ON_DERSLER.filter((d, i) => v[`d${i}_sevdigim`]).length ? "; sevdiği " + LGS_ON_DERSLER.filter((d, i) => v[`d${i}_sevdigim`]).join(", ") : ""}.`);
+  const yaz = LGS_ON_DERSLER.map((d, i) => v[`d${i}_y1`] || v[`d${i}_y2`] ? `${d} ${v[`d${i}_y1`] || "—"}/${v[`d${i}_y2`] || "—"}` : "").filter(Boolean); if (yaz.length) p.push(`Yazılılar: ${yaz.join(", ")}.`);
+  if (v.oda || c("yer")) p.push(`Ortam: oda ${v.oda || "—"}; sevdiği yer ${c("yer") || "—"}${v.dagitan ? "; dikkat dağıtan " + v.dagitan : ""}.`);
+  const ks = LGS_ON_GUNLER.map((g, i) => v[`kg${i}`] ? `${g.slice(0, 3)} ${v[`kg${i}`]}` : "").filter(Boolean);
+  if (c("kurs")) p.push(`Kurs: ${c("kurs")}${ks.length ? " (" + ks.join(", ") + ")" : ""}.`);
+  if (v.yatisOkul || v.ekran) p.push(`Düzen: okul günü yatış ${v.yatisOkul || "—"}, kalkış ${v.kalkisOkul || "—"}; ekran ${v.ekran || "—"}; çalışırken telefon ${v.telefonCalisirken || "—"}.`);
+  if (v.saatOkul || v.saatHafta || v.program) p.push(`Çalışma: okul günü ${v.saatOkul || "—"} sa, hafta sonu ${v.saatHs || "—"} sa, haftada ${v.saatHafta || "—"} sa; günde ${v.gunlukSoru || "—"} soru; ayda ${v.aylikDeneme || "—"} deneme; program: ${v.program || "—"}.`);
+  if (v.nasilCalisir) p.push(`Nasıl çalışıyor: "${String(v.nasilCalisir).slice(0, 300)}"`);
+  if (v.ilgi || v.meslek1) p.push(`İlgi: ${v.ilgi || "—"}${v.sporSanat ? "; " + v.sporSanat : ""}. Meslek: ${[v.meslek1, v.meslek2].filter(Boolean).join(", ") || "—"}${v.aileMeslek ? "; ailesi: " + v.aileMeslek : ""}.`);
+  if (v.kaygi || v.motivasyon) p.push([v.kaygi ? `Kaygı ${v.kaygi}/5` : "", v.motivasyon ? `motivasyon ${v.motivasyon}/5` : ""].filter(Boolean).join(", ") + ".");
+  if (v.konusmak) p.push(`Konuşmak istediği: "${String(v.konusmak).slice(0, 200)}"`);
+  return p.join(" ");
+}
+// Asistan ve öğrenci dosyası için: son formun özeti + görüşmede dikkat edilecekler
+function pdrLgsOnFormMetni(ctx, o) {
+  try {
+    const l = (pdrSozlukOku(ctx.testKayitlari || {}, o.name, o.className, o.numara) || []).filter(k => k.tip === "lgs_on_form").sort((a, b) => pdrTarihMs(b.tarih) - pdrTarihMs(a.tarih));
+    if (!l.length) return "";
+    const k = l[0], v = k.veri || {}, t = lgsOnTespitler(v);
+    return `📋 LGS ÖN GÖRÜŞME FORMU (${k.tarih}; öğrenci doldurdu)\n${lgsOnOzetMetni(v)}${t.length ? "\nGörüşmede dikkat: " + t.map(x => "• " + x).join(" ") : ""}`;
+  } catch (e) { return ""; }
+}
+// Formdaki yaşam düzeni bulguları (notlardaki bulgularla aynı biçimde)
+function lgsOnYasamBulgulari(kayit) {
+  if (!kayit || !kayit.veri) return [];
+  const v = kayit.veri, l = [], kanit = (x) => `LGS ön görüşme formu: ${x}`;
+  const yat = lgsOnYatisDk(v.yatisOkul); if (yat !== null && yat >= -30) l.push({ tur: "uyku", baslik: `Geç yatış (okul günü ${v.yatisOkul})`, kanit: kanit(`okul günleri ${v.yatisOkul}'da yatıyor`) });
+  if (["2–4 saat", "4 saatten çok"].includes(v.ekran)) l.push({ tur: "ekran", baslik: `Uzun ekran süresi (${v.ekran})`, kanit: kanit(`ders dışı ekran ${v.ekran}`) });
+  if (v.kahvalti === "Yapmıyorum") l.push({ tur: "kahvalti", baslik: "Kahvaltı yapmıyor", kanit: kanit("kahvaltı yapmıyor") });
+  return l.map(x => ({ ...x, tarih: kayit.tarih, kim: "", oneri: PDR_YASAM_ONERI[x.tur] }));
+}
+function lgsOnSonKayit(testKayitlari, ad, sinif, no) {
+  try { return (pdrSozlukOku(testKayitlari || {}, ad, sinif, no) || []).filter(k => k.tip === "lgs_on_form").sort((a, b) => pdrTarihMs(b.tarih) - pdrTarihMs(a.tarih))[0] || null; } catch (e) { return null; }
+}
+// Fotoğraftaki renkli üst şeridin (ad-soyad, sınıf) bittiği yüzde. Bulunamazsa null.
+function lgsOnSeritBul(img) {
+  const W = 300, H = Math.max(1, Math.round(img.naturalHeight * W / img.naturalWidth));
+  const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+  const cx = cv.getContext("2d"); cx.drawImage(img, 0, 0, W, H);
+  const d = cx.getImageData(0, 0, W, Math.round(H * 0.4)).data, satir = Math.round(H * 0.4), oran = [];
+  for (let y = 0; y < satir; y++) { let n = 0; for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, r = d[i], g = d[i + 1], b = d[i + 2]; if (b >= 110 && b - g >= 22 && b - r >= 35) n++; } oran.push(n / W); }
+  const mx = Math.max(...oran); if (mx < 0.25) return null;
+  const esik = mx * 0.35; let ilk = oran.findIndex(x => x >= esik); if (ilk < 0) return null;
+  let son = ilk, bosluk = 0;
+  for (let y = ilk + 1; y < satir; y++) { if (oran[y] >= esik) { son = y; bosluk = 0; } else if (++bosluk > H * 0.03) break; }
+  return Math.min(45, Math.round(((son + H * 0.012) / H) * 100));
+}
+function lgsOnKirp(img, yuzde) {
+  const kes = Math.round(img.naturalHeight * yuzde / 100), sc = Math.min(1, 1600 / img.naturalWidth);
+  const cv = document.createElement("canvas"); cv.width = Math.round(img.naturalWidth * sc); cv.height = Math.max(1, Math.round((img.naturalHeight - kes) * sc));
+  cv.getContext("2d").drawImage(img, 0, kes, img.naturalWidth, img.naturalHeight - kes, 0, 0, cv.width, cv.height);
+  return cv.toDataURL("image/jpeg", 0.85);
+}
+function lgsOnResimYukle(file) {
+  return new Promise((res, rej) => { const r = new FileReader(); r.onload = e => { const im = new Image(); im.onload = () => res(im); im.onerror = () => rej(new Error("Resim açılamadı")); im.src = e.target.result; }; r.onerror = rej; r.readAsDataURL(file); });
+}
+// Yapay zekânın döndürdüğü cevapları şemaya göre süzer
+function lgsOnTemizle(ham) {
+  const v = {};
+  Object.entries(ham || {}).forEach(([id, x]) => {
+    const a = LGS_ON_ALAN[id]; if (!a || x === null || x === undefined || x === "") return;
+    const bul = (s) => a.sec.find(o => ksSade(o) === ksSade(s)) || a.sec.find(o => ksSade(o).startsWith(ksSade(s)) || ksSade(s).startsWith(ksSade(o)));
+    if (a.tip === "tek") { const s = bul(String(x)); if (s) v[id] = s; }
+    else if (a.tip === "cok") { const l = (Array.isArray(x) ? x : String(x).split(/[,;]/)).map(s => bul(String(s).trim())).filter(Boolean); if (l.length) v[id] = [...new Set(l)]; }
+    else if (a.tip === "evet") { if (x === true || /^(true|evet|var|x|✓)$/i.test(String(x).trim())) v[id] = true; }
+    else if (a.tip === "olcek") { const n = parseInt(x, 10); if (n >= 1 && n <= 5) v[id] = String(n); }
+    else v[id] = String(x).trim().slice(0, a.tip === "uzun" ? 800 : 200);
+  });
+  return v;
+}
+async function lgsOnFotoOku(resimler) {
+  const alanlar = LGS_ON_BOLUMLER.filter(b => !b.ogretmen).flatMap(b => b.a.map(([id, tip, etiket, sec]) => `${id} (${tip}${sec ? ": " + sec.join(" | ") : ""}) = ${etiket}`)).join("\n");
+  const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-6", max_tokens: 3000,
+      system: `Sen bir veri çıkarma asistanısın. Görseller, 8. sınıf öğrencisinin elle doldurduğu 2 sayfalık "LGS'ye Hazırım" görüşme öncesi bilgi formudur (üst şerit kesilmiştir). Bölümler: 1 Hedef lisem, 2 Derslerim (tablo: her ders için Kolay/Orta/Zor/En sevdiğim kutuları ve 1., 2. yazılı notu), 3 Çalışma ortamım, 4 Dershane/kurs (gün gün saat tablosu), 5 Günlük düzenim, 6 Duygularım (1-5 emoji ölçeği), 7 Nasıl ders çalışıyorum, 8 Ben kimim, 9 Son söz. "Rehber öğretmen için" kutusunu OKUMA.
+GÖREVİN: Yalnız aşağıdaki alan kimliklerini kullanarak SADECE bir JSON nesnesi döndür, başka hiçbir şey yazma.
+Tip kuralları: tek → seçeneklerden biri (metni aynen); cok → seçenek dizisi; evet → true (işaretliyse, değilse yazma); olcek → "1"-"5"; metin/uzun → öğrencinin yazdığı metin (yazım hatalarını düzeltme).
+KURALLAR: İşaretlenmemiş ya da boş alanı YAZMA. Emin olamadığın işareti ya da okuyamadığın yazıyı EKLEME; danışman kaydetmeden önce kontrol edecek. Ad-soyad, numara gibi kimlik bilgisi görürsen YAZMA.
+ALANLAR:
+${alanlar}`,
+      messages: [{ role: "user", content: [...resimler.map(u => ({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: u.split(",")[1] } })), { type: "text", text: "Formdaki cevapları JSON olarak ver." }] }],
+    }),
+  });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((j && (j.error && (j.error.message || j.error))) || "Okuma başarısız");
+  const metin = ((j.content || []).find(c => c.type === "text") || {}).text || "";
+  const m = /\{[\s\S]*\}/.exec(metin); if (!m) throw new Error("Cevaplar okunamadı");
+  const v = lgsOnTemizle(JSON.parse(m[0]));
+  LGS_ON_BOLUMLER.filter(b => b.ogretmen).forEach(b => b.a.forEach(([id]) => { delete v[id]; }));   // öğretmen kutusu fotoğraftan alınmaz
+  return v;
+}
+// Doldurulmuş formun yazdırılabilir özeti
+function lgsOnDoluHtml(kayit, ogr) {
+  const E = pdrHtmlKac, v = (kayit && kayit.veri) || {}, t = lgsOnTespitler(v);
+  const deger = (a) => { const x = v[a.id]; if (x === undefined || x === "" || (Array.isArray(x) && !x.length)) return ""; return a.tip === "evet" ? "✓" : Array.isArray(x) ? x.join(", ") : a.tip === "olcek" ? `${x} / 5` : String(x); };
+  const bol = LGS_ON_BOLUMLER.map(b => { const s = b.a.map(([id]) => LGS_ON_ALAN[id]).filter(a => deger(a)); return s.length ? `<div class="b" style="border-color:${b.r}"><h3 style="color:${b.r}">${E(b.b)}</h3>${s.map(a => `<div class="s"><span>${E(a.etiket)}</span><b>${E(deger(a))}</b></div>`).join("")}</div>` : ""; }).join("");
+  return `<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LGS Ön Görüşme Formu</title><style>@page{size:A4;margin:10mm}body{font-family:"Nunito","Segoe UI",Arial,sans-serif;color:#1F2937;font-size:11px;margin:0}
+h1{font-size:18px;margin:0 0 4px;color:#4C1D95}.b{border:1.5px solid;border-radius:10px;padding:6px 9px;margin:6px 0;page-break-inside:avoid}.b h3{margin:0 0 3px;font-size:12.5px}.s{display:flex;justify-content:space-between;gap:10px;border-bottom:1px dashed #E5E7EB;padding:2px 0}.s b{text-align:right}
+.t{background:#FFFBEB;border:1.5px solid #FCD34D;border-radius:10px;padding:6px 9px}</style></head><body>
+<h1>📋 LGS Ön Görüşme Formu — ${E(ogr.ad || "")} ${ogr.sinif ? "· " + E(ogr.sinif) : ""}</h1><div style="color:#64748B">Rehberlik Servisi · ${E(kayit.tarih || "")}</div>
+${t.length ? `<div class="t"><b>Görüşmede dikkat edilecekler</b><ul style="margin:3px 0 0 16px;padding:0">${t.map(x => `<li>${E(x)}</li>`).join("")}</ul></div>` : ""}${bol}</body></html>`;
+}
+function LgsOnFormKarti({ ogrAd, ogrSinif, ogrNumara, testKayitlari, setTestKayitlari, hedefOkullar, onHedefKaydet, profiles2, setProfiles2 }) {
+  const [acik, setAcik] = useState(false), [doldur, setDoldur] = useState(false), [v, setV] = useState({});
+  const [durum, setDurum] = useState(""), [okunuyor, setOkunuyor] = useState(false), [kirpma, setKirpma] = useState(null);
+  const [aktarHedef, setAktarHedef] = useState(true), [aktarP2, setAktarP2] = useState(true);
+  const dosyaRef = useRef(null);
+  useEffect(() => { setV({}); setDoldur(false); setDurum(""); setKirpma(null); }, [ogrAd, ogrSinif]);
+  const tum = pdrSozlukOku(testKayitlari, ogrAd, ogrSinif, ogrNumara) || [];
+  const kayitlar = tum.filter(k => k.tip === "lgs_on_form").sort((a, b) => pdrTarihMs(b.tarih) - pdrTarihMs(a.tarih) || String(b.id).localeCompare(String(a.id)));
+  const ata = (id, x) => setV(s => { const y = { ...s }; if (x === undefined || x === "" || x === false || (Array.isArray(x) && !x.length)) delete y[id]; else y[id] = x; return y; });
+  const hedefBulunan = ["hedef1", "hedef2", "hedef3"].map(k => String(v[k] || "").trim()).filter(Boolean).map(ad => { let l = []; try { l = pdrOkulBul(ad); } catch (e) {} return { ad, s: l.length ? l.slice().sort((a, b) => (b.taban || 0) - (a.taban || 0))[0] : null }; });
+  const p2Var = !!(v.meslek1 || v.meslek2 || v.ilgi);
+  async function yaz(liste, mesaj) {
+    const guncel = pdrSozlukYaz(testKayitlari, ogrAd, ogrSinif, [...tum.filter(k => k.tip !== "lgs_on_form"), ...liste], ogrNumara);
+    setTestKayitlari(guncel);
+    try { await saveTestKayitlari(guncel); setDurum(mesaj); } catch (e) { setDurum("⚠ Kaydedilirken sorun oluştu — bağlantıyı kontrol edin."); }
+  }
+  async function kaydet() {
+    const veri = { ...v, ozet: lgsOnOzetMetni(v) };
+    const ek = [];
+    if (aktarHedef && onHedefKaydet && hedefBulunan.some(h => h.s)) {
+      let ogr = { hedefOkullar: hedefOkullar || [] };
+      hedefBulunan.filter(h => h.s).slice().reverse().forEach(h => { if (!ogr.hedefOkullar.some(x => x.okul === h.s.okul)) ogr = pdrHedefEkle(ogr, h.s.okul, h.s.alan, "form"); });
+      try { await onHedefKaydet(ogr.hedefOkullar); ek.push("hedef okullar eklendi"); } catch (e) {}
+    }
+    if (aktarP2 && p2Var && setProfiles2) {
+      try {
+        const ctx = { profiles2: profiles2 || [], kaydet: { profiles2: async (g) => { setProfiles2(g); await saveProfiles2(g); } } };
+        const o = { name: ogrAd, className: ogrSinif, numara: ogrNumara };
+        const g = { kariyer_hedef: [v.meslek1, v.meslek2].filter(Boolean).join(", "), ilgiler: String(v.ilgi || "").split(/[,;/]| ve /).map(x => x.trim()).filter(Boolean) };
+        const p = ksP2Plani(g, ctx, o); if (Object.keys(p.degisim).length) { await ksP2Yaz(ctx, o, p.kayit, p.degisim); ek.push("Profil 2 güncellendi"); }
+      } catch (e) {}
+    }
+    await yaz([{ id: uid(), tarih: today(), tip: "lgs_on_form", testAdi: "LGS Ön Görüşme Formu", veri }, ...kayitlar], `✓ Form kaydedildi${ek.length ? " · " + ek.join(" · ") : ""}`);
+    setV({}); setDoldur(false);
+  }
+  async function fotoSec(files) {
+    const l = [...(files || [])].filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|heic|webp)$/i.test(f.name || "")).slice(0, 2);
+    if (dosyaRef.current) dosyaRef.current.value = "";
+    if (!l.length) { setDurum("⚠ Fotoğraf seçin (en fazla 2 sayfa). PDF desteklenmez: üst şerit kesilemediği için."); return; }
+    try {
+      const imgs = await Promise.all(l.map(lgsOnResimYukle));
+      setKirpma(imgs.map(im => { const y = lgsOnSeritBul(im); return { im, yuzde: y === null ? 14 : y, bulundu: y !== null }; }));
+      setDurum("");
+    } catch (e) { setDurum("⚠ " + ((e && e.message) || e)); }
+  }
+  async function gonder() {
+    if (!kirpma) return;
+    if (!window.confirm("Kesilmiş fotoğraflar yapay zekâya gönderilecek.\n\nÖnizlemede ad-soyad ve sınıfın görünmediğinden emin olun; görünüyorsa kaydırıcıyla daha fazla kesin.\n\nGönderilsin mi?")) return;
+    setOkunuyor(true); setDurum("");
+    try {
+      const veri = await lgsOnFotoOku(kirpma.map(k => lgsOnKirp(k.im, k.yuzde)));
+      setV(veri); setDoldur(true); setKirpma(null);
+      setDurum(`📷 ${Object.keys(veri).length} cevap okundu — kaydetmeden önce kontrol edin, yanlışı düzeltin.`);
+    } catch (e) { setDurum("⚠ Fotoğraf okunamadı: " + ((e && e.message) || e) + ". Formu elle doldurabilirsiniz."); }
+    finally { setOkunuyor(false); }
+  }
+  const btn = (renk, dolu) => ({ padding: "7px 10px", borderRadius: 8, border: `1px solid ${renk}`, background: dolu ? renk : "#fff", color: dolu ? "#fff" : renk, fontSize: 11.5, fontWeight: 700, cursor: "pointer" });
+  const giris = { width: "100%", padding: "6px 8px", border: `1px solid ${BORDER}`, borderRadius: 7, fontSize: 12, boxSizing: "border-box" };
+  const cip = (secili, renk) => ({ padding: "4px 9px", borderRadius: 14, border: `1px solid ${secili ? renk : BORDER}`, background: secili ? renk : "#fff", color: secili ? "#fff" : TEXT, fontSize: 11, cursor: "pointer", margin: "2px 4px 2px 0" });
+  const alan = (a, renk) => {
+    const x = v[a.id];
+    if (a.tip === "tek") return <div style={{ display: "flex", flexWrap: "wrap" }}>{a.sec.map(s => <button key={s} type="button" data-testid={`lgsform-${a.id}`} onClick={() => ata(a.id, x === s ? undefined : s)} style={cip(x === s, renk)}>{s}</button>)}</div>;
+    if (a.tip === "cok") { const l = Array.isArray(x) ? x : []; return <div style={{ display: "flex", flexWrap: "wrap" }}>{a.sec.map(s => <button key={s} type="button" data-testid={`lgsform-${a.id}`} onClick={() => ata(a.id, l.includes(s) ? l.filter(y => y !== s) : [...l, s])} style={cip(l.includes(s), renk)}>{s}</button>)}</div>; }
+    if (a.tip === "olcek") return <div style={{ display: "flex" }}>{["1", "2", "3", "4", "5"].map(s => <button key={s} type="button" data-testid={`lgsform-${a.id}`} onClick={() => ata(a.id, x === s ? undefined : s)} style={cip(x === s, renk)}>{s}</button>)}</div>;
+    if (a.tip === "evet") return <input type="checkbox" data-testid={`lgsform-${a.id}`} checked={!!x} onChange={e => ata(a.id, e.target.checked)} />;
+    if (a.tip === "uzun") return <textarea rows={3} data-testid={`lgsform-${a.id}`} value={x || ""} onChange={e => ata(a.id, e.target.value)} style={{ ...giris, resize: "vertical" }} />;
+    return <input data-testid={`lgsform-${a.id}`} value={x || ""} onChange={e => ata(a.id, e.target.value)} style={giris} />;
+  };
+  const tespit = lgsOnTespitler(v);
+  return (
+    <div data-testid="lgs-on-form" style={{ background: "#F5F3FF", border: "1px solid #DDD6FE", borderRadius: 14, padding: "12px 14px", marginBottom: 12 }}>
+      <button data-testid="lgs-on-form-ac" onClick={() => setAcik(a => !a)} style={{ width: "100%", background: "none", border: "none", padding: 0, textAlign: "left", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ fontSize: 13, fontWeight: 800, color: "#6D28D9" }}>📋 LGS Ön Görüşme Formu{kayitlar.length ? ` (${kayitlar.length})` : ""}</span>
+        <span style={{ fontSize: 11, color: MUTED }}>{acik ? "▲ Kapat" : "▼ Aç"}</span>
+      </button>
+      {!acik && kayitlar[0] && <div style={{ fontSize: 11.5, color: TEXT, marginTop: 4 }}>{kayitlar[0].tarih} · {lgsOnTespitler(kayitlar[0].veri || {}).length} dikkat noktası</div>}
+      {acik && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ fontSize: 10.5, color: MUTED, lineHeight: 1.5, marginBottom: 8 }}>Öğrencinin görüşmeden önce doldurduğu 2 sayfalık form. Boş formu yazdırın; doldurulan kâğıdı ekranda işleyin ya da fotoğrafını okutun. Fotoğrafta ad-soyadın yazdığı renkli üst şerit gönderilmeden önce telefonda kesilir.</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+            <button data-testid="lgs-on-form-bos" onClick={() => ootBelgeAc(LGS_ON_FORM_HTML, "LGS On Gorusme Formu")} style={btn("#6D28D9", false)}>🖨️ Boş form yazdır</button>
+            <button data-testid="lgs-on-form-doldur" onClick={() => setDoldur(a => !a)} style={btn("#6D28D9", doldur)}>✏️ Ekranda doldur</button>
+            <button data-testid="lgs-on-form-foto" disabled={okunuyor} onClick={() => dosyaRef.current && dosyaRef.current.click()} style={btn(PURPLE, false)}>{okunuyor ? "⏳ Okunuyor…" : "📷 Fotoğraftan oku"}</button>
+            <input ref={dosyaRef} data-testid="lgs-on-form-dosya" type="file" accept="image/*" multiple style={{ display: "none" }} onChange={e => fotoSec(e.target.files)} />
+          </div>
+          {kirpma && (
+            <div data-testid="lgs-on-form-kirp" style={{ background: "#fff", border: `1px solid ${BORDER}`, borderRadius: 10, padding: 8, marginBottom: 8 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 800, color: TEXT, marginBottom: 4 }}>✂️ Üst şerit kesiliyor — yalnızca aşağıdaki kısım gönderilecek</div>
+              {kirpma.map((k, i) => (
+                <div key={i} style={{ marginBottom: 8 }}>
+                  <div style={{ fontSize: 10.5, color: k.bulundu ? ACCENT : "#B42318", marginBottom: 3 }}>{i + 1}. sayfa · {k.bulundu ? "renkli şerit bulundu" : "şerit bulunamadı — kaydırıcıyla ad-soyad görünmeyene kadar kesin"} · üstten %{k.yuzde}</div>
+                  <input type="range" min="0" max="60" value={k.yuzde} data-testid="lgs-on-form-kaydir" onChange={e => setKirpma(l => l.map((x, j) => j === i ? { ...x, yuzde: +e.target.value } : x))} style={{ width: "100%" }} />
+                  <img alt="" data-testid="lgs-on-form-onizleme" src={lgsOnKirp(k.im, k.yuzde)} style={{ width: "100%", maxHeight: 220, objectFit: "cover", objectPosition: "top", borderRadius: 6, border: `1px solid ${BORDER}` }} />
+                </div>
+              ))}
+              <div style={{ display: "flex", gap: 6 }}>
+                <button data-testid="lgs-on-form-gonder" disabled={okunuyor} onClick={gonder} style={{ ...btn(PURPLE, true), flex: 1 }}>{okunuyor ? "⏳ Okunuyor…" : "📤 Kesilmiş hâlini oku"}</button>
+                <button onClick={() => setKirpma(null)} style={btn(MUTED, false)}>Vazgeç</button>
+              </div>
+            </div>
+          )}
+          {durum && <div data-testid="lgs-on-form-durum" style={{ fontSize: 11.5, color: durum.startsWith("⚠") ? "#B42318" : ACCENT, fontWeight: 700, marginBottom: 8 }}>{durum}</div>}
+          {doldur && (
+            <div>
+              {LGS_ON_BOLUMLER.map((b, bi) => (
+                <div key={bi} style={{ background: "#fff", border: `1px solid ${b.r}55`, borderRadius: 10, padding: "8px 10px", marginBottom: 8 }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: b.r, marginBottom: 4 }}>{bi + 1}. {b.b}</div>
+                  {b.a.map(([id]) => { const a = LGS_ON_ALAN[id]; return (
+                    <div key={id} style={{ marginBottom: 6, display: a.tip === "evet" ? "flex" : "block", gap: 6, alignItems: "center" }}>
+                      <div style={{ fontSize: 11, color: MUTED, marginBottom: 2 }}>{a.etiket}</div>{alan(a, b.r)}
+                    </div>
+                  ); })}
+                </div>
+              ))}
+              {tespit.length > 0 && <div data-testid="lgs-on-form-tespit" style={{ background: "#FFFBEB", border: "1px solid #FCD34D", borderRadius: 10, padding: "8px 10px", marginBottom: 8, fontSize: 11.5, lineHeight: 1.5 }}><b>Görüşmede dikkat edilecekler</b>{tespit.map((x, i) => <div key={i}>• {x}</div>)}</div>}
+              <div style={{ background: "#fff", border: `1px solid ${BORDER}`, borderRadius: 10, padding: "8px 10px", marginBottom: 8, fontSize: 11.5 }}>
+                <b>Programa aktar</b>
+                {hedefBulunan.length > 0 && <label style={{ display: "flex", gap: 6, alignItems: "flex-start", marginTop: 4 }}><input type="checkbox" data-testid="lgs-on-form-aktar-hedef" checked={aktarHedef} onChange={e => setAktarHedef(e.target.checked)} /><span>🎯 Hedef okul kartına ekle: {hedefBulunan.map(h => h.s ? h.s.okul : `${h.ad} (listede yok, eklenmez)`).join(" · ")}</span></label>}
+                {p2Var && <label style={{ display: "flex", gap: 6, alignItems: "flex-start", marginTop: 4 }}><input type="checkbox" data-testid="lgs-on-form-aktar-p2" checked={aktarP2} onChange={e => setAktarP2(e.target.checked)} /><span>📋 Meslek ve ilgileri Profil 2'ye ekle</span></label>}
+                <div style={{ fontSize: 10.5, color: MUTED, marginTop: 3 }}>Uyku, ekran ve kahvaltı bilgileri yaşam düzeni kartında; tüm form asistanın seans hazırlığında kullanılır.</div>
+              </div>
+              <button data-testid="lgs-on-form-kaydet" onClick={kaydet} style={{ ...btn("#6D28D9", true), width: "100%" }}>💾 Kaydet</button>
+            </div>
+          )}
+          {kayitlar.length > 0 && (
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: MUTED, marginBottom: 4 }}>KAYITLAR</div>
+              {kayitlar.map(k => { const t = lgsOnTespitler(k.veri || {}); return (
+                <div key={k.id} data-testid="lgs-on-form-kayit" style={{ background: "#fff", border: `1px solid ${BORDER}`, borderRadius: 10, padding: "8px 10px", marginBottom: 6 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: TEXT }}>{k.tarih}{k.veri && k.veri.hedef1 ? ` · 🎯 ${k.veri.hedef1}` : ""}</span>
+                    <span style={{ display: "flex", gap: 6 }}>
+                      <button onClick={() => ootBelgeAc(lgsOnDoluHtml(k, { ad: ogrAd, sinif: ogrSinif }), "LGS On Gorusme Formu - " + ogrAd)} style={btn("#6D28D9", false)}>🖨️ Görüntüle</button>
+                      <button data-testid="lgs-on-form-sil" onClick={() => { if (window.confirm(`${k.tarih} tarihli form silinsin mi?`)) yaz(kayitlar.filter(x => x.id !== k.id), "Kayıt silindi"); }} style={btn("#B42318", false)}>Sil</button>
+                    </span>
+                  </div>
+                  {t.length > 0 && <div style={{ fontSize: 11, color: TEXT, marginTop: 4, lineHeight: 1.45 }}>{t.slice(0, 6).map((x, i) => <div key={i}>• {x}</div>)}{t.length > 6 ? <div style={{ color: MUTED }}>+{t.length - 6} nokta daha</div> : null}</div>}
+                </div>
+              ); })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+const LGS_ON_FORM_HTML = "<!DOCTYPE html><html lang=\"tr\"><head><meta charset=\"utf-8\"><title>LGS Görüşme Öncesi Bilgi Formu</title><link href=\"https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800;900&display=swap\" rel=\"stylesheet\"><style>@page{size:A4;margin:8mm}*{box-sizing:border-box}body{font-family:\"Nunito\",\"Segoe UI\",Arial,sans-serif;color:#1F2937;margin:0;font-size:11px;line-height:1.35}\n.sayfa{page-break-after:always;zoom:1.1}.sayfa:last-child{page-break-after:auto}\n.ust{border-radius:18px;padding:10px 16px;color:#fff;background:linear-gradient(120deg,#7C3AED,#2563EB 55%,#0891B2);display:flex;justify-content:space-between;align-items:center}\n.ust h1{margin:0;font-size:21px}.rs{font-size:10.5px;font-weight:900;letter-spacing:.6px;opacity:.95}\n.bol{border-radius:14px;border:2px solid;padding:6px 9px 7px;margin-top:6px;page-break-inside:avoid}.bb{font-weight:900;font-size:12.5px;margin-bottom:3px;display:flex;align-items:center;gap:6px}\n.bb .no{display:inline-block;width:20px;height:20px;border-radius:50%;color:#fff;text-align:center;line-height:20px;font-size:11px}\n.s{margin:3px 0}.c{display:inline-block;margin:1px 9px 1px 0;white-space:nowrap}.c:before{content:\"\";display:inline-block;width:11px;height:11px;border:1.6px solid #64748B;border-radius:3px;margin-right:4px;vertical-align:-1px;background:#fff}\n.o:before{border-radius:50%}.l{display:inline-block;border-bottom:1.5px dotted #64748B;min-width:60px;height:13px;vertical-align:bottom}.cz{border-bottom:1.5px dotted #94A3B8;height:17px}\ntable{width:100%;border-collapse:separate;border-spacing:0;border-radius:10px;overflow:hidden}th{color:#fff;font-size:10px;padding:3px 4px}td{border-bottom:1px solid #E5E7EB;padding:3px 4px;font-size:10.5px;text-align:center}tr:nth-child(even) td{background:#F8FAFC}\n.kk{display:inline-block;width:13px;height:13px;border:1.6px solid #64748B;border-radius:3px;background:#fff}.yan{display:flex;gap:6px}.yan>div{flex:1}\n.emo{display:inline-flex;gap:5px}.emo span{display:inline-block;border:1.5px solid #CBD5E1;border-radius:9px;padding:0 5px;font-size:13px;background:#fff}.not{font-size:9px;color:#64748B}</style></head><body><div class=\"sayfa\"><div class=\"ust\"><div><div class=\"rs\">🧭 REHBERLİK SERVİSİ</div><h1>🎯 LGS'ye Hazırım! — Kendimi Tanıyorum</h1><div style=\"font-size:11px;opacity:.95\">8. sınıf · LGS 2027 · Görüşme öncesi bilgi formu</div></div><div style=\"text-align:right;font-size:10.5px;line-height:1.7\">Adı Soyadı: <span class=\"l\" style=\"min-width:120px\"></span><br/>Sınıf / No: <span class=\"l\" style=\"min-width:50px\"></span> Tarih: <span class=\"l\" style=\"min-width:55px\"></span></div></div>\n<div style=\"font-size:10.5px;margin:5px 2px 0;color:#334155\">Merhaba! Bu form, görüşmemizden önce seni daha iyi tanımam için. <b>Doğru ya da yanlış cevap yok</b>; dürüst cevaplar sana en uygun planı yapmamızı sağlar. Bilmediğin yeri “bilmiyorum” diye işaretleyebilirsin. 😊</div>\n<div class=\"bol\" style=\"border-color:#D9770655;background:#FFFBEB;\"><div class=\"bb\" style=\"color:#D97706\"><span class=\"no\" style=\"background:#D97706\">1</span>Hedef lisem</div><div class=\"s\">1. tercih: <span class=\"l\" style=\"min-width:200px\"></span> &nbsp; 2. tercih: <span class=\"l\" style=\"min-width:170px\"></span></div><div class=\"s\">3. tercih: <span class=\"l\" style=\"min-width:200px\"></span> &nbsp; Hiç düşünmedim: <span class=\"c\"></span></div>\n<div class=\"s\" style=\"background:#fff;border-radius:9px;padding:4px 7px;border:1.5px dashed #F59E0B\"><b>1. tercihim için:</b> Taban puanı ≈ <span class=\"l\" style=\"min-width:55px\"></span> · Yüzdelik dilimi ≈ % <span class=\"l\" style=\"min-width:40px\"></span> · Kaç net gerekir? ≈ <span class=\"l\" style=\"min-width:45px\"></span> net &nbsp; <span class=\"c\">Bilmiyorum</span></div>\n<div class=\"s\">Son deneme netim: <span class=\"l\" style=\"min-width:40px\"></span> · Deneme ortalamam: <span class=\"l\" style=\"min-width:40px\"></span> · Hedefime kaç net uzaktayım? <span class=\"l\" style=\"min-width:40px\"></span></div>\n<div class=\"s\"><b>Bu hedefi kim belirledi?</b> <span class=\"c o\">Ben</span><span class=\"c o\">Ailem</span><span class=\"c o\">Birlikte</span><span class=\"c o\">Öğretmenim</span> &nbsp; <b>Hedefimden:</b> <span class=\"c o\">Çok eminim</span><span class=\"c o\">Biraz eminim</span><span class=\"c o\">Kararsızım</span></div>\n<div class=\"s\"><b>Neden bu lise?</b> <span class=\"c\">Puanı yüksek</span><span class=\"c\">Eve yakın</span><span class=\"c\">Arkadaşlarım</span><span class=\"c\">Bölümleri</span><span class=\"c\">Ailem istiyor</span><span class=\"c\">Diğer:</span><span class=\"l\" style=\"min-width:70px\"></span></div></div>\n<div class=\"bol\" style=\"border-color:#7C3AED55;background:#F5F3FF;\"><div class=\"bb\" style=\"color:#7C3AED\"><span class=\"no\" style=\"background:#7C3AED\">2</span>Derslerim — her ders için Kolay / Orta / Zor'dan birini işaretle</div><table><tr><th style=\"background:#475569;text-align:left\">Ders</th><th style=\"background:#16A34A\">😊 Kolay</th><th style=\"background:#D97706\">😐 Orta</th><th style=\"background:#DC2626\">😟 Zor</th><th style=\"background:#7C3AED\">💜 En sevdiğim</th><th style=\"background:#334155\">1. yazılı</th><th style=\"background:#334155\">2. yazılı</th></tr><tr><td style=\"text-align:left;font-weight:800;color:#7C3AED\">📖 Türkçe</td><td><span class=\"kk\"></span></td><td><span class=\"kk\"></span></td><td><span class=\"kk\"></span></td><td><span class=\"kk\"></span></td><td><span class=\"l\" style=\"min-width:30px\"></span></td><td><span class=\"l\" style=\"min-width:30px\"></span></td></tr><tr><td style=\"text-align:left;font-weight:800;color:#2563EB\">➗ Matematik</td><td><span class=\"kk\"></span></td><td><span class=\"kk\"></span></td><td><span class=\"kk\"></span></td><td><span class=\"kk\"></span></td><td><span class=\"l\" style=\"min-width:30px\"></span></td><td><span class=\"l\" style=\"min-width:30px\"></span></td></tr><tr><td style=\"text-align:left;font-weight:800;color:#059669\">🔬 Fen Bilimleri</td><td><span class=\"kk\"></span></td><td><span class=\"kk\"></span></td><td><span class=\"kk\"></span></td><td><span class=\"kk\"></span></td><td><span class=\"l\" style=\"min-width:30px\"></span></td><td><span class=\"l\" style=\"min-width:30px\"></span></td></tr><tr><td style=\"text-align:left;font-weight:800;color:#B45309\">🏛️ İnkılap Tarihi</td><td><span class=\"kk\"></span></td><td><span class=\"kk\"></span></td><td><span class=\"kk\"></span></td><td><span class=\"kk\"></span></td><td><span class=\"l\" style=\"min-width:30px\"></span></td><td><span class=\"l\" style=\"min-width:30px\"></span></td></tr><tr><td style=\"text-align:left;font-weight:800;color:#0E7490\">🕌 Din Kültürü</td><td><span class=\"kk\"></span></td><td><span class=\"kk\"></span></td><td><span class=\"kk\"></span></td><td><span class=\"kk\"></span></td><td><span class=\"l\" style=\"min-width:30px\"></span></td><td><span class=\"l\" style=\"min-width:30px\"></span></td></tr><tr><td style=\"text-align:left;font-weight:800;color:#DB2777\">🌍 İngilizce</td><td><span class=\"kk\"></span></td><td><span class=\"kk\"></span></td><td><span class=\"kk\"></span></td><td><span class=\"kk\"></span></td><td><span class=\"l\" style=\"min-width:30px\"></span></td><td><span class=\"l\" style=\"min-width:30px\"></span></td></tr></table>\n<div class=\"s\">7. sınıf yıl sonu ortalamam: <span class=\"l\" style=\"min-width:40px\"></span> &nbsp; En zorlandığım konu(lar): <span class=\"l\" style=\"min-width:230px\"></span></div></div>\n<div class=\"yan\"><div class=\"bol\" style=\"border-color:#16A34A55;background:#F0FDF4;\"><div class=\"bb\" style=\"color:#16A34A\"><span class=\"no\" style=\"background:#16A34A\">3</span>Çalışma ortamım</div><div class=\"s\"><b>Kendi çalışma odam:</b> <span class=\"c o\">Var, sadece benim</span><span class=\"c o\">Kardeşimle ortak</span><span class=\"c o\">Yok</span></div>\n<div class=\"s\"><b>En çok nerede çalışmayı seviyorum?</b><br/><span class=\"c\">Odamda masada</span><span class=\"c\">Yatakta</span><span class=\"c\">Salon / mutfak masası</span><span class=\"c\">Kütüphanede</span><span class=\"c\">Dershane / etütte</span><span class=\"c\">Okulda</span><span class=\"c\">Diğer:</span><span class=\"l\" style=\"min-width:60px\"></span></div>\n<div class=\"s\"><b>Çalışırken:</b> <span class=\"c\">Sessizlik isterim</span><span class=\"c\">Müzik dinlerim</span><span class=\"c\">TV açık olur</span><span class=\"c\">Yanımda biri olsun isterim</span></div>\n<div class=\"s\"><b>Evde dikkatimi en çok dağıtan:</b> <span class=\"l\" style=\"min-width:250px\"></span></div></div><div class=\"bol\" style=\"border-color:#0891B255;background:#ECFEFF;\"><div class=\"bb\" style=\"color:#0891B2\"><span class=\"no\" style=\"background:#0891B2\">4</span>Dershane / kurs / özel ders</div><div class=\"s\"><span class=\"c\">Dershane</span><span class=\"c\">Okul kursu (DYK)</span><span class=\"c\">Özel ders</span><span class=\"c\">Online ders / platform</span><span class=\"c\">Etüt merkezi</span><span class=\"c\">Hiçbiri</span></div>\n<table><tr><th style=\"background:#0E7490;text-align:left\">Hangi gün, kaçta?</th><th style=\"background:#0891B2\">Pzt</th><th style=\"background:#0891B2\">Salı</th><th style=\"background:#0891B2\">Çarş</th><th style=\"background:#0891B2\">Perş</th><th style=\"background:#0891B2\">Cuma</th><th style=\"background:#0891B2\">Cmt</th><th style=\"background:#0891B2\">Pazar</th></tr><tr><td style=\"text-align:left;font-weight:800\">Saat aralığı</td><td style='height:22px'>__:__<br/>__:__</td><td style='height:22px'>__:__<br/>__:__</td><td style='height:22px'>__:__<br/>__:__</td><td style='height:22px'>__:__<br/>__:__</td><td style='height:22px'>__:__<br/>__:__</td><td style='height:22px'>__:__<br/>__:__</td><td style='height:22px'>__:__<br/>__:__</td></tr></table>\n<div class=\"s\">Gitmekten memnunum: <span class=\"c o\">Evet</span><span class=\"c o\">Kısmen</span><span class=\"c o\">Hayır</span> &nbsp; Kursa giderken / dönerken yolda geçen süre: <span class=\"l\" style=\"min-width:50px\"></span> dk</div></div></div></div><div class=\"sayfa\"><div class=\"ust\"><div><div class=\"rs\">🧭 REHBERLİK SERVİSİ</div><h1>⏰ Günüm, çalışmam ve ben</h1><div style=\"font-size:11px;opacity:.95\">8. sınıf · LGS 2027 · Görüşme öncesi bilgi formu</div></div><div style=\"text-align:right;font-size:10.5px;line-height:1.7\">Adı Soyadı: <span class=\"l\" style=\"min-width:120px\"></span><br/>Sınıf / No: <span class=\"l\" style=\"min-width:50px\"></span> Tarih: <span class=\"l\" style=\"min-width:55px\"></span></div></div>\n<div class=\"yan\"><div class=\"bol\" style=\"border-color:#DB277755;background:#FDF2F8;\"><div class=\"bb\" style=\"color:#DB2777\"><span class=\"no\" style=\"background:#DB2777\">5</span>Günlük düzenim</div><div class=\"s\"><b>Okul günleri</b> yatış: <span class=\"l\" style=\"min-width:35px\"></span> kalkış: <span class=\"l\" style=\"min-width:35px\"></span> · <b>Hafta sonu</b> yatış: <span class=\"l\" style=\"min-width:35px\"></span> kalkış: <span class=\"l\" style=\"min-width:35px\"></span></div>\n<div class=\"s\"><b>Kahvaltı:</b> <span class=\"c o\">Her gün</span><span class=\"c o\">Bazen</span><span class=\"c o\">Yapmıyorum</span> &nbsp; <b>Gündüz uykum gelir:</b> <span class=\"c o\">Sık</span><span class=\"c o\">Bazen</span><span class=\"c o\">Hayır</span></div>\n<div class=\"s\"><b>Kendi telefonum:</b> <span class=\"c o\">Var</span><span class=\"c o\">Ailemle ortak</span><span class=\"c o\">Yok</span> &nbsp; <b>Tablet / bilgisayar:</b> <span class=\"c o\">Var</span><span class=\"c o\">Yok</span></div>\n<div class=\"s\"><b>Günde ekranda (ders dışı):</b> <span class=\"c o\">1 saatten az</span><span class=\"c o\">1–2 saat</span><span class=\"c o\">2–4 saat</span><span class=\"c o\">4 saatten çok</span></div>\n<div class=\"s\"><b>En çok:</b> <span class=\"c\">Sosyal medya</span><span class=\"c\">Oyun</span><span class=\"c\">Video / dizi</span><span class=\"c\">Mesajlaşma</span> &nbsp; <b>Ders çalışırken telefon:</b> <span class=\"c o\">Başka odada</span><span class=\"c o\">Yanımda sessiz</span><span class=\"c o\">Yanımda açık</span></div>\n<div class=\"s\"><b>Spor / hareket:</b> haftada <span class=\"l\" style=\"min-width:25px\"></span> gün · <b>Evde sorumluluklarım:</b> <span class=\"l\" style=\"min-width:150px\"></span></div></div><div class=\"bol\" style=\"border-color:#9333EA55;background:#FAF5FF;\"><div class=\"bb\" style=\"color:#9333EA\"><span class=\"no\" style=\"background:#9333EA\">6</span>Duygularım</div><div class=\"s\"><b>LGS'yi düşününce kaygım:</b> <span class=\"emo\"><span>😌 1</span><span>🙂 2</span><span>😐 3</span><span>😟 4</span><span>😰 5</span></span></div><div class=\"s\"><b>Çalışma isteğim (motivasyonum):</b> <span class=\"emo\"><span>😴 1</span><span>😕 2</span><span>😐 3</span><span>🙂 4</span><span>🔥 5</span></span></div>\n<div class=\"s\"><b>Zorlandığımda destek aldığım kişi:</b> <span class=\"c\">Annem / babam</span><span class=\"c\">Kardeşim</span><span class=\"c\">Öğretmenim</span><span class=\"c\">Arkadaşım</span><span class=\"c\">Kimse</span></div>\n<div class=\"s\"><b>Ailemle sınav hakkında konuşmak:</b> <span class=\"c o\">Rahatlatıyor</span><span class=\"c o\">Fark etmiyor</span><span class=\"c o\">Geriyor</span></div></div></div>\n<div class=\"bol\" style=\"border-color:#2563EB55;background:#EFF6FF;\"><div class=\"bb\" style=\"color:#2563EB\"><span class=\"no\" style=\"background:#2563EB\">7</span>Nasıl ders çalışıyorum?</div><div class=\"s\"><b>Okul günleri</b> günde <span class=\"l\" style=\"min-width:30px\"></span> saat · <b>hafta sonu</b> günde <span class=\"l\" style=\"min-width:30px\"></span> saat ders çalışırım. <b>Haftada toplam ≈</b> <span class=\"l\" style=\"min-width:35px\"></span> saat</div>\n<div class=\"s\"><b>Günde ortalama</b> <span class=\"l\" style=\"min-width:35px\"></span> soru çözerim · <b>Ayda</b> <span class=\"c o\">0</span><span class=\"c o\">1–2</span><span class=\"c o\">3–4</span><span class=\"c o\">5+</span> deneme çözerim</div>\n<div class=\"s\"><b>Çalışma programım:</b> <span class=\"c o\">Yazılı programım var</span><span class=\"c o\">Kafamda var</span><span class=\"c o\">Yok, aklıma geldikçe</span> &nbsp; <b>En verimli saatim:</b> <span class=\"l\" style=\"min-width:50px\"></span></div>\n<div class=\"s\"><b>Yanlış yaptığım soruyu:</b> <span class=\"c\">Çözümünden incelerim</span><span class=\"c\">Hata defterime yazarım</span><span class=\"c\">Öğretmene sorarım</span><span class=\"c\">Bakmadan geçerim</span></div>\n<div class=\"s\"><b>En çok zorlandığım şey:</b> <span class=\"c\">Başlamak</span><span class=\"c\">Dikkatimi toplamak</span><span class=\"c\">Öğrendiğimi unutmak</span><span class=\"c\">Süreyi yetiştirmek</span><span class=\"c\">İsteksizlik</span><span class=\"c\">Sınav kaygısı</span><span class=\"c\">Konuyu anlamak</span></div>\n<div class=\"s\" style=\"background:#fff;border-radius:9px;padding:4px 7px;border:1.5px dashed #2563EB\"><b>✍️ Bir derse nasıl çalışırsın? Anlat.</b> <span class=\"not\">(Örn. Matematikte yeni bir konu işlendi; eve gelince ne yaparsın, sırasıyla yaz.)</span><div class=\"cz\"></div><div class=\"cz\"></div><div class=\"cz\"></div></div></div>\n<div class=\"yan\"><div class=\"bol\" style=\"border-color:#05966955;background:#ECFDF5;\"><div class=\"bb\" style=\"color:#059669\"><span class=\"no\" style=\"background:#059669\">8</span>Ben kimim? İlgilerim ve meslek hayalim</div><div class=\"s\"><b>İlgi alanlarım ve hobilerim:</b> <span class=\"l\" style=\"min-width:260px\"></span></div>\n<div class=\"s\"><b>Yaptığım spor / sanat / kulüp:</b> <span class=\"l\" style=\"min-width:230px\"></span></div>\n<div class=\"s\"><b>Düşündüğüm meslek(ler):</b> 1. <span class=\"l\" style=\"min-width:120px\"></span> 2. <span class=\"l\" style=\"min-width:120px\"></span></div>\n<div class=\"s\"><b>Neden bu meslek?</b> <span class=\"l\" style=\"min-width:270px\"></span></div>\n<div class=\"s\"><b>Ailemin benim için düşündüğü:</b> <span class=\"l\" style=\"min-width:150px\"></span> &nbsp; Benimkiyle aynı mı? <span class=\"c o\">Evet</span><span class=\"c o\">Hayır</span><span class=\"c o\">Bilmiyorum</span></div></div><div class=\"bol\" style=\"border-color:#D9770655;background:#FFFBEB;\"><div class=\"bb\" style=\"color:#D97706\"><span class=\"no\" style=\"background:#D97706\">9</span>Son söz</div><div class=\"s\"><b>Bu yıl kendime vereceğim söz:</b> <span class=\"l\" style=\"min-width:250px\"></span></div><div class=\"s\"><b>Rehber öğretmenimle konuşmak istediğim konu:</b><div class=\"cz\"></div><div class=\"cz\"></div></div></div></div>\n<div class=\"bol\" style=\"border-color:#47556955;background:#F1F5F9;border-style:dashed\"><div class=\"bb\" style=\"color:#475569\"><span class=\"no\" style=\"background:#475569\">✓</span>Rehber öğretmen için (öğrenci doldurmaz)</div><div style=\"font-size:9.5px;line-height:1.55\"><b>Hedef puan/neti biliyor:</b> <span class=\"c o\">Evet</span><span class=\"c o\">Kısmen</span><span class=\"c o\">Hayır</span> · <b>Hedef–net uyumu:</b> <span class=\"c o\">Gerçekçi</span><span class=\"c o\">Zorlayıcı</span><span class=\"c o\">Uzak</span><br/><b>Öncelikli konular:</b> <span class=\"c\">Çalışma yöntemi</span><span class=\"c\">Zaman / program</span><span class=\"c\">Uyku–ekran</span><span class=\"c\">Motivasyon</span><span class=\"c\">Kaygı</span><span class=\"c\">Kariyer</span><span class=\"c\">Aile</span><br/>Not: <span class=\"l\" style=\"min-width:330px\"></span></div></div>\n<div style=\"text-align:center;font-size:10px;color:#7C3AED;font-weight:800;margin-top:5px\">Formu doldurduğun için teşekkürler! Görüşmede bu cevaplarla senin için bir yol haritası hazırlayacağız. 🚀 — Rehberlik Servisi</div></div></body></html>";
+// ===== LGS ÖN GÖRÜŞME FORMU BİTİŞ =====
+
 // ===== NET YÜKSELTME KONTROL LİSTESİ BAŞLANGIÇ =====
 // "Netim neden artmıyor?" — 8 bölüm, 50 madde. Öğrenci gerçekten ve düzenli yaptığını işaretler; boş kalan
 // maddeler netin kaçtığı yerleri gösterir. Puanlama cihazda; yapay zekâ yalnız istenirse doldurulmuş kâğıdın

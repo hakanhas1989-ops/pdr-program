@@ -475,7 +475,7 @@ async function pdrBildirimTokenKaydet(uid) {
     // Durumu" panelinden elle temizlenebiliyor.
     const tokenDeger = (x) => (typeof x === "string" ? x : x?.token);
     if (!mevcut.some(x => tokenDeger(x) === token)) {
-      mevcut.push({ token, tarih: today() });
+      mevcut.push({ token, tarih: new Date().toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" }) });   // (bu betik modülün dışında: today() burada tanımlı değil)
       await pdrFirestoreYaz(uid, "fcmTokens", JSON.stringify(mevcut));
     }
   } catch (e) {
@@ -14719,7 +14719,7 @@ function ksAsistanGirdi(ctx, o) {
   const ayni = (x) => pdrAyniOgrenci(x.studentName, x.className, ad, sinif);
   // Grup görüşmesinde not tüm katılımcılara aynen kaydedilir; analizde yalnız bu öğrencinin kısmı (ve ortak cümleler) kullanılır
   const gorusmeler = (ctx.records || []).filter(ayni).map(r => r.grupKatilimcilari && r.grupKatilimcilari.length && !r.form ? { ...r, summary: pdrOgrNotMetni(r, o, true), raw: pdrOgrNotMetni(r, o, true) } : r);
-  const ogrDen = pdrSozlukOku(ctx.denemeler, ad, sinif) || {};
+  const ogrDen = pdrSozlukOku(ctx.denemeler, ad, sinif, o.numara) || pdrSozlukOku(ctx.denemeler, ad, sinif) || {};
   const dersler = aktifDersler(ctx.sinavTuru);
   const denemeGirilen = Object.entries(ogrDen).filter(([k]) => k !== "7sinif").sort((a, b) => a[0] - b[0])
     .map(([no, nets]) => ({ no: parseInt(no), nets, toplam: dersler.reduce((t, d) => t + (parseFloat(nets[d.key]) || 0), 0) }));
@@ -23872,6 +23872,12 @@ function pdrSozlukOku(sozluk, name, className, numara) {
   }
   const yeniKey = pdrOgrAnahtar(name, className);
   if (sozluk[yeniKey] !== undefined) return sozluk[yeniKey];
+  // Numara bilinmeden okunuyorsa: kayıt numaralı anahtarla yazılmış olabilir ("Ad || Sınıf || No").
+  // Aynı ad ve sınıfta TEK numaralı kayıt varsa onu döndür (birden fazlaysa hangisi olduğu belirsiz, dokunma).
+  if (!numara && (className || "").trim()) {
+    const on = yeniKey + " || ", adaylar = Object.keys(sozluk).filter(k => k.startsWith(on));
+    if (adaylar.length === 1) return sozluk[adaylar[0]];
+  }
   return sozluk[name]; // eski format (sadece isim) — geriye dönük uyumluluk
 }
 // Yazarken en spesifik (numara varsa isim+sınıf+numara, yoksa isim+sınıf) anahtara
@@ -24194,7 +24200,7 @@ function ozetRaporVeri(rapor) {
   V.riskler = (rapor.riskListesi || []).filter(r => ayni(r) && !r.kapandi);
   V.planlar = pdrSozlukOku(rapor.mudahalePlan || {}, ad, sinif) || (rapor.mudahalePlan || {})[ad] || [];
   V.sevkler = (rapor.sevkler || []).filter(ayni).sort((a, b) => pdrTarihMs(b.tarih) - pdrTarihMs(a.tarih));
-  V.oneriler = (pdrSozlukOku(rapor.mudahaleOnerileri, ad, sinif) || []).filter((o, i, l) => o && l.findIndex(y => y && y.baslik === o.baslik) === i);
+  V.oneriler = (pdrSozlukOku(rapor.mudahaleOnerileri, ad, sinif, no) || pdrSozlukOku(rapor.mudahaleOnerileri, ad, sinif) || []).filter((o, i, l) => o && l.findIndex(y => y && y.baslik === o.baslik) === i);
   // Denemeler
   const dersler = aktifDersler(rapor.sinavTuru);
   const dn = rapor.denemeler || {};
@@ -26027,7 +26033,7 @@ function RadarChart({ scores, size = 240, glass = false }) {
   const labelColor = glass ? "#ffffff" : TEXT;
 
   return (
-    <svg width="100%" height="auto" style={{ maxWidth: totalW, display: "block" }} viewBox={`0 0 ${totalW} ${totalH}`}>
+    <svg width="100%" style={{ maxWidth: totalW, display: "block", height: "auto" }} viewBox={`0 0 ${totalW} ${totalH}`}>
       <defs>
         <radialGradient id={gid} cx="50%" cy="45%" r="60%">
           <stop offset="0%" stopColor={fillColor} stopOpacity={glass ? 0.38 : 0.42} />

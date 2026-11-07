@@ -39267,6 +39267,7 @@ function LgsTarzRozeti({ q, onSayfaAc }) {
 // Bir soru listesinde soru tarzlarının yüzdesi
 function lgsTarzDagilimi(l) { const c = {}; l.forEach(q => { if (q.tip) c[q.tip] = (c[q.tip] || 0) + 1; }); const n = l.filter(q => q.tip).length || 1; return Object.fromEntries(Object.entries(c).map(([k, v]) => [k, Math.round(100 * v / n)])); }
 // "%93'ü", "%97'si" gibi: yüzdeye Türkçe okunuşuna göre iyelik eki
+const LGS_ORNEK_DERS_SIRA = ["Türkçe", "Matematik", "Fen Bilimleri", "İnkılap Tarihi", "Din Kültürü", "İngilizce"];
 function trYuzdeEk(n) {
   n = Math.round(Math.abs(+n || 0));
   const bir = ["ı", "i", "si", "ü", "ü", "i", "sı", "si", "i", "u"], on = ["", "u", "si", "u", "ı", "si", "ı", "i", "i", "ı"];
@@ -39281,10 +39282,14 @@ function lgsOrnekYilOzeti(Y) {
   const z = [0, 0, 0, 0, 0], zl = [0, 0, 0, 0, 0]; o.forEach(q => z[q.zorluk]++); l.forEach(q => zl[q.zorluk]++);
   const oK = new Set(o.filter(q => q.konu).map(q => q.ders + "|" + q.konu)), lK = new Set(l.filter(q => q.konu).map(q => q.ders + "|" + q.konu));
   const oKonulu = o.filter(q => q.konu), lKonulu = l.filter(q => q.konu);
+  // Farklı konular: LGS'de çıkıp örneklerde hiç sorulmayanlar ve örneklerde sorulup o yılın LGS'sinde çıkmayanlar (ders ders)
+  const farkLgs = {}, farkOrnek = {};
+  lKonulu.filter(q => !oK.has(q.ders + "|" + q.konu)).forEach(q => { const k = q.ders + "|" + q.konu; (farkLgs[k] = farkLgs[k] || { ders: q.ders, konu: q.konu, sorular: [] }).sorular.push(q); });
+  oKonulu.filter(q => !lK.has(q.ders + "|" + q.konu)).forEach(q => { const k = q.ders + "|" + q.konu; (farkOrnek[k] = farkOrnek[k] || { ders: q.ders, konu: q.konu, n: 0 }).n++; });
   const ay = [...new Set(o.map(q => q.yil * 100 + q.ay))].sort().map(v => LGS_AY_AD[v % 100]);
   const benz = o.filter(q => q.oran != null), tz = o.filter(q => q.tarzOran != null), td = lgsTarzDagilimi(o), tdl = lgsTarzDagilimi(l);
   const tarzlar = Object.entries(td).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => ({ tip: k, ornek: v, lgs: l.length ? (tdl[k] || 0) : null }));
-  return { yil: Y, n: o.length, kitapcik: new Set(o.map(q => q.kitapcik)).size, ay, z, zl, ln: l.length, benzerlik: benz.length ? Math.round(benz.reduce((a, q) => a + q.oran, 0) / benz.length) : null, tarz: tz.length ? Math.round(tz.reduce((a, q) => a + q.tarzOran, 0) / tz.length) : null, tarzlar,
+  return { yil: Y, n: o.length, kitapcik: new Set(o.map(q => q.kitapcik)).size, ay, z, zl, ln: l.length, benzerlik: benz.length ? Math.round(benz.reduce((a, q) => a + q.oran, 0) / benz.length) : null, farkLgs: Object.values(farkLgs), farkOrnek: Object.values(farkOrnek), tarz: tz.length ? Math.round(tz.reduce((a, q) => a + q.tarzOran, 0) / tz.length) : null, tarzlar,
     isabet: l.length && oKonulu.length ? Math.round(100 * oKonulu.filter(q => lK.has(q.ders + "|" + q.konu)).length / oKonulu.length) : null,
     kapsama: l.length && lKonulu.length ? Math.round(100 * lKonulu.filter(q => oK.has(q.ders + "|" + q.konu)).length / lKonulu.length) : null,
     zorOran: Math.round(100 * (z[3] + z[4]) / o.length), zorOranLgs: l.length ? Math.round(100 * (zl[3] + zl[4]) / l.length) : null };
@@ -39295,7 +39300,7 @@ function lgsOrnekOzetMetni() {
   return "MEB ÖRNEK SORULARI (öğretim yılı → o yılın LGS'si): " + yl.map(Y => { const s = lgsOrnekYilOzeti(Y); return `${Y - 1}-${Y} (${s.ay.join("/")}, ${s.n} soru): LGS'ye genel benzerlik %${s.benzerlik}, tarz benzerliği %${s.tarz}, en sık tarzlar ${s.tarzlar.map(t => `${LGS_SORU_TIP_AD[t.tip] || t.tip} %${t.ornek}${t.lgs != null ? ` (LGS %${t.lgs})` : ""}`).join(", ")}, zor+çok zor %${s.zorOran}${s.zorOranLgs != null ? ` (${Y} LGS'de %${s.zorOranLgs})` : ""}${s.isabet != null ? `; örneklerdeki konuların ${trYuzdeEk(s.isabet)} o yılın LGS'sinde çıktı, LGS sorularının ${trYuzdeEk(s.kapsama)} örneklerdeki konulardan geldi` : ""}`; }).join(" | ") + ". (2023 LGS yalnız 1. dönem konularını kapsar.)";
 }
 function LgsOrnekListesi({ onSayfaAc }) {
-  const [acik, setAcik] = useState(null), [acikYil, setAcikYil] = useState(null), yillar = useMemo(() => lgsOrnekYillari(), []);
+  const [acik, setAcik] = useState(null), [acikYil, setAcikYil] = useState(null), [acikFark, setAcikFark] = useState(null), yillar = useMemo(() => lgsOrnekYillari(), []);
   if (!yillar.length) return <div data-testid="ornek-bos" style={{ fontSize: 11.5, color: "#166534", background: "#F0FDF4", borderRadius: 9, padding: "8px 10px", lineHeight: 1.45 }}>Henüz MEB örnek sorusu eklenmedi.</div>;
   const yesil = "#166534", cizgi = "1px dashed #86EFAC";
   return (<div data-testid="ornek-liste">
@@ -39307,6 +39312,16 @@ function LgsOrnekListesi({ onSayfaAc }) {
           Genel benzerlik <b>%{s.benzerlik}</b> · <b style={{ color: "#7C3AED" }}>tarz benzerliği %{s.tarz}</b> · zorluk<LgsZorlukCubuk z={s.z} sayi={s.n} /> <span style={{ color: MUTED }}>zor+çok zor %{s.zorOran}</span>
           {s.ln > 0 && <span style={{ color: MUTED }}> ({Y} LGS<LgsZorlukCubuk z={s.zl} sayi={s.ln} /> %{s.zorOranLgs})</span>}
           {s.isabet != null && <div data-ornek-isabet={Y}>🎯 Örneklerdeki konuların <b>{trYuzdeEk(s.isabet)}</b> {Y} LGS'de çıktı · {Y} LGS sorularının <b>{trYuzdeEk(s.kapsama)}</b> örneklerdeki konulardan geldi.{Y === 2023 ? <span style={{ color: MUTED }}> (2023 LGS yalnız 1. dönem konularını kapsar.)</span> : null}</div>}
+          {s.ln > 0 && (s.farkLgs.length > 0 || s.farkOrnek.length > 0) && <div style={{ marginTop: 2 }}>
+            <button data-ornek-fark-ac={Y} onClick={() => setAcikFark(a => a === Y ? null : Y)} style={{ background: "none", border: "1px dashed #86EFAC", borderRadius: 7, color: "#166534", fontSize: 11, fontWeight: 800, cursor: "pointer", padding: "2px 7px" }}>🔍 Farklı konuları göster {acikFark === Y ? "▲" : "▼"}</button>
+            {acikFark === Y && <div data-ornek-fark={Y} style={{ background: "#F0FDF4", borderRadius: 8, padding: "6px 8px", marginTop: 4, lineHeight: 1.5 }}>
+              <div style={{ fontWeight: 800, color: "#9A3412" }}>📌 {Y} LGS'de çıkıp örnek sorularda hiç sorulmayan konular</div>
+              {s.farkLgs.length ? LGS_ORNEK_DERS_SIRA.map(ad => { const l = s.farkLgs.filter(x => x.ders === ad); return l.length ? <div key={ad}><b>{ad}:</b> {l.map((x, i) => <span key={x.konu}>{i ? " · " : ""}{x.konu} {x.sorular.map(q => <button key={q.no} onClick={() => onSayfaAc && onSayfaAc(q.kitapcik, q.sayfa, q)} style={{ fontSize: 10, padding: "0 5px", margin: "0 1px", borderRadius: 5, border: "1px solid #FDBA74", background: "#fff", color: "#9A3412", cursor: "pointer" }}>{q.no}. soru</button>)}</span>)}</div> : null; }) : <div>Yok — bütün LGS soruları örneklerdeki konulardan geldi.</div>}
+              <div style={{ fontWeight: 800, color: "#1E40AF", marginTop: 5 }}>📎 Örneklerde sorulup {Y} LGS'de çıkmayan konular</div>
+              {s.farkOrnek.length ? LGS_ORNEK_DERS_SIRA.map(ad => { const l = s.farkOrnek.filter(x => x.ders === ad); return l.length ? <div key={ad}><b>{ad}:</b> {l.map(x => `${x.konu} (${x.n} örnek soru)`).join(" · ")}</div> : null; }) : <div>Yok.</div>}
+              <div style={{ fontSize: 10, color: MUTED, marginTop: 3 }}>LGS sorusuna dokununca kitapçığın o sayfası açılır.</div>
+            </div>}
+          </div>}
           <div data-ornek-tarz={Y} style={{ color: "#5B21B6" }}>🎭 En sık soru tarzları: {s.tarzlar.map(t => `${LGS_SORU_TIP_AD[t.tip] || t.tip} %${t.ornek}${t.lgs != null ? ` (LGS %${t.lgs})` : ""}`).join(" · ")}</div>
           {s.ln === 0 && <div style={{ color: MUTED }}>{Y} LGS soruları eklendiğinde konu isabeti burada görünür.</div>}
         </div>

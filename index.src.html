@@ -3010,7 +3010,7 @@ function ompButuncul(o, K) {
   if (pb.gozlem) bilissel.push({ ad: `CAS gözlem taraması (${pb.gozlem.tarih})`, olumsuz: pb.gozlem.zayif.length > 0, metin: pb.gozlem.zayif.length ? pb.gozlem.zayif.map(z => `${z.ad} güçlük %${z.puan}`).join(", ") : "belirgin güçlük yok" });
   if (!pb.perf && !pb.gozlem) eksik.push("CAS bilişsel süreçler (PASS) taraması ya da performans testi");
   db.dikkat.forEach(x => bilissel.push(x));
-  if (!db.dikkat.length) eksik.push("Dikkat testi (D2, ÇDT ya da Frankfurter)");
+  if (!db.dikkat.length) eksik.push("Dikkat testi (D2, ÇDT, Burdon ya da Frankfurter)");
   const cat = son("cattell"); if (cat) { const r = cattellHesapla(cat.veri, cat.tarih); if (r.iq && r.iq.iq) bilissel.push({ ad: `Cattell ${r.form} (${cat.tarih})`, olumsuz: r.iq.iq < 80, metin: `ZB ${r.iq.alt ? "≤" : r.iq.ust ? "≥" : ""}${r.iq.iq} (${r.sinif.ad.toLocaleLowerCase("tr")})${r.iq.iq < 80 ? " — ÖÖG'den önce bireysel zekâ testiyle doğrulanmalı" : ""}` }); }
   const wisc = son("wisc_r"); if (wisc) { const d = ozTestDurum(wisc); bilissel.push({ ad: `WISC-R (${wisc.tarih})`, olumsuz: d.renk === OZ_KIRMIZI, metin: d.renk === OZ_KIRMIZI ? "ortalamanın altında puan(lar) var — ayrıntı Testler'de" : d.renk === OZ_SARI ? "sınırda puan(lar) var" : "puanlar beklenen aralıkta" }); }
   // Görsel-motor
@@ -10013,7 +10013,7 @@ function bilproGorselMotorBirlikte(s, tum) {
   try { const k = son("bender"); if (k) { const r = benderHesapla(k.veri, k.tarih); if (r.hata != null) { benderOog = r.oog.length; bul.push({ ad: `Bender-Gestalt (${k.tarih})`, olumsuz: r.durum === "alti", metin: `hata puanı ${r.hata}${r.yuzdelik ? `, yüzdelik ${r.yuzdelik.metin}` : ""}${r.yasEsdeger ? `, yaş eşdeğeri ${r.yasEsdeger}` : ""}${r.durum === "alti" ? " — yaşından beklenenin altında" : r.durum === "sinir" ? " — üst sınıra yakın" : r.durum ? " — yaşına uygun" : ""}` }); } } } catch (e) {}
   try { const k = son("frostig"); if (k) { const r = frostigHesapla(k.veri, k.tarih); if (r.ts || r.alt.some(x => x.s)) { const z = r.alt.filter(x => x.s && x.s.p < 50); const sz = r.alt.find(x => x.k === "2"); frostigSekilZemin = sz && sz.s ? sz.s.p : null; bul.push({ ad: `Frostig (${k.tarih})`, olumsuz: (r.ts && r.ts.p < 50) || z.length >= 2, metin: `${r.ts ? `genel standart puan ${r.ts.alt ? "≤1" : r.ts.p} (${r.tDuzey.ad.toLocaleLowerCase("tr")})` : "genel puan yok"}${z.length ? `; %50 altı: ${z.map(x => x.ad.toLocaleLowerCase("tr")).join(", ")}` : ""}` }); } } } catch (e) {}
   try { const k = son("gesell"); if (k) { const r = gesellHesapla(k.veri, k.tarih); if (r.yas && r.uygulanan.length) bul.push({ ad: `Gesell (${k.tarih})`, olumsuz: r.eksik.length >= 2, metin: r.eksik.length ? `yaşına göre çizemediği şekiller: ${r.eksik.map(x => x.ad.toLocaleLowerCase("tr")).join(", ")}` : "yaşına göre beklenen şekillerin tümünü kopyaladı" }); } } catch (e) {}
-  // Dikkat testleri (D2, ÇDT, Frankfurter, Stroop)
+  // Dikkat testleri (D2, ÇDT, Frankfurter, Burdon, Stroop)
   let dikkat = []; try { dikkat = ekDigerBulgular(tum).dikkat || []; } catch (e) {}
   let cdtDurtu = null, cdtVar = false;
   try { const k = son("dikkat_cdt"); if (k) { const r = cdtPuanla(k.veri); if (r && r.tamam && r.indeksler) { cdtVar = true; const d = r.indeksler.filter(i => (i.k === "I" || i.k === "H") && i.yuzdelik != null && i.yuzdelik < 16); if (d.length) cdtDurtu = d.map(i => `${i.ad.toLocaleLowerCase("tr")} %${Math.round(i.yuzdelik)}`).join(", "); } } } catch (e) {}
@@ -17281,8 +17281,8 @@ const KS_ALAN_BILGISI = {
 },
 "testler.programdakiler": {
 "b": "Programdaki test ve ölçeklerin özellikleri",
-"k": "d2 dikkat frostig bender gestalt koppitz cattell metropolitan agte porteus frankfurter beck depresyon cdi çocuklar için depresyon ölçeği spence scas rosenberg conners 16pf kuder mesleki eğilim beier cümle tamamlama goodenough harris bir insan çiz düss hikayeleri moxo durumluk sürekli kaygı",
-"m": "PROGRAMDAKİ TEST VE ÖLÇEKLER — NE ÖLÇER, KİME, NASIL YORUMLANIR?\n(Puanlama ve kesme değerleri için programın kendi test ekranı ve ilgili el kitabı esas alınır. Hepsi tarama/değerlendirme yardımcısıdır, tek başına tanı koymaz.)\n\nDİKKAT VE ALGI\n• d2 Dikkat Testi (Brickenkamp; Türkçe Toker 1988): Seçici dikkat, psikomotor hız ve dikkat tipi. 14 satır × 47 harf, satır başına 20 sn; hedef: iki çizgili \"d\". Puanlar: TN = her satırda son işaretlenen harfe kadar işlenen toplam (psikomotor hız); E1 = atlanan hedef (seçici dikkat; yüksekliği seçici dikkatte düşüklük); E2 = yanlış işaretleme (normalde düşüktür; yüksekliği öğrenme güçlüğü/zihinsel yetersizlikte artar); E = E1+E2; TN-E = TN−(E1+E2) (test performansı); E% = (E1+E2)/TN×100; CP = doğru işaretlenen − E2; FR = en yüksek satır TN − en düşük satır TN (dikkat salınımı). Yorum: TN-E ham puanının yaşa ve cinsiyete göre norm tablosundaki yüzdeliğine (PR) bakılır: 50–60 averaj (risk grubu), 60–70 vasat, 70–85 normal, 85+ iyi; %75 üstü beklenir. E%: 0–1,5 normal, 1,5–2,5 dikkat edilmeli, 2,5 üstü dikkat problemi (norm tablosu yaşa göre E% sınırlarını da verir). FR 6'yı geçmemelidir; satırlar arası büyük farklar dikkat salınımını gösterir. Danışman el kitabının norm dosyasını D2 ekranından yüklediyse (9–59 yaş; İlkokul–Ortaokul, Ortaokul–Lise, Meslek lisesi tabloları) doğum tarihi ve cinsiyet girilince PR'ler kendiliğinden bulunur. Tarama aracıdır; tek başına tanı koydurmaz.\n• Frankfurter Dikkat Testi: 60–72 ay; 90 saniyede elmalar arasından armutları işaretleme (seçici dikkat, görsel tarama). Ham puana (armut + en çok 2 elma) yaş-cinsiyet ek puanı eklenir; son değer 0–22 ortalamanın altı, 23–32 ortalama, 33 ve üstü ortalamanın üstü.\n• Frostig Gelişimsel Görsel Algı Testi: 4-8 yaş; beş alt alan — göz-motor koordinasyonu, şekil-zemin ayırt etme, şekil sabitliği, mekânda konum, mekânsal ilişkiler. Okuma-yazmaya hazırbulunuşlukta görsel algı güçlüklerini fark etmeye yardım eder.\n• Bender-Gestalt Görsel Motor Algı Testi: Dokuz geometrik şeklin kopyalanması; görsel-motor bütünleştirme. Çocuklarda Koppitz gelişimsel puanlaması (yaklaşık 5-11 yaş) kullanılır. \"Duygusal göstergeler\" yorumu zayıf kanıtlıdır; nörolojik tanı için tek başına kullanılmaz.\n• Porteus Labirentleri: Sözel olmayan planlama, öngörü ve dürtü kontrolü (12 labirent, 5 yaş kartından başlanır; zekâ yaşı = 2 + kart puanları, zekâ bölümü yaş tablosundan). Labirentte geri dönme, çizgiden çıkma gibi hata türleri dürtüsellik hakkında ipucu verir.\n• MOXO ve benzeri sürekli performans testleri (CPT): Bilgisayarda dikkat, zamanlama, dürtüsellik ve hiper-reaktivite ölçümü; görsel/işitsel çeldiricilerle. DEHB değerlendirmesinde ek bilgi sağlar ama tek başına tanı koymaz; yanlış pozitif ve negatif oranı yüksektir.\n\nZEKÂ VE HAZIRBULUNUŞLUK\n• Cattell Kültürden Bağımsız Zekâ Testi (Ölçek 2: yaklaşık 8-14 yaş; Ölçek 3: lise ve üstü/yetişkin; A ve B formları): Sözel olmayan, akıcı zekâ (Gf) ağırlıklı grup testi; seriler, sınıflama, matrisler, koşullar alt testleri. Dil etkisi azdır. Bireysel zekâ testinin yerini tutmaz.\n• Metropolitan Okul Olgunluğu Testi: Okula başlama hazırbulunuşluğu (sözcük anlamı, cümleler, genel bilgi, eşleştirme, sayılar, kopya etme). Okula erken başlatma veya bekletme kararında tek ölçüt olmaz; sosyal-duygusal olgunluk ve gözlemle birlikte değerlendirilir.\n• Ankara Gelişim Tarama Envanteri (AGTE): 0-6 yaş; anne/bakım verenden bilgi alınarak dil-bilişsel, ince motor, kaba motor, sosyal beceri-öz bakım alanlarında gelişim taraması. Gecikme şüphesinde çocuk gelişim/pediatri ve RAM yönlendirmesi.\n\nDUYGUSAL DURUM VE KİŞİLİK\n• Çocuklar İçin Depresyon Ölçeği (CDI, Kovacs): 7-17 yaş, 27 madde, son iki haftayı sorgular. Türkiye'de yaygın kullanılan kesme puanı 19'dur. Yüksek puanda görüşme ve yönlendirme; madde 9 (kendine zarar/ölüm düşüncesi) puanı sıfırdan büyükse toplam puandan bağımsız olarak aynı gün değerlendirilir.\n• Beck Depresyon Envanteri: Ergen ve yetişkin (yaklaşık 13 yaş üstü), 21 madde. Toplam puan şiddet düzeyini gösterir (programdaki aralıklar). İntihar maddesi (madde 9) ayrıca değerlendirilir.\n• Spence Çocuk Kaygı Ölçeği (SCAS): 44 madde (38 kaygı + 6 olumlu dolgu madde); alt ölçekler: ayrılık kaygısı, sosyal fobi, obsesif-kompulsif, panik/agorafobi, fiziksel yaralanma korkuları, yaygın anksiyete. Alt ölçek profili hangi kaygı türüne odaklanılacağını gösterir.\n• Durumluk-Sürekli Kaygı Envanteri (Spielberger; çocuk formu ÇDSKE): Durumluk kaygı (şu anki, duruma bağlı) ve sürekli kaygı (genel eğilim) ayrımı. Sınav kaygısı çalışmalarında ön-son ölçüm için uygundur.\n• Rosenberg Benlik Saygısı Ölçeği: Genel benlik saygısı (10 maddelik çekirdek). Düşük benlik saygısı depresyon ve akran sorunları açısından dikkat gerektirir.\n• Conners Derecelendirme Ölçekleri: Öğretmen ve ebeveyn formları; DEHB belirtileri ve eşlik eden davranış/duygusal sorunlar. Öğretmen ve veli formları arasındaki fark (yalnız bir ortamda yüksek) önemli bir yorum bilgisidir — DEHB tanısı iki ortamda belirti gerektirir.\n• 16PF temelli kişilik ölçümü (Cattell'in 16 kişilik faktörü): Kişilik özelliklerini betimler; meslek yönlendirmede ilgi ve yetenekle birlikte, keşif amaçlı kullanılır. Kişilik \"iyi-kötü\" diye yorumlanmaz.\n\nİLGİ VE KARİYER\n• Kuder Mesleki İlgi Envanteri: On ilgi alanı (açık hava, mekanik, hesap, fen, ikna, sanat, edebiyat, müzik, sosyal hizmet, büro). En yüksek 2-3 alan meslek keşfi için başlangıç noktasıdır. İlgi yetenek demek değildir.\n• Mesleki eğilim testleri: Holland (RIASEC) mantığıyla yorumlanabilir; sonuç \"senin mesleğin\" değil, araştırılacak meslek grupları listesidir.\n\nPROJEKTİF\n• Cümle Tamamlama Testi (çocuk-ergen formu): Aile, okul, arkadaş, kendilik, korku ve gelecek temalarında yarım cümlelerin tamamlanması. Normatif puanı yoktur; tekrar eden temalar görüşmede açılacak konuları gösterir. Ölüm, kendine zarar veya istismar içerikli yanıtlar ayrıca ve hemen ele alınır.\n• Goodenough-Harris Bir İnsan Çiz Testi: Çizimdeki ayrıntıların puanlanmasıyla bilişsel olgunluğun kaba bir tahmini (yaklaşık 3-15 yaş). Duygusal yorum (Koppitz göstergeleri) zayıf kanıtlıdır; tek başına sonuç çıkarılmaz.\n• Louisa Düss Psikanalitik Hikâyeleri: Çocuğun tamamladığı on kısa yarım hikâye; psikanalitik kurama dayanır, bilimsel geçerliği sınırlıdır. Çocukla konuşmayı başlatan bir araç olarak kullanılır."
+"k": "d2 dikkat burdon bourdon frostig bender gestalt koppitz cattell metropolitan agte porteus frankfurter beck depresyon cdi çocuklar için depresyon ölçeği spence scas rosenberg conners 16pf kuder mesleki eğilim beier cümle tamamlama goodenough harris bir insan çiz düss hikayeleri moxo durumluk sürekli kaygı",
+"m": "PROGRAMDAKİ TEST VE ÖLÇEKLER — NE ÖLÇER, KİME, NASIL YORUMLANIR?\n(Puanlama ve kesme değerleri için programın kendi test ekranı ve ilgili el kitabı esas alınır. Hepsi tarama/değerlendirme yardımcısıdır, tek başına tanı koymaz.)\n\nDİKKAT VE ALGI\n• d2 Dikkat Testi (Brickenkamp; Türkçe Toker 1988): Seçici dikkat, psikomotor hız ve dikkat tipi. 14 satır × 47 harf, satır başına 20 sn; hedef: iki çizgili \"d\". Puanlar: TN = her satırda son işaretlenen harfe kadar işlenen toplam (psikomotor hız); E1 = atlanan hedef (seçici dikkat; yüksekliği seçici dikkatte düşüklük); E2 = yanlış işaretleme (normalde düşüktür; yüksekliği öğrenme güçlüğü/zihinsel yetersizlikte artar); E = E1+E2; TN-E = TN−(E1+E2) (test performansı); E% = (E1+E2)/TN×100; CP = doğru işaretlenen − E2; FR = en yüksek satır TN − en düşük satır TN (dikkat salınımı). Yorum: TN-E ham puanının yaşa ve cinsiyete göre norm tablosundaki yüzdeliğine (PR) bakılır: 50–60 averaj (risk grubu), 60–70 vasat, 70–85 normal, 85+ iyi; %75 üstü beklenir. E%: 0–1,5 normal, 1,5–2,5 dikkat edilmeli, 2,5 üstü dikkat problemi (norm tablosu yaşa göre E% sınırlarını da verir). FR 6'yı geçmemelidir; satırlar arası büyük farklar dikkat salınımını gösterir. Danışman el kitabının norm dosyasını D2 ekranından yüklediyse (9–59 yaş; İlkokul–Ortaokul, Ortaokul–Lise, Meslek lisesi tabloları) doğum tarihi ve cinsiyet girilince PR'ler kendiliğinden bulunur. Tarama aracıdır; tek başına tanı koydurmaz.\n• Burdon Dikkat Testi: Ortaokuldan itibaren; 30 satır karışık harf içinde bütün a, b, d, g harflerinin altını çizme (ortaokul 3, lise 2 dakika; bireysel ya da grup). Puanlar: doğru çizilen, çizilmemiş (atlanan) ve yanlış çizilen harf. Normu yoktur; 10'ar satırlık üç grupta hata eğilimine bakılır: ilk satırlarda hata az, aşağıya doğru artıyorsa dikkat çabuk bozuluyor; başta çok, sonra azalıyorsa çalışmaya başlarken uyum güçlüğü, sonra verimli; çizgiler çok azsa dikkati toplamada güçlük. Programda öğrenci formu ve puanlama anahtarı yazdırılır, grup sonuçları girilince eğilim hesaplanır. Tarama aracıdır.\n• Frankfurter Dikkat Testi: 60–72 ay; 90 saniyede elmalar arasından armutları işaretleme (seçici dikkat, görsel tarama). Ham puana (armut + en çok 2 elma) yaş-cinsiyet ek puanı eklenir; son değer 0–22 ortalamanın altı, 23–32 ortalama, 33 ve üstü ortalamanın üstü.\n• Frostig Gelişimsel Görsel Algı Testi: 4-8 yaş; beş alt alan — göz-motor koordinasyonu, şekil-zemin ayırt etme, şekil sabitliği, mekânda konum, mekânsal ilişkiler. Okuma-yazmaya hazırbulunuşlukta görsel algı güçlüklerini fark etmeye yardım eder.\n• Bender-Gestalt Görsel Motor Algı Testi: Dokuz geometrik şeklin kopyalanması; görsel-motor bütünleştirme. Çocuklarda Koppitz gelişimsel puanlaması (yaklaşık 5-11 yaş) kullanılır. \"Duygusal göstergeler\" yorumu zayıf kanıtlıdır; nörolojik tanı için tek başına kullanılmaz.\n• Porteus Labirentleri: Sözel olmayan planlama, öngörü ve dürtü kontrolü (12 labirent, 5 yaş kartından başlanır; zekâ yaşı = 2 + kart puanları, zekâ bölümü yaş tablosundan). Labirentte geri dönme, çizgiden çıkma gibi hata türleri dürtüsellik hakkında ipucu verir.\n• MOXO ve benzeri sürekli performans testleri (CPT): Bilgisayarda dikkat, zamanlama, dürtüsellik ve hiper-reaktivite ölçümü; görsel/işitsel çeldiricilerle. DEHB değerlendirmesinde ek bilgi sağlar ama tek başına tanı koymaz; yanlış pozitif ve negatif oranı yüksektir.\n\nZEKÂ VE HAZIRBULUNUŞLUK\n• Cattell Kültürden Bağımsız Zekâ Testi (Ölçek 2: yaklaşık 8-14 yaş; Ölçek 3: lise ve üstü/yetişkin; A ve B formları): Sözel olmayan, akıcı zekâ (Gf) ağırlıklı grup testi; seriler, sınıflama, matrisler, koşullar alt testleri. Dil etkisi azdır. Bireysel zekâ testinin yerini tutmaz.\n• Metropolitan Okul Olgunluğu Testi: Okula başlama hazırbulunuşluğu (sözcük anlamı, cümleler, genel bilgi, eşleştirme, sayılar, kopya etme). Okula erken başlatma veya bekletme kararında tek ölçüt olmaz; sosyal-duygusal olgunluk ve gözlemle birlikte değerlendirilir.\n• Ankara Gelişim Tarama Envanteri (AGTE): 0-6 yaş; anne/bakım verenden bilgi alınarak dil-bilişsel, ince motor, kaba motor, sosyal beceri-öz bakım alanlarında gelişim taraması. Gecikme şüphesinde çocuk gelişim/pediatri ve RAM yönlendirmesi.\n\nDUYGUSAL DURUM VE KİŞİLİK\n• Çocuklar İçin Depresyon Ölçeği (CDI, Kovacs): 7-17 yaş, 27 madde, son iki haftayı sorgular. Türkiye'de yaygın kullanılan kesme puanı 19'dur. Yüksek puanda görüşme ve yönlendirme; madde 9 (kendine zarar/ölüm düşüncesi) puanı sıfırdan büyükse toplam puandan bağımsız olarak aynı gün değerlendirilir.\n• Beck Depresyon Envanteri: Ergen ve yetişkin (yaklaşık 13 yaş üstü), 21 madde. Toplam puan şiddet düzeyini gösterir (programdaki aralıklar). İntihar maddesi (madde 9) ayrıca değerlendirilir.\n• Spence Çocuk Kaygı Ölçeği (SCAS): 44 madde (38 kaygı + 6 olumlu dolgu madde); alt ölçekler: ayrılık kaygısı, sosyal fobi, obsesif-kompulsif, panik/agorafobi, fiziksel yaralanma korkuları, yaygın anksiyete. Alt ölçek profili hangi kaygı türüne odaklanılacağını gösterir.\n• Durumluk-Sürekli Kaygı Envanteri (Spielberger; çocuk formu ÇDSKE): Durumluk kaygı (şu anki, duruma bağlı) ve sürekli kaygı (genel eğilim) ayrımı. Sınav kaygısı çalışmalarında ön-son ölçüm için uygundur.\n• Rosenberg Benlik Saygısı Ölçeği: Genel benlik saygısı (10 maddelik çekirdek). Düşük benlik saygısı depresyon ve akran sorunları açısından dikkat gerektirir.\n• Conners Derecelendirme Ölçekleri: Öğretmen ve ebeveyn formları; DEHB belirtileri ve eşlik eden davranış/duygusal sorunlar. Öğretmen ve veli formları arasındaki fark (yalnız bir ortamda yüksek) önemli bir yorum bilgisidir — DEHB tanısı iki ortamda belirti gerektirir.\n• 16PF temelli kişilik ölçümü (Cattell'in 16 kişilik faktörü): Kişilik özelliklerini betimler; meslek yönlendirmede ilgi ve yetenekle birlikte, keşif amaçlı kullanılır. Kişilik \"iyi-kötü\" diye yorumlanmaz.\n\nİLGİ VE KARİYER\n• Kuder Mesleki İlgi Envanteri: On ilgi alanı (açık hava, mekanik, hesap, fen, ikna, sanat, edebiyat, müzik, sosyal hizmet, büro). En yüksek 2-3 alan meslek keşfi için başlangıç noktasıdır. İlgi yetenek demek değildir.\n• Mesleki eğilim testleri: Holland (RIASEC) mantığıyla yorumlanabilir; sonuç \"senin mesleğin\" değil, araştırılacak meslek grupları listesidir.\n\nPROJEKTİF\n• Cümle Tamamlama Testi (çocuk-ergen formu): Aile, okul, arkadaş, kendilik, korku ve gelecek temalarında yarım cümlelerin tamamlanması. Normatif puanı yoktur; tekrar eden temalar görüşmede açılacak konuları gösterir. Ölüm, kendine zarar veya istismar içerikli yanıtlar ayrıca ve hemen ele alınır.\n• Goodenough-Harris Bir İnsan Çiz Testi: Çizimdeki ayrıntıların puanlanmasıyla bilişsel olgunluğun kaba bir tahmini (yaklaşık 3-15 yaş). Duygusal yorum (Koppitz göstergeleri) zayıf kanıtlıdır; tek başına sonuç çıkarılmaz.\n• Louisa Düss Psikanalitik Hikâyeleri: Çocuğun tamamladığı on kısa yarım hikâye; psikanalitik kurama dayanır, bilimsel geçerliği sınırlıdır. Çocukla konuşmayı başlatan bir araç olarak kullanılır."
 }
 };
 
@@ -24157,7 +24157,7 @@ function raporVerisiOlustur({ ozetAc, ogrenciProfilleri2, ogrenci, ogrenciSinif,
 // Tamamen cihazda hesaplanır; hiçbir veri dışarı gönderilmez.
 const OZ_TEST_GRUP = {
   bilissel: ["wisc_r", "iq_esdeger", "cattell", "alt_test", "gelisimsel_hata", "metropolitan", "okul_olgunlugu", "porteus"],
-  dikkat: ["d2", "dikkat_cdt", "stroop_tbag", "dikkat_egitim", "frankfurter"],
+  dikkat: ["d2", "dikkat_cdt", "stroop_tbag", "dikkat_egitim", "frankfurter", "burdon"],
   okuma: ["okuma_degerlendirme", "okuma_programi", "kaynastirma_ed", "net_kontrol", "bender", "frostig", "gesell", "okuma_hizi"],
   duygusal: ["scas_cocuk", "toplam_duzey", "toplam_duzey_serbest", "insan_ciz", "louisa_duss", "beier_form_a"],
 };
@@ -24174,6 +24174,7 @@ function ozTestDurum(k) {
       case "dikkat_cdt": { const s = cdtPuanla(v); if (s && s.tamam && s.indeksler) { const y = s.indeksler.map(i => i.yuzdelik).filter(x => x != null); if (y.length) { const m = Math.min(...y); return { renk: m < 16 ? OZ_KIRMIZI : m < 25 ? OZ_SARI : OZ_YESIL }; } } break; }
       case "stroop_tbag": { const r = stroopHesapla(v); if (r.oran != null) return { renk: r.oran >= 2.3 ? OZ_KIRMIZI : r.oran >= 1.8 ? OZ_SARI : OZ_YESIL }; break; }
       case "frankfurter": { const r = frankHesapla(v, k.tarih); if (r.duzey) return { renk: r.duzey.ad === "Ortalamanın altı" ? OZ_KIRMIZI : OZ_YESIL }; break; }
+      case "burdon": { const r = burdonHesapla(v); if (r.duzey) return { renk: r.duzey.ad === "Düşük" ? OZ_KIRMIZI : r.duzey.ad === "Orta" || (r.oruntu && r.oruntu.k !== "dengeli") ? OZ_SARI : OZ_YESIL }; break; }
       case "bender": { const r = benderHesapla(v, k.tarih); if (r.durum) return { renk: r.durum === "alti" ? OZ_KIRMIZI : r.durum === "sinir" ? OZ_SARI : OZ_YESIL }; break; }
       case "frostig": { const r = frostigHesapla(v, k.tarih); if (r.ts) return { renk: r.ts.p < 50 ? OZ_KIRMIZI : r.ts.p < 60 ? OZ_SARI : OZ_YESIL }; break; }
       case "okuma_hizi": { const r = ohHesapla(v, k.tarih, false, k.id); if (r.ddk != null) { const y = r.hizDurum === "alti", h = r.dogruluk < 90; return { renk: y && h ? OZ_KIRMIZI : y || h ? OZ_SARI : OZ_YESIL }; } break; }
@@ -26866,7 +26867,7 @@ function scasRaporHtmlOlustur(sonuc, bilgi) {
 
 
 // ===== EK TESTLER: Stroop TBAG · Metropolitan · Louisa Düss · WISC-R =====
-const EK_TESTLER = ["stroop_tbag", "metropolitan", "louisa_duss", "wisc_r", "frankfurter", "porteus", "bender", "frostig", "gesell", "okuma_hizi", "cattell"];
+const EK_TESTLER = ["stroop_tbag", "metropolitan", "louisa_duss", "wisc_r", "frankfurter", "porteus", "bender", "frostig", "gesell", "okuma_hizi", "cattell", "burdon"];
 const ekSayi = x => { if (x === null || x === undefined || String(x).trim() === "") return null; const n = parseFloat(String(x).replace(",", ".")); return isFinite(n) ? n : null; };
 const ekYaz = x => x == null ? "—" : String(Math.round(x * 100) / 100).replace(".", ",");
 
@@ -27095,6 +27096,118 @@ function frankRapor(ek, tarih) {
   L.push("", "Not: Frankfurter Dikkat Testi 60–72 aylık çocuklar için bir tarama aracıdır; tek başına tanı koydurmaz. Görme, işitme ve el becerisi sonucu etkileyebilir.");
   return { r, metin: L.join("\n") };
 }
+
+// ── BURDON DİKKAT TESTİ (BAŞLANGIÇ) ──
+// Ortaokuldan itibaren; karışık harfler arasında a, b, d, g harflerinin altını çizme (ortaokul 3 dk, lise 2 dk).
+// Form: 30 satır × 22 harf, 10'ar satırlık 3 grup. Hedef sayıları danışmanın paylaştığı uygulama belgesindeki
+// anahtarla aynıdır (I. grup 11a 10b 10d 10g · II. 10a 9b 10d 9g · III. 10a 11b 9d 10g) ve satırlardan hesaplanır.
+// Testin normu yoktur: yorum, belgedeki niteliksel ölçüte (10'ar satırlık gruplarda hata eğilimi) dayanır;
+// doğruluk düzeyleri programın yol gösterici sınırlarıdır, norm değildir.
+const BURDON_SATIR = ["aepznzsuahvklasibiouoe", "rvbpmibirbsmntdaufcfka", "ckahseyphbpsdgyzdvrifg", "ydvcoyerzhezsegmkfzday", "fsdyibtdhmlriemtgtbdfu", "kcickokostluzugmaflvut", "izrfoudVhypnbpmvhnngry", "pvklntyorzncphtemzioim", "ralygsoivainarchodbfph", "kubsyguemkltcgvgripcte", "citelrnzfudtmshdkufdsm", "sivetcplrgvgctlrmeugye", "bokehbukopfıdohoraniav", "iosgylarmifbzmelhpznzr", "oytnakvpykgvnhvmpbnpyh", "vduofrhituvluamfacults", "okokcickufsbtgtmeinizh", "dtbiyasfyndzfkmgeszehz", "renocvdyfflrvdzvgdzpbe", "pycaascgcahtnmpbribikp", "afnpvdmtoymilgdeotocnt", "lupznkrhpucboygudvyaol", "szoapfftcvkirbpmnerges", "bahvihsckzrfdracgynmhy", "tdşvcgzyfmptrogeuubbyh", "iuanyadumfapyzebkdbolz", "elzheadztclpryfmsnvicv", "sbivmzgpsmrkbkrehcuvns", "flsleiolglkthzoktdearh", "fmiucftibsgkmknphvbgui"];
+const BURDON_HEDEF = ["a", "b", "d", "g"];
+const BURDON_SATIR_HEDEF = BURDON_SATIR.map(s => [...s].filter(c => BURDON_HEDEF.includes(c)).length);
+const BURDON_GRUP_HEDEF = [0, 1, 2].map(g => BURDON_SATIR_HEDEF.slice(g * 10, g * 10 + 10).reduce((a, b) => a + b, 0));
+const BURDON_STRATEJI = ["Satır satır, dört harf birlikte (doğru)", "Önce bir harf, sonra diğeri", "Atlayarak / gelişigüzel"];
+// Belgedeki "Dikkati Yoğunlaştırma Yöntemi"nden kısaltılmış öneriler (rapora ve öğrenci formuna girer)
+const BURDON_ONERI = [
+  "Çalışmaya başlamadan amacını ve çalışma sonunda ulaşacağın küçük hedefi belirle (\"Bugün 10 soru, 1 konu\").",
+  "Neyi, ne zaman, nerede çalışacağına önceden karar ver; her gün aynı yerde, masa başında çalış.",
+  "Konuya merak duy: başlıkları soruya çevirip kendine sor.",
+  "Masada yalnız o işin kitabı ve kalemi olsun; televizyon, telefon ve gereksiz eşyalar uzakta dursun.",
+  "Planlı çalış; okuma, yazma, anlatma ve soru çözmeyi dönüşümlü yaparak çeşitlilik sağla.",
+  "Canın istemese bile planladığın saatte hemen başla; kolaydan zora git, okumak yerine yazarak başla.",
+  "Çalışmadan önce gerçekten dinlen; bulmaca, satranç gibi dikkat isteyen oyunlarla boş zamanını değerlendir.",
+];
+function burdonHesapla(ek) {
+  ek = ek || {}; const kademe = ek.kademe === "lise" ? "lise" : "ortaokul"; const sure = kademe === "lise" ? 2 : 3;
+  const sonGir = ekSayi(ek.sonSatir); const son = sonGir == null ? 30 : Math.min(30, Math.max(0, Math.round(sonGir)));
+  const uyari = [];
+  const gruplar = [0, 1, 2].map(i => {
+    const satir = Math.min(10, Math.max(0, son - i * 10));
+    const hedef = BURDON_SATIR_HEDEF.slice(i * 10, i * 10 + satir).reduce((a, b) => a + b, 0);
+    const g = (ek.g || [])[i] || {}; let d = ekSayi(g.d); const y = Math.max(0, ekSayi(g.y) || 0);
+    if (d != null && d < 0) d = 0;
+    if (d != null && d > hedef) { uyari.push(`${i + 1}. grupta doğru çizilen (${d}) taranan satırlardaki hedef harf sayısından (${hedef}) fazla; son satırı ya da sayımı kontrol edin.`); d = hedef; }
+    return { i, satir, hedef, d, y, atlanan: d == null ? null : hedef - d, basari: d == null || !hedef ? null : Math.round(100 * d / hedef), tamHedef: BURDON_GRUP_HEDEF[i] };
+  });
+  const islenen = gruplar.filter(x => x.satir > 0);
+  const eksikGrup = islenen.filter(x => x.d == null);
+  if (sonGir != null && eksikGrup.length && eksikGrup.length < islenen.length) uyari.push(`Taranan ${eksikGrup.map(x => x.i + 1).join(", ")}. grup için doğru sayısı girilmedi.`);
+  const girilen = gruplar.filter(x => x.d != null && x.satir > 0);
+  const dogru = girilen.length ? girilen.reduce((a, x) => a + x.d, 0) : null;
+  const hedef = girilen.reduce((a, x) => a + x.hedef, 0);
+  const yanlis = gruplar.reduce((a, x) => a + x.y, 0);
+  const atlanan = dogru == null ? null : hedef - dogru;
+  const dogruluk = dogru == null || !hedef ? null : Math.round(100 * dogru / hedef);
+  const net = dogru == null ? null : dogru - yanlis;
+  const yanlisOran = dogru == null || dogru + yanlis === 0 ? null : Math.round(100 * yanlis / (dogru + yanlis));
+  // Belgedeki ölçüt: gruplara göre hata eğilimi (en az 5 satırı taranmış gruplar karşılaştırılır)
+  const gecerli = girilen.filter(x => x.satir >= 5 && x.basari != null);
+  let oruntu = null;
+  if (gecerli.length >= 2) {
+    const fark = gecerli[gecerli.length - 1].basari - gecerli[0].basari;
+    oruntu = fark <= -15 ? { k: "bozulma", ad: "Dikkat çabuk bozuluyor", fark } : fark >= 15 ? { k: "uyum", ad: "Başlangıçta uyum güçlüğü", fark } : { k: "dengeli", ad: "Dikkat süre boyunca dengeli", fark };
+  }
+  const duzey = dogruluk == null ? null : dogruluk >= 90 ? { ad: "İyi", renk: "#15803D" } : dogruluk >= 75 ? { ad: "Orta", renk: "#B45309" } : { ad: "Düşük", renk: "#B91C1C" };
+  return { kademe, sure, son, sonGirildi: sonGir != null, gruplar, dogru, hedef, yanlis, atlanan, dogruluk, net, yanlisOran, oruntu, duzey, uyari };
+}
+function burdonRapor(ek) {
+  const r = burdonHesapla(ek); ek = ek || {}; const L = ["BURDON DİKKAT TESTİ — DEĞERLENDİRME"];
+  L.push(`Uygulama: ${r.kademe === "lise" ? "lise" : "ortaokul"} · ${r.sure} dakika · taranan satır: ${r.son}/30`);
+  if (r.dogru != null) L.push(`Doğru çizilen: ${r.dogru}/${r.hedef} (%${r.dogruluk}) · Çizilmemiş (atlanan): ${r.atlanan} · Yanlış çizilen: ${r.yanlis} · Net (doğru − yanlış): ${r.net}`);
+  r.gruplar.filter(x => x.satir > 0 && x.d != null).forEach(x => L.push(`${x.i + 1}. grup (${x.i * 10 + 1}–${x.i * 10 + x.satir}. satır): ${x.d}/${x.hedef} doğru (%${x.basari}), ${x.atlanan} atlanan, ${x.y} yanlış`));
+  r.uyari.forEach(u => L.push("⚠ " + u));
+  L.push("");
+  if (r.duzey) {
+    if (r.duzey.ad === "Düşük") L.push(`Hedef harflerin yalnızca ${trYuzdeEk(r.dogruluk)} çizilmiş; kâğıttaki çizgiler azdır. Belgedeki ölçüte göre öğrenci dikkatini bir yerde toplamakta güçlük yaşıyor olabilir.`);
+    else if (r.duzey.ad === "Orta") L.push(`Hedef harflerin ${trYuzdeEk(r.dogruluk)} doğru çizilmiş; seçici dikkat orta düzeyde, zaman zaman hedef atlanıyor.`);
+    else L.push(`Hedef harflerin ${trYuzdeEk(r.dogruluk)} doğru çizilmiş; seçici dikkat ve görsel tarama iyi düzeyde.`);
+  }
+  if (r.oruntu) {
+    if (r.oruntu.k === "bozulma") L.push(`→ Dikkat çabuk bozuluyor: ilk satırlarda başarı yüksekken aşağıya doğru düşüyor (${r.gruplar.filter(x => x.basari != null && x.satir >= 5).map(x => "%" + x.basari).join(" → ")}). Öğrenci dikkatini uzun süre bir işte tutmakta zorlanıyor olabilir; çalışmalar kısa bloklara bölünmeli.`);
+    else if (r.oruntu.k === "uyum") L.push(`→ Başlangıçta uyum güçlüğü: ilk satırlarda hata çok, aşağıya doğru azalıyor (${r.gruplar.filter(x => x.basari != null && x.satir >= 5).map(x => "%" + x.basari).join(" → ")}). Öğrenci çalışmaya başlarken zorlanıyor, bir süre sonra uyum sağlayıp verimli olabiliyor; derse kısa ve kolay bir ısınmayla başlamak yararlı olur.`);
+    else L.push(`Gruplar arasında belirgin fark yok (${r.gruplar.filter(x => x.basari != null && x.satir >= 5).map(x => "%" + x.basari).join(" → ")}); dikkat süre boyunca benzer düzeyde sürdürülüyor.`);
+  } else if (r.dogru != null && r.son < 15) L.push("Karşılaştırma için en az iki grupta 5'er satır taranmalı; hata eğilimi yorumlanamadı.");
+  if (r.yanlis >= 5 || (r.yanlisOran != null && r.yanlisOran >= 10)) L.push(`Yanlış çizilen harf sayısı yüksek (${r.yanlis}): hedefi çeldiriciden ayırt etmede zorlanma ya da hızlı ama özensiz (dürtüsel) çalışma olabilir.`);
+  if (r.sonGirildi && r.son < 10) L.push(`Süre içinde yalnızca ${r.son} satır tarandı: çalışma temposu yavaş olabilir (yavaş bilişsel tempo, aşırı titizlik ya da motivasyon düşüklüğü). Testin hız normu yoktur; aynı sınıftaki akranlarla karşılaştırarak yorumlayın.`);
+  else if (r.sonGirildi && r.son >= 30 && r.duzey && r.duzey.ad !== "İyi") L.push("Bütün satırlar süre bitmeden tarandı ama atlanan hedef çok: hızlı ilerleyip ayrıntıyı kaçırma eğilimi olabilir.");
+  if (ek.strateji && ek.strateji !== BURDON_STRATEJI[0]) L.push(`Çalışma biçimi: ${ek.strateji} — yönergeye uygun sistematik tarama stratejisi henüz oturmamış olabilir.`);
+  else if (ek.strateji) L.push("Çalışma biçimi: yönergeye uygun, satır satır sistematik tarama.");
+  if (ek.gozlem) L.push("Davranış gözlemi: " + ek.gozlem);
+  if (r.duzey && (r.duzey.ad !== "İyi" || (r.oruntu && r.oruntu.k !== "dengeli"))) { L.push("", "Öneriler (dikkati yoğunlaştırma):"); BURDON_ONERI.forEach(o => L.push("• " + o)); }
+  L.push("", "Not: Burdon Dikkat Testi bir tarama aracıdır; normu yoktur ve tek başına tanı koydurmaz. Sonuç, sınıf içi gözlem ve diğer dikkat testleriyle (D2, ÇDT) birlikte değerlendirilmelidir. Görme sorunu, yorgunluk ve motivasyon sonucu etkileyebilir.");
+  return { r, metin: L.join("\n") };
+}
+function burdonOzet(ek) {
+  const r = burdonHesapla(ek);
+  return r.dogru != null ? `Doğru ${r.dogru}/${r.hedef} (%${r.dogruluk}${r.duzey ? ", " + r.duzey.ad.toLocaleLowerCase("tr") : ""}) · atlanan ${r.atlanan} · yanlış ${r.yanlis} · ${r.son}/30 satır${r.oruntu ? " · " + r.oruntu.ad : ""}` : "Puan girilmedi";
+}
+// Yazdırılabilir formlar: öğrenci test kâğıdı (adsız; öğrenci kendisi yazar) ve uygulayıcı puanlama anahtarı
+function burdonFormHtml(tur) {
+  const anahtar = tur === "anahtar";
+  const harf = c => anahtar && BURDON_HEDEF.includes(c) ? `<td style="padding:1px 0;width:23px;text-align:center"><span style="display:inline-block;min-width:15px;background:#FDE68A;border-bottom:2px solid #B45309;font-weight:700;color:#7C2D12">${c}</span></td>` : `<td style="padding:1px 0;width:23px;text-align:center">${cdtEsc(c)}</td>`;
+  const grup = g => `<table style="border-collapse:collapse;font-family:'Courier New',monospace;font-size:15.5px;margin:0 auto 9px">${BURDON_SATIR.slice(g * 10, g * 10 + 10).map((s, j) => `<tr><td style="font-size:9px;color:#94A3B8;width:20px;text-align:right;padding-right:6px">${g * 10 + j + 1}</td>${[...s].map(harf).join("")}${anahtar ? `<td style="font-size:10px;color:#B45309;padding-left:8px;font-family:Arial">${BURDON_SATIR_HEDEF[g * 10 + j]}</td>` : ""}</tr>`).join("")}</table>`
+    + (anahtar ? `<div style="text-align:center;font-size:10.5px;color:#7C2D12;margin:-4px 0 8px">${g + 1}. grup: ${BURDON_HEDEF.map(h => `${BURDON_SATIR.slice(g * 10, g * 10 + 10).join("").split(h).length - 1} ${h}`).join(", ")} = <b>${BURDON_GRUP_HEDEF[g]} hedef</b></div>` : "");
+  const alan = a => `<td style="padding:3px 6px;font-size:11.5px;width:25%"><b>${a}:</b></td><td style="border-bottom:1px dotted #94A3B8;width:25%"></td>`;
+  const ust = anahtar
+    ? `<div style="display:flex;justify-content:space-between;border-bottom:2px solid #B45309;padding-bottom:6px;margin-bottom:8px"><b style="font-size:15px;color:#B45309">Burdon Dikkat Testi — uygulayıcı puanlama anahtarı</b><span style="font-size:11px;color:#64748B">Hedefler sarı · sağda satır başına hedef sayısı</span></div>
+       <div style="font-size:11px;line-height:1.5;margin-bottom:8px"><b>Yönerge:</b> "Önündeki sayfada bulunan bütün a, b, d ve g harflerinin altını kurşun kalemle çiz. Satırları soldan sağa tara; bir satırdaki dört harfin hepsini birlikte işaretle (önce a'lar sonra b'ler şeklinde değil). Süren <b>ortaokulda 3, lisede 2 dakika</b>." Gerekirse tahtaya örnek bir satır yazıp birlikte uygulayın; öğrencinin motivasyonunu sağlayın. Süre bitince öğrenciden son taradığı satırın yanına çizgi çekmesini isteyin.<br><b>Puanlama:</b> her grupta doğru çizilen ve yanlış çizilen (hedef olmayan) harfleri sayın; son satırı not edin. Programa grup grup girince atlanan sayısı ve hata eğilimi kendiliğinden hesaplanır.</div>`
+    : `<div style="text-align:center;font-size:17px;font-weight:700;letter-spacing:1px;margin-bottom:6px">BURDON DİKKAT TESTİ</div>
+       <table style="width:100%;border-collapse:collapse;margin-bottom:6px"><tr>${alan("Adı, Soyadı")}${alan("Yaş")}</tr><tr>${alan("Okul")}${alan("Sınıf")}</tr><tr>${alan("Tarih")}${alan("Süre")}</tr></table>
+       <div style="font-size:11.5px;margin-bottom:8px;border:1px solid #CBD5E1;border-radius:6px;padding:5px 8px"><b>Yönerge:</b> Sayfadaki bütün <b>a, b, d, g</b> harflerinin altını kurşun kalemle çiz. Satırları soldan sağa tara ve bir satırdaki dört harfin hepsini birlikte işaretle. "Başla" denince başla, "Dur" denince kalemini bırak.</div>`;
+  const alt = anahtar
+    ? `<table style="width:100%;border-collapse:collapse;font-size:11.5px;margin-top:4px"><tr>${["", "1. grup (1–10)", "2. grup (11–20)", "3. grup (21–30)", "Toplam"].map(t => `<td style="border:1px solid #CBD5E1;padding:4px 6px;font-weight:700;background:#FFFBEB">${t}</td>`).join("")}</tr>${["Doğru çizilen", "Yanlış çizilen"].map(t => `<tr><td style="border:1px solid #CBD5E1;padding:4px 6px;font-weight:700">${t}</td>${"<td style=\"border:1px solid #CBD5E1;height:22px\"></td>".repeat(4)}</tr>`).join("")}</table><div style="font-size:11.5px;margin-top:6px">Son taranan satır: ........ &nbsp;&nbsp; Çalışma biçimi: ☐ satır satır ☐ harf harf ☐ gelişigüzel &nbsp;&nbsp; Gözlem: ................................................</div>`
+    : `<table style="width:100%;border-collapse:collapse;font-size:11px;margin-top:2px"><tr><td style="padding:3px 6px;width:25%"><b>Çizilmemiş:</b></td><td style="border-bottom:1px dotted #94A3B8;width:25%"></td><td style="padding:3px 6px;width:25%"><b>Yanlış çizilmiş:</b></td><td style="border-bottom:1px dotted #94A3B8"></td></tr></table><div style="font-size:9px;color:#94A3B8;text-align:right;margin-top:2px">(Bu bölümü uygulayıcı doldurur.)</div>`;
+  return `<div style="font-family:Arial,Helvetica,sans-serif;color:#111">${ust}${grup(0)}${grup(1)}${grup(2)}${alt}</div>`;
+}
+function burdonYazdir(tur) {
+  const id = "burdon-yazdir-" + Date.now(); const tmp = document.createElement("div"); tmp.id = id;
+  Object.assign(tmp.style, { position: "absolute", left: "-9999px", top: "0", width: "800px", padding: "18px" });
+  tmp.innerHTML = burdonFormHtml(tur); document.body.appendChild(tmp);
+  raporIndir(id, tur === "anahtar" ? "Burdon_Dikkat_Testi_puanlama_anahtari" : "Burdon_Dikkat_Testi_ogrenci_formu");
+  setTimeout(() => { const el = document.getElementById(id); if (el) el.remove(); }, 8000);
+}
+// ── BURDON DİKKAT TESTİ (BİTİŞ) ──
 
 // ── Porteus Labirentleri Testi (B. Toğrol uyarlaması) ──
 // Puanlama tablosu (uygulama formu): III–XI: 1. denemede 1, 2. denemede 0,5 yıl; XII ve XIV: 2 / 1,5 / 1 / 0,5;
@@ -27624,6 +27737,7 @@ function ekDigerBulgular(tum, haricId) {
   try { const k = son("d2"); if (k && k.veri && (k.veri.TN || k.veri.PR)) { const g = d2GenelSonuc(k.veri); const pr = d2Sayi(k.veri.PR); const olumsuz = (pr != null && pr < 50) || (g && g.renk === "#B91C1C"); dikkat.push({ ad: `D2 (${k.tarih})`, olumsuz, metin: g ? g.metin : `PR ${k.veri.PR}` }); } } catch (e) {}
   try { const k = son("dikkat_cdt"); if (k) { const s = cdtPuanla(k.veri); if (s && s.tamam) { const dusuk = s.indeksler.filter(i => i.yuzdelik != null && i.yuzdelik < 16); dikkat.push({ ad: `ÇDT (${k.tarih})`, olumsuz: dusuk.length > 0, metin: dusuk.length ? `düşük indeks: ${dusuk.map(i => `${i.ad} (%${Math.round(i.yuzdelik)})`).join(", ")}` : "indeksler yaşıtlarıyla benzer" }); } } } catch (e) {}
   try { const k = son("frankfurter"); if (k) { const r = frankHesapla(k.veri, k.tarih); if (r.duzey) dikkat.push({ ad: `Frankfurter (${k.tarih})`, olumsuz: r.duzey.ad === "Ortalamanın altı", metin: `son değer ${r.son} (${r.duzey.ad.toLocaleLowerCase("tr")})` }); } } catch (e) {}
+  try { const k = son("burdon"); if (k) { const r = burdonHesapla(k.veri); if (r.duzey) dikkat.push({ ad: `Burdon (${k.tarih})`, olumsuz: r.duzey.ad === "Düşük" || (r.oruntu && r.oruntu.k === "bozulma"), metin: `doğruluk %${r.dogruluk} (${r.duzey.ad.toLocaleLowerCase("tr")})${r.oruntu ? ", " + r.oruntu.ad.toLocaleLowerCase("tr") : ""}` }); } } catch (e) {}
   try { const k = son("stroop_tbag"); if (k) { const r = stroopHesapla(k.veri); if (r.oran != null) dikkat.push({ ad: `Stroop (${k.tarih})`, olumsuz: r.oran >= 1.8, metin: `bozucu etki ${ekYaz(r.enterferans)} sn (${r.oranDuzey})` }); } } catch (e) {}
   try { const k = son("okuma_hizi"); if (k) { const r = ohHesapla(k.veri, k.tarih, false, k.id); if (r.ddk != null) okuma.push({ ad: `Sesli okuma akıcılığı (${k.tarih})`, olumsuz: r.hizDurum === "alti" || r.dogruluk < 90, metin: `${r.m.sinif}. sınıf metni: ${r.ddk} DDK${r.hedef ? ` (aralık ${r.hedef[0]}–${r.hedef[1]})` : ""}, doğruluk %${String(r.dogruluk).replace(".", ",")}${r.anlama != null ? `, anlama %${r.anlama}` : ""}` }); } } catch (e) {}
   try { const k = son("bender"); if (k) { const r = benderHesapla(k.veri, k.tarih); if (r.durum) okuma.push({ ad: `Bender-Gestalt (${k.tarih})`, olumsuz: r.durum === "alti", metin: `hata puanı ${r.hata}${r.yuzdelik ? `, yüzdelik ${r.yuzdelik.metin}` : ""}${r.oog.length >= 3 ? `, ÖÖG açısından şüpheli ${r.oog.length} madde` : ""}` }); } } catch (e) {}
@@ -27640,6 +27754,7 @@ function ekTestRapor(k, tum) {
     if (k.tip === "bender") return benderRapor(v, k.tarih).metin; if (k.tip === "frostig") return frostigRapor(v, k.tarih).metin; if (k.tip === "gesell") return gesellRapor(v, k.tarih).metin;
     if (k.tip === "okuma_hizi") return ohRapor(v, k.tarih, null, k.id).metin;
     if (k.tip === "cattell") return cattellRapor(v, k.tarih).metin;
+    if (k.tip === "burdon") return burdonRapor(v).metin;
   } catch (e) {}
   return "";
 }
@@ -27648,6 +27763,7 @@ function ekTestOzet(k) {
   if (k.tip === "stroop_tbag") { const r = stroopHesapla(v); return `Süreler ${r.sure.map(ekYaz).join(" / ")} sn · bozucu etki (5−3) ${ekYaz(r.enterferans)} sn (${r.oranDuzey || "—"}) · ${r.toplamHata} hata, ${r.toplamDuz} düzeltme`; }
   if (k.tip === "metropolitan") { const r = metroHesapla(v); return `Okuma ${r.okuma ?? "—"}/66 ${r.okumaH ? r.okumaH.harf : ""} · Sayı ${r.sayi ?? "—"}/24 ${r.sayiH ? r.sayiH.harf : ""} · Genel ${r.genel ?? "—"}/100 ${r.genelH ? `${r.genelH.harf} (${r.genelH.ad})` : ""}`; }
   if (k.tip === "louisa_duss") { const r = dussHesapla(v); return `${r.yanitSay}/10 öykü yanıtlandı · ${r.sinyal.length} öyküde çatışma belirtisi${r.sinyal.length ? ": " + r.sinyal.map(x => x.o.ad).join(", ") : ""}`; }
+  if (k.tip === "burdon") return burdonOzet(v);
   if (k.tip === "frankfurter") { const r = frankHesapla(v, k.tarih); return r.son != null ? `Ham puan ${r.ham} · son değer ${r.son} (${r.duzey.ad}, ${r.duzey.yuzde})` : r.ham != null ? `Ham puan ${r.ham}` : "Puan girilmedi"; }
   if (k.tip === "cattell") { const r = cattellHesapla(v, k.tarih); return r.toplam != null ? `${r.form} · toplam ${r.toplam}/${r.maks}${r.iq && r.iq.iq ? ` · ZB ${r.iq.alt ? "≤" : r.iq.ust ? "≥" : ""}${r.iq.iq} (${r.sinif.ad})` : ""}` : "Puan girilmedi"; }
   if (k.tip === "porteus") { const r = porteusHesapla(v, k.tarih); return r.zy != null ? `Zekâ yaşı ${String(r.zy).replace(".", ",")}${r.iq && r.iq.iq ? ` · ZB ${r.iq.alt ? "≤" : r.iq.ust ? "≥" : ""}${r.iq.iq} (${r.sinif.ad})` : ""}` : "Kart sonucu girilmedi"; }
@@ -27665,6 +27781,7 @@ function ekTestGecerli(tip, ek) {
   if (tip === "louisa_duss") return (ek.yanit || []).some(x => String(x || "").trim());
   if (tip === "wisc_r") return [ek.sozel, ek.perf, ek.toplam, ...Object.values(ek.alt || {})].some(x => ekSayi(x) != null);
   if (tip === "frankfurter") return ekSayi(ek.armut) != null;
+  if (tip === "burdon") return (ek.g || []).some(x => ekSayi(x && x.d) != null);
   if (tip === "porteus") return Object.values(ek.d || {}).some(x => x);
   if (tip === "cattell") return (ek.giris === "madde" ? Object.values(ek.m || {}).some(f => (f || []).some(c => (c || []).some(x => x))) : false) || (ek.a || []).some(x => ekSayi(x) != null);
   if (tip === "bender") return Object.values(ek.h || {}).some(Boolean) || ekSayi(ek.elleHata) != null || ek.hataYok === true;
@@ -27691,6 +27808,7 @@ function EkTestFormu({ tip, ek, setEk, cinsiyet, yas, tarih, dogum, sinif, ogren
   const [acik, setAcik] = useState(-1); const [aiDurum, setAiDurum] = useState("");
   const [, setNormSurum] = useState(0); const [normDurum, setNormDurum] = useState("");
   useEffect(() => {
+    if (tip === "burdon") { if (!e.kademe) setEk({ ...e, kademe: oySinifNo(sinif) >= 9 ? "lise" : "ortaokul" }); return; }
     if (!["frankfurter", "porteus", "bender", "frostig", "gesell", "cattell"].includes(tip)) return;
     const ekle = {}; if (!e.cinsiyet && (cinsiyet === "Kız" || cinsiyet === "Erkek")) ekle.cinsiyet = cinsiyet; if (!e.dogum && !e.yasYil && dogum) ekle.dogum = dogum;
     if (Object.keys(ekle).length) setEk({ ...e, ...ekle });
@@ -27812,6 +27930,36 @@ function EkTestFormu({ tip, ek, setEk, cinsiyet, yas, tarih, dogum, sinif, ogren
       <input value={e.gozlem || ""} onChange={ev => setEk({ ...e, gozlem: ev.target.value })} style={inp} />
       {ekTestGecerli(tip, e) && ozetKart([["Doğru şekil", `${r.dogru.length}/${r.uygulanan.length}`], ["Yaşına göre eksik", r.yas ? r.eksik.length : "—", r.eksik.length ? "#B91C1C" : "#15803D"], ["En ileri şekil", r.enIleri ? r.enIleri.ad : "—"]])}
       {ekTestGecerli(tip, e) && <div data-ektest-sonuc="1" style={kutu}>{gesellRapor(e, tarih).metin}</div>}
+    </div>);
+  }
+  if (tip === "burdon") {
+    const r = burdonHesapla(e);
+    const gSet = (i, k, v) => { const g = [0, 1, 2].map(j => ({ ...((e.g || [])[j] || {}) })); g[i][k] = v; setEk({ ...e, g }); };
+    const btn = dolu => ({ padding: "6px 10px", borderRadius: 8, border: "1px solid #B45309", background: dolu ? "#B45309" : "#fff", color: dolu ? "#fff" : "#B45309", fontWeight: 800, fontSize: 11.5, cursor: "pointer" });
+    return (<div data-ektest="burdon">
+      <div style={{ fontSize: 11.5, color: MUTED, marginBottom: 6, lineHeight: 1.5 }}>Ortaokul 3 dk · lise 2 dk. Öğrenci 30 satırlık formda bütün a, b, d, g harflerinin altını çizer. Önce öğrenci formunu yazdırın; uygulamadan sonra puanlama anahtarıyla grup grup sayıp girin. Atlanan sayısı ve hata eğilimi kendiliğinden hesaplanır.</div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+        <button type="button" data-burdon-yazdir="ogrenci" onClick={() => burdonYazdir("ogrenci")} style={btn(true)}>🖨 Öğrenci formu</button>
+        <button type="button" data-burdon-yazdir="anahtar" onClick={() => burdonYazdir("anahtar")} style={btn(false)}>🖨 Puanlama anahtarı (yönerge + cevaplar)</button>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+        <div><label style={lbl}>Kademe / süre</label><select data-burdon-kademe="1" value={r.kademe} onChange={ev => setEk({ ...e, kademe: ev.target.value })} style={inp}><option value="ortaokul">Ortaokul (3 dakika)</option><option value="lise">Lise (2 dakika)</option></select></div>
+        <div><label style={lbl}>Süre bitince son taranan satır (1–30)</label><input data-burdon-son="1" type="number" min="1" max="30" value={e.sonSatir || ""} onChange={ev => setEk({ ...e, sonSatir: ev.target.value })} placeholder="boşsa 30 (hepsi)" style={inp} /></div>
+      </div>
+      <div style={{ marginTop: 6, border: `1px solid ${BORDER}`, borderRadius: 9, overflow: "hidden" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr 1fr", gap: 6, padding: "5px 8px", background: "#FFFBEB", fontSize: 10.5, fontWeight: 800, color: "#92400E" }}><div>Grup</div><div>Doğru çizilen</div><div>Yanlış çizilen</div></div>
+        {r.gruplar.map(x => (<div key={x.i} style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr 1fr", gap: 6, padding: "5px 8px", borderTop: `1px solid ${BORDER}`, alignItems: "center", opacity: x.satir ? 1 : 0.45 }}>
+          <div style={{ fontSize: 12 }}><b>{x.i + 1}. grup</b> <span style={{ color: MUTED, fontSize: 11 }}>({x.i * 10 + 1}–{x.i * 10 + 10}. satır){x.satir ? ` · hedef ${x.hedef}${x.satir < 10 ? ` (${x.satir} satır tarandı)` : ""}` : " · taranmadı"}</span></div>
+          <input data-burdon-d={x.i} type="number" min="0" disabled={!x.satir} value={((e.g || [])[x.i] || {}).d || ""} onChange={ev => gSet(x.i, "d", ev.target.value)} style={inp} />
+          <input data-burdon-y={x.i} type="number" min="0" disabled={!x.satir} value={((e.g || [])[x.i] || {}).y || ""} onChange={ev => gSet(x.i, "y", ev.target.value)} style={inp} />
+        </div>))}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 6 }}>
+        <div><label style={lbl}>Çalışma biçimi</label><select value={e.strateji || ""} onChange={ev => setEk({ ...e, strateji: ev.target.value })} style={inp}><option value="">—</option>{BURDON_STRATEJI.map(x => <option key={x}>{x}</option>)}</select></div>
+        <div><label style={lbl}>Davranış gözlemi</label><input value={e.gozlem || ""} onChange={ev => setEk({ ...e, gozlem: ev.target.value })} placeholder="örn. sık sık başını kaldırdı" style={inp} /></div>
+      </div>
+      {ekTestGecerli(tip, e) && <div data-burdon-ozet="1">{ozetKart([["Doğru", r.dogru == null ? "—" : `${r.dogru}/${r.hedef}`], ["Atlanan", r.atlanan ?? "—", r.atlanan ? "#B45309" : undefined], ["Yanlış", r.yanlis, r.yanlis >= 5 ? "#B91C1C" : undefined], ["Doğruluk", r.dogruluk == null ? "—" : "%" + r.dogruluk, r.duzey ? r.duzey.renk : undefined], ["Eğilim", r.oruntu ? r.oruntu.ad : "—", r.oruntu && r.oruntu.k !== "dengeli" ? "#B45309" : undefined]])}</div>}
+      {ekTestGecerli(tip, e) && <div data-ektest-sonuc="1" style={kutu}>{burdonRapor(e).metin}</div>}
     </div>);
   }
   if (tip === "frankfurter") {
@@ -27991,7 +28139,7 @@ function EkTestFormu({ tip, ek, setEk, cinsiyet, yas, tarih, dogum, sinif, ogren
 // ── Ek testler için yazdırılabilir (PDF) rapor ──
 function ekTestRaporHtml(k, bilgi, tum) {
   const v = (k && k.veri) || {}; const e = cdtEsc; const b = bilgi || {};
-  const RENK = { d2: "#6D28D9", stroop_tbag: "#B45309", metropolitan: "#0E7490", louisa_duss: "#7C3AED", wisc_r: "#1D4ED8", frankfurter: "#BE185D", porteus: "#4D7C0F", bender: "#0369A1", frostig: "#9333EA", gesell: "#C2410C", okuma_hizi: "#0E7490", cattell: "#1E40AF" }[k.tip] || "#334155";
+  const RENK = { d2: "#6D28D9", stroop_tbag: "#B45309", metropolitan: "#0E7490", louisa_duss: "#7C3AED", wisc_r: "#1D4ED8", frankfurter: "#BE185D", burdon: "#B45309", porteus: "#4D7C0F", bender: "#0369A1", frostig: "#9333EA", gesell: "#C2410C", okuma_hizi: "#0E7490", cattell: "#1E40AF" }[k.tip] || "#334155";
   const baslik = t => `<div style="background:${RENK};color:#fff;font-size:12.5px;font-weight:700;padding:6px 11px;border-radius:6px;margin:14px 0 7px;page-break-after:avoid">${t}</div>`;
   const th = t => `<th style="text-align:left;padding:5px 7px;background:#F8FAFC;color:#475569;font-size:10.5px;border-bottom:1px solid #E2E8F0">${t}</th>`;
   const td = (t, ek) => `<td style="padding:5px 7px;border-bottom:1px solid #EEF2F7;font-size:11px;${ek || ""}">${t}</td>`;
@@ -28015,6 +28163,10 @@ function ekTestRaporHtml(k, bilgi, tum) {
     const nm = { TN: n.tnPR != null ? `SS ${n.tnSS}, PR ${d2PrYaz(n.tnPR)}` : "", TN_E: n.tnePR != null ? `SS ${n.tneSS}, PR ${d2PrYaz(n.tnePR)}` : "", E_yuzde: n.eMetin || "", FR: n.frMetin || "" };
     olcum = tablo(["Puan", "Açıklama", "Ham", "Yaş normu"], D2_ALANLAR.filter(f => d[f.k]).map(f => [td(`<b>${f.ad}</b>`), td(e(f.ac), "color:#64748B"), td(`<b>${e(f.k === "E_yuzde" ? "%" + d[f.k] : d[f.k])}</b>`), td(e(nm[f.k] || ""))])) + (n.tablo ? `<div style="font-size:10.5px;color:#555;margin-top:4px">Norm: ${e(n.tablo)}${n.yas ? " · yaş " + e(n.yas) : ""}</div>` : "");
     const gs = d2GenelSonuc(v); if (gs) ust = `<div style="border:2px solid ${gs.renk};background:${gs.renk}12;color:${gs.renk};border-radius:8px;padding:8px 10px;font-weight:700;font-size:13px">Genel sonuç: ${e(gs.metin)}</div>` + d2GenelTabloHtml(v);
+  } else if (k.tip === "burdon") {
+    const r = burdonHesapla(v);
+    ust = `<div style="display:flex;gap:8px;flex-wrap:wrap">${[["Doğru çizilen", r.dogru == null ? "—" : r.dogru + "/" + r.hedef], ["Çizilmemiş", r.atlanan ?? "—"], ["Yanlış çizilen", r.yanlis], ["Doğruluk", r.dogruluk == null ? "—" : "%" + r.dogruluk + (r.duzey ? " · " + r.duzey.ad : "")], ["Hata eğilimi", r.oruntu ? r.oruntu.ad : "—"]].map(([a, z]) => `<div style="flex:1 1 110px;border:1px solid #E5E7EB;border-radius:8px;padding:7px;text-align:center"><div style="font-size:10px;color:#555">${a}</div><div style="font-size:15px;font-weight:700;color:${RENK}">${e(String(z))}</div></div>`).join("")}</div>`;
+    olcum = tablo(["Grup", "Taranan satır", "Hedef", "Doğru", "Atlanan", "Yanlış", "Başarı"], r.gruplar.filter(x => x.satir > 0).map(x => [td(`<b>${x.i + 1}. grup</b>`), td(`${x.i * 10 + 1}–${x.i * 10 + x.satir}`), td(x.hedef), td(`<b>${x.d ?? "—"}</b>`), td(x.atlanan ?? "—"), td(x.y), td(x.basari == null ? "—" : `<div style="background:#E2E8F0;border-radius:4px;height:8px;width:110px;display:inline-block;vertical-align:middle"><div style="background:${RENK};height:8px;border-radius:4px;width:${x.basari}%"></div></div> %${x.basari}`)])) + `<div style="font-size:10.5px;color:#555;margin-top:5px">Uygulama: ${r.kademe} · ${r.sure} dakika · taranan satır ${r.son}/30. Testin normu yoktur; düzey sınırları (doğruluk %90+ iyi, %75–89 orta, %75 altı düşük) programın yol gösterici ölçütüdür.</div>`;
   } else if (k.tip === "frankfurter") {
     const r = frankHesapla(v, k.tarih);
     ust = `<div style="display:flex;gap:8px;flex-wrap:wrap">${[["Ham puan", r.ham ?? "—"], ["Ek puan", r.ekPuan == null ? "—" : "+" + r.ekPuan], ["Son değer", r.son ?? "—"]].map(([a, z]) => `<div style="flex:1 1 120px;border:1px solid ${a === "Son değer" && r.duzey ? r.duzey.renk + "66" : "#E5E7EB"};border-radius:8px;padding:8px;text-align:center"><div style="font-size:22px;font-weight:700;color:${a === "Son değer" && r.duzey ? r.duzey.renk : "#334155"}">${e(z)}</div><div style="font-size:10.5px;color:#555">${a}${a === "Son değer" && r.duzey ? " · " + e(r.duzey.ad) + " (" + r.duzey.yuzde + ")" : ""}</div></div>`).join("")}</div>`;
@@ -28089,6 +28241,7 @@ const TEST_LISTESI = {
       genelEtiket: "Genel Gelişim Düzeyi" },
     { ad: "Porteus Labirentleri Testi", tip: "porteus" },
     { ad: "Frankfurter Dikkat Testi", tip: "frankfurter" },
+    { ad: "Burdon Dikkat Testi", tip: "burdon" },
     { ad: "Beck Depresyon Envanteri", tip: "toplam_duzey", maxPuan: 63,
       duzeyler: [{max:9,ad:"Normal"},{max:18,ad:"Hafif"},{max:29,ad:"Orta"},{max:63,ad:"Şiddetli"}] },
     { ad: "Çocuklar İçin Depresyon Ölçeği (CDI)", tip: "toplam_duzey_serbest" },
@@ -34699,6 +34852,7 @@ function pdrTestOlcumleri(k, sinifNo) {
       case "stroop_tbag": { const r = stroopHesapla(v); r.sure.forEach((x, i) => ekle(`${i + 1}. bölüm süresi`, x, "dusuk", " sn")); ekle("Bozucu etki (5−3)", r.enterferans, "dusuk", " sn"); ekle("Toplam hata", r.toplamHata, "dusuk"); break; }
       case "metropolitan": { const r = metroHesapla(v); METRO_ALT.forEach((x, i) => ekle(x.ad, r.a[i], "yuksek", "/" + x.maks)); ekle("Okuma olgunluğu", r.okuma, "yuksek", "/66"); ekle("Sayı olgunluğu", r.sayi, "yuksek", "/24"); ekle("Genel olgunluk", r.genel, "yuksek", "/100"); break; }
       case "wisc_r": { const r = wiscHesapla(v); ekle("Sözel ZB", r.sz, "yuksek"); ekle("Performans ZB", r.pf, "yuksek"); ekle("Toplam ZB", r.tp, "yuksek"); WISC_ALT.forEach(x => ekle(x.ad, r.p[x.k], "yuksek")); break; }
+      case "burdon": { const r = burdonHesapla(v); ekle("Doğru çizilen", r.dogru, "yuksek"); ekle("Çizilmemiş (atlanan)", r.atlanan, "dusuk"); ekle("Yanlış çizilen", r.dogru != null ? r.yanlis : null, "dusuk"); ekle("Doğruluk", r.dogruluk, "yuksek", "%"); break; }
       case "frankfurter": { const r = frankHesapla(v, k.tarih); ekle("Ham puan", r.ham, "yuksek"); ekle("Son değer", r.son, "yuksek"); ekle("İşaretlenen elma", r.armut != null ? r.elma : null, "dusuk"); break; }
       case "porteus": { const r = porteusHesapla(v, k.tarih); ekle("Zekâ yaşı", r.zy, "yuksek"); ekle("Zekâ bölümü", r.iq && r.iq.iq, "yuksek"); break; }
       case "cattell": { const r = cattellHesapla(v, k.tarih); r.alt.forEach(x => ekle(x.ad, x.ham, "yuksek", "/" + x.n)); ekle("Toplam ham puan", r.toplam, "yuksek", "/" + r.maks); ekle("Zekâ bölümü", r.iq && r.iq.iq, "yuksek"); break; }

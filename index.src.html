@@ -44147,24 +44147,6 @@ function OgrenciYonetim({
   const [gorunumModu, setGorunumModu] = useState("liste"); // liste | aylik
   const [acikAylar, setAcikAylar] = useState({});
 
-  async function handleOgrenciSil(studentName) {
-    const ad = studentName.toLocaleLowerCase("tr").trim();
-    const updOgr = ogrenciler.filter(o => o.studentName.toLocaleLowerCase("tr").trim() !== ad);
-    setOgrenciler(updOgr); await saveOgrenciler(updOgr);
-    const updRec = records.filter(r => r.studentName?.toLocaleLowerCase("tr").trim() !== ad);
-    setRecords(updRec); await saveRecords(updRec);
-    const updP1 = profiles.filter(p => p.studentName?.toLocaleLowerCase("tr").trim() !== ad);
-    setProfiles(updP1); await saveProfiles(updP1);
-    const updP2 = profiles2.filter(p => p.studentName?.toLocaleLowerCase("tr").trim() !== ad);
-    setProfiles2(updP2); await saveProfiles2(updP2);
-    const updDen = { ...denemeler };
-    Object.keys(updDen).forEach(k => { if (k.toLocaleLowerCase("tr").trim() === ad) delete updDen[k]; });
-    setDenemeler(updDen); await saveDenemeler(updDen);
-    const updRisk = riskListesi.filter(r => r.studentName?.toLocaleLowerCase("tr").trim() !== ad);
-    setRiskListesi(updRisk); await saveRiskListesi(updRisk);
-    if (setAktifOgrenci) setAktifOgrenci({ name: "", className: "" });
-    setSeciliOgrenci(null);
-  }
 
   // Öğrenci listesi — aktif yıla ve seçili okul kademesine göre filtrele (useMemo ile cache)
   const tumOgrenciler = useMemo(() =>

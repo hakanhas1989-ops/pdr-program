@@ -39266,6 +39266,13 @@ function LgsTarzRozeti({ q, onSayfaAc }) {
 }
 // Bir soru listesinde soru tarzlarının yüzdesi
 function lgsTarzDagilimi(l) { const c = {}; l.forEach(q => { if (q.tip) c[q.tip] = (c[q.tip] || 0) + 1; }); const n = l.filter(q => q.tip).length || 1; return Object.fromEntries(Object.entries(c).map(([k, v]) => [k, Math.round(100 * v / n)])); }
+// "%93'ü", "%97'si" gibi: yüzdeye Türkçe okunuşuna göre iyelik eki
+function trYuzdeEk(n) {
+  n = Math.round(Math.abs(+n || 0));
+  const bir = ["ı", "i", "si", "ü", "ü", "i", "sı", "si", "i", "u"], on = ["", "u", "si", "u", "ı", "si", "ı", "i", "i", "ı"];
+  const ek = n === 0 ? "ı" : n % 10 ? bir[n % 10] : n % 100 ? on[(n % 100) / 10] : n % 1000 ? "ü" : "i";
+  return `%${n}'${ek}`;
+}
 function lgsOrnekLgsYili(q) { return q.ay >= 9 ? q.yil + 1 : q.yil; }
 // Bir öğretim yılının örnek soruları ile o yılın LGS'si: konu isabeti (iki yönlü), zorluk, benzerlik
 function lgsOrnekYilOzeti(Y) {
@@ -39285,7 +39292,7 @@ function lgsOrnekYilOzeti(Y) {
 function lgsOrnekYillari() { return [...new Set(lgsSorular().filter(q => q.kaynak === "ornek").map(lgsOrnekLgsYili))].sort((a, b) => b - a); }
 function lgsOrnekOzetMetni() {
   const yl = lgsOrnekYillari(); if (!yl.length) return "";
-  return "MEB ÖRNEK SORULARI (öğretim yılı → o yılın LGS'si): " + yl.map(Y => { const s = lgsOrnekYilOzeti(Y); return `${Y - 1}-${Y} (${s.ay.join("/")}, ${s.n} soru): LGS'ye genel benzerlik %${s.benzerlik}, tarz benzerliği %${s.tarz}, en sık tarzlar ${s.tarzlar.map(t => `${LGS_SORU_TIP_AD[t.tip] || t.tip} %${t.ornek}${t.lgs != null ? ` (LGS %${t.lgs})` : ""}`).join(", ")}, zor+çok zor %${s.zorOran}${s.zorOranLgs != null ? ` (${Y} LGS'de %${s.zorOranLgs})` : ""}${s.isabet != null ? `; örnek soru konularının o yılın LGS'sinde de çıkma oranı %${s.isabet}, LGS sorularının örnek sorulardaki konulardan gelme oranı %${s.kapsama}` : ""}`; }).join(" | ") + ". (2023 LGS yalnız 1. dönem konularını kapsar.)";
+  return "MEB ÖRNEK SORULARI (öğretim yılı → o yılın LGS'si): " + yl.map(Y => { const s = lgsOrnekYilOzeti(Y); return `${Y - 1}-${Y} (${s.ay.join("/")}, ${s.n} soru): LGS'ye genel benzerlik %${s.benzerlik}, tarz benzerliği %${s.tarz}, en sık tarzlar ${s.tarzlar.map(t => `${LGS_SORU_TIP_AD[t.tip] || t.tip} %${t.ornek}${t.lgs != null ? ` (LGS %${t.lgs})` : ""}`).join(", ")}, zor+çok zor %${s.zorOran}${s.zorOranLgs != null ? ` (${Y} LGS'de %${s.zorOranLgs})` : ""}${s.isabet != null ? `; örneklerdeki konuların ${trYuzdeEk(s.isabet)} o yılın LGS'sinde çıktı, LGS sorularının ${trYuzdeEk(s.kapsama)} örneklerdeki konulardan geldi` : ""}`; }).join(" | ") + ". (2023 LGS yalnız 1. dönem konularını kapsar.)";
 }
 function LgsOrnekListesi({ onSayfaAc }) {
   const [acik, setAcik] = useState(null), [acikYil, setAcikYil] = useState(null), yillar = useMemo(() => lgsOrnekYillari(), []);
@@ -39299,7 +39306,7 @@ function LgsOrnekListesi({ onSayfaAc }) {
         <div style={{ fontSize: 11, lineHeight: 1.5, marginTop: 2 }}>
           Genel benzerlik <b>%{s.benzerlik}</b> · <b style={{ color: "#7C3AED" }}>tarz benzerliği %{s.tarz}</b> · zorluk<LgsZorlukCubuk z={s.z} sayi={s.n} /> <span style={{ color: MUTED }}>zor+çok zor %{s.zorOran}</span>
           {s.ln > 0 && <span style={{ color: MUTED }}> ({Y} LGS<LgsZorlukCubuk z={s.zl} sayi={s.ln} /> %{s.zorOranLgs})</span>}
-          {s.isabet != null && <div data-ornek-isabet={Y}>🎯 Örnek soru konularının {Y} LGS'de de çıkma oranı: <b>%{s.isabet}</b> · {Y} LGS sorularının örnek sorulardaki konulardan gelme oranı: <b>%{s.kapsama}</b>{Y === 2023 ? <span style={{ color: MUTED }}> (2023 LGS yalnız 1. dönem konularını kapsar.)</span> : null}</div>}
+          {s.isabet != null && <div data-ornek-isabet={Y}>🎯 Örneklerdeki konuların <b>{trYuzdeEk(s.isabet)}</b> {Y} LGS'de çıktı · {Y} LGS sorularının <b>{trYuzdeEk(s.kapsama)}</b> örneklerdeki konulardan geldi.{Y === 2023 ? <span style={{ color: MUTED }}> (2023 LGS yalnız 1. dönem konularını kapsar.)</span> : null}</div>}
           <div data-ornek-tarz={Y} style={{ color: "#5B21B6" }}>🎭 En sık soru tarzları: {s.tarzlar.map(t => `${LGS_SORU_TIP_AD[t.tip] || t.tip} %${t.ornek}${t.lgs != null ? ` (LGS %${t.lgs})` : ""}`).join(" · ")}</div>
           {s.ln === 0 && <div style={{ color: MUTED }}>{Y} LGS soruları eklendiğinde konu isabeti burada görünür.</div>}
         </div>

@@ -14717,6 +14717,11 @@ function pdrAltKonuBul(konu, v) {
 }
 // Görüşme notunda adı geçen (katılımcı listesinde olmayan) kayıtlı öğrenciler. Ad büyük harfle yazılmış olmalı.
 // Yalnız ad geçiyorsa (soyadsız) ana öğrencinin sınıfında tek eşleşme aranır; tam ad (ad + soyadın görünen kısmı) her sınıfta.
+// Notta grup görüşmesi ifadesi var mı ("her iki öğrenci", "ikisi de", "öğrencilerle", "grup görüşmesi"…).
+// Model ikinci öğrenciyi eklemeyi unutup notu adsız yazarsa ad taraması yakalayamaz; bu ifade varsa önce danışmana sorulur.
+function pdrGrupIfadesiVar(metin) {
+  return /(her iki (ogrenci|ogrenciy|ogrencin|ogrencid)\w*|her ikis\w*|ikisi de|ikisiyle|ikisinin|ikisine|ucu de|uc ogrenci\w*|dort ogrenci\w*|ogrencilerle|ogrencilerin (ikisi|hepsi)|ogrenciler (birlikte|beraber|geldi|gelmis)\w*|grup (gorusme|olarak|halinde|calisma)\w*|birlikte geldi\w*|beraber geldi\w*)/.test(ksSade(metin || ""));
+}
 function pdrNottakiOgrenciler(metin, liste, haric) {
   const sinifAnahtar = (c) => { const m = /(\d{1,2})\D*([\p{L}])/u.exec(String(c || "")); return m ? m[1] + ksSade(m[2]) : ""; };
   // Cümle cümle: büyük harfle yazılmış sözcükler + o cümlede geçen sınıflar ("8-D", "8D", "8/D", "8. D", "8-D'den")
@@ -15933,13 +15938,14 @@ const KS_ASISTAN_ARACLAR = {
     } },
   // ── Kayıt oluşturan araçlar (danışman onayı gerekir) ──
   gorusme_kaydet: {
-    aciklama: "Danışmanın anlattığı görüşmeyi kaydeder (ONAY GEREKİR). tur: Öğrenci | Veli | Öğretmen. tarih GG.AA.YYYY (boşsa bugün). Grup görüşmesinde diğer öğrencileri 'diger_ogrenciler' listesine yaz. Notta başka kayıtlı öğrencilerin adı geçiyorsa ve görüşmeye katılıp katılmadıkları belli değilse önce danışmana sor. Her öğrencinin alt konusu farklı olabilir (ör. mağdur 'Zorbalığa Maruz Kalma', uygulayanlar 'Zorbalık Uygulama'): ana öğrenci alt_konu, diğerleri diger_ogrenciler[].alt_konu; belli değilse sor.", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "diger_ogrenciler": [{"ogrenci": "ad", "sinif": "8-H", "alt_konu": "isteğe bağlı"}], "alt_konu": "isteğe bağlı", "konu": "kısa konu", "ozet": "görüşme özeti", "tarih": "GG.AA.YYYY", "tur": "Öğrenci", "iyi_olus": "isteğe bağlı 0-10", "seans_uyumu": "isteğe bağlı 0-10"}', ogrenciIster: true, yazma: true,
+    aciklama: "Danışmanın anlattığı görüşmeyi kaydeder (ONAY GEREKİR). tur: Öğrenci | Veli | Öğretmen. tarih GG.AA.YYYY (boşsa bugün). Grup görüşmesinde diğer öğrencileri 'diger_ogrenciler' listesine yaz. Notta başka kayıtlı öğrencilerin adı geçiyorsa ve görüşmeye katılıp katılmadıkları belli değilse önce danışmana sor. Her öğrencinin alt konusu farklı olabilir (ör. mağdur 'Zorbalığa Maruz Kalma', uygulayanlar 'Zorbalık Uygulama'): ana öğrenci alt_konu, diğerleri diger_ogrenciler[].alt_konu; belli değilse sor.", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "diger_ogrenciler": [{"ogrenci": "ad", "sinif": "8-H", "alt_konu": "isteğe bağlı"}], "grup_yok": "isteğe bağlı true", "alt_konu": "isteğe bağlı", "konu": "kısa konu", "ozet": "görüşme özeti", "tarih": "GG.AA.YYYY", "tur": "Öğrenci", "iyi_olus": "isteğe bağlı 0-10", "seans_uyumu": "isteğe bağlı 0-10"}', ogrenciIster: true, yazma: true,
     onayOzeti: (g, ctx, o) => { const d = ksAsistanDigerleriBul(ctx, g, o); const konu = pdrKonuBul(g.konu); const alt = (k, v) => { const a = pdrAltKonuBul(konu, v); return a ? " — " + a : ""; };
       const anilan = (g.tur || "Öğrenci") === "Öğrenci" ? pdrNottakiOgrenciler(g.ozet, ctx.ogrenciListesi || [], [o, ...(d.liste || [])]) : [];
-      return `📝 Görüşme kaydı${d.liste && d.liste.length ? " (grup)" : ""}\nÖğrenci: ${[ksAsistanEtiket(o) + alt(o, g.alt_konu), ...(d.liste || []).map(x => ksAsistanEtiket(x) + alt(x, x.altKonu))].join(", ")}${d.hata ? "\n⚠ " + d.hata : ""}${anilan.length ? "\n⚠ Notta geçen ama gruba eklenmeyen: " + anilan.map(ksAsistanEtiket).join(", ") + " (görüşmeye katıldılarsa Reddet de, asistana ekle)" : ""}\nTarih: ${ksAsistanTarihNormal(g.tarih) || today()} · Tür: ${g.tur || "Öğrenci"}${g.konu ? " · Konu: " + g.konu : ""}\nÖzet: ${g.ozet || "—"}`; },
+      return `📝 Görüşme kaydı${d.liste && d.liste.length ? " (grup)" : ""}\nÖğrenci: ${[ksAsistanEtiket(o) + alt(o, g.alt_konu), ...(d.liste || []).map(x => ksAsistanEtiket(x) + alt(x, x.altKonu))].join(", ")}${d.hata ? "\n⚠ " + d.hata : ""}${!anilan.length && !(d.liste || []).length && (g.tur || "Öğrenci") === "Öğrenci" && pdrGrupIfadesiVar(g.ozet) ? "\n⚠ Notta grup görüşmesi ifadesi var ama yalnız bir öğrenci eklendi" : ""}${anilan.length ? "\n⚠ Notta geçen ama gruba eklenmeyen: " + anilan.map(ksAsistanEtiket).join(", ") + " (görüşmeye katıldılarsa Reddet de, asistana ekle)" : ""}\nTarih: ${ksAsistanTarihNormal(g.tarih) || today()} · Tür: ${g.tur || "Öğrenci"}${g.konu ? " · Konu: " + g.konu : ""}\nÖzet: ${g.ozet || "—"}`; },
     calistir: async (g, ctx, o) => {
       if (!String(g.ozet || "").trim()) return "Özet boş olduğu için kaydedilmedi.";
       const dg = ksAsistanDigerleriBul(ctx, g, o); if (dg.hata) return dg.hata + " Kayıt yapılmadı.";
+      if ((g.tur || "Öğrenci") === "Öğrenci" && !dg.liste.length && g.grup_yok !== true && String(g.grup_yok) !== "true" && pdrGrupIfadesiVar(g.ozet) && !pdrNottakiOgrenciler(g.ozet, ctx.ogrenciListesi || [], [o]).length) return `Kayıt yapılmadı. Notta grup görüşmesi ifadesi var ("her iki öğrenci", "ikisi de" gibi) ama yalnız ${ksAsistanEtiket(o)} eklendi. Danışmana sor: görüşmeye başka hangi öğrenciler katıldı (ad ve sınıf), her birinin alt konusu ne olsun? Cevaba göre diger_ogrenciler ile ya da grup değilse grup_yok: true ile tekrar çağır.`;
       const yeni = { id: uid(), date: ksAsistanTarihNormal(g.tarih) || today(), saat: new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }),
         meetingType: ["Öğrenci", "Veli", "Öğretmen"].includes(g.tur) ? g.tur : "Öğrenci", topic: pdrKonuBul(g.konu) || g.konu || "", altKonu: pdrAltKonuBul(pdrKonuBul(g.konu), g.alt_konu), raw: g.ozet, summary: g.ozet,
         studentName: o.name, className: o.className, numara: o.numara || "", kaynak: "asistan" };
@@ -16346,6 +16352,7 @@ const KS_ASISTAN_ARACLAR = {
       // Notta adı geçen başka kayıtlı öğrenciler varsa (ve danışman "grup değil" dememişse) önce sorulsun
       if ((g.tur || "Öğrenci") === "Öğrenci" && g.grup_yok !== true && String(g.grup_yok) !== "true") {
         const anilan = pdrNottakiOgrenciler(g.ozet, ctx.ogrenciListesi || [], [o, ...d.liste]);
+        if (!anilan.length && !d.liste.length && pdrGrupIfadesiVar(g.ozet)) return `Form doldurulmadı. Notta grup görüşmesi ifadesi var ("her iki öğrenci", "ikisi de" gibi) ama yalnız ${ksAsistanEtiket(o)} eklendi. Danışmana sor: görüşmeye başka hangi öğrenciler katıldı (ad ve sınıf), her birinin alt konusu ne olsun? Cevaba göre diger_ogrenciler ile ya da grup değilse grup_yok: true ile tekrar çağır.`;
         if (anilan.length) return `Form doldurulmadı. Notta başka kayıtlı öğrenciler geçiyor: ${anilan.map(ksAsistanEtiket).join(", ")}. Danışmana sor: bu öğrenciler görüşmeye katıldı mı, grup görüşmesi olarak eklensinler mi; eklenecekse her birinin alt konusu ne olsun (ör. Zorbalık Uygulama)? Cevaba göre diger_ogrenciler (alt_konu ile) ya da grup_yok: true ile tekrar çağır.`;
       }
       return ksEkranGorusme(o, { ...g, __digerler: d.liste });
@@ -39978,6 +39985,12 @@ function NetHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, netH
   const seciliNumara = seciliOgr?.numara || aktifOgrenci?.numara || "";
 
   const ogrKayitlar = (netHaritasiKayitlari||[]).filter(k => pdrAyniOgrenci(k.studentName, k.className, seciliAd, seciliSinif, k.numara, seciliNumara)).sort((a,b) => pdrTarihMs(b.tarih) - pdrTarihMs(a.tarih));
+  // Kaydedilmiş son Yanlış Analizi: AI'a her seferinde yeniden sorulmasın diye öğrencinin bir deneme kaydında saklanır
+  // (yanlisAnalizi alanı). Ayrı bir veri türü açılmadı: kayıtla birlikte yedeklenir, eşitlenir, şifrelenir ve silinir.
+  const kayitliAnaliz = ogrKayitlar.reduce((en, k) => (k.yanlisAnalizi && k.yanlisAnalizi.metin && (!en || (k.yanlisAnalizi.ms || 0) > (en.ms || 0))) ? k.yanlisAnalizi : en, null);
+  const yeniBelgeSayisi = kayitliAnaliz ? Math.max(0, ogrKayitlar.length - (kayitliAnaliz.belgeSayisi || 0)) : 0;
+  const gosterilenAnaliz = tekrarListesi || (kayitliAnaliz ? kayitliAnaliz.metin : null);
+  useEffect(() => { setTekrarListesi(null); }, [seciliAd, seciliSinif, seciliNumara]);
 
   // Öğrencinin tüm denemelerindeki hata türü işaretlemelerini tek bir tabloya
   // toplar: ders → hata türü → (her deneme için sayı) + toplam. Hiç işaretleme
@@ -40189,7 +40202,16 @@ Sade, somut, öğretmenin doğrudan kullanabileceği şekilde yaz. Markdown kull
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      setTekrarListesi(data.content?.[0]?.text || "");
+      const metin = data.content?.[0]?.text || "";
+      setTekrarListesi(metin);
+      if (metin.trim() && ogrKayitlar[0]) {
+        // En yeni deneme kaydına yazılır; aynı öğrencinin eski analizleri kaldırılır (tek, güncel analiz kalır)
+        const hedefId = ogrKayitlar[0].id, idler = new Set(ogrKayitlar.map(k => k.id));
+        const analiz = { metin, tarih: today(), ms: Date.now(), belgeSayisi: ogrKayitlar.length };
+        const guncel = (netHaritasiKayitlari || []).map(k => k.id === hedefId ? { ...k, yanlisAnalizi: analiz } : (idler.has(k.id) && k.yanlisAnalizi ? (({ yanlisAnalizi, ...r }) => r)(k) : k));
+        setNetHaritasiKayitlari(guncel);
+        await saveNetHaritasi(guncel);
+      }
     } catch (e) {
       alert("Analiz oluşturulamadı: " + e.message);
     }
@@ -40235,10 +40257,10 @@ Sade, somut, öğretmenin doğrudan kullanabileceği şekilde yaz. Markdown kull
         ${zayifKonular.map(x => `<tr style="font-size:10px; border-top:1px solid #F0F0F0; ${x.kezYanlis >= 2 ? 'color:#C0392B;' : ''}"><td style="padding:5px 8px;">${esc(x.ders)}</td><td style="padding:5px 8px;">${esc(x.kazanim)}</td><td style="padding:5px 8px; font-weight:700;">${x.kezYanlis}/${x.kezToplam}</td><td style="padding:5px 8px;">%${esc(x.sonBasari)} (${esc(x.sonTarih)})</td></tr>`).join("")}
       </table>`;
 
-    const analizBolumu = tekrarListesi ? `
+    const analizBolumu = gosterilenAnaliz ? `
       <div style="margin-top:20px;">
         <div style="font-weight:700; font-size:12px; background:#6D5BD0; color:#fff; padding:6px 10px; border-radius:6px 6px 0 0;">🔍 Yanlış Analizi ve Tekrar Listesi</div>
-        <div style="border:1px solid #E5D6FA; border-top:none; padding:12px; font-size:11px; white-space:pre-wrap; line-height:1.6;">${esc(tekrarListesi)}</div>
+        <div style="border:1px solid #E5D6FA; border-top:none; padding:12px; font-size:11px; white-space:pre-wrap; line-height:1.6;">${esc(gosterilenAnaliz)}</div>
       </div>` : "";
 
     const html = `
@@ -40361,15 +40383,20 @@ Sade, somut, öğretmenin doğrudan kullanabileceği şekilde yaz. Markdown kull
       {/* Yanlış Analizi + Kişiselleştirilmiş Tekrar Listesi */}
       {seciliAd && ogrKayitlar.length > 0 && !taslak && (
         <div style={{ marginBottom:20 }}>
-          <button onClick={handleTekrarListesi} disabled={tekrarYukleniyor} style={{
-            width:"100%", padding:12, background: tekrarYukleniyor ? BORDER : PURPLE, color: tekrarYukleniyor ? MUTED : "#fff",
-            border:"none", borderRadius:12, fontSize:14, fontWeight:800, cursor: tekrarYukleniyor ? "default" : "pointer", marginBottom:10
+          {kayitliAnaliz && !tekrarYukleniyor && (
+            <div data-yanlis-analiz-kayitli="1" style={{ fontSize:12, color: yeniBelgeSayisi ? "#B45309" : MUTED, marginBottom:6, lineHeight:1.45 }}>
+              💾 Kayıtlı analiz: {kayitliAnaliz.tarih} · {kayitliAnaliz.belgeSayisi} belgeden{yeniBelgeSayisi ? ` — sonrasında ${yeniBelgeSayisi} yeni deneme eklendi; güncel analiz için yeniden yapabilirsiniz.` : " — yeni deneme eklenmedi, yeniden yapmanıza gerek yok."}
+            </div>
+          )}
+          <button data-yanlis-analiz-btn="1" onClick={() => { if (kayitliAnaliz && !yeniBelgeSayisi && !window.confirm("Bu öğrencinin kayıtlı bir analizi var ve sonrasında yeni deneme eklenmedi. Yine de AI ile yeniden analiz edilsin mi? (ücretli)")) return; handleTekrarListesi(); }} disabled={tekrarYukleniyor} style={{
+            width:"100%", padding:12, background: tekrarYukleniyor ? BORDER : (kayitliAnaliz ? "#fff" : PURPLE), color: tekrarYukleniyor ? MUTED : (kayitliAnaliz ? PURPLE : "#fff"),
+            border: kayitliAnaliz && !tekrarYukleniyor ? `2px solid ${PURPLE}` : "none", borderRadius:12, fontSize:14, fontWeight:800, cursor: tekrarYukleniyor ? "default" : "pointer", marginBottom:10
           }}>
-            {tekrarYukleniyor ? "⏳ Analiz ediliyor…" : `🔍 Yanlış Analizi Yap (${ogrKayitlar.length} belgeden)`}
+            {tekrarYukleniyor ? "⏳ Analiz ediliyor…" : kayitliAnaliz ? `🔄 Yeniden Analiz Et (${ogrKayitlar.length} belgeden)` : `🔍 Yanlış Analizi Yap (${ogrKayitlar.length} belgeden)`}
           </button>
-          {tekrarListesi && (
-            <div style={{ background:PURPLE_LIGHT, border:`1px solid ${PURPLE}`, borderRadius:12, padding:14, whiteSpace:"pre-wrap", fontSize:13, lineHeight:1.6, color:TEXT, marginBottom:10 }}>
-              {tekrarListesi}
+          {gosterilenAnaliz && (
+            <div data-yanlis-analiz-metin="1" style={{ background:PURPLE_LIGHT, border:`1px solid ${PURPLE}`, borderRadius:12, padding:14, whiteSpace:"pre-wrap", fontSize:13, lineHeight:1.6, color:TEXT, marginBottom:10 }}>
+              {gosterilenAnaliz}
             </div>
           )}
           <button onClick={handleRaporIndir} style={{

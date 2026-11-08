@@ -39990,6 +39990,9 @@ function NetHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, netH
   const kayitliAnaliz = ogrKayitlar.reduce((en, k) => (k.yanlisAnalizi && k.yanlisAnalizi.metin && (!en || (k.yanlisAnalizi.ms || 0) > (en.ms || 0))) ? k.yanlisAnalizi : en, null);
   const yeniBelgeSayisi = kayitliAnaliz ? Math.max(0, ogrKayitlar.length - (kayitliAnaliz.belgeSayisi || 0)) : 0;
   const gosterilenAnaliz = tekrarListesi || (kayitliAnaliz ? kayitliAnaliz.metin : null);
+  // Analiz geçmişi: en yeniden eskiye (en yenisi yukarıda zaten gösteriliyor, listede öncekiler var)
+  const analizGecmisi = ogrKayitlar.map(k => k.yanlisAnalizi).filter(a => a && a.metin).sort((a, b) => (b.ms || 0) - (a.ms || 0));
+  const [acikGecmis, setAcikGecmis] = useState(null);
   useEffect(() => { setTekrarListesi(null); }, [seciliAd, seciliSinif, seciliNumara]);
 
   // Öğrencinin tüm denemelerindeki hata türü işaretlemelerini tek bir tabloya
@@ -40205,10 +40208,12 @@ Sade, somut, öğretmenin doğrudan kullanabileceği şekilde yaz. Markdown kull
       const metin = data.content?.[0]?.text || "";
       setTekrarListesi(metin);
       if (metin.trim() && ogrKayitlar[0]) {
-        // En yeni deneme kaydına yazılır; aynı öğrencinin eski analizleri kaldırılır (tek, güncel analiz kalır)
-        const hedefId = ogrKayitlar[0].id, idler = new Set(ogrKayitlar.map(k => k.id));
-        const analiz = { metin, tarih: today(), ms: Date.now(), belgeSayisi: ogrKayitlar.length };
-        const guncel = (netHaritasiKayitlari || []).map(k => k.id === hedefId ? { ...k, yanlisAnalizi: analiz } : (idler.has(k.id) && k.yanlisAnalizi ? (({ yanlisAnalizi, ...r }) => r)(k) : k));
+        // O anki en yeni deneme kaydına yazılır. Önceki analizler (daha eski denemelerin kaydında) SİLİNMEZ: analiz geçmişi
+        // tutulur, böylece hangi konunun düzeldiği/sürdüğü zaman içinde izlenebilir. Yalnızca yeni deneme eklenmeden yapılan
+        // yeniden analiz aynı kaydın üzerine yazar.
+        const hedefId = ogrKayitlar[0].id;
+        const analiz = { metin, tarih: today(), ms: Date.now(), belgeSayisi: ogrKayitlar.length, sonDeneme: ogrKayitlar[0].denemeAdi || ogrKayitlar[0].tarih || "" };
+        const guncel = (netHaritasiKayitlari || []).map(k => k.id === hedefId ? { ...k, yanlisAnalizi: analiz } : k);
         setNetHaritasiKayitlari(guncel);
         await saveNetHaritasi(guncel);
       }
@@ -40394,6 +40399,19 @@ Sade, somut, öğretmenin doğrudan kullanabileceği şekilde yaz. Markdown kull
           }}>
             {tekrarYukleniyor ? "⏳ Analiz ediliyor…" : kayitliAnaliz ? `🔄 Yeniden Analiz Et (${ogrKayitlar.length} belgeden)` : `🔍 Yanlış Analizi Yap (${ogrKayitlar.length} belgeden)`}
           </button>
+          {analizGecmisi.length > 1 && (
+            <div data-yanlis-analiz-gecmis="1" style={{ background:"#fff", border:`1px solid ${BORDER}`, borderRadius:12, padding:"8px 10px", marginBottom:10 }}>
+              <div style={{ fontSize:12, fontWeight:800, color:PURPLE, marginBottom:4 }}>🗂 Önceki analizler ({analizGecmisi.length - 1}) — zaman içinde neyin düzeldiğini karşılaştırın</div>
+              {analizGecmisi.slice(1).map(a => (
+                <div key={a.ms} style={{ borderTop:`1px solid ${BORDER}`, padding:"5px 0" }}>
+                  <button onClick={() => setAcikGecmis(acikGecmis === a.ms ? null : a.ms)} style={{ background:"none", border:"none", padding:0, cursor:"pointer", fontSize:12, color:TEXT, fontWeight:700, textAlign:"left", width:"100%" }}>
+                    {acikGecmis === a.ms ? "▲" : "▼"} {a.tarih} · {a.belgeSayisi} belgeden{a.sonDeneme ? ` (son: ${a.sonDeneme})` : ""}
+                  </button>
+                  {acikGecmis === a.ms && <div style={{ whiteSpace:"pre-wrap", fontSize:12, lineHeight:1.55, color:TEXT, marginTop:5, background:"#FAF8FF", borderRadius:8, padding:8 }}>{a.metin}</div>}
+                </div>
+              ))}
+            </div>
+          )}
           {gosterilenAnaliz && (
             <div data-yanlis-analiz-metin="1" style={{ background:PURPLE_LIGHT, border:`1px solid ${PURPLE}`, borderRadius:12, padding:14, whiteSpace:"pre-wrap", fontSize:13, lineHeight:1.6, color:TEXT, marginBottom:10 }}>
               {gosterilenAnaliz}

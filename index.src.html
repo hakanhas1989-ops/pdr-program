@@ -1624,6 +1624,8 @@ function pdrKalkanDosyaSor(adet, imzalar) {
   try {
     window.__pdrKalkanDosyaOnay = window.__pdrKalkanDosyaOnay || new Set();
     if (imzalar.length && imzalar.every(i => window.__pdrKalkanDosyaOnay.has(i))) return true;
+    // Uygulama içinde açıkça onaylanmış tek gönderim (ör. Çözüm yolu "Gönder" düğmesi): bir kez kullanılır
+    if (window.__pdrKalkanDosyaTekOnay) { window.__pdrKalkanDosyaTekOnay = false; imzalar.forEach(i => window.__pdrKalkanDosyaOnay.add(i)); return true; }
     const tamam = window.confirm(`📎 Bu işlemde ${adet} fotoğraf/PDF yapay zekâya gidecek.\n\nGizlilik kalkanı fotoğrafın ya da PDF'in İÇİNDEKİ yazıları göremez. Kâğıtta öğrenci adı, numarası, T.C. no ya da imza görünüyorsa göndermeden önce kapat veya kırp.\n\nGönderilsin mi?`);
     if (tamam) imzalar.forEach(i => window.__pdrKalkanDosyaOnay.add(i));
     return !!tamam;
@@ -4591,19 +4593,32 @@ function KitapSayfaGosterici({ kitap, kitapAd, sayfa, aralik, ofset = 0, onKapat
       setOzel(null); setUyari(""); setDegisDurum("✓ PDF değiştirildi."); setOlcek(x => x + 0.0001); } catch (e) { setDegisDurum("Değiştirilemedi: " + ((e && e.message) || e)); } }
   const [disAcik, setDisAcik] = useState(false), [disYanit, setDisYanit] = useState(""), [disDurum, setDisDurum] = useState(""), [yontem, setYontem] = useState(pdrCozumYontemOku());
   function disHazirla() { const c = kanvas.current; c.__vpW = sfRef.current.vp.width; return { resim: pdrSoruResmi(c, cozum.bolge, 1600), istem: pdrCozumDisIstem(soru, cozum.metin) }; }
-  async function disPaylas() { try { const { resim, istem } = disHazirla(); const bl = await (await fetch("data:image/jpeg;base64," + resim)).blob(), dosya = new File([bl], `soru_${String(kitap).replace(/[^a-z0-9]/gi, "")}_${soru.ders.normalize("NFD").replace(/[^A-Za-z]/g, "").slice(0, 8)}_${soru.no}.jpg`, { type: "image/jpeg" });
-      try { await navigator.clipboard.writeText(istem); } catch (e) {}
-      if (navigator.canShare && navigator.canShare({ files: [dosya] })) { await navigator.share({ files: [dosya], text: istem }); setDisDurum("Paylaşıldı. İstem panoya da kopyalandı; uygulamada görselin yanına yapıştırın."); }
-      else { const a = document.createElement("a"); a.href = URL.createObjectURL(bl); a.download = dosya.name; document.body.appendChild(a); a.click(); a.remove(); setDisDurum("Görsel indirildi, istem panoya kopyalandı. Uygulamada görseli ekleyip istemi yapıştırın."); } }
+  // Panoya kopyalama telefonda yalnız dokunuşun hemen ardından izinli; bu yüzden hiçbir "await"ten önce çağrılır.
+  // Clipboard API yoksa/izin vermezse eski execCommand yöntemi denenir; o da olmazsa istem ekranda seçilebilir gösterilir.
+  function panoyaYaz(metin) {
+    let ok = false;
+    try { const t = document.createElement("textarea"); t.value = metin; t.setAttribute("readonly", ""); t.style.cssText = "position:fixed;top:0;left:0;opacity:0;"; document.body.appendChild(t); t.select(); t.setSelectionRange(0, metin.length); ok = document.execCommand("copy"); t.remove(); } catch (e) {}
+    const api = navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(metin).then(() => true, () => ok) : Promise.resolve(ok);
+    return api;
+  }
+  const [disIstem, setDisIstem] = useState("");
+  async function disPaylas() { try { const { resim, istem } = disHazirla(); const kopya = panoyaYaz(istem); setDisIstem(istem);
+      const ham = atob(resim), dz = new Uint8Array(ham.length); for (let i = 0; i < ham.length; i++) dz[i] = ham.charCodeAt(i);
+      const bl = new Blob([dz], { type: "image/jpeg" }), dosya = new File([bl], `soru_${String(kitap).replace(/[^a-z0-9]/gi, "")}_${soru.ders.normalize("NFD").replace(/[^A-Za-z]/g, "").slice(0, 8)}_${soru.no}.jpg`, { type: "image/jpeg" });
+      const kopyalandi = await kopya, pano = kopyalandi ? "İstem panoya kopyalandı" : "İstem panoya kopyalanamadı (aşağıdan kopyalayın)";
+      if (navigator.canShare && navigator.canShare({ files: [dosya] })) { await navigator.share({ files: [dosya], text: istem }); setDisDurum(`Paylaşıldı. ${pano}. Bazı uygulamalar (Gemini gibi) görselle gelen yazıyı almaz: görseli ekledikten sonra yazı alanına basılı tutup "Yapıştır" deyin.`); }
+      else { const a = document.createElement("a"); a.href = URL.createObjectURL(bl); a.download = dosya.name; document.body.appendChild(a); a.click(); a.remove(); setDisDurum(`Görsel indirildi. ${pano}. Uygulamada görseli ekleyip istemi yapıştırın.`); } }
     catch (e) { if (!(e && e.name === "AbortError")) setDisDurum("Paylaşılamadı: " + ((e && e.message) || e)); } }
-  async function disKopyala() { try { await navigator.clipboard.writeText(disHazirla().istem); setDisDurum("İstem panoya kopyalandı."); } catch (e) { setDisDurum("Kopyalanamadı; tarayıcı izin vermedi."); } }
+  async function disKopyala() { try { const istem = disHazirla().istem; const k = panoyaYaz(istem); setDisIstem(istem); setDisDurum((await k) ? "İstem panoya kopyalandı." : "Panoya kopyalanamadı; aşağıdaki kutudan basılı tutup kopyalayın."); } catch (e) { setDisDurum("Kopyalanamadı: " + ((e && e.message) || e)); } }
   async function disKaydet() { try { const j = pdrCozumYanitCoz(disYanit); j.__model = "Dış uygulama (yapıştırıldı)"; j.__tarih = today(); setOzel(j); await pdrCozumKaydet(cozumAnahtar, j); await cozumAc(j); setDisAcik(false); setDisYanit(""); setDisDurum(""); } catch (e) { setDisDurum((e && e.message) || String(e)); } }
   async function cozumAc(ozelVeri, zorla) { if (cozumAcik && !ozelVeri && !zorla) { setCozumAcik(false); setCozum(null); const c = cizim.current; if (c) c.getContext("2d").clearRect(0, 0, c.width, c.height); return; }
     setIsaretAcik(false); setIsaret(null); setNotGizle(false);
     try { const r = await pdrSoruCozumCiz(sfRef.current.sf, sfRef.current.vp, soru, cizim.current, ozelVeri || null); setCozum(r); setCozumAcik(true);
       if (!ozelVeri) { const kay = (await pdrCozumOku())[cozumAnahtar]; if (kay) { setOzel(kay); await pdrSoruCozumCiz(sfRef.current.sf, sfRef.current.vp, soru, cizim.current, kay); } } } catch (e) { setCozum({ hata: (e && e.message) || String(e) }); setCozumAcik(true); } }
-  async function ozelIste() { if (!cozum || cozum.hata) return; setOzelDurum("hazirlaniyor"); setCevapGoster(false);
-    try { const c = kanvas.current; c.__vpW = sfRef.current.vp.width; const j = await pdrCozumOzelIste(soru, cozum.metin, c, cozum.bolge); setOzel(j); await pdrCozumKaydet(cozumAnahtar, j); await cozumAc(j); setOzelDurum(""); } catch (e) { setOzelDurum("hata:" + ((e && e.message) || e)); } setYontem(pdrCozumYontemOku()); }
+  const [ozelOnay, setOzelOnay] = useState(false);
+  async function ozelIste() { if (!cozum || cozum.hata) return; setOzelOnay(false); setOzelDurum("hazirlaniyor"); setCevapGoster(false);
+    window.__pdrKalkanDosyaTekOnay = true;   // danışman aşağıdaki kutuda "Gönder"e bastı: bu tek gönderimde tarayıcı onayı sorulmaz
+    try { const c = kanvas.current; c.__vpW = sfRef.current.vp.width; const j = await pdrCozumOzelIste(soru, cozum.metin, c, cozum.bolge); setOzel(j); await pdrCozumKaydet(cozumAnahtar, j); await cozumAc(j); setOzelDurum(""); } catch (e) { setOzelDurum("hata:" + ((e && e.message) || e)); } window.__pdrKalkanDosyaTekOnay = false; setYontem(pdrCozumYontemOku()); }
   useEffect(() => { setS(sayfa); }, [sayfa]);
   async function isaretle() { setCozumAcik(false); setCozum(null); if (isaretAcik) { setIsaretAcik(false); setIsaret(null); const c = cizim.current; if (c) c.getContext("2d").clearRect(0, 0, c.width, c.height); return; }
     try { const r = await pdrSoruBeceriIsaretle(sfRef.current.sf, sfRef.current.vp, soru, cizim.current); setIsaret(r); setIsaretAcik(true); } catch (e) { setIsaret({ hata: (e && e.message) || String(e) }); setIsaretAcik(true); } }
@@ -4684,7 +4699,9 @@ function KitapSayfaGosterici({ kitap, kitapAd, sayfa, aralik, ofset = 0, onKapat
               {ozel && ozel.celdirici && <div style={{ marginTop: 4 }}><b>⚠ Dikkat (çeldirici):</b> {pdrUstYaz(ozel.celdirici)}</div>}
               {ozel && ozel.cevap && <div style={{ marginTop: 4 }}>{cevapGoster ? <span><b>✅ Cevap:</b> {pdrUstYaz(ozel.cevap)}</span> : <button data-cozum-cevap onClick={() => setCevapGoster(true)} style={{ padding: "4px 9px", borderRadius: 7, border: "1px solid #FDBA74", background: "#FFF7ED", cursor: "pointer", fontSize: 11.5, fontWeight: 700 }}>Önce kendin dene — cevabı göster</button>}</div>}
               {!ozel && <div style={{ marginTop: 6 }}>
-                <button data-cozum-ozel onClick={ozelIste} disabled={ozelDurum === "hazirlaniyor"} style={{ padding: "6px 10px", borderRadius: 8, border: "none", background: "#EA580C", color: "#fff", fontWeight: 800, fontSize: 12, cursor: "pointer" }}>{ozelDurum === "hazirlaniyor" ? "Hazırlanıyor…" : "🤖 Bu soruya özel adımları hazırla"}</button>
+                <button data-cozum-ozel onClick={() => setOzelOnay(true)} disabled={ozelDurum === "hazirlaniyor"} style={{ padding: "6px 10px", borderRadius: 8, border: "none", background: "#EA580C", color: "#fff", fontWeight: 800, fontSize: 12, cursor: "pointer" }}>{ozelDurum === "hazirlaniyor" ? "Hazırlanıyor…" : "🤖 Bu soruya özel adımları hazırla"}</button>
+                {ozelOnay && <div data-cozum-onay style={{ marginTop: 5, background: "#FFF7ED", border: "1px solid #FDBA74", borderRadius: 8, padding: "6px 8px", fontSize: 11.5, lineHeight: 1.45 }}>📎 Bu sorunun <b>görseli</b> (yalnız kitapçık sayfasından kesilen soru) ve metni {yontem.gemini ? <b>Google Gemini'ye (ücretsiz kota)</b> : <b>seçili yapay zekâya (ücretli, API anahtarınızla)</b>} gönderilecek. Öğrenci bilgisi gönderilmez.
+                  <div style={{ display: "flex", gap: 6, marginTop: 4 }}><button data-cozum-onay-gonder onClick={ozelIste} style={{ padding: "5px 10px", borderRadius: 7, border: "none", background: "#EA580C", color: "#fff", fontWeight: 800, fontSize: 11.5, cursor: "pointer" }}>Gönder</button><button onClick={() => setOzelOnay(false)} style={{ padding: "5px 10px", borderRadius: 7, border: "1px solid #FDBA74", background: "#fff", fontWeight: 700, fontSize: 11.5, cursor: "pointer" }}>Vazgeç</button></div></div>}
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 5, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 11, fontWeight: 700 }}>Model:</span>
                   <select data-cozum-model value={yontem.gemini ? "__gemini" : pdrAiAyarOku().secim} onChange={e => { const v = e.target.value; const y = { ...yontem, gemini: v === "__gemini" }; pdrCozumYontemYaz(y); setYontem(y); if (v !== "__gemini") pdrAiAyarYaz({ ...pdrAiAyarOku(), secim: v }); setOzelDurum(x => x === "" ? " " : ""); }} style={{ fontSize: 11.5, padding: "3px 5px", borderRadius: 6, border: "1px solid #FDBA74", maxWidth: 260 }}>
@@ -4709,6 +4726,7 @@ function KitapSayfaGosterici({ kitap, kitapAd, sayfa, aralik, ofset = 0, onKapat
                   <textarea data-cozum-yanit value={disYanit} onChange={e => setDisYanit(e.target.value)} rows={4} placeholder="Yanıtı buraya yapıştırın…" style={{ width: "100%", boxSizing: "border-box", fontSize: 11.5, borderRadius: 7, border: "1px solid #FDBA74", padding: 5, marginTop: 3 }} />
                   <button data-cozum-yanit-kaydet onClick={disKaydet} disabled={!disYanit.trim()} style={{ marginTop: 4, padding: "5px 10px", borderRadius: 7, border: "none", background: "#C2410C", color: "#fff", fontWeight: 800, fontSize: 11.5, cursor: "pointer" }}>✓ Kaydet ve soru üzerinde göster</button>
                   {disDurum && <div style={{ marginTop: 3, color: "#7C2D12" }}>{disDurum}</div>}
+                  {disIstem && <details data-cozum-istem style={{ marginTop: 3 }}><summary style={{ cursor: "pointer", fontSize: 11, fontWeight: 700, color: "#9A3412" }}>📝 İstemi göster (elle kopyalamak için)</summary><textarea readOnly value={disIstem} onFocus={e => e.target.select()} rows={5} style={{ width: "100%", boxSizing: "border-box", fontSize: 10.5, borderRadius: 7, border: "1px solid #FDBA74", padding: 5, marginTop: 3 }} /></details>}
                   <div style={{ fontSize: 10, color: MUTED, marginTop: 3 }}>Yalnız soru gönderilir; öğrenci bilgisi yoktur. Yanıt kaydedilir, aynı soru için tekrar sormanız gerekmez.</div>
                 </div>}
               </div>}

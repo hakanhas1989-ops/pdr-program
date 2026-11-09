@@ -39173,6 +39173,15 @@ function lgsSoruTarzi(q) { const y = q.yapi || "", ek = [y.includes("n") && "ön
 const LGS_ZORLUK_AD = ["belirsiz", "kolay", "orta", "zor", "çok zor"], LGS_ZORLUK_RENK = ["#94A3B8", "#15803D", "#2563EB", "#C2410C", "#991B1B"];
 const LGS_AY_AD = ["", "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
 const LGS_SORU_DERS = { M: "Matematik", F: "Fen Bilimleri", T: "Türkçe", I: "İnkılap Tarihi", D: "Din Kültürü", E: "İngilizce" };
+// Cevap anahtarları (yalnız şık harfleri; soru metni yok). Kitapçık → ders kodu → sırayla cevaplar.
+// Anahtarı olan kitapçıkta Çözdür'de öğrencinin işaretlediği şıklar yazılır, doğru/yanlış/boş program tarafından bulunur.
+const LGS_CEVAP_ANAHTARI = {
+  m26111say: { M: "CDBADABDBCBADCCBCBAD", F: "ACACDBCBDABCBDCDAACB" },
+  m26111soz: { T: "ABDDAACBBDBBCBADCCAC", I: "DCDCBAABDB", D: "BDCABCACDA", E: "BCDACCBDAA" },
+};
+function lgsCevapAnahtari(kitapcik, ders) { const A = LGS_CEVAP_ANAHTARI[kitapcik]; if (!A) return ""; const kod = Object.keys(LGS_SORU_DERS).find(k => LGS_SORU_DERS[k] === ders); return (kod && A[kod]) || ""; }
+// Öğrencinin şıkları ("ABD-C..."; boş için - ya da boşluk) → işaret (y: yanlış, b: boş; doğrular işaretsiz)
+function lgsSiktanIsaret(siklar, anahtar) { const x = {}; for (let i = 0; i < Math.min(siklar.length, anahtar.length); i++) { const c = siklar[i].toUpperCase(); if (!"ABCD".includes(c) || c === " ") x[i + 1] = "b"; else if (c !== anahtar[i]) x[i + 1] = "y"; } return x; }
 const LGS_SORU_OTURUM_DERS = { say: ["Matematik", "Fen Bilimleri"], soz: ["Türkçe", "İnkılap Tarihi", "Din Kültürü", "İngilizce"] };
 let LGS_SORU_ONBELLEK = null;
 function lgsSorular() {
@@ -39337,12 +39346,14 @@ function LgsTahminPaneli({ onSayfaAc }) {
 
 function LgsGecmisPaneli({ seciliAd, ogrAnahtar, onSayfaAc }) {
   const [takip, setTakip] = useState(null);
-  const [acik, setAcik] = useState(false), [kitapcik, setKitapcik] = useState("26soz"), [isaret, setIsaret] = useState({}), [kayitlar, setKayitlar] = useState(PDR_LGS_DENEME), [goster, setGoster] = useState(null), [mod, setMod] = useState("ozet");
+  const [acik, setAcik] = useState(false), [kitapcik, setKitapcik] = useState("26soz"), [isaret, setIsaret] = useState({}), [kayitlar, setKayitlar] = useState(PDR_LGS_DENEME), [goster, setGoster] = useState(null), [mod, setMod] = useState("ozet"), [siklar, setSiklar] = useState({});
   useEffect(() => { lgsDenemeOku().then(v => setKayitlar({ ...v })); }, []);
   const S = useMemo(() => lgsSoruIstatistik(), []), ogrKayit = (ogrAnahtar && kayitlar[ogrAnahtar]) || [];
   const dersler = LGS_SORU_OTURUM_DERS[kitapcik.slice(-3)], qs = lgsSorular().filter(q => q.kitapcik === kitapcik);
   const cevir = (d, no) => setIsaret(s => { const x = { ...(s[d] || {}) }; x[no] = !x[no] ? "y" : x[no] === "y" ? "b" : undefined; if (!x[no]) delete x[no]; return { ...s, [d]: x }; });
-  async function kaydet() { const v = await lgsDenemeOku(), l = [...(v[ogrAnahtar] || []), { kitapcik, tarih: today(), isaret }]; await lgsDenemeKaydet({ ...v, [ogrAnahtar]: l }); setKayitlar({ ...PDR_LGS_DENEME }); setGoster(l.length - 1); setIsaret({}); setMod("ozet"); }
+  const anahtarVar = !!LGS_CEVAP_ANAHTARI[kitapcik];
+  const sikYaz = (d, v) => { const a = lgsCevapAnahtari(kitapcik, d), t = String(v || "").toUpperCase().replace(/[^ABCD\- ]/g, "").slice(0, a.length); setSiklar(s => ({ ...s, [d]: t })); if (a) setIsaret(s => ({ ...s, [d]: t.length ? lgsSiktanIsaret(t, a) : {} })); };
+  async function kaydet() { const v = await lgsDenemeOku(), l = [...(v[ogrAnahtar] || []), { kitapcik, tarih: today(), isaret, ...(anahtarVar && Object.values(siklar).some(Boolean) ? { siklar } : {}) }]; await lgsDenemeKaydet({ ...v, [ogrAnahtar]: l }); setKayitlar({ ...PDR_LGS_DENEME }); setGoster(l.length - 1); setIsaret({}); setSiklar({}); setMod("ozet"); }
   async function sil(i) { const v = await lgsDenemeOku(), l = (v[ogrAnahtar] || []).filter((x, j) => j !== i); await lgsDenemeKaydet({ ...v, [ogrAnahtar]: l }); setKayitlar({ ...PDR_LGS_DENEME }); setGoster(null); }
   const yuz = (x) => x[1] ? Math.round(100 * x[0] / x[1]) : 0, btn = { padding: "6px 9px", borderRadius: 8, border: "1px solid #FDBA74", background: "#fff", color: "#9A3412", fontSize: 11.5, fontWeight: 800, cursor: "pointer" };
   const sonuc = goster != null && ogrKayit[goster] ? ogrKayit[goster] : null, A = sonuc ? lgsDenemeAnaliz(sonuc.kitapcik, sonuc.isaret) : null;
@@ -39371,15 +39382,18 @@ function LgsGecmisPaneli({ seciliAd, ogrAnahtar, onSayfaAc }) {
         {mod === "cozdur" && (!seciliAd ? <div style={{ fontSize: 11.5, color: MUTED }}>Önce aşağıdan bir öğrenci seçin.</div> : (<>
           <div style={{ fontSize: 11, color: "#7C2D12", marginBottom: 5, lineHeight: 1.45 }}>Öğrenciye geçmiş bir LGS'yi süre tutarak çözdürün. Cevap anahtarıyla kontrol ettikten sonra yanlışlarına bir kez (✗), boşlarına iki kez (○) dokunun; işaretsizler doğru sayılır.</div>
           <div style={{ display: "flex", gap: 6, marginBottom: 6, alignItems: "center", flexWrap: "wrap" }}>
-            <select data-testid="lgs-kitapcik" value={kitapcik} onChange={e => { setKitapcik(e.target.value); setIsaret({}); }} style={{ padding: "6px", borderRadius: 8, border: "1px solid #FDBA74", fontSize: 12 }}>
+            <select data-testid="lgs-kitapcik" value={kitapcik} onChange={e => { setKitapcik(e.target.value); setIsaret({}); setSiklar({}); }} style={{ padding: "6px", borderRadius: 8, border: "1px solid #FDBA74", fontSize: 12 }}>
               {lgsKitapciklar().map(k => <option key={k} value={k}>{lgsKitapcikAd(k)}</option>)}
             </select>
             <button onClick={() => onSayfaAc && onSayfaAc(kitapcik, kitapcik[0] === "p" ? (qs[0] || {}).sayfa || 3 : 2)} style={btn}>📄 Kitapçığı aç</button>
           </div>
           {kitapcik[0] === "p" && <div data-testid="tahmin-deneme-bilgi" style={{ fontSize: 11, background: "#ECFDF5", border: "1px solid #86EFAC", borderRadius: 8, padding: "6px 8px", marginBottom: 6, lineHeight: 1.45 }}>🔮 <b>Rehberlik servisinin 2027 tahmini denemesi.</b> Kitapçık programla birlikte gelir, yüklemeniz gerekmez. Cevap anahtarı, "neden bu soru?" açıklamaları ve çözümler kitapçığın sonundadır. <a href={TAHMIN_DENEME_PDF} target="_blank" rel="noopener" style={{ color: "#166534", fontWeight: 800 }}>🖨 Yazdırmak için PDF'i aç</a></div>}
+          {anahtarVar && <div data-testid="cevap-anahtari-bilgi" style={{ fontSize: 11, background: "#EFF6FF", border: "1px solid #93C5FD", borderRadius: 8, padding: "6px 8px", marginBottom: 6, lineHeight: 1.45 }}>🔑 <b>Bu denemenin cevap anahtarı programda.</b> Her dersin kutusuna öğrencinin işaretlediği şıkları sırayla yazın (örn. <i>ABDCA-B…</i>; boş bıraktığı soru için <b>-</b>). Doğru, yanlış ve boşlar kendiliğinden bulunur; isterseniz aşağıdaki numaralara dokunarak da düzeltebilirsiniz.</div>}
           {dersler.map(d => (
             <div key={d} style={{ marginBottom: 5 }}>
-              <div style={{ fontSize: 11, fontWeight: 800 }}>{d} <span style={{ color: MUTED, fontWeight: 400 }}>✗ {Object.values(isaret[d] || {}).filter(x => x === "y").length} · ○ {Object.values(isaret[d] || {}).filter(x => x === "b").length}</span></div>
+              <div style={{ fontSize: 11, fontWeight: 800 }}>{d} <span style={{ color: MUTED, fontWeight: 400 }}>{anahtarVar && (siklar[d] || "").length ? `✓ ${(siklar[d] || "").length - Object.keys(isaret[d] || {}).length} · ` : ""}✗ {Object.values(isaret[d] || {}).filter(x => x === "y").length} · ○ {Object.values(isaret[d] || {}).filter(x => x === "b").length}</span></div>
+              {anahtarVar && lgsCevapAnahtari(kitapcik, d) && <input data-lgs-sik={d} value={siklar[d] || ""} onChange={e => sikYaz(d, e.target.value)} placeholder={`${lgsCevapAnahtari(kitapcik, d).length} soru: öğrencinin şıkları (boş için -)`} autoCapitalize="characters" autoCorrect="off" spellCheck={false} style={{ width: "100%", boxSizing: "border-box", padding: "5px 7px", borderRadius: 7, border: "1px solid #93C5FD", fontFamily: "monospace", fontSize: 13, letterSpacing: 2, marginBottom: 3 }} />}
+              {anahtarVar && (siklar[d] || "").length > 0 && (siklar[d] || "").length < lgsCevapAnahtari(kitapcik, d).length && <div style={{ fontSize: 10, color: "#B45309" }}>{lgsCevapAnahtari(kitapcik, d).length - (siklar[d] || "").length} soru daha girilmedi; girilmeyenler doğru sayılır.</div>}
               <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>{qs.filter(q => q.ders === d).map(q => { const i = (isaret[d] || {})[q.no]; return (
                 <button key={q.no} data-lgs-soru={d + "_" + q.no} onClick={() => cevir(d, q.no)} style={{ width: 30, padding: "4px 0", borderRadius: 6, fontSize: 11, fontWeight: 800, cursor: "pointer", border: `1px solid ${i === "y" ? "#B91C1C" : i === "b" ? "#64748B" : "#FDBA74"}`, background: i === "y" ? "#FEE2E2" : i === "b" ? "#F1F5F9" : "#fff", color: i === "y" ? "#B91C1C" : TEXT }}>{i === "y" ? "✗" : i === "b" ? "○" : q.no}</button>); })}</div>
             </div>))}

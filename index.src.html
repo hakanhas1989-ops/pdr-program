@@ -17827,6 +17827,29 @@ function psikoKopyala(metin) {
   try { const t = document.createElement("textarea"); t.value = metin; t.setAttribute("readonly", ""); t.style.cssText = "position:fixed;top:0;left:0;opacity:0;"; document.body.appendChild(t); t.select(); t.setSelectionRange(0, metin.length); ok = document.execCommand("copy"); t.remove(); } catch (e) {}
   return navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(metin).then(() => true, () => ok) : Promise.resolve(ok);
 }
+// Uyarlama notu yapay zekâya gitmeden önce: gizlilik kalkanı kayıtlı öğrenci adlarını, telefon, T.C. ve e-postayı zaten kodlar.
+// Her ihtimale karşı kalkanın tanımadığı (kayıtlı olmayan) özel adlar da "[kişi]" yapılır: cümle içinde büyük harfle başlayan
+// ya da tümü büyük yazılmış, bilinen kısaltma/ders/gün/ay olmayan sözcükler. Dönen: { metin: gönderilecek not, onizleme: yapay zekânın göreceği hâl }
+const PSIKO_AD_DEGIL = new Set("hanım bey hoca öğretmen tc lgs yks tyt ayt dehb öög ram bep mebi̇ mebi pdr obp türkçe matematik fen ingilizce inkılap din sosyal bilimleri kültürü ocak şubat mart nisan mayıs haziran temmuz ağustos eylül ekim kasım aralık pazartesi salı çarşamba perşembe cuma cumartesi pazar allah kuran ramazan".split(" "));
+function psikoNotGuvenli(not) {
+  const kalkan = (t) => { try { return typeof pdrKalkanDene === "function" ? pdrKalkanDene(t).metin : t; } catch (e) { return t; } };
+  const kodlu = kalkan(String(not || "")), kacak = new Set();
+  const adMi = (w) => /^[A-ZÇĞİÖŞÜ][a-zçğıöşü]{2,}$/.test(w) && !PSIKO_AD_DEGIL.has(w.toLocaleLowerCase("tr"));
+  const buyukMu = (w) => /^[A-ZÇĞİÖŞÜ]{3,}$/.test(w) && !PSIKO_AD_DEGIL.has(w.toLocaleLowerCase("tr"));
+  kodlu.split(/(?<=[.!?:;\n])\s+/).forEach(cumle => {
+    const kel = cumle.split(/\s+/).map(w => w.replace(/^[^\p{L}\[]+|[^\p{L}\]\d]+$/gu, "").replace(/['’]\p{L}*$/u, ""));
+    kel.forEach((w, i) => {
+      if (!w || /[\[\]\d-]/.test(w)) return;                       // kalkan kodu (Öğrenci-1, [KİŞİ-2]) ya da sayı
+      if (buyukMu(w)) { kacak.add(w); return; }
+      if (!adMi(w)) return;
+      if (i > 0) kacak.add(w);                                      // cümle içinde büyük harf → özel ad
+      else if (kel[1] && (adMi(kel[1]) || buyukMu(kel[1]))) kacak.add(w);   // cümle başı + ardından özel ad ("Mehmet Yılmaz geldi")
+    });
+  });
+  let metin = String(not || "");
+  kacak.forEach(w => { metin = metin.replace(new RegExp("(^|[^\\p{L}])" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?=$|[^\\p{L}]|['’])", "gu"), "$1[kişi]"); });
+  return { metin, onizleme: kalkan(metin), kacak: kacak.size };
+}
 // Hazır metin kartının düğmeleri (panelde ve asistan sohbetinde ortak)
 function PsikoDugmeler({ k, kisi, kucuk }) {
   const [d, setD] = useState("");
@@ -17843,7 +17866,7 @@ function PsikoegitimPaneli({ onKapat, kademe }) {
   const k = PSIKO_KONULAR.find(x => x.id === id);
   const sec = (a) => ({ padding: "6px 12px", borderRadius: 18, border: `1.5px solid ${a ? ACCENT : BORDER}`, background: a ? ACCENT : "#fff", color: a ? "#fff" : TEXT, fontSize: 12.5, fontWeight: 700, cursor: "pointer" });
   const uyarla = () => {
-    const m = `«${k.ad}» konusunda ${kisi === "veli" ? "veliye" : "öğrenciye"} psikoeğitim yapacağım${kisi !== "veli" && kucuk ? " (küçük yaş grubu)" : ""}. psikoegitim aracındaki hazır metni temel al ve şu duruma göre uyarla: ${not.trim()}. Sade, kısa ve anlaşılır olsun; açılış cümlesi, anlatım, benzetme ve yapılabilecekleri yaz.`;
+    const m = `«${k.ad}» konusunda ${kisi === "veli" ? "veliye" : "öğrenciye"} psikoeğitim yapacağım${kisi !== "veli" && kucuk ? " (küçük yaş grubu)" : ""}. psikoegitim aracındaki hazır metni temel al ve şu duruma göre uyarla: ${psikoNotGuvenli(not.trim()).metin}. Sade, kısa ve anlaşılır olsun; açılış cümlesi, anlatım, benzetme ve yapılabilecekleri yaz.`;
     window.dispatchEvent(new CustomEvent("pdr-asistan-gonder", { detail: { metin: m } })); onKapat();
   };
   return (
@@ -17874,8 +17897,9 @@ function PsikoegitimPaneli({ onKapat, kademe }) {
               </div>))}
             <div style={{ marginTop: 10, background: "#F5F3FF", border: "1px solid #C4B5FD", borderRadius: 10, padding: "8px 10px" }}>
               <div style={{ fontSize: 12.5, fontWeight: 800, color: "#6D28D9" }}>🤖 Bu duruma göre uyarla (isteğe bağlı · yapay zekâ)</div>
-              <div style={{ fontSize: 11, color: MUTED, margin: "2px 0 4px", lineHeight: 1.45 }}>Hazır metin yetmezse durumu kısaca yazın; asistan metni buna göre uyarlar. Yazdığınız not seçili yapay zekâya gider (gizlilik kalkanı açık; ad yazmayın). Ücretli modelde ücret oluşur.</div>
+              <div style={{ fontSize: 11, color: MUTED, margin: "2px 0 4px", lineHeight: 1.45 }}>Hazır metin yetmezse durumu kısaca yazın; asistan metni buna göre uyarlar. Not seçili yapay zekâya <b>kodlanarak</b> gider: öğrenci adları, diğer özel adlar, telefon, T.C. ve e-posta gönderilmez. Ücretli modelde ücret oluşur.</div>
               <textarea data-psiko-not value={not} onChange={e => setNot(e.target.value)} rows={2} placeholder="örn. sınavdan önce midesi bulanıyor, annesi netleri çok soruyor; 8. sınıf" style={{ width: "100%", boxSizing: "border-box", fontSize: 12.5, borderRadius: 8, border: "1px solid #C4B5FD", padding: 6 }} />
+              {not.trim() && <div data-psiko-onizleme style={{ fontSize: 11, background: "#fff", border: "1px dashed #C4B5FD", borderRadius: 8, padding: "5px 7px", marginTop: 4, lineHeight: 1.45 }}>🛡️ <b>Yapay zekânın göreceği hâli:</b> {psikoNotGuvenli(not.trim()).onizleme}</div>}
               <button data-psiko-uyarla onClick={uyarla} disabled={!not.trim()} style={{ marginTop: 4, padding: "7px 12px", borderRadius: 8, border: "none", background: not.trim() ? "#6D28D9" : "#C4B5FD", color: "#fff", fontSize: 12, fontWeight: 800, cursor: not.trim() ? "pointer" : "default" }}>🤖 Asistanla uyarla</button>
             </div>
           </div>}

@@ -14671,6 +14671,9 @@ const PDR_ASISTAN_MODELLER = {
     { id: "@cf/google/gemma-4-26b-a4b-it", ad: "Gemma 4 26B (Google) — çok dilli (önerilen)" },
     // Gemini 3.8 Flash: Cloudflare değil, çözüm yolunda kullanılan pdr-gemini worker'ı üzerinden Google'ın ücretsiz katmanına gider
     { id: "gemini-3.8-flash", ad: "Gemini 3.8 Flash (Google) — en güçlü ücretsiz, günlük kotalı", gemini: true },
+    // Gemini yedekleri: listede gösterilmez (gizli), yalnız kartta adları düzgün görünsün diye
+    { id: "gemini-3.6-flash", ad: "Gemini 3.6 Flash (Google)", gemini: true, gizli: true },
+    { id: "gemini-3.5-flash-lite", ad: "Gemini 3.5 Flash-Lite (Google)", gemini: true, gizli: true },
     { id: "@cf/qwen/qwen3.8-27b", ad: "Qwen 3.8 27B — çok dilli" },
     { id: "@cf/meta/llama-3.3-70b-instruct-fp8-fast", ad: "Llama 3.3 70B" },
     // Qwen3 30B, Cloudflare 20 Kasım 2026'da kapattığı için listeden çıkarıldı.
@@ -18296,8 +18299,8 @@ async function ksAsistanModelCagir(ayar, sistem, mesajlar, iptal) {
   // Gemini'de her hata (kota dolu, model kapalı) yedeğe geçiş sebebidir
   const geciciHata = (x) => hatali(x) && (pdrAsistanGeminiMi(x.model) || [429, 500, 502, 503, 504].includes(x.res.status) || /4002|3040|route|capacity|kapasite|timeout|high demand|overloaded/i.test(x.ham || ""));
   if (!claudeMi && geciciHata(r)) {
-    await new Promise(ok => setTimeout(ok, 1500)); ksAsistanDurdu(iptal);
-    r = await istek(r.model);
+    // Zaman aşımı (524: model 100 sn içinde bitiremedi) ve kota dolu (429) aynı modelde tekrar denenmez — danışman boşuna beklemesin
+    if (!(pdrAsistanGeminiMi(r.model) && [429, 524].includes(r.res.status))) { await new Promise(ok => setTimeout(ok, 1500)); ksAsistanDurdu(iptal); r = await istek(r.model); }
     // Gemini yoğun/kotası dolu → önce diğer ücretsiz Gemini modelleri (3.6 Flash, 3.5 Flash-Lite), sonra Cloudflare modelleri
     if (geciciHata(r) && pdrAsistanGeminiMi(r.model)) {
       const ilkHata = hataOzeti(r), ilkModel = r.model;
@@ -18305,7 +18308,7 @@ async function ksAsistanModelCagir(ayar, sistem, mesajlar, iptal) {
       if (geciciHata(r)) r = { ...r, model: ilkModel, __ilkHata: ilkHata };
     }
     if (geciciHata(r)) {
-      const diger = PDR_ASISTAN_MODELLER.ucretsiz.map(m => m.id).filter(id => id !== r.model && !PDR_ASISTAN_YEDEK_DISI.includes(id));
+      const diger = PDR_ASISTAN_MODELLER.ucretsiz.filter(m => !m.gemini).map(m => m.id).filter(id => id !== r.model && !PDR_ASISTAN_YEDEK_DISI.includes(id));
       yedekNeden = r.__ilkHata ? r.__ilkHata + " — diğer Gemini modelleri de yoğundu" : hataOzeti(r);
       for (const id of diger.slice(0, 2)) { ksAsistanDurdu(iptal); r = await istek(id); yedek = true; if (!geciciHata(r)) break; }
     }
@@ -43188,7 +43191,7 @@ function AsistanEkrani({
 
           <div style={{ fontSize: 12, fontWeight: 800, color: TEXT, marginBottom: 4 }}>☁️ Ücretsiz model</div>
           <select value={ayar.ucretsizModel} onChange={e => ayarDegis({ ucretsizModel: e.target.value })} style={{ ...inp, marginBottom: 6 }}>
-            {PDR_ASISTAN_MODELLER.ucretsiz.map(m => <option key={m.id} value={m.id}>{m.ad}</option>)}
+            {PDR_ASISTAN_MODELLER.ucretsiz.filter(m => !m.gizli).map(m => <option key={m.id} value={m.id}>{m.ad}</option>)}
           </select>
           {pdrAsistanGeminiMi(ayar.ucretsizModel) && <div data-testid="asistan-gemini-not" style={{ fontSize: 10.5, color: "#9A3412", background: "#FFF7ED", border: "1px solid #FDBA74", borderRadius: 8, padding: "6px 8px", marginBottom: 8, lineHeight: 1.45 }}>🆓 Gemini 3.8 Flash, çözüm yolunda kullanılan 'pdr-gemini' worker'ı üzerinden Google'ın ücretsiz katmanına gider (aşağıdaki worker adresi bunu etkilemez). Günlük istek sınırı vardır; dolarsa ya da yanıt vermezse Gemma ile yanıtlanır. Google ücretsiz katmanda içeriği kendi geliştirmesi için kullanabilir; öğrenci, veli, okul adları gizlilik kalkanıyla kodlanarak gider.</div>}
           <div style={{ fontSize: 11, color: MUTED, marginBottom: 3 }}>Worker adresi</div>

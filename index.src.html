@@ -4529,7 +4529,9 @@ function pdrCozumYontemOku() { try { return JSON.parse(localStorage.getItem("pdr
 function pdrCozumYontemYaz(v) { try { localStorage.setItem("pdr_cozum_gemini", JSON.stringify(v)); } catch (e) {} }
 const PDR_GEMINI_VARSAYILAN = { url: "https://pdr-gemini.hakanhas1989.workers.dev", model: "gemini-3.8-flash" };
 // Seçilen model meşgulse sırayla denenecek yedekler (en yeniden eskiye; hafif "lite" modeller daha az yoğundur)
-const PDR_GEMINI_YEDEK = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-flash-latest", "gemini-flash-lite-latest"];
+// Yedek sırası yalnızca Gemini ücretsiz katmanında görünen modellerden oluşur (Kasım 2026);
+// ücretsiz listede olmayan 3.7 Flash ve 3.5 Flash çıkarıldı, 3.1 Flash-Lite eklendi.
+const PDR_GEMINI_YEDEK = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-flash-latest", "gemini-flash-lite-latest"];
 async function pdrCozumOzelIste(soru, metin, kanvas, bolge) {
   const yon = pdrCozumYontemOku();
   if (yon.gemini) {
@@ -14656,6 +14658,9 @@ const PDR_ASISTAN_VARSAYILAN_AYAR = {
   acilistaAsistan: false,                    // program açılınca asistan ekranıyla başla                     // "ekran" (formu ekranda doldurur, Kaydet'e danışman basar) | "sohbet" (sohbette onay kartı)
 };
 const PDR_ASISTAN_CLAUDE_URL = "https://pdr-api.hakanhas1989.workers.dev";
+// Geçici hatada otomatik yedek olarak denenmeyen modeller: yeni eklenenler, worker kodu
+// güncellenmemişse worker'da izinli olmayabilir (worker o zaman sessizce ilk modele döner).
+const PDR_ASISTAN_YEDEK_DISI = ["@cf/qwen/qwen3.8-27b", "@cf/thinkingmachines/inkling-2-small"];
 const PDR_ASISTAN_MODELLER = {
   claude: [
     { id: "claude-haiku-5-5", ad: "Claude Haiku 5.5 — hızlı, en ucuz (önerilen)", fiyat: [0.10, 0.50] },
@@ -14664,13 +14669,19 @@ const PDR_ASISTAN_MODELLER = {
   ],
   ucretsiz: [
     { id: "@cf/google/gemma-4-26b-a4b-it", ad: "Gemma 4 26B (Google) — çok dilli (önerilen)" },
-    { id: "@cf/qwen/qwen3-30b-a3b-fp8", ad: "Qwen3 30B — çok dilli" },
-    { id: "@cf/qwen/qwen3.8-27b", ad: "Qwen 3.8 27B — çok dilli, yeni (Ağustos 2026; worker kodu güncellenmeli)" },
+    { id: "@cf/qwen/qwen3.8-27b", ad: "Qwen 3.8 27B — çok dilli" },
     { id: "@cf/meta/llama-3.3-70b-instruct-fp8-fast", ad: "Llama 3.3 70B" },
+    // Qwen3 30B, Cloudflare 20 Kasım 2026'da kapattığı için listeden çıkarıldı.
+    { id: "@cf/thinkingmachines/inkling-2-small", ad: "Inkling 2 Small (Thinking Machines) — yeni, Kasım 2026; Türkçesi deneniyor" },
   ],
 };
 function pdrAsistanAyarOku() {
-  try { return { ...PDR_ASISTAN_VARSAYILAN_AYAR, ...(JSON.parse(localStorage.getItem("pdr_asistan_ayar") || "{}")) }; }
+  try {
+    const a = { ...PDR_ASISTAN_VARSAYILAN_AYAR, ...(JSON.parse(localStorage.getItem("pdr_asistan_ayar") || "{}")) };
+    // Seçili ücretsiz model artık listede yoksa (Cloudflare kapattıysa) istekler hata vermesin diye varsayılana dönülür
+    if (!PDR_ASISTAN_MODELLER.ucretsiz.some(m => m.id === a.ucretsizModel)) a.ucretsizModel = PDR_ASISTAN_VARSAYILAN_AYAR.ucretsizModel;
+    return a;
+  }
   catch (e) { return { ...PDR_ASISTAN_VARSAYILAN_AYAR }; }
 }
 function pdrAsistanAyarYaz(ayar) {
@@ -18264,7 +18275,7 @@ async function ksAsistanModelCagir(ayar, sistem, mesajlar, iptal) {
     await new Promise(ok => setTimeout(ok, 1500)); ksAsistanDurdu(iptal);
     r = await istek(r.model);
     if (geciciHata(r)) {
-      const diger = PDR_ASISTAN_MODELLER.ucretsiz.map(m => m.id).filter(id => id !== r.model && id !== "@cf/qwen/qwen3.8-27b");
+      const diger = PDR_ASISTAN_MODELLER.ucretsiz.map(m => m.id).filter(id => id !== r.model && !PDR_ASISTAN_YEDEK_DISI.includes(id));
       for (const id of diger.slice(0, 2)) { ksAsistanDurdu(iptal); r = await istek(id); yedek = true; if (!geciciHata(r)) break; }
     }
   }
@@ -42257,9 +42268,9 @@ const PDR_ASISTAN_WORKER_KODU = `// pdr-asistan — PDR Asistanı'nın ücretsiz
 // Gerekli bağlantı: Settings > Bindings > Workers AI, değişken adı: AI
 const IZINLI_MODELLER = [
   "@cf/google/gemma-4-26b-a4b-it",
-  "@cf/qwen/qwen3-30b-a3b-fp8",
   "@cf/qwen/qwen3.8-27b",
   "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+  "@cf/thinkingmachines/inkling-2-small",
 ];
 // Yalnızca programın açıldığı yerlerden gelen isteklere izin verilir
 // ("null": program dosyadan açıldığında tarayıcının gönderdiği değer)

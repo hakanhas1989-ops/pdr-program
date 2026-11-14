@@ -18239,7 +18239,7 @@ function ksAsistanBirlestir(a, b) {
 // Danışman "Durdur"a basınca fırlatılan hata
 function ksAsistanDurdu(iptal) { if (iptal && iptal.iptal) { const e = new Error("Durduruldu."); e.durduruldu = true; throw e; } }
 // Gemini (pdr-gemini worker) seçili ücretsiz model mi?
-function pdrAsistanGeminiMi(model) { return PDR_ASISTAN_MODELLER.ucretsiz.some(m => m.id === model && m.gemini); }
+function pdrAsistanGeminiMi(model) { return /^gemini-/.test(String(model || "")) || PDR_ASISTAN_MODELLER.ucretsiz.some(m => m.id === model && m.gemini); }
 // Gemini worker'ı tek kullanıcı mesajı bekler (çözüm yolundaki biçim): sohbet geçmişi etiketlenip tek metne çevrilir
 function pdrAsistanGeminiMesaj(mesajlar) {
   const duz = (c) => typeof c === "string" ? c : Array.isArray(c) ? c.map(b => (b && b.text) || "").join("\n") : String(c || "");
@@ -18298,9 +18298,15 @@ async function ksAsistanModelCagir(ayar, sistem, mesajlar, iptal) {
   if (!claudeMi && geciciHata(r)) {
     await new Promise(ok => setTimeout(ok, 1500)); ksAsistanDurdu(iptal);
     r = await istek(r.model);
+    // Gemini yoğun/kotası dolu → önce diğer ücretsiz Gemini modelleri (3.6 Flash, 3.5 Flash-Lite), sonra Cloudflare modelleri
+    if (geciciHata(r) && pdrAsistanGeminiMi(r.model)) {
+      const ilkHata = hataOzeti(r), ilkModel = r.model;
+      for (const gm of PDR_GEMINI_YEDEK.filter(m => m !== ilkModel).slice(0, 2)) { ksAsistanDurdu(iptal); r = await istek(gm); if (!geciciHata(r)) { yedek = true; yedekNeden = ilkHata; break; } }
+      if (geciciHata(r)) r = { ...r, model: ilkModel, __ilkHata: ilkHata };
+    }
     if (geciciHata(r)) {
       const diger = PDR_ASISTAN_MODELLER.ucretsiz.map(m => m.id).filter(id => id !== r.model && !PDR_ASISTAN_YEDEK_DISI.includes(id));
-      yedekNeden = hataOzeti(r);
+      yedekNeden = r.__ilkHata ? r.__ilkHata + " — diğer Gemini modelleri de yoğundu" : hataOzeti(r);
       for (const id of diger.slice(0, 2)) { ksAsistanDurdu(iptal); r = await istek(id); yedek = true; if (!geciciHata(r)) break; }
     }
   }

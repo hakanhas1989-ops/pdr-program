@@ -54458,36 +54458,38 @@ const SEMA_DALLARI = [
 // Her sekmenin içindeki başlıca özellikler — Şema'da yaprakların altında
 // gösterilir. Yeni bir özellik eklendiğinde buraya da bir satır eklenmeli.
 // yeni: true olanlar "YENİ" rozetiyle görünür.
+// Şema en son güncellendiği tarih — içerik değiştirildiğinde bu da güncellenmeli.
+const SEMA_GUNCELLEME = "14 Kasım 2026";
 const SEMA_ICERIK = {
-  ogrenciler: [["Öğrenci ekle, sınıf listesi / Excel yükle"], ["Soyadı otomatik maskeleme"], ["Akademik yıl seçimi"], ["Yıl sonu toplu sınıf atlatma", true]],
-  profil_merkez: [["Profil 1 ve Profil 2"], ["Geçmiş yıl ortalamaları"], ["Düzenlenebilir PDR profil raporu (PDF)"]],
-  sinif_profili: [["Sınıf listesi ve genel durum"], ["Öncelik Listesi"], ["Risk Haritası (MEB formu)"], ["Net Tablosu + Grafiği yazdır"], ["Sınıf Haritası (görüşülenler)"], ["Kaynaştırma tablosu"]],
+  ogrenciler: [["Öğrenci ekle, sınıf listesi / Excel yükle"], ["Soyadı otomatik maskeleme"], ["Akademik yıl seçimi, yıl sonu sınıf atlatma"], ["Akıllı arama: soyadı, kelime sırası, Türkçe harfsiz yazım", true], ["Öğrenci kartı: canlı özet ve hedef okul (en çok 5)"], ["LGS Ön Görüşme Formu: yazdır, ekranda doldur, fotoğraftan oku", true], ["Formlar sekmesi: form ile görüşmelerin takibi"]],
+  profil_merkez: [["Profil 1 ve Profil 2 (yazılı puanları, yıl sonu ortalamaları)"], ["Düzenlenebilir PDR profil raporu (PDF)"], ["Özet Rapor: 2 sayfa grafik ve tablo"]],
+  sinif_profili: [["Sınıf listesi ve genel durum"], ["Öncelik Listesi"], ["Risk Haritası (MEB formu)"], ["Risk Haritası: Google Form yanıtlarını Excel/CSV ile yükleme", true], ["Net Tablosu + Grafiği yazdır"], ["Sınıf Haritası (görüşülenler)"], ["Kaynaştırma tablosu"]],
   devamsizlik: [["Devamsızlık kaydı, 12 neden kategorisi"], ["Ani artış uyarısı"]],
-  yeni: [["AI özetli görüşme notu"], ["Grup görüşmesi"], ["Konu + alt konu"], ["BDT / Bireyi Tanıma / Uyum otomatik tespiti"]],
-  hatirlatici: [["Metinden tarih algılama (\"haftaya çarşamba\")"], ["Sabah ve öğleden sonra telefon bildirimi"]],
+  yeni: [["AI özetli görüşme notu"], ["Grup görüşmesi: öğrenciye özel not ve alt konu"], ["Konu + alt konu (Özel Eğitim dahil)", true], ["Form ile görüşme: ilk görüşme, zorbalık, kriz, sınav kaygısı…"], ["Ölçüme dayalı takip: iyi oluş ve seans uyumu"], ["Bilgi kaynağı ayrımı (öğrenci / veli / öğretmen)", true], ["Nottan hedef okul ve net yakalama"], ["BDT / Bireyi Tanıma / Uyum otomatik tespiti"]],
+  hatirlatici: [["Metinden tarih algılama (\"haftaya çarşamba\")"], ["Sabah ve öğleden sonra telefon bildirimi"], ["Hassas hatırlatma metni şifreli saklanır"]],
   gorusme_takvimi: [["Ay / hafta görünümü"]],
-  mudahale: [["AI destekli bireysel plan"], ["Oturum takibi ve Gelişim Hızı"]],
+  mudahale: [["AI destekli bireysel plan"], ["Oturum takibi ve Gelişim Hızı"], ["Müdahale programlarından oturum önerisi"]],
   belgeler: [["Sevk yazısı, dönem raporu, veli mektubu"]],
-  net_haritasi: [["Net gelişimi"], ["Hata tipi ve boş bırakma analizi"], ["Kazanım trendi"], ["Deneme Değerlendirme Raporu"]],
-  konu_haritasi: [["LGS konu bazlı çalışma takibi"]],
-  deneme: [["Deneme sonuçları, toplu Excel"], ["Geçmiş dönem ortalaması"], ["Yüzdelik dilim tahmini"]],
+  net_haritasi: [["Net gelişimi ve kazanım trendi"], ["Hata tipi ve boş bırakma analizi"], ["Yanlış Analizi kalıcı, geçmişi tutuluyor", true], ["Belgeden okunan netler Deneme'ye de kaydedilir", true], ["Deneme Değerlendirme Raporu"]],
+  konu_haritasi: [["Konu bazlı çalışma takibi, 8. sınıf 266 kazanım"], ["Konu başına beklenen soru ve öncelik listesi"], ["Bu hafta derslerde (tahmini) + kitap sayfası", true], ["LGS Beceri Haritası (17 beceri)", true], ["Ön Koşul Köprüsü ve psikoeğitim rehberi", true], ["Geçmiş LGS 2022–2026: Çözdür ve beceri analizi", true], ["MEBİ denemeleri ve MEB örnek soruları analizi", true], ["Tahmin paneli ve 2027 LGS Tahmini Deneme", true], ["Soru üzerinde çözüm yolu (AI / Gemini)", true]],
+  deneme: [["Deneme sonuçları, toplu Excel"], ["Geçmiş dönem ortalaması, yüzdelik dilim"], ["Net Yükseltme Kontrol Listesi"], ["LGS Çalışma Programı (kişisel, haftalık)"], ["Aylık Çalışma Programı (Kolay / Orta / Zor)", true]],
   kazanimlar: [["Etkinlik kartından ilgili PDF sayfasına git"]],
-  testler: [["Bir İnsan Çiz Testi (fotoğrafla, AI destekli)", true], ["Çeldiricili Dikkat Testi (ÇDT)"], ["Dikkat Güçlendirme Programı"], ["Okuma-Yazma Destek Programı", true], ["Kaynaştırma Eğitsel Değerlendirme (BEP)", true], ["Veli bilgilendirme raporu (dikkat)", true], ["D2, SCAS-Çocuk, BEİER, Mesleki Eğilim"], ["BİLPRO, CAS, Otizm taraması, ÖÖG ön-tarama"], ["Düzey taramaları, Benlik, Bütünleşik"]],
+  testler: [["Burdon Dikkat Testi", true], ["D2, Frankfurter, Stroop, Çeldiricili Dikkat (ÇDT)"], ["Okul Olgunluğu Taraması, Sesli Okuma Akıcılığı"], ["Bender, Frostig, Gesell, Porteus"], ["WISC-R, Cattell 2A/3A, Metropolitan, Goodenough-Harris", true], ["Bir İnsan Çiz (Koppitz), Louisa Düss"], ["SCAS-Çocuk, CDI, Beck, Conners, BEİER"], ["Mesleki Eğilim, Kuder, 16PF"], ["BİLPRO, CAS, otizm taraması, ÖÖG ön-tarama"], ["Dikkat Güçlendirme, Okuma-Yazma Destek, Kaynaştırma (BEP)"], ["Düzey taramaları (grafikli analiz)"], ["Tekrarlanan testlerde değişim karşılaştırması"]],
   risk: [["Risk listesi ve vaka adımları"], ["Birleşik Sinyal, Takip Boşluğu, Veli Görüşülmedi"], ["AI / Manuel sonuç değerlendirmesi"]],
   uyum_izleme: [["Uyum taraması (6 gösterge, 37 madde)"], ["Görüşme notundan otomatik öneri"]],
-  kutuphane: [["Yönetmelik / makale yükle — AI referansı"]],
-  mudahale_kutuphane: [["Hazır müdahale programları"]],
-  metin_calisma: [["Ders kitabı metinleri danışmanlık temalarına göre", true], ["Öğrenciye göre metin önerisi"], ["Kitap sayfasını cihazdan açma"]],
-  oog_mudahale: [["ÖÖG müdahale programı (4 seviye, okuma-yazma + matematik)", true], ["Oturum kâğıdı ve veli ev kartı PDF"], ["DDK ilerleme grafiği ve karar kuralı"]],
-  prof_danisma: [["Süpervizyon soru-cevap"]],
-  asistan: [["Yazarak iş ver: özet, liste, hazırlık, rapor", true], ["Kayıt eklemeden önce onay ister"], ["Claude / ücretsiz model seçimi"]],
+  kutuphane: [["Yönetmelik / makale yükle — AI ve asistan referansı"]],
+  mudahale_kutuphane: [["8 hazır müdahale programı (tam metin)"]],
+  metin_calisma: [["5–8. sınıf Türkçe kitabı metinleri, danışmanlık temalarına göre"], ["Bu hafta derslerde (tahmini)", true], ["Öğrenciye göre metin önerisi"], ["Kitap sayfasını cihazdan açma"]],
+  oog_mudahale: [["4 seviye, okuma-yazma + matematik (48 ünite)"], ["Tablette çalışma modu", true], ["Kâğıt-kalem formu ve cevap anahtarı", true], ["PASS/CAS eşleştirme, BEP hedef karşılıkları"], ["Oturum kâğıdı ve veli ev kartı PDF"], ["DDK ilerleme grafiği ve karar kuralı"]],
+  prof_danisma: [["Süpervizyon soru-cevap"], ["Asistan önerilerini kayıt öncesi inceleme"]],
+  asistan: [["Yazarak iş ver: özet, liste, hazırlık, rapor"], ["Kayıt eklemeden önce onay ister"], ["Grafik, diyagram ve infografik çizer"], ["Excel dosyasını tanıyıp ilgili sekmeye aktarır"], ["İş defteri: uzun işi 'devam et' ile sürdürür"], ["Akademik takip ve soru çözüm yolu", true], ["Psikoeğitim metinleri: 16 konu, öğrenci/veli (sağ alt menü 🧠)", true], ["Claude / ücretsiz model seçimi"]],
   grup_calismalari: [["Sınıf / okul grup etkinlikleri"]],
   kriz: [["Kriz müdahale kayıtları"]],
   sosyometri: [["3 kriterli sosyometri"], ["Kâğıt form PDF ve hızlı giriş"]],
   sinif_sunumu: [["Sınıfa / veliye gösterilebilir net sunumu"], ["Tam ekran sunum"]],
-  istatistik: [["Görüşme ve kapsam istatistikleri"], ["Aylara göre kırılım"]],
-  isci_raporu: [["Günlük öncelikler"], ["Veri Bekçisi"], ["Akademik uyarılar"]],
-  ayarlar: [["Kademe ve sınav türü"], ["Yedek al / geri yükle"], ["Yedek hatırlatma (30 gün)", true], ["Bildirim ayarları"]],
+  istatistik: [["Görüşme ve kapsam istatistikleri"], ["Aylara göre kırılım"], ["Aylık görüşme grafiği (öğrenci / veli / toplam)"]],
+  isci_raporu: [["Günlük öncelikler"], ["Veri Bekçisi"], ["Akademik uyarılar"], ["Açılış kartı: bugün dikkat isteyenler"]],
+  ayarlar: [["Kademe ve sınav türü"], ["Yedek al / geri yükle (birleştirme modu)"], ["Yedek hatırlatma (30 gün)"], ["Kayıp Kayıt Bul (son silinenler)"], ["Gizlilik kalkanı ve cihazda şifreleme"], ["Ekran düzeni bekçisi"], ["Bildirim ayarları"]],
 };
 
 function SemaEkrani({ setTab, tab, kademe }) {
@@ -54505,6 +54507,7 @@ function SemaEkrani({ setTab, tab, kademe }) {
     <div>
       <div style={{ background: "#EEF2FF", borderRadius: 10, padding: "10px 14px", marginBottom: 12, fontSize: 13, color: BLUE, fontWeight: 600, lineHeight: 1.5 }}>
         🧭 Programın zihin haritası — bir dala dokun, altındaki sekmeleri ve içlerindeki özellikleri gör; bir sekmeye dokun, doğrudan oraya git.
+        <div style={{ fontSize: 11, fontWeight: 500, color: MUTED, marginTop: 3 }}>Son güncelleme: {SEMA_GUNCELLEME} · <b style={{ color: "#B45309" }}>YENİ</b> = son iki haftada eklenenler</div>
       </div>
 
       {/* Merkez düğüm */}

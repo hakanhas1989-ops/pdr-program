@@ -1173,7 +1173,7 @@ const XLSX = window.XLSX;
 // gönderimden önce "sızıntı bekçisi" ikinci kez tarar; kayıtlı olmayan kişiler için
 // Türkçe ad sözlüğü; IBAN, plaka, doğum tarihi, sabit hat; listede olmayan bir adrese
 // giden yapay zekâ isteği de yakalanır; her istek "Gizlilik kaydı"na yazılır (ad içermez).
-const PDR_KALKAN_HEDEFLER = ["pdr-api.hakanhas1989.workers.dev", "rehber-pusula-ai.hakanhas1989.workers.dev", "pdr-asistan.hakanhas1989.workers.dev"];
+const PDR_KALKAN_HEDEFLER = ["pdr-api.hakanhas1989.workers.dev", "rehber-pusula-ai.hakanhas1989.workers.dev", "pdr-asistan.hakanhas1989.workers.dev", "pdr-gemini.hakanhas1989.workers.dev"];
 // Küçük harfle yazıldığında sıradan bir kelime de olan adlar — bunlar yalnızca
 // büyük harfle başladığında ad sayılır (metin bozulmasın diye).
 const PDR_KALKAN_KELIME_ADLAR = new Set(["can", "umut", "deniz", "ay", "su", "nur", "gül", "bahar", "yağmur", "barış", "ekin", "ilke", "onur", "doğa", "güneş", "yaz", "kar", "şafak", "sevgi", "sevinç", "mutlu", "ümit", "özgür", "başak", "çiçek", "yıldız", "inci", "ela", "duru", "kaya", "demir", "tuna", "derya", "ırmak", "pınar", "simge", "rüya", "hayal", "sevda", "bulut", "toprak", "çınar", "orman", "aslan", "kartal", "ateş", "bora", "poyraz", "mert", "berk", "ece", "efe", "eren", "arda", "ada", "lale", "melek", "bilge", "akın", "erdem", "cesur", "sarp", "tan", "gök", "ozan", "kutay", "hilal", "dilek", "nazlı", "sabah", "aydın", "kurt", "polat", "çelik", "kılıç", "yılmaz", "öztürk", "şahin", "doğan", "yalçın", "güler", "keskin", "kara", "ak", "uçar", "tekin", "özer", "gündüz", "işık", "ışık"]);
@@ -1758,7 +1758,7 @@ function pdrAiSecenekleri() {
     { id: "varsayilan", ad: "Claude Sonnet 4.6 — varsayılan", kisa: "Sonnet 4.6", tur: "claude", model: null },
     { id: "claude-haiku-5-5", ad: "Claude Haiku 5.5 — hızlı, en ucuz", kisa: "Haiku 5.5", tur: "claude", model: "claude-haiku-5-5" },
     { id: "claude-sonnet-5-5", ad: "Claude Sonnet 5.5 — en güçlü", kisa: "Sonnet 5.5", tur: "claude", model: "claude-sonnet-5-5" },
-    ...PDR_ASISTAN_MODELLER.ucretsiz.map(m => ({ id: m.id, ad: "🆓 " + m.ad, kisa: m.ad.split(" — ")[0].replace(/\s*\(.*\)/, ""), tur: "ucretsiz", model: m.id })),
+    ...PDR_ASISTAN_MODELLER.ucretsiz.filter(m => !m.gemini).map(m => ({ id: m.id, ad: "🆓 " + m.ad, kisa: m.ad.split(" — ")[0].replace(/\s*\(.*\)/, ""), tur: "ucretsiz", model: m.id })),
   ];
 }
 function pdrAiAyarOku() { try { return { secim: "varsayilan", yedek: true, ...(JSON.parse(localStorage.getItem("pdr_ai_model") || "{}")) }; } catch (e) { return { secim: "varsayilan", yedek: true }; } }
@@ -14669,6 +14669,8 @@ const PDR_ASISTAN_MODELLER = {
   ],
   ucretsiz: [
     { id: "@cf/google/gemma-4-26b-a4b-it", ad: "Gemma 4 26B (Google) — çok dilli (önerilen)" },
+    // Gemini 3.8 Flash: Cloudflare değil, çözüm yolunda kullanılan pdr-gemini worker'ı üzerinden Google'ın ücretsiz katmanına gider
+    { id: "gemini-3.8-flash", ad: "Gemini 3.8 Flash (Google) — en güçlü ücretsiz, günlük kotalı", gemini: true },
     { id: "@cf/qwen/qwen3.8-27b", ad: "Qwen 3.8 27B — çok dilli" },
     { id: "@cf/meta/llama-3.3-70b-instruct-fp8-fast", ad: "Llama 3.3 70B" },
     // Qwen3 30B, Cloudflare 20 Kasım 2026'da kapattığı için listeden çıkarıldı.
@@ -18236,16 +18238,28 @@ function ksAsistanBirlestir(a, b) {
 }
 // Danışman "Durdur"a basınca fırlatılan hata
 function ksAsistanDurdu(iptal) { if (iptal && iptal.iptal) { const e = new Error("Durduruldu."); e.durduruldu = true; throw e; } }
+// Gemini (pdr-gemini worker) seçili ücretsiz model mi?
+function pdrAsistanGeminiMi(model) { return PDR_ASISTAN_MODELLER.ucretsiz.some(m => m.id === model && m.gemini); }
+// Gemini worker'ı tek kullanıcı mesajı bekler (çözüm yolundaki biçim): sohbet geçmişi etiketlenip tek metne çevrilir
+function pdrAsistanGeminiMesaj(mesajlar) {
+  const duz = (c) => typeof c === "string" ? c : Array.isArray(c) ? c.map(b => (b && b.text) || "").join("\n") : String(c || "");
+  const metin = mesajlar.map(m => `── ${m.role === "assistant" ? "ASİSTAN (senin önceki yanıtın)" : "DANIŞMAN / PROGRAM"} ──\n${duz(m.content)}`).join("\n\n")
+    + "\n\n── Şimdi ASİSTAN olarak yalnızca bir sonraki yanıtını yaz (araç gerekiyorsa <arac> biçimini kullan). ──";
+  return [{ role: "user", content: [{ type: "text", text: metin }] }];
+}
 async function ksAsistanModelCagir(ayar, sistem, mesajlar, iptal) {
   const claudeMi = ayar.saglayici !== "ucretsiz";
-  const url = claudeMi ? PDR_ASISTAN_CLAUDE_URL : ayar.ucretsizUrl;
-  if (!claudeMi) pdrAsistanKalkanaEkle(url);
+  const modelUrl = (model) => claudeMi ? PDR_ASISTAN_CLAUDE_URL : pdrAsistanGeminiMi(model) ? PDR_GEMINI_VARSAYILAN.url : ayar.ucretsizUrl;
+  if (!claudeMi) pdrAsistanKalkanaEkle(ayar.ucretsizUrl);
   // Önbellek (yalnızca Claude): sabit sistem talimatı ve konuşmanın önceki kısmı Anthropic tarafında
   // 5 dk saklanır; aynı işin sonraki adımlarında yeniden işlenmez → daha hızlı ve ~%90 daha ucuz giriş.
   let onbellekAcik = claudeMi && ayar.onbellek !== false;
   const istek = async (model) => {
     // __kalkanGenis: gizlilik kalkanı bu istekte veli/öğretmen/okul/yer adlarını da kodlar (sunucuya gitmeden silinir)
-    const govde = { model, max_tokens: claudeMi ? 4000 : 6000, system: sistem, messages: mesajlar, __kalkanGenis: true, __asistan: true };
+    const gem = !claudeMi && pdrAsistanGeminiMi(model), url = modelUrl(model);
+    if (!claudeMi) pdrAsistanKalkanaEkle(url);
+    // Gemini önce "düşünür"; düşünme de sınırdan yer, bu yüzden sınır geniş tutulur
+    const govde = { model, max_tokens: claudeMi ? 4000 : gem ? 8000 : 6000, system: sistem, messages: gem ? pdrAsistanGeminiMesaj(mesajlar) : mesajlar, __kalkanGenis: true, __asistan: true };
     if (onbellekAcik) {
       govde.system = [{ type: "text", text: sistem, cache_control: { type: "ephemeral" } }];
       govde.messages = mesajlar.map((m, i) => i === mesajlar.length - 1 && typeof m.content === "string"
@@ -18254,7 +18268,7 @@ async function ksAsistanModelCagir(ayar, sistem, mesajlar, iptal) {
     let res;
     try { res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(govde), signal: iptal && iptal.ctrl ? iptal.ctrl.signal : undefined }); }
     catch (e) {
-      ksAsistanDurdu(iptal); throw new Error(claudeMi ? "Sunucuya ulaşılamadı. İnternet bağlantını kontrol et." : "Ücretsiz model sunucusuna ulaşılamadı. Cloudflare'de 'pdr-asistan' worker'ı kurulu mu? (Asistan ayarlarındaki kurulum adımlarına bak.)"); }
+      ksAsistanDurdu(iptal); throw new Error(claudeMi ? "Sunucuya ulaşılamadı. İnternet bağlantını kontrol et." : gem ? "Gemini sunucusuna ulaşılamadı. İnternetini kontrol et; sorun sürerse Cloudflare'de 'pdr-gemini' worker'ının açık olduğuna bak." : "Ücretsiz model sunucusuna ulaşılamadı. Cloudflare'de 'pdr-asistan' worker'ı kurulu mu? (Asistan ayarlarındaki kurulum adımlarına bak.)"); }
     const giden = typeof window !== "undefined" ? window.__pdrKalkanSonGiden || "" : "";
     const ham = await res.text();
     let data; try { data = JSON.parse(ham); } catch (e) { data = null; }
@@ -18279,7 +18293,8 @@ async function ksAsistanModelCagir(ayar, sistem, mesajlar, iptal) {
   if (!claudeMi && !hatali(r) && !ksAsistanMetinCikar(r.data).trim()) r = await istek(r.model);
   // Cloudflare geçici hata verdiyse (ör. "4002 could not route request", kapasite dolu, zaman aşımı):
   // kısa bir beklemeyle aynı modeli bir kez daha dene; yine olmazsa başka bir ücretsiz modelle yanıtla
-  const geciciHata = (x) => hatali(x) && ([429, 500, 502, 503, 504].includes(x.res.status) || /4002|3040|route|capacity|kapasite|timeout/i.test(x.ham || ""));
+  // Gemini'de her hata (kota dolu, model kapalı) yedeğe geçiş sebebidir
+  const geciciHata = (x) => hatali(x) && (pdrAsistanGeminiMi(x.model) || [429, 500, 502, 503, 504].includes(x.res.status) || /4002|3040|route|capacity|kapasite|timeout|high demand|overloaded/i.test(x.ham || ""));
   if (!claudeMi && geciciHata(r)) {
     await new Promise(ok => setTimeout(ok, 1500)); ksAsistanDurdu(iptal);
     r = await istek(r.model);
@@ -18319,7 +18334,7 @@ async function ksAsistanModelCagir(ayar, sistem, mesajlar, iptal) {
 function ksAsistanMetinCikar(data) {
   if (!data) return "";
   let t = "";
-  if (Array.isArray(data.content)) t = data.content.filter(b => b && b.type === "text" && typeof b.text === "string").map(b => b.text).join("\n");
+  if (Array.isArray(data.content)) t = data.content.filter(b => b && (b.type === "text" || !b.type) && typeof b.text === "string").map(b => b.text).join("\n");
   else if (typeof data.content === "string") t = data.content;
   if (!t && typeof data.response === "string") t = data.response;
   if (!t && data.choices && data.choices[0] && data.choices[0].message) t = String(data.choices[0].message.content || "");
@@ -43169,6 +43184,7 @@ function AsistanEkrani({
           <select value={ayar.ucretsizModel} onChange={e => ayarDegis({ ucretsizModel: e.target.value })} style={{ ...inp, marginBottom: 6 }}>
             {PDR_ASISTAN_MODELLER.ucretsiz.map(m => <option key={m.id} value={m.id}>{m.ad}</option>)}
           </select>
+          {pdrAsistanGeminiMi(ayar.ucretsizModel) && <div data-testid="asistan-gemini-not" style={{ fontSize: 10.5, color: "#9A3412", background: "#FFF7ED", border: "1px solid #FDBA74", borderRadius: 8, padding: "6px 8px", marginBottom: 8, lineHeight: 1.45 }}>🆓 Gemini 3.8 Flash, çözüm yolunda kullanılan 'pdr-gemini' worker'ı üzerinden Google'ın ücretsiz katmanına gider (aşağıdaki worker adresi bunu etkilemez). Günlük istek sınırı vardır; dolarsa ya da yanıt vermezse Gemma ile yanıtlanır. Google ücretsiz katmanda içeriği kendi geliştirmesi için kullanabilir; öğrenci, veli, okul adları gizlilik kalkanıyla kodlanarak gider.</div>}
           <div style={{ fontSize: 11, color: MUTED, marginBottom: 3 }}>Worker adresi</div>
           <input value={ayar.ucretsizUrl} onChange={e => ayarDegis({ ucretsizUrl: e.target.value.trim() })} style={{ ...inp, marginBottom: 10, fontSize: 12 }} />
 

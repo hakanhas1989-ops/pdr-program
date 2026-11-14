@@ -15597,13 +15597,14 @@ const KS_ASISTAN_ARACLAR = {
     calistir: (g, ctx, o) => ksAsistanOgrenciDosyasi(ctx, o),
   },
   gorusme_notlari: {
-    aciklama: "Bir öğrencinin son görüşme notlarını (tarih, konu, özet) getirir. Yalnızca gerektiğinde kullan; çoğu iş için ogrenci_ozeti yeterlidir.", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "adet": 5}', ogrenciIster: true,
+    aciklama: "Bir öğrencinin BÜTÜN görüşme notlarını (tarih, konu, notun tamamı) yeniden eskiye getirir. Öğrenciyle ilgili her değerlendirmede kullan. adet verme (yalnız danışman 'son 3 görüşme' gibi bir sayı söylerse ver).", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
     calistir: (g, ctx, o) => {
-      const n = Math.max(1, Math.min(10, parseInt(g.adet) || 5));
+      // Varsayılan: bütün görüşmeler (en fazla 60); danışman sayı söylediyse o kadar
+      const n = Math.max(1, Math.min(60, parseInt(g.adet) || 60));
       const l = (ctx.records || []).filter(x => pdrAyniOgrenci(x.studentName, x.className, o.name, o.className)).sort((a, b) => ksTarihSirala(b, a)).slice(0, n);
       if (!l.length) return "Bu öğrenci için görüşme notu yok.";
       const ek = pdrDegerlendirmeEksikMetni(ctx, o);
-      return pdrNotOkumaKurali(ksAsistanEtiket(o)) + "\n" + l.map(x => `• ${x.date}${x.topic ? " · " + konuGoster(x) : ""}${x.meetingType && x.meetingType !== "Öğrenci" ? " · " + x.meetingType + " görüşmesi" : ""}: ${ksAsistanKisalt(pdrOgrNotMetni(x, o), 1500)}`).join("\n") + (ek ? "\n\n" + ek : "");
+      return pdrNotOkumaKurali(ksAsistanEtiket(o)) + "\n" + (l.length < n || !g.adet ? `BÜTÜN GÖRÜŞMELER (${l.length}, yeniden eskiye):\n` : `SON ${l.length} GÖRÜŞME:\n`) + l.map(x => `• ${x.date}${x.topic ? " · " + konuGoster(x) : ""}${x.meetingType && x.meetingType !== "Öğrenci" ? " · " + x.meetingType + " görüşmesi" : ""}: ${ksAsistanKisalt(pdrOgrNotMetni(x, o), 5000)}`).join("\n") + (ek ? "\n\n" + ek : "");
     },
   },
   risk_analizi: { aciklama: "Kapalı sistemle risk analizi yapar (kaydetmez).", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
@@ -18206,7 +18207,7 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - Danışmana ASLA kod sorma ve kodlardan söz etme; o ekranında gerçek adları görür. Öğrenciyi araçlara adıyla ya da sana gelen koduyla yazabilirsin. Ad belirsizse ogrenci_ara ile ara ve bulunan seçenekleri sun.
 - Kayıtlı bir görüşme notunu düzeltmen istenirse gorusme_duzelt kullan.
 - Bir kayıt aracı onaya sunulduğunda danışman "kaydet/evet" ya da "bekle/hayır/ben yaparım/şunu düzelt" diye cevap verebilir; araç sonucunda gelen cevaba göre davran.
-- Yanıtların kısa olsun (genelde 150 kelimeyi geçme); uzun rapor istenirse maddeler hâlinde öz ver.
+- BÜTÜN GÖRÜŞMELERİ OKU: Bir öğrenciyle ilgili değerlendirme, öneri, seans hazırlığı, müdahale planı, risk değerlendirmesi, süpervizyon ya da veli yazısı istendiğinde ÖNCE gorusme_notlari ile o öğrencinin BÜTÜN görüşme notlarını oku (adet verme; araç hepsini getirir). Yalnızca son görüşmeye, öğrenci özetine ya da dosyadaki kısaltılmış notlara dayanma. Değerlendirmede ilk görüşmeden bu yana gidişatı (ne değişti, ne sürüyor, hangi öneriler uygulandı) belirt.
 - Kodları her zaman eksiksiz yaz: "Öğrenci-11, Öğrenci-12" gibi; "11, 12 ve 13" diye kısaltma (kısaltılan kod danışmanın ekranında gerçek ada çevrilemez).
 ${ekranModu ? `- Danışman bir kayıt eklemeni ya da yazmanı isterse (görüşme notu, hatırlatma, risk, müdahale planı) [EKRANDA DOLDURUR] araçlarını kullan: formu danışmanın gözü önünde doldurursun, ardından program danışmana "Kaydedeyim mi?" diye sorar; danışman onaylarsa kaydedilir. Araç sonucu kaydedilip kaydedilmediğini söyler, ona göre kısa bir yanıt ver. Bu araçlardan bir yanıtta YALNIZCA BİRİNİ çağır.
 - Danışman bir ekranı "aç", "göster", "götür" derse ekranda_ac kullan.` : `- Danışman bir ekranı "aç", "göster", "götür" derse ekranda_ac kullan.`}
@@ -18218,7 +18219,7 @@ DEĞİŞTİRİLEMEZ KURALLAR
 3. Tanı koyma; "olabilir", "değerlendirilmeli" gibi temkinli bir dil kullan. Yönlendirme kararını danışmana bırak.
 4. Bir araç sonucunda "⚠ KRİTİK" ya da kendine zarar, intihar, istismar, şiddet belirtisi varsa yanıtına bununla başla ve güvenlik adımlarını (aynı gün değerlendirme, okul yönetimi, veli ya da yasal bildirim, uzman yönlendirmesi) öner.
 5. Hatırlatma metinlerine hassas ayrıntı yazma; kısa ve nötr yaz (örn. "Veli görüşmesi").
-6. Yanıtların kısa ve uygulanabilir olsun. Uzun araç çıktısını olduğu gibi kopyalama; özetle, önemli noktaları ve sonraki adımı belirt. Markdown başlığı ve tablo kullanma; gerekirse kısa maddeler kullan.
+6. Yanıtların uygulanabilir olsun; uzunluğu sorunun gerektirdiği kadar olsun. Uzun araç çıktısını olduğu gibi kopyalama; özetle, önemli noktaları ve sonraki adımı belirt. Markdown başlığı ve tablo kullanma; gerekirse kısa maddeler kullan.
 
 DANIŞMANIN KURALLARI
 UZUN İŞLER (İŞ DEFTERİ)
@@ -18700,7 +18701,7 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
       if (ogr && a && !a.yazma && !/⚠ KRİTİK/.test(String(sonuc))) {
         try { const X = ksSupBaglam(ksAsistanGirdi(ctx, ogr)); if (X.c.kritikTurler.length) sonuc = `⚠ KRİTİK: ${X.c.kritikTurler.join(", ")} ile ilgili ifadeler var — önce güvenlik.\n` + sonuc; } catch (e) {}
       }
-      sonuc = ksAsistanKisalt(String(sonuc), c.ad === "alan_bilgisi" ? 7000 : 4500); // bilgi kitaplığı bölümleri bütün gelsin
+      sonuc = ksAsistanKisalt(String(sonuc), c.ad === "gorusme_notlari" ? 60000 : c.ad === "alan_bilgisi" ? 7000 : 4500); // bilgi kitaplığı bölümleri ve bütün görüşme notları kesilmeden gelsin
       if (/⚠ KRİTİK/.test(sonuc)) kritik = true;
       aracSonuclari[c.ad] = sonuc;
       olay({ tip: "arac", ad: c.ad, ogrenci: ogr ? ksAsistanEtiket(ogr) : "", ogrKimlik: ogr ? { name: ogr.name, className: ogr.className || "", numara: ogr.numara || "" } : null, sonuc });

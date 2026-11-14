@@ -18014,8 +18014,10 @@ async function pdrDerslerBulutYukle() {
   try {
     const r = await window.storage.get("pdr-asistan-dersler");
     const bulut = r && r.value ? JSON.parse(r.value) : null;
-    if (Array.isArray(bulut)) pdrDerslerYaz(bulut, true);
-    else { const yerel = pdrDerslerOku(); if (yerel.length) pdrDerslerYaz(yerel); }
+    const yerel = pdrDerslerOku();
+    // Bulut boşken telefondaki dersler silinmez (eskiden boş bulut listesi buradaki dersleri de siliyordu); buluta geri gönderilir
+    if (Array.isArray(bulut) && (bulut.length || !yerel.length)) pdrDerslerYaz(bulut, true);
+    else if (yerel.length) pdrDerslerYaz(yerel);
   } catch (e) {}
 }
 // Ders metni kişisel bilgi içeriyor mu? (kayıtlı öğrenci adı, uzun sayı, e-posta, telefon)
@@ -42863,8 +42865,8 @@ async function pdrAsistanIstek(m, kullanilan, ctx) {
 
 // 🎓 Asistan yanıtının altındaki süpervizyon kutusu
 // Ayarlar → 🧠 Öğrendikleri: onaylı dersler, deneyim kaydı, "Kendini değerlendir"
-function PdrOgrendiklerPaneli({ gonder }) {
-  const [, yenile] = useState(0);
+function PdrOgrendiklerPaneli({ gonder, mesgul, ayarKapat }) {
+  const [, yenile] = useState(0), [uyari, setUyari] = useState("");
   const dersler = pdrDerslerOku(), deneyim = pdrDeneyimOku();
   const sonDeg = deneyim.filter(x => /kendini değerlendir/i.test(x.soru || "")).pop();
   const yeniIs = sonDeg ? deneyim.length - 1 - deneyim.lastIndexOf(sonDeg) : deneyim.length;
@@ -42880,9 +42882,14 @@ function PdrOgrendiklerPaneli({ gonder }) {
         </div>
       ))}
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
-        <button data-testid="kendini-degerlendir" onClick={() => gonder("🧠 Kendini değerlendir: deneyim kaydına bak, tekrarlayan hatalarını bul ve ders öner.")} style={{ ...k, background: PURPLE, color: "#fff" }}>🧠 Kendini değerlendir</button>
+        <button data-testid="kendini-degerlendir" onClick={() => {
+          // Asistan başka bir işle meşgulken istek sessizce düşüyordu: artık söylenir; gönderilince ayarlar kapanır ve sohbete inilir
+          if (mesgul) { setUyari("⏳ Asistan şu an başka bir işi bitirmeye çalışıyor. Sohbetin altındaki işin bitmesini bekle ya da ⏹ Durdur'a bas, sonra tekrar dene."); return; }
+          setUyari(""); if (ayarKapat) ayarKapat();
+          gonder("🧠 Kendini değerlendir: deneyim kaydına bak, tekrarlayan hatalarını bul ve ders öner."); }} style={{ ...k, background: PURPLE, color: "#fff" }}>🧠 Kendini değerlendir</button>
         {deneyim.length > 0 && <button onClick={() => { if (window.confirm("Deneyim kaydı temizlensin mi? (Onaylı dersler kalır.)")) { pdrDeneyimYaz([]); yenile(x => x + 1); } }} style={k}>Kaydı temizle</button>}
       </div>
+      {uyari && <div data-testid="degerlendir-uyari" style={{ fontSize: 11, color: "#9A3412", background: "#FFF7ED", border: "1px solid #FDBA74", borderRadius: 8, padding: "5px 8px", marginTop: 6 }}>{uyari}</div>}
     </div>
   );
 }
@@ -43198,7 +43205,7 @@ function AsistanEkrani({
           <div style={{ fontSize: 11, color: MUTED, marginBottom: 3 }}>Worker adresi</div>
           <input value={ayar.ucretsizUrl} onChange={e => ayarDegis({ ucretsizUrl: e.target.value.trim() })} style={{ ...inp, marginBottom: 10, fontSize: 12 }} />
 
-          <PdrOgrendiklerPaneli gonder={gonder} />
+          <PdrOgrendiklerPaneli gonder={gonder} mesgul={!!S.calisiyor && !S.onay} ayarKapat={() => setAyarAcik(false)} />
 
           <div style={{ fontSize: 12, fontWeight: 800, color: TEXT, marginBottom: 4 }}>📋 Asistana kurallarım</div>
           <textarea value={ayar.kurallar} onChange={e => ayarDegis({ kurallar: e.target.value })} rows={4} placeholder={PDR_ASISTAN_VARSAYILAN_KURALLAR} style={{ ...inp, resize: "vertical", marginBottom: 4 }} />

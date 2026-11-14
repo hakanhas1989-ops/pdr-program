@@ -14660,7 +14660,7 @@ const PDR_ASISTAN_VARSAYILAN_AYAR = {
 const PDR_ASISTAN_CLAUDE_URL = "https://pdr-api.hakanhas1989.workers.dev";
 // Geçici hatada otomatik yedek olarak denenmeyen modeller: yeni eklenenler, worker kodu
 // güncellenmemişse worker'da izinli olmayabilir (worker o zaman sessizce ilk modele döner).
-const PDR_ASISTAN_YEDEK_DISI = ["@cf/qwen/qwen3.8-27b", "@cf/thinkingmachines/inkling-2-small"];
+const PDR_ASISTAN_YEDEK_DISI = ["@cf/qwen/qwen3.8-27b"];
 const PDR_ASISTAN_MODELLER = {
   claude: [
     { id: "claude-haiku-5-5", ad: "Claude Haiku 5.5 — hızlı, en ucuz (önerilen)", fiyat: [0.10, 0.50] },
@@ -14672,7 +14672,7 @@ const PDR_ASISTAN_MODELLER = {
     { id: "@cf/qwen/qwen3.8-27b", ad: "Qwen 3.8 27B — çok dilli" },
     { id: "@cf/meta/llama-3.3-70b-instruct-fp8-fast", ad: "Llama 3.3 70B" },
     // Qwen3 30B, Cloudflare 20 Kasım 2026'da kapattığı için listeden çıkarıldı.
-    { id: "@cf/thinkingmachines/inkling-2-small", ad: "Inkling 2 Small (Thinking Machines) — yeni, Kasım 2026; Türkçesi deneniyor" },
+    // Inkling 2 Small denendi: Workers Free planında kullanılamıyor (hata 5035, ücretli plan istiyor) — eklenmedi.
   ],
 };
 function pdrAsistanAyarOku() {
@@ -42277,7 +42277,6 @@ const IZINLI_MODELLER = [
   "@cf/google/gemma-4-26b-a4b-it",
   "@cf/qwen/qwen3.8-27b",
   "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-  "@cf/thinkingmachines/inkling-2-small",
 ];
 // Yalnızca programın açıldığı yerlerden gelen isteklere izin verilir
 // ("null": program dosyadan açıldığında tarayıcının gönderdiği değer)

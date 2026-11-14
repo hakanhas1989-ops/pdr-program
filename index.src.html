@@ -15598,7 +15598,7 @@ const KS_ASISTAN_ARACLAR = {
       const l = (ctx.records || []).filter(x => pdrAyniOgrenci(x.studentName, x.className, o.name, o.className)).sort((a, b) => ksTarihSirala(b, a)).slice(0, n);
       if (!l.length) return "Bu öğrenci için görüşme notu yok.";
       const ek = pdrDegerlendirmeEksikMetni(ctx, o);
-      return l.map(x => `• ${x.date}${x.topic ? " · " + konuGoster(x) : ""}${x.meetingType && x.meetingType !== "Öğrenci" ? " · " + x.meetingType + " görüşmesi" : ""}: ${ksAsistanKisalt(pdrOgrNotMetni(x, o), 1500)}`).join("\n") + (ek ? "\n\n" + ek : "");
+      return pdrNotOkumaKurali(ksAsistanEtiket(o)) + "\n" + l.map(x => `• ${x.date}${x.topic ? " · " + konuGoster(x) : ""}${x.meetingType && x.meetingType !== "Öğrenci" ? " · " + x.meetingType + " görüşmesi" : ""}: ${ksAsistanKisalt(pdrOgrNotMetni(x, o), 1500)}`).join("\n") + (ek ? "\n\n" + ek : "");
     },
   },
   risk_analizi: { aciklama: "Kapalı sistemle risk analizi yapar (kaydetmez).", girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı"}', ogrenciIster: true,
@@ -16689,7 +16689,8 @@ function ksAsistanOgrenciDosyasi(ctx, o) {
   if (gor.length) {
     const konu = {}; gor.forEach(r => { const k = r.topic || "Konusuz"; konu[k] = (konu[k] || 0) + 1; });
     const tur = {}; gor.forEach(r => { const k = r.meetingType || "Öğrenci"; tur[k] = (tur[k] || 0) + 1; });
-    b.push(`\nGÖRÜŞMELER (${gor.length}; ilk ${gor[gor.length - 1].date}, son ${gor[0].date}) — konular: ${Object.entries(konu).sort((a, c) => c[1] - a[1]).map(([k, v]) => k + " " + v).join(", ")}; türler: ${Object.entries(tur).map(([k, v]) => k + " " + v).join(", ")}`);
+    b.push("\n" + pdrNotOkumaKurali(ksAsistanEtiket(o)));
+    b.push(`GÖRÜŞMELER (${gor.length}; ilk ${gor[gor.length - 1].date}, son ${gor[0].date}) — konular: ${Object.entries(konu).sort((a, c) => c[1] - a[1]).map(([k, v]) => k + " " + v).join(", ")}; türler: ${Object.entries(tur).map(([k, v]) => k + " " + v).join(", ")}`);
     gor.slice(0, 6).forEach(r => b.push(`• ${r.date}${r.topic ? " · " + konuGoster(r) : ""}${r.meetingType && r.meetingType !== "Öğrenci" ? " · " + r.meetingType : ""}${r.grupKatilimcilari && r.grupKatilimcilari.length ? " · grup" : ""}: ${((m, n) => m.length > n ? K(m, n) + " [kısaltıldı — tamamı için gorusme_notlari]" : m)(String(pdrOgrNotMetni(r, o)).replace(/\s+/g, " ").trim(), r === gor[0] ? 1500 : 280)}`));
     if (gor.length > 6) b.push(`  (daha eski ${gor.length - 6} görüşme var; gerekirse gorusme_notlari ile adet artır)`);
   } else b.push("\nGÖRÜŞMELER: kayıt yok.");
@@ -18148,6 +18149,7 @@ ${ksKademeMetni(ctx)}
 VERİ VE GİZLİLİK
 - Öğrenci adları sana "Öğrenci-1" gibi kodlarla, sınıflar "8-Ş1" gibi, diğer kişi/okul/yer adları "[KİŞİ-1]", "[OKUL-1]", "[YER-1]" gibi gelir. Kodları aynen kullan; gerçek adları tahmin etmeye çalışma. Danışman ekranında kodları gerçek adlarla görür.
 - Öğrencilerle ilgili bilgiyi yalnızca araçlardan al. Araç sonucunda olmayan bilgiyi uydurma; gerekirse araç çağır ya da bilmediğini söyle.
+- Görüşme notlarında rolleri karıştırma: notun kimin kaydında olduğu ile notta "kendisi" diye anlatılan kişi farklı olabilir. Zorbalık, çatışma, kavga ve risk notlarında öneriden önce kimin yaptığını, kimin etkilendiğini nottan belirle; belirsizse bunu söyle ve sor. Danışmanın seçtiği konuyu kendi yorumunla değiştirme; çelişki görürsen yalnızca uyar.
 
 ARAÇLAR${secim ? ` (bu soru için seçilen ${secim.liste.length}/${secim.toplam} araç; gereken araç listede yoksa adıyla yine çağırabilirsin ya da arac_listesi ile tam listeyi al)` : ""}
 ${araclar}${secim && secim.harita ? "\n\n" + secim.harita : ""}
@@ -21991,6 +21993,12 @@ function pdrOgrNotMetni(r, o, sade) {
     return sade ? `${ana} ${oz}` : `${ana} [bu öğrenciye özel not: ${oz}]`;
   }
   return pdrOgrNotMetniTemel(r, o, sade);
+}
+// Asistan notları modele verirken başa eklenen okuma kuralı. Neden: not bir öğrencinin dosyasında
+// dururken içinde "kendisi" diye BAŞKA bir öğrencinin anlattıkları yazılmış olabilir (ör. mağdurun
+// anlattıkları zorbalığı yapanın dosyasına). Model "kendisi = kayıt sahibi" sanınca roller ters döner.
+function pdrNotOkumaKurali(etiket) {
+  return `NOT OKUMA KURALI: Aşağıdaki notlar ${etiket} adlı öğrencinin KAYDINDADIR. Notta "kendisi / öğrenci" diye anlatılan kişi her zaman kayıt sahibi olmayabilir (ör. başka bir öğrencinin anlattıkları zorbalığı yapan öğrencinin dosyasına yazılmış olabilir). Kimin ne yaptığını ve kimin etkilendiğini nottaki adlardan ve ifadelerden çıkar; belirsizse varsayma, yanıtında açıkça belirt ve danışmana sor. Konu (ör. "Zorbalık Uygulama" / "Zorbalığa Maruz Kalma") danışmanın kendi değerlendirmesidir: onu değiştirme; notla çelişki görürsen yalnızca "Not şu yönde görünüyor, konu X seçilmiş; kontrol eder misiniz?" diye uyar.`;
 }
 // Notta öğrencinin adının (ilk ad / görünen soyadı) geçtiği cümleler — yapay zekâsız, yeni bilgi eklemez
 function pdrNottaAdiGecenCumleler(metin, ad) {

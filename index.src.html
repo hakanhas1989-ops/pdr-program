@@ -18212,6 +18212,7 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - Danışmana ASLA kod sorma ve kodlardan söz etme; o ekranında gerçek adları görür. Öğrenciyi araçlara adıyla ya da sana gelen koduyla yazabilirsin. Ad belirsizse ogrenci_ara ile ara ve bulunan seçenekleri sun.
 - Kayıtlı bir görüşme notunu düzeltmen istenirse gorusme_duzelt kullan.
 - Bir kayıt aracı onaya sunulduğunda danışman "kaydet/evet" ya da "bekle/hayır/ben yaparım/şunu düzelt" diye cevap verebilir; araç sonucunda gelen cevaba göre davran.
+- BULUNAN ÖĞRENCİYİ KABUL ET: ogrenci_ara, sinif_bilgisi ya da başka bir araç danışmanın söylediği ad ve sınıfa uyan TEK bir öğrenci getirdiyse (kayıttaki adın ikinci adı ya da soyadı olsa bile, örn. danışman "Umay" dedi, kayıt "UMAY M… I…") o öğrenci odur; "karıştırılmış olabilir" deyip danışmana yeniden teyit sorma, numara isteme. Yalnız birden çok aday çıkarsa ya da hiç çıkmazsa sor. Danışman kaydetmeni istediyse ve öğrenciler bulunduysa "kaydedeyim mi?" diye ayrıca sorma; formu doldur (onayı danışman formda Kaydet'e basarak verir).
 - ARAÇ SONUCUNA SADIK KAL: Bir araç "doldurulmadı", "yapılmadı", "bulunamadı", "kaydedilmedi" ya da hata döndürdüyse o iş YAPILMAMIŞTIR. Danışmana asla "dolduruldu / kaydedildi" deme; sonucu olduğu gibi söyle, nedenini düzelt ve yeniden dene ya da danışmana sor.
 - KAYNAĞA DAYAN: Öğrenci değerlendirmesi, öneri, seans hazırlığı ya da müdahale planı istendiğinde, görüşme notlarını okumakla aynı yanıtta kutuphane_ara (danışmanın Kütüphanesi) ve program_ara (Müdahale Programları kitapları) ile öğrencinin sorununa uyan bölümleri de ara; uygun bölüm çıkarsa gerekirse kutuphane_oku / program_oturumu ile oku. Önerilerini bulduğun kaynağa dayandır ve her önerinin yanında kaynağın adını, bölümünü ya da kitap + oturum numarasını yaz. Uygun kaynak çıkmazsa yanıtın sonunda bir cümleyle "Kütüphanede bu konuya uygun kaynak bulamadım; öneriler genel alan bilgisine dayanıyor" de. Kaynakta olmayanı kaynaktaymış gibi söyleme.
 - BÜTÜN GÖRÜŞMELERİ OKU: Bir öğrenciyle ilgili değerlendirme, öneri, seans hazırlığı, müdahale planı, risk değerlendirmesi, süpervizyon ya da veli yazısı istendiğinde ÖNCE gorusme_notlari ile o öğrencinin BÜTÜN görüşme notlarını oku (adet verme; araç hepsini getirir). Yalnızca son görüşmeye, öğrenci özetine ya da dosyadaki kısaltılmış notlara dayanma. Değerlendirmede ilk görüşmeden bu yana gidişatı (ne değişti, ne sürüyor, hangi öneriler uygulandı) belirt.
@@ -18312,8 +18313,8 @@ async function ksAsistanModelCagir(ayar, sistem, mesajlar, iptal) {
     // Gemini yoğun/kotası dolu → önce diğer ücretsiz Gemini modelleri (3.6 Flash, 3.5 Flash-Lite), sonra Cloudflare modelleri
     if (geciciHata(r) && pdrAsistanGeminiMi(r.model)) {
       const ilkHata = hataOzeti(r), ilkModel = r.model;
-      // 3.6 yoğunsa 3.5 Flash-Lite denenir (3.8'in küçük kotası harcanmasın); 3.8 yoğunsa 3.6, sonra 3.5 Flash-Lite
-      const gemYedek = ilkModel === "gemini-3.8-flash" ? ["gemini-3.6-flash", "gemini-3.5-flash-lite"] : ["gemini-3.5-flash-lite"].filter(m => m !== ilkModel);
+      // 3.8 yoğunsa 3.6 denenir; 3.6 yoğunsa doğrudan Gemma'ya geçilir (3.5 Flash-Lite çıkarıldı: araçları karıştırıyor, bulduğu öğrenciye güvenmiyordu)
+      const gemYedek = ilkModel === "gemini-3.8-flash" ? ["gemini-3.6-flash"] : [];
       for (const gm of gemYedek) { ksAsistanDurdu(iptal); r = await istek(gm); if (!geciciHata(r)) { yedek = true; yedekNeden = ilkHata; break; } }
       if (geciciHata(r)) r = { ...r, model: ilkModel, __ilkHata: ilkHata };
     }

@@ -18316,11 +18316,11 @@ async function ksAsistanModelCagir(ayar, sistem, mesajlar, iptal) {
       // 3.8 yoğunsa 3.6 denenir; 3.6 yoğunsa doğrudan Gemma'ya geçilir (3.5 Flash-Lite çıkarıldı: araçları karıştırıyor, bulduğu öğrenciye güvenmiyordu)
       const gemYedek = ilkModel === "gemini-3.8-flash" ? ["gemini-3.6-flash"] : [];
       for (const gm of gemYedek) { ksAsistanDurdu(iptal); r = await istek(gm); if (!geciciHata(r)) { yedek = true; yedekNeden = ilkHata; break; } }
-      if (geciciHata(r)) r = { ...r, model: ilkModel, __ilkHata: ilkHata };
+      if (geciciHata(r)) r = { ...r, model: ilkModel, __ilkHata: ilkHata + (gemYedek.length ? " — diğer Gemini modelleri de yoğundu" : "") };
     }
     if (geciciHata(r)) {
       const diger = PDR_ASISTAN_MODELLER.ucretsiz.filter(m => !m.gemini).map(m => m.id).filter(id => id !== r.model && !PDR_ASISTAN_YEDEK_DISI.includes(id));
-      yedekNeden = r.__ilkHata ? r.__ilkHata + " — diğer Gemini modelleri de yoğundu" : hataOzeti(r);
+      yedekNeden = r.__ilkHata ? r.__ilkHata : hataOzeti(r);
       for (const id of diger.slice(0, 2)) { ksAsistanDurdu(iptal); r = await istek(id); yedek = true; if (!geciciHata(r)) break; }
     }
   }

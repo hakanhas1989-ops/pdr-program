@@ -15305,7 +15305,7 @@ function ksKutuphaneBilgiBlogu(liste) {
 ${satirlar.join("\n")}
 - Soru bu kaynakların konusuna giriyorsa (mevzuat, etik, gizlilik, süre/madde, kuram, teknik, yöntem) danışman "kütüphane" demese de önce kutuphane_ara ile ilgili bölümü bul, gerekirse kutuphane_oku ile oku; yanıtını ona dayandır ve kaynağın adını (ve bölümünü) belirt.
 - Kaynak ile genel bilgin çelişirse kaynağı esas al ve farkı belirt. Kaynakta olmayanı kaynaktaymış gibi söyleme.
-- Konu bu kaynaklarla ilgisizse genel bilginle yanıt ver; kütüphaneyi zorla araya sokma.`;
+- Öğrenci değerlendirmesi, öneri, seans hazırlığı ve müdahale planında kütüphaneyi her zaman ara (bkz. KAYNAĞA DAYAN). Bunların dışında konu kaynaklarla ilgisizse genel bilginle yanıt ver; kütüphaneyi zorla araya sokma.`;
 }
 async function ksAsistanKutuphaneAra(g) {
   const q = String(g.sorgu || "").trim();
@@ -18209,6 +18209,7 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - Danışmana ASLA kod sorma ve kodlardan söz etme; o ekranında gerçek adları görür. Öğrenciyi araçlara adıyla ya da sana gelen koduyla yazabilirsin. Ad belirsizse ogrenci_ara ile ara ve bulunan seçenekleri sun.
 - Kayıtlı bir görüşme notunu düzeltmen istenirse gorusme_duzelt kullan.
 - Bir kayıt aracı onaya sunulduğunda danışman "kaydet/evet" ya da "bekle/hayır/ben yaparım/şunu düzelt" diye cevap verebilir; araç sonucunda gelen cevaba göre davran.
+- KAYNAĞA DAYAN: Öğrenci değerlendirmesi, öneri, seans hazırlığı ya da müdahale planı istendiğinde, görüşme notlarını okumakla aynı yanıtta kutuphane_ara (danışmanın Kütüphanesi) ve program_ara (Müdahale Programları kitapları) ile öğrencinin sorununa uyan bölümleri de ara; uygun bölüm çıkarsa gerekirse kutuphane_oku / program_oturumu ile oku. Önerilerini bulduğun kaynağa dayandır ve her önerinin yanında kaynağın adını, bölümünü ya da kitap + oturum numarasını yaz. Uygun kaynak çıkmazsa yanıtın sonunda bir cümleyle "Kütüphanede bu konuya uygun kaynak bulamadım; öneriler genel alan bilgisine dayanıyor" de. Kaynakta olmayanı kaynaktaymış gibi söyleme.
 - BÜTÜN GÖRÜŞMELERİ OKU: Bir öğrenciyle ilgili değerlendirme, öneri, seans hazırlığı, müdahale planı, risk değerlendirmesi, süpervizyon ya da veli yazısı istendiğinde ÖNCE gorusme_notlari ile o öğrencinin BÜTÜN görüşme notlarını oku (adet verme; araç hepsini getirir). Yalnızca son görüşmeye, öğrenci özetine ya da dosyadaki kısaltılmış notlara dayanma. Değerlendirmede ilk görüşmeden bu yana gidişatı (ne değişti, ne sürüyor, hangi öneriler uygulandı) belirt.
 - Kodları her zaman eksiksiz yaz: "Öğrenci-11, Öğrenci-12" gibi; "11, 12 ve 13" diye kısaltma (kısaltılan kod danışmanın ekranında gerçek ada çevrilemez).
 ${ekranModu ? `- Danışman bir kayıt eklemeni ya da yazmanı isterse (görüşme notu, hatırlatma, risk, müdahale planı) [EKRANDA DOLDURUR] araçlarını kullan: formu danışmanın gözü önünde doldurursun, ardından program danışmana "Kaydedeyim mi?" diye sorar; danışman onaylarsa kaydedilir. Araç sonucu kaydedilip kaydedilmediğini söyler, ona göre kısa bir yanıt ver. Bu araçlardan bir yanıtta YALNIZCA BİRİNİ çağır.
@@ -18518,6 +18519,8 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
   // Kütüphane her istekte bilinsin: kaynak listesi sisteme girer, arama/okuma araçları hep seçili kalır
   let kutuphaneListe = []; try { kutuphaneListe = await ksKutuphaneListe(); } catch (e) { kutuphaneListe = []; }
   if (secim && kutuphaneListe.length) ["kutuphane_ara", "kutuphane_oku"].forEach(a => { if (!secim.liste.includes(a) && KS_ASISTAN_ARACLAR[a] && ksAsistanAracAcik(a, ayar)) secim.liste.push(a); });
+  // KAYNAĞA DAYAN kuralı: Müdahale Programları kitaplarını arama araçları ücretsiz modelde de her istekte açık olsun
+  if (secim) ["program_ara", "program_oturumu"].forEach(a => { if (!secim.liste.includes(a) && KS_ASISTAN_ARACLAR[a] && ksAsistanAracAcik(a, ayar)) secim.liste.push(a); });
   let isDefteri = []; try { isDefteri = await pdrIsDefteriOku(); } catch (e) { isDefteri = []; }
   if (secim && isDefteri.some(x => x.durum === "devam")) ["is_defteri", "is_defteri_yaz"].forEach(a => { if (!secim.liste.includes(a) && KS_ASISTAN_ARACLAR[a]) secim.liste.push(a); });
   const sistem = ksAsistanSistem(ayar, ctx, secim, kutuphaneListe, isDefteri);

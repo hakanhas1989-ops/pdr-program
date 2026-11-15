@@ -18212,6 +18212,7 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - Danışmana ASLA kod sorma ve kodlardan söz etme; o ekranında gerçek adları görür. Öğrenciyi araçlara adıyla ya da sana gelen koduyla yazabilirsin. Ad belirsizse ogrenci_ara ile ara ve bulunan seçenekleri sun.
 - Kayıtlı bir görüşme notunu düzeltmen istenirse gorusme_duzelt kullan.
 - Bir kayıt aracı onaya sunulduğunda danışman "kaydet/evet" ya da "bekle/hayır/ben yaparım/şunu düzelt" diye cevap verebilir; araç sonucunda gelen cevaba göre davran.
+- ARAÇ SONUCUNA SADIK KAL: Bir araç "doldurulmadı", "yapılmadı", "bulunamadı", "kaydedilmedi" ya da hata döndürdüyse o iş YAPILMAMIŞTIR. Danışmana asla "dolduruldu / kaydedildi" deme; sonucu olduğu gibi söyle, nedenini düzelt ve yeniden dene ya da danışmana sor.
 - KAYNAĞA DAYAN: Öğrenci değerlendirmesi, öneri, seans hazırlığı ya da müdahale planı istendiğinde, görüşme notlarını okumakla aynı yanıtta kutuphane_ara (danışmanın Kütüphanesi) ve program_ara (Müdahale Programları kitapları) ile öğrencinin sorununa uyan bölümleri de ara; uygun bölüm çıkarsa gerekirse kutuphane_oku / program_oturumu ile oku. Önerilerini bulduğun kaynağa dayandır ve her önerinin yanında kaynağın adını, bölümünü ya da kitap + oturum numarasını yaz. Uygun kaynak çıkmazsa yanıtın sonunda bir cümleyle "Kütüphanede bu konuya uygun kaynak bulamadım; öneriler genel alan bilgisine dayanıyor" de. Kaynakta olmayanı kaynaktaymış gibi söyleme.
 - BÜTÜN GÖRÜŞMELERİ OKU: Bir öğrenciyle ilgili değerlendirme, öneri, seans hazırlığı, müdahale planı, risk değerlendirmesi, süpervizyon ya da veli yazısı istendiğinde ÖNCE gorusme_notlari ile o öğrencinin BÜTÜN görüşme notlarını oku (adet verme; araç hepsini getirir). Yalnızca son görüşmeye, öğrenci özetine ya da dosyadaki kısaltılmış notlara dayanma. Değerlendirmede ilk görüşmeden bu yana gidişatı (ne değişti, ne sürüyor, hangi öneriler uygulandı) belirt.
 - Kodları her zaman eksiksiz yaz: "Öğrenci-11, Öğrenci-12" gibi; "11, 12 ve 13" diye kısaltma (kısaltılan kod danışmanın ekranında gerçek ada çevrilemez).
@@ -18671,6 +18672,15 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
       ksAsistanDurdu(iptal);
       const a = KS_ASISTAN_ARACLAR[c.ad];
       let sonuc, ogr = null;
+      // Gemini gibi modeller alan adlarını bazen kendince yazıyor ("not", "gorusme_notu", "ogrenciler"); doğru adlara çevrilir
+      if (a && c.girdi && typeof c.girdi === "object" && /"ozet"/.test(a.girdi || "") && !String(c.girdi.ozet || "").trim()) {
+        const t = ["not", "gorusme_notu", "notu", "metin", "icerik", "aciklama", "ozet_metni", "summary", "note"].map(k => c.girdi[k]).find(v => typeof v === "string" && v.trim());
+        if (t) c.girdi = { ...c.girdi, ozet: t };
+      }
+      if (a && c.girdi && typeof c.girdi === "object" && /diger_ogrenciler/.test(a.girdi || "") && !Array.isArray(c.girdi.diger_ogrenciler)) {
+        const l = ["diger_ogrenci", "ogrenciler", "katilimcilar", "grup", "grup_ogrencileri"].map(k => c.girdi[k]).find(v => Array.isArray(v) || (typeof v === "string" && v.trim()));
+        if (l) c.girdi = { ...c.girdi, diger_ogrenciler: Array.isArray(l) ? l : String(l).split(/,| ve /).map(x => x.trim()).filter(Boolean) };
+      }
       if (!a) sonuc = `Böyle bir araç yok. Kullanılabilir araçlar: ${Object.keys(KS_ASISTAN_ARACLAR).filter(x => ksAsistanAracAcik(x, ayar)).join(", ")}`;
       else if (!ksAsistanAracAcik(c.ad, ayar)) sonuc = (ayar.kayitYontemi === "sohbet") ? "Bu araç kapalı (kayıt yöntemi: sohbette onay). gorusme_kaydet, hatirlatma_ekle, risk_kaydet ya da mudahale_kaydet kullan." : "Bu araç kapalı (kayıt yöntemi: ekranda doldurma). ekranda_gorusme, ekranda_hatirlatma, ekranda_risk ya da ekranda_mudahale kullan.";
       else if (a.ekran && ekranIsi) sonuc = "Ekranda zaten bir işlem yapıldı. Aynı yanıtta ikinci ekran işlemi yapılmaz; danışman formu kaydettikten sonra iste.";
@@ -18715,8 +18725,10 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
               olay({ tip: "onay_sonuc", ad: c.ad, ok });
               sonuc = ok ? await a.calistir(c.girdi, ctx, ogr) : `Danışman bu işlemi onaylamadı; kayıt yapılmadı.${not ? ` Danışmanın yanıtı: "${ksAsistanKisalt(not, 300)}" — buna göre davran (örn. düzeltme istiyorsa düzeltip yeniden onaya sun, beklemek istiyorsa bekle).` : ""}`;
             } else {
-              if (a.ekran) { ekranIsi = true; olay({ tip: "ekran", ad: c.ad }); }
+              if (a.ekran) olay({ tip: "ekran", ad: c.ad });
               sonuc = await a.calistir(c.girdi, ctx, ogr);
+              // Yalnız BAŞARILI ekran işi ikinci ekran işini engeller; doldurulamayan form, düzeltilip aynı yanıtta yeniden denenebilir
+              if (a.ekran && !/^(Ekranda yapılamadı|Ekranda başka|Form doldurulmadı|Not metni boş|Grup görüşmesi:|Tarih anlaşılamadı)|yazılmadı|doldurulmadı/i.test(String(sonuc || ""))) ekranIsi = true;
             }
             if (supNot) sonuc = String(sonuc) + "\n" + supNot;
           } catch (e) { sonuc = "Araç çalışırken hata oluştu: " + (e && e.message ? e.message : String(e)); }
@@ -43293,7 +43305,10 @@ function AsistanEkrani({
               <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 8 }}>
                 {m.adimlar.map((a, j) => {
                   const k = `a${i}-${j}`;
-                  const etiket = a.onay === undefined ? `🔧 ${PDR_ASISTAN_ARAC_AD[a.ad] || a.ad}${a.ogrenci ? " · " + a.ogrenci : ""}` : `${a.onay ? "✅ Onaylandı" : "✋ Vazgeçildi"}: ${PDR_ASISTAN_ARAC_AD[a.ad] || a.ad}`;
+                  // Başarısız araç işi "dolduruldu" diye görünmesin: ⚠ ile ve "yapılamadı" olarak gösterilir
+                  const basarisiz = a.onay === undefined && /^(Ekranda yapılamadı|Ekranda başka|Ekranda zaten|Form doldurulmadı|Not metni boş|Grup görüşmesi:|Araç çalışırken hata|Böyle bir araç yok|Bu araç kapalı)|bulunamadı\.|yazılmadı|doldurulmadı/i.test(String(a.sonuc || ""));
+                  const adEt = basarisiz ? String(PDR_ASISTAN_ARAC_AD[a.ad] || a.ad).replace(/dolduruldu/, "doldurulamadı").replace(/^👀 /, "") : (PDR_ASISTAN_ARAC_AD[a.ad] || a.ad);
+                  const etiket = a.onay === undefined ? `${basarisiz ? "⚠" : "🔧"} ${adEt}${a.ogrenci ? " · " + a.ogrenci : ""}` : `${a.onay ? "✅ Onaylandı" : "✋ Vazgeçildi"}: ${PDR_ASISTAN_ARAC_AD[a.ad] || a.ad}`;
                   return (
                     <span key={k} style={{ display: "contents" }}>
                       <button onClick={() => a.sonuc && ac(k)} style={{ padding: "3px 8px", borderRadius: 12, border: `1px solid ${BORDER}`, background: a.onay === false ? "#FFF4E5" : "#fff", color: MUTED, fontSize: 10.5, cursor: a.sonuc ? "pointer" : "default" }}>{etiket}{a.sonuc ? (acik[k] ? " ▲" : " ▼") : ""}</button>

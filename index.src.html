@@ -18254,7 +18254,7 @@ function pdrAsistanGeminiMi(model) { return /^gemini-/.test(String(model || ""))
 function pdrAsistanGeminiMesaj(mesajlar) {
   const duz = (c) => typeof c === "string" ? c : Array.isArray(c) ? c.map(b => (b && b.text) || "").join("\n") : String(c || "");
   const metin = mesajlar.map(m => `── ${m.role === "assistant" ? "ASİSTAN (senin önceki yanıtın)" : "DANIŞMAN / PROGRAM"} ──\n${duz(m.content)}`).join("\n\n")
-    + "\n\n── Şimdi ASİSTAN olarak yalnızca bir sonraki yanıtını yaz (araç gerekiyorsa <arac> biçimini kullan). ──";
+    + "\n\n── Şimdi ASİSTAN olarak yalnızca bir sonraki yanıtını yaz (araç gerekiyorsa TAM OLARAK <arac>{\"ad\": \"araç_adı\", \"girdi\": {...}}</arac> biçimini kullan; ```json kod bloğu yazma). ──";
   return [{ role: "user", content: [{ type: "text", text: metin }] }];
 }
 async function ksAsistanModelCagir(ayar, sistem, mesajlar, iptal) {
@@ -18373,12 +18373,27 @@ function ksAsistanAyristir(metin) {
     try { const j = JSON.parse(ic); if (j && j.ad) cagrilar.push({ ad: String(j.ad), girdi: j.girdi || {} }); else hatalar.push(ic); }
     catch (e) { hatalar.push(ic); }
   }
-  // Model etiketsiz düz JSON yazdıysa ({"ad": ...}) onu da kabul et
+  // Model etiketsiz JSON yazdıysa onu da kabul et. Gemini bazen kendi alan adlarını kullanıyor:
+  // {"arac_adi": "...", "parametreler": {...}} gibi. Yalnız gerçek bir araç adı varsa çağrı sayılır.
+  let disMetin = metin.replace(/<arac>[\s\S]*?<\/arac>/g, "").trim();
   if (!cagrilar.length && !hatalar.length) {
-    const j = /^\s*(?:```(?:json)?\s*)?(\{[\s\S]*"ad"\s*:[\s\S]*\})\s*(?:```)?\s*$/.exec(metin);
-    if (j) { try { const o = JSON.parse(j[1]); if (o.ad && KS_ASISTAN_ARACLAR[o.ad]) cagrilar.push({ ad: o.ad, girdi: o.girdi || {} }); } catch (e) {} }
+    const cevir = (o) => {
+      if (!o || typeof o !== "object" || Array.isArray(o)) return null;
+      const ad = o.ad || o.arac || o.arac_adi || o["araç"] || o["araç_adı"] || o.tool || o.tool_name || o.name || o.function;
+      if (typeof ad !== "string" || !KS_ASISTAN_ARACLAR[ad]) return null;
+      const g = o.girdi || o.parametreler || o.parameters || o.args || o.arguments || o.input || {};
+      return { ad, girdi: typeof g === "string" ? (() => { try { return JSON.parse(g); } catch (e) { return {}; } })() : g };
+    };
+    const bloklar = [...metin.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)];
+    const adaylar = bloklar.length ? bloklar.map(b => ({ ham: b[0], ic: b[1] })) : [{ ham: metin, ic: metin }];
+    adaylar.forEach(({ ham, ic }) => {
+      try {
+        const o = JSON.parse(ic.trim());
+        const l = (Array.isArray(o) ? o : [o]).map(cevir).filter(Boolean);
+        if (l.length) { cagrilar.push(...l); disMetin = disMetin.replace(ham, "").trim(); }
+      } catch (e) {}
+    });
   }
-  const disMetin = metin.replace(/<arac>[\s\S]*?<\/arac>/g, "").trim();
   return { cagrilar, hatalar, disMetin };
 }
 

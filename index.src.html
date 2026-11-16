@@ -39955,8 +39955,8 @@ function LgsYaprakListesi({ onSayfaAc }) {
 }
 // Konu satırı: geçmiş LGS'de bu konudan çıkan sorular
 function LgsKonuGecmisSatiri({ ders, konu, onSayfaAc }) {
-  const [acik, setAcik] = useState(false), [mAcik, setMAcik] = useState(false), g = lgsKonuGecmis(ders, konu), m = lgsKonuGecmis(ders, konu, "mebi"), om = lgsKonuGecmis(ders, konu, "ornek"), [oAcik, setOAcik] = useState(false);
-  if (!g && !m && !om) return null;
+  const [acik, setAcik] = useState(false), [mAcik, setMAcik] = useState(false), g = lgsKonuGecmis(ders, konu), m = lgsKonuGecmis(ders, konu, "mebi"), om = lgsKonuGecmis(ders, konu, "ornek"), [oAcik, setOAcik] = useState(false), yp = lgsKonuGecmis(ders, konu, "yaprak"), [yAcik, setYAcik] = useState(false);
+  if (!g && !m && !om && !yp) return null;
   return (
     <div data-konu-gecmis style={{ marginTop: 3 }}>
       {g && <>
@@ -39971,6 +39971,11 @@ function LgsKonuGecmisSatiri({ ders, konu, onSayfaAc }) {
       {om && <div style={{ marginTop: 2 }}>
         <button onClick={() => setOAcik(a => !a)} style={{ background: "none", border: "none", color: "#166534", fontSize: 11, fontWeight: 700, cursor: "pointer", padding: 0 }}>📗 MEB örnek sorularında {om.sorular.length} soru {oAcik ? "▲" : "▼"}</button>
         {oAcik && <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: 3 }}>{om.sorular.map(q => <button key={q.kitapcik + q.ders + q.no} data-ornek-soru={q.kitapcik + "_" + q.no} onClick={() => onSayfaAc && onSayfaAc(q.kitapcik, q.sayfa, q)} style={{ fontSize: 10, padding: "2px 6px", borderRadius: 6, border: `1px solid ${LGS_ZORLUK_RENK[q.zorluk]}`, borderLeft: `4px solid ${LGS_ZORLUK_RENK[q.zorluk]}`, background: "#fff", color: "#166534", cursor: "pointer" }}>{LGS_AY_AD[q.ay].slice(0, 3)} {q.yil} · {q.no}.{q.oran != null ? ` · %${q.oran}` : ""}</button>)}</div>}
+      </div>}
+      {yp && <div style={{ marginTop: 2 }}>
+        <button data-konu-yaprak onClick={() => setYAcik(a => !a)} style={{ background: "none", border: "none", color: "#B45309", fontSize: 11, fontWeight: 700, cursor: "pointer", padding: 0 }}>🍃 MEB yaprak testlerinde {yp.sorular.length} soru {yAcik ? "▲" : "▼"}</button>
+        {yAcik && <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: 3 }}>{yp.sorular.map(q => <button key={q.kitapcik + q.no} data-yaprak-soru={q.kitapcik + "_" + q.no} title={YAPRAK_TEST_BASLIK[q.kitapcik] || ""} onClick={() => onSayfaAc && onSayfaAc(q.kitapcik, q.sayfa, q)} style={{ fontSize: 10, padding: "2px 6px", borderRadius: 6, border: `1px solid ${LGS_ZORLUK_RENK[q.zorluk]}`, borderLeft: `4px solid ${LGS_ZORLUK_RENK[q.zorluk]}`, background: "#fff", color: "#92400E", cursor: "pointer" }}>{+q.kitapcik.slice(6) > 20 ? "Kelime" : "Test " + +q.kitapcik.slice(6)} · {q.no}. · {LGS_ZORLUK_AD[q.zorluk]}{q.gorsel ? " 📊" : ""}{q.olumsuz ? " ⚠" : ""}</button>)}
+          <span style={{ fontSize: 10, color: MUTED, width: "100%" }}>Soruya dokununca yaprak testi PDF'inin o sayfası açılır (PDF iki parça yüklenir). Konu, testin başlığından alınmıştır.</span></div>}
       </div>}
     </div>
   );

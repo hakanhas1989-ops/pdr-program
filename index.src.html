@@ -39373,7 +39373,7 @@ async function ksAsistanCozumYolu(g, ctx, o) {
   const soruMetni = (q, durum) => {
     const c = kay[`${q.kitapcik}|${q.ders}|${q.no}`], ok = q.konu ? onkosulKonuBecerileri(q.ders, q.konu).map(id => onkosulBeceri(id)) : [];
     const st = (KONU_STRATEJI[q.ders] || {})[q.konu] || (KONU_STRATEJI[q.ders] || {})._ || "";
-    const r = [`■ ${lgsKitapcikAd(q.kitapcik)} · ${q.ders} ${q.no}. soru${durum ? ` (${durum})` : ""} — konu: ${q.konu || "?"}; zorluk: ${LGS_ZORLUK_AD[q.zorluk] || "?"} (${lgsZorlukNedenMetni(q)}); beceriler: ${q.bec.map(b => LGS_BECERI[b] ? LGS_BECERI[b][1] : b).join(", ")}${q.olumsuz ? "; kökte olumsuz ifade var" : ""}${q.gorsel ? "; görselli/tablolu" : ""}${q.oran ? `; LGS'ye genel benzerlik %${q.oran}` : ""}${q.tip ? `; soru tarzı: ${lgsSoruTarzi(q)}` : ""}${q.tarz ? `; tarzca en benzer LGS sorusu ${q.tarz.replace(/^(\d\d)(say|soz):/, (m, y, o) => `20${y} ${o === "say" ? "sayısal" : "sözel"} `)}. soru (tarz benzerliği %${q.tarzOran})` : ""}`];
+    const r = [`■ ${lgsKitapcikAd(q.kitapcik)} · ${q.ders} ${q.no}. soru${durum ? ` (${durum})` : ""} — konu: ${q.konu || "?"}; zorluk: ${LGS_ZORLUK_AD[q.zorluk] || "?"} (${lgsZorlukNedenMetni(q)})${q.kokSoz ? `; uzunluk: ${q.kokSoz + q.secSoz} sözcük` : ""}; beceriler: ${q.bec.map(b => LGS_BECERI[b] ? LGS_BECERI[b][1] : b).join(", ")}${q.olumsuz ? "; kökte olumsuz ifade var" : ""}${q.gorsel ? "; görselli/tablolu" : ""}${q.oran ? `; LGS'ye genel benzerlik %${q.oran}` : ""}${q.tip ? `; soru tarzı: ${lgsSoruTarzi(q)}` : ""}${q.tarz ? `; tarzca en benzer LGS sorusu ${q.tarz.replace(/^(\d\d)(say|soz):/, (m, y, o) => `20${y} ${o === "say" ? "sayısal" : "sözel"} `)}. soru (tarz benzerliği %${q.tarzOran})` : ""}`];
     if (ok.length) r.push(`  Ön koşullar (önceki sınıflar): ${ok.map(b => `${b.ad} (${onkosulSinifYaz(b.nerede)})`).join(", ")}`);
     const tc = TAHMIN_COZUM[`${q.kitapcik}|${q.ders}|${q.no}`];
     if (tc) r.push(`  Hazırlayanın çözümü: ${tc.z} Cevap (danışman için): ${tc.c}. Neden bu soru: ${tc.g}`);
@@ -39477,6 +39477,7 @@ function lgsZorlukNedenleri(q) {
   if (q.gorsel) okuma.push(["+", "Görsel / tablo / grafik", "Bilgiyi görselden alıp metindeki bilgiyle birleştirmek gerekiyor."]);
   if (y.includes("b")) okuma.push(["+", "Bilgi kutusu", "Soruda verilen yeni bir kuralı ya da tanımı anlayıp hemen uygulamak gerekiyor."]);
   if (q.secSoz >= 40) okuma.push(["+", "Uzun seçenekler", `Dört seçenek toplam ${q.secSoz} sözcük; her şıkkı ayrı ayrı okuyup tartmak gerekiyor.`]);
+  if (q.kokSoz) okuma.push(["0", "Toplam sözcük", `Soru metni ${q.kokSoz} + seçenekler ${q.secSoz} = ${q.kokSoz + q.secSoz} sözcük.`]);
   // 2) SORU KURGUSU
   if (q.olumsuz) kurgu.push(["+", "Olumsuz kök", "\"Hangisi söylenemez / yoktur / değildir\" diye soruyor; gözden kaçınca konuyu bilen öğrenci de yanlış yapar."]);
   if (y.includes("n")) kurgu.push(["+", `Öncüllü yapı${q.onculSay ? ` (${q.onculSay} öncül)` : " (I-II-III)"}`, "Her öncül ayrı ayrı doğrulanmalı; tek bir öncülde hata bütün cevabı bozar."]);
@@ -39505,6 +39506,7 @@ function LgsZorlukNeden({ q }) {
   const [acik, setAcik] = useState(false); if (!q || !q.zorluk) return null;
   const n = acik ? lgsZorlukNedenleri(q) : null, renk = LGS_ZORLUK_RENK[q.zorluk];
   return (<>
+    {q.kokSoz > 0 && <span data-sozcuk-say title="Soru metni + seçenekler" style={{ fontSize: 10, color: MUTED, flexShrink: 0, whiteSpace: "nowrap" }}>📖 {q.kokSoz + q.secSoz} sözcük</span>}
     <button data-zorluk-neden={q.kitapcik + "_" + q.no} onClick={() => setAcik(v => !v)} style={{ fontSize: 10, padding: "1px 6px", borderRadius: 6, border: `1px solid ${renk}`, background: acik ? "#F8FAFC" : "#fff", color: renk, cursor: "pointer", flexShrink: 0, fontWeight: 700 }}>❓ neden {LGS_ZORLUK_AD[q.zorluk]}</button>
     {acik && <div data-zorluk-neden-kutu style={{ flexBasis: "100%", background: "#F8FAFC", border: `1px solid ${renk}`, borderRadius: 8, padding: "6px 8px", fontSize: 11, lineHeight: 1.5, color: "#0F172A" }}>
       <div style={{ fontWeight: 900, color: renk }}>Bu soru neden "{LGS_ZORLUK_AD[q.zorluk]}"?</div>

@@ -4261,7 +4261,8 @@ async function pdrKitapDosyaUyusmazlik(k, dosya) {
     // Yaprak testi parçaları: 1. parça 120, 2. parça 142 sayfa olmalı (sayfa eşlemesi buna göre)
     if (/^yaprak[12]$/.test(String(k))) { const lib = await pdrPdfJsYukle(), belge = await lib.getDocument({ data: new Uint8Array(await dosya.arrayBuffer()) }).promise, n = belge.numPages, t = await pdrKitapKimlikMetni(belge); try { belge.destroy(); } catch (e) {}
       const bek = k === "yaprak1" ? YAPRAK_PARCA_SINIR : 262 - YAPRAK_PARCA_SINIR;
-      if (!/YAPRAK/i.test(t)) return "Bu dosya MEB yaprak testi görünmüyor. Doğru PDF'i seçin.";
+      // "YAPRAK" sözcüğü yalnız 1. parçanın ilk sayfasında geçer; 2. parça sayfa sayısıyla tanınır (ilk sayfaları test ortasından başlar)
+      if (k === "yaprak1" && n === bek && !/YAPRAK/i.test(t)) return "Bu dosya MEB yaprak testi görünmüyor. Doğru PDF'i seçin.";
       if (n === 262) return "Bu dosyanın tamamı (262 sayfa). Programa iki parça yüklenir: 1-120 ve 121-262. sayfalar.";
       if (n !== bek) return `Bu parça ${n} sayfa; burası ${k === "yaprak1" ? "1. parça (1-" + YAPRAK_PARCA_SINIR + ". sayfalar, " + bek + " sayfa)" : "2. parça (" + (YAPRAK_PARCA_SINIR + 1) + "-262. sayfalar, " + bek + " sayfa)"}. Doğru parçayı seçin.`;
       return null; }

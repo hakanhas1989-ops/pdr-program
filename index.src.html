@@ -15755,6 +15755,29 @@ const KS_ASISTAN_ARACLAR = {
       return `İnfografik hazır [[INFOGRAFIK:${id}]] — ${v.baslik}. ${v.kutular.map(k => `${k.ad}: ${k.deger}`).join(", ")}. ${v.grafikler.length} grafik. ${v.one.join(" ")} (Sohbette "Aç / Yazdır" düğmesiyle tam sayfa açılır.)`;
     },
   },
+  web_ara: {
+    aciklama: "İnternette güncel bilgi arar (Tavily arama, ayda 1000 ücretsiz arama) ve kaynak linkleriyle sonuç getirir. Mevzuat ve yönetmelik değişiklikleri, sınav takvimleri (LGS/YKS), MEB duyuruları, güncel araştırmalar, kurum ve kaynak bilgisi gibi senin bilgin dışında kalabilecek ya da değişmiş olabilecek konularda kullan. SORGUYA ASLA öğrenci, veli, öğretmen adı ya da kişisel/özel bilgi yazma; yalnız genel konu yaz.", girdi: '{"sorgu": "kısa arama ifadesi (Türkçe olabilir)", "adet": 5}',
+    calistir: async (g, ctx) => {
+      const sorgu = String(g.sorgu || g.ara || g.query || "").trim().slice(0, 300);
+      if (!sorgu) return "Arama ifadesi boş.";
+      // Gizlilik: sorguda kayıtlı bir öğrencinin adı geçiyorsa arama yapılmaz
+      const sade = (x) => ksSade(String(x || "")), sq = " " + sade(sorgu) + " ";
+      const adlar = new Set(); [...(ctx.ogrenciListesi || []), ...(ctx.ogrenciler || []), ...(ctx.profiles || [])].forEach(x => { const ad = x && (x.name || x.ad || x.studentName); if (ad) String(ad).split(/\s+/).forEach(p => { if (p.length >= 3) adlar.add(sade(p)); }); });
+      (ctx.records || []).forEach(r => r && r.studentName && String(r.studentName).split(/\s+/).forEach(p => { if (p.length >= 3) adlar.add(sade(p)); }));
+      const GENEL = new Set(["umut", "deniz", "sevgi", "barış", "ümit", "özgür", "bahar", "güneş", "şafak", "huzur", "başarı", "zafer", "ilk", "nur", "can", "ay", "doğa", "ada", "gül", "sınav", "okul", "öğretmen", "çocuk", "ergen"]); // isim de olabilen genel sözcükler
+      const yasak = [...adlar].find(a => a && !GENEL.has(a) && sq.includes(" " + a + " "));
+      if (yasak) return "Arama yapılmadı: sorguda kayıtlı bir öğrencinin adına benzeyen bir sözcük var. Öğrenci adı ya da kişisel bilgi olmadan, yalnız genel konuyla yeniden ara.";
+      const url = (pdrAsistanAyarOku().ucretsizUrl || PDR_ASISTAN_VARSAYILAN_AYAR.ucretsizUrl || "").trim();
+      if (!url) return "Arama yapılamadı: ücretsiz model worker adresi tanımlı değil.";
+      let res, d;
+      try { res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ arama: sorgu, adet: Math.max(1, Math.min(8, parseInt(g.adet) || 5)) }) }); d = await res.json(); }
+      catch (e) { return "Arama yapılamadı: arama sunucusuna ulaşılamadı."; }
+      if (!res.ok || !d || d.error) return "Arama yapılamadı: " + ((d && d.error && d.error.message) || ("HTTP " + res.status)) + (/TAVILY|Bilinmeyen|Geçersiz istek|Yalnızca/i.test(JSON.stringify(d || "")) ? " (Cloudflare'deki pdr-asistan worker'ının kodu güncellenmemiş ya da TAVILY_API_KEY eklenmemiş olabilir; Asistan → Ayarlar → Ücretsiz model kurulumu.)" : "");
+      const l = Array.isArray(d.sonuclar) ? d.sonuclar : [];
+      if (!l.length) return `"${sorgu}" için sonuç bulunamadı.`;
+      return `WEB ARAMASI: "${sorgu}" (${new Date().toLocaleDateString("tr-TR")})\n` + (d.ozet ? `Kısa özet (arama motorunun): ${d.ozet}\n` : "") + l.map((x, i) => `[${i + 1}] ${x.baslik || ""}\n${x.url || ""}${x.tarih ? " · " + x.tarih : ""}\n${ksAsistanKisalt(String(x.metin || ""), 700)}`).join("\n\n") + "\n\nYanıtında bilgiyi kendi sözlerinle aktar ve kullandığın kaynakların linklerini yanıtın sonunda \"Kaynaklar:\" başlığıyla ver. Kaynaklar çelişiyorsa söyle; resmî kaynak (meb.gov.tr, resmigazete.gov.tr, odsgm.meb.gov.tr) varsa ona öncelik ver.";
+    },
+  },
   alan_bilgisi: {
     aciklama: "Mesleki bilgi kitaplığı: eğitim psikolojisi (gelişim kuramları, öğrenme, kanıta dayalı çalışma teknikleri, üstbiliş, motivasyon, zekâ ve yürütücü işlevler, kaynaştırma/BEP), pozitif psikoloji (PERMA, karakter güçleri, umut, akış, sağlamlık, öz-şefkat), psikolojik danışma ve rehberlik (kuramlar: BDT, ADDT, çözüm odaklı, gerçeklik, Adler, öyküsel, motivasyonel görüşme; görüşme becerileri, veli görüşmesi, grup, MEB yönetmeliği ve RAM süreçleri, etik ve gizlilik, kriz ve intihar riski, ihmal-istismar bildirimi, kariyer), klinik psikoloji (tarama-tanı ayrımı, yönlendirme aciliyeti, kaygı, depresyon, DEHB, OSB, özgül öğrenme güçlüğü, davranış sorunları, zorbalık, travma, OKB, yeme, uyku, madde, dijital bağımlılık, psikoz belirtileri), ölçme-değerlendirme (standart puanlar, ölçme hatası, güvenirlik, geçerlik, sonuç bildirme, madde analizi, deneme yorumu), bireyi tanıma (gözlem, sosyometri, Kimdir Bu, otobiyografi, vaka formülasyonu) ve psikolojik testler (türler, uygulama yetkisi, programdaki testlerin ne ölçtüğü). alan: egitim | pozitif | pdr | klinik | olcme | bireyi_tanima | testler; konu: bölüm anahtarı (örn. klinik.dehb) ya da birkaç kelime; ara: serbest arama. Hiçbiri verilmezse dizini döndürür.",
     girdi: '{"alan": "klinik", "konu": "dehb", "ara": "isteğe bağlı"}', yontem: "hepsi",
@@ -18230,6 +18253,7 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - BULUNAN ÖĞRENCİYİ KABUL ET: ogrenci_ara, sinif_bilgisi ya da başka bir araç danışmanın söylediği ad ve sınıfa uyan TEK bir öğrenci getirdiyse (kayıttaki adın ikinci adı ya da soyadı olsa bile, örn. danışman "Umay" dedi, kayıt "UMAY M… I…") o öğrenci odur; "karıştırılmış olabilir" deyip danışmana yeniden teyit sorma, numara isteme. Yalnız birden çok aday çıkarsa ya da hiç çıkmazsa sor. Danışman kaydetmeni istediyse ve öğrenciler bulunduysa "kaydedeyim mi?" diye ayrıca sorma; formu doldur (onayı danışman formda Kaydet'e basarak verir).
 - ARAÇ SONUCUNA SADIK KAL: Bir araç "doldurulmadı", "yapılmadı", "bulunamadı", "kaydedilmedi" ya da hata döndürdüyse o iş YAPILMAMIŞTIR. Danışmana asla "dolduruldu / kaydedildi" deme; sonucu olduğu gibi söyle, nedenini düzelt ve yeniden dene ya da danışmana sor.
 - KAYNAĞA DAYAN: Öğrenci değerlendirmesi, öneri, seans hazırlığı ya da müdahale planı istendiğinde, görüşme notlarını okumakla aynı yanıtta kutuphane_ara (danışmanın Kütüphanesi) ve program_ara (Müdahale Programları kitapları) ile öğrencinin sorununa uyan bölümleri de ara; uygun bölüm çıkarsa gerekirse kutuphane_oku / program_oturumu ile oku. Önerilerini bulduğun kaynağa dayandır ve her önerinin yanında kaynağın adını, bölümünü ya da kitap + oturum numarasını yaz. Uygun kaynak çıkmazsa yanıtın sonunda bir cümleyle "Kütüphanede bu konuya uygun kaynak bulamadım; öneriler genel alan bilgisine dayanıyor" de. Kaynakta olmayanı kaynaktaymış gibi söyleme.
+- GÜNCEL BİLGİ İÇİN İNTERNETE BAK: Mevzuat, yönetmelik, sınav takvimi, MEB duyurusu, güncel araştırma ya da değişmiş olabilecek her bilgi sorulduğunda ("güncel", "yeni", "bu yıl", "açıklandı mı" gibi) web_ara aracını kullan; bilgiyi hafızandan kesin gibi verme. Arama sorgusuna asla öğrenci, veli ya da kişi adı ve kişisel bilgi yazma. Bulduğunu kendi sözlerinle aktar, yanıtın sonuna "Kaynaklar:" başlığıyla linkleri ekle. Arama yapılamazsa bunu söyle ve bilginin güncel olmayabileceğini belirt.
 - AKADEMİK VERİYİ DE OKU: Öğrenci değerlendirmesi, öneri, seans hazırlığı, müdahale planı ya da risk değerlendirmesi istendiğinde görüşme notlarıyla AYNI yanıtta ogrenci_dosyasi (deneme netleri ve gidişatı, en düşük dersler, geçmiş dönem denemeleri, bu yılın derslere göre 1. ve 2. yazılı puanları, yıl sonu not ortalamaları, karne/PDF net haritasındaki zayıf kazanımlar, hedef okul) ve akademik_takip (Geçmiş LGS → Çözdür denemelerindeki süregelen/yeni/gelişen beceri eksikleri, ön koşul eksikleri, Konu Haritası'nda düşük konular) araçlarını da çağır. Değerlendirmede ayrı bir "Akademik durum" bölümü yaz: netlerin gidişatı, yazılı puanları (düşük dersler, 1. ve 2. yazılı arasındaki değişim), en zayıf ders ve konular, not ortalaması; deneme netleriyle yazılı puanları arasındaki tutarlılığa da bak. Akademik bulguyu görüşme notlarıyla İLİŞKİLENDİR (örn. kaygının arttığı dönemde netin düşmesi, motivasyon sorununun belli derslerde görünmesi) ve önerilerine yansıt. Akademik kayıt yoksa bunu bir cümleyle söyle ("denemesi/not ortalaması girilmemiş"); uydurma.
 - BÜTÜN GÖRÜŞMELERİ OKU: Bir öğrenciyle ilgili değerlendirme, öneri, seans hazırlığı, müdahale planı, risk değerlendirmesi, süpervizyon ya da veli yazısı istendiğinde ÖNCE gorusme_notlari ile o öğrencinin BÜTÜN görüşme notlarını oku (adet verme; araç hepsini getirir). Yalnızca son görüşmeye, öğrenci özetine ya da dosyadaki kısaltılmış notlara dayanma. Değerlendirmede ilk görüşmeden bu yana gidişatı (ne değişti, ne sürüyor, hangi öneriler uygulandı) belirt.
 - Kodları her zaman eksiksiz yaz: "Öğrenci-11, Öğrenci-12" gibi; "11, 12 ve 13" diye kısaltma (kısaltılan kod danışmanın ekranında gerçek ada çevrilemez).
@@ -18559,7 +18583,7 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
   if (secim && kutuphaneListe.length) ["kutuphane_ara", "kutuphane_oku"].forEach(a => { if (!secim.liste.includes(a) && KS_ASISTAN_ARACLAR[a] && ksAsistanAracAcik(a, ayar)) secim.liste.push(a); });
   // KAYNAĞA DAYAN kuralı: Müdahale Programları kitaplarını arama araçları ücretsiz modelde de her istekte açık olsun
   // AKADEMİK VERİYİ DE OKU kuralı: öğrenci dosyası ve akademik takip araçları ücretsiz modelde de her istekte açık olsun
-  if (secim) ["ogrenci_dosyasi", "akademik_takip", "gorusme_notlari"].forEach(a => { if (!secim.liste.includes(a) && KS_ASISTAN_ARACLAR[a] && ksAsistanAracAcik(a, ayar)) secim.liste.push(a); });
+  if (secim) ["ogrenci_dosyasi", "akademik_takip", "gorusme_notlari", "web_ara"].forEach(a => { if (!secim.liste.includes(a) && KS_ASISTAN_ARACLAR[a] && ksAsistanAracAcik(a, ayar)) secim.liste.push(a); });
   if (secim) ["program_ara", "program_oturumu"].forEach(a => { if (!secim.liste.includes(a) && KS_ASISTAN_ARACLAR[a] && ksAsistanAracAcik(a, ayar)) secim.liste.push(a); });
   let isDefteri = []; try { isDefteri = await pdrIsDefteriOku(); } catch (e) { isDefteri = []; }
   if (secim && isDefteri.some(x => x.durum === "devam")) ["is_defteri", "is_defteri_yaz"].forEach(a => { if (!secim.liste.includes(a) && KS_ASISTAN_ARACLAR[a]) secim.liste.push(a); });
@@ -42467,6 +42491,7 @@ Sade, klinik ama sıcak bir dil kullan. Markdown kullanma.`}]
 const PDR_ASISTAN_WORKER_KODU = `// pdr-asistan — PDR Asistanı'nın ücretsiz modeli (Cloudflare Workers AI)
 // Bu worker hiçbir şey kaydetmez; gelen isteği modele iletir, yanıtı döndürür.
 // Gerekli bağlantı: Settings > Bindings > Workers AI, değişken adı: AI
+// İnternet araması için (isteğe bağlı): Settings > Variables and Secrets > TAVILY_API_KEY
 const IZINLI_MODELLER = [
   "@cf/google/gemma-4-26b-a4b-it",
   "@cf/qwen/qwen3.8-27b",
@@ -42489,9 +42514,21 @@ export default {
     if (request.method === "OPTIONS") return new Response(null, { headers: cors });
     if (request.method !== "POST") return json({ error: { message: "Yalnızca POST kabul edilir." } }, 405);
     if (!IZINLI_KAYNAKLAR.includes(origin)) return json({ error: { message: "İzin verilmeyen kaynak." } }, 403);
-    if (!env.AI) return json({ error: { message: "Workers AI bağlantısı eklenmemiş (Settings > Bindings > Workers AI, ad: AI)." } }, 500);
     let b;
     try { b = await request.json(); } catch (e) { return json({ error: { message: "Geçersiz istek." } }, 400); }
+    // İnternet araması (asistanın web_ara aracı): Tavily, ayda 1000 ücretsiz arama
+    // Gerekli gizli değişken: Settings > Variables and Secrets > TAVILY_API_KEY (app.tavily.com'dan ücretsiz anahtar)
+    if (typeof b.arama === "string") {
+      if (!env.TAVILY_API_KEY) return json({ error: { message: "TAVILY_API_KEY eklenmemiş (Settings > Variables and Secrets)." } }, 500);
+      try {
+        const r = await fetch("https://api.tavily.com/search", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + env.TAVILY_API_KEY },
+          body: JSON.stringify({ query: b.arama.slice(0, 300), search_depth: "basic", max_results: Math.min(parseInt(b.adet) || 5, 8), include_answer: true }) });
+        const d = await r.json();
+        if (!r.ok) return json({ error: { message: "Arama hatası: " + ((d && (d.detail && (d.detail.error || d.detail))) || r.status) } }, 502);
+        return json({ ozet: d.answer || "", sonuclar: (d.results || []).map(x => ({ baslik: x.title, url: x.url, metin: String(x.content || "").slice(0, 1500), tarih: x.published_date || "" })) });
+      } catch (e) { return json({ error: { message: "Arama hatası: " + (e && e.message ? e.message : String(e)) } }, 502); }
+    }
+    if (!env.AI) return json({ error: { message: "Workers AI bağlantısı eklenmemiş (Settings > Bindings > Workers AI, ad: AI)." } }, 500);
     const model = IZINLI_MODELLER.includes(b.model) ? b.model : IZINLI_MODELLER[0];
     const mesajlar = (Array.isArray(b.messages) ? b.messages : []).slice(-30)
       .map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content || "").slice(0, 40000) }));
@@ -42532,6 +42569,7 @@ const PDR_ASISTAN_ARAC_AD = {
   soru_cozum_yolu: "Soru çözüm yolu",
   akademik_takip: "Akademik takip",
   lgs_tahmin: "LGS tahmini",
+  web_ara: "🌐 İnternette arandı",
   ogrenci_ara: "Öğrenci arandı", ogrenci_ozeti: "Öğrenci özeti", gorusme_notlari: "Görüşme notları okundu",
   risk_analizi: "Risk analizi (kapalı sistem)", seans_hazirlik: "Seans hazırlığı (kapalı sistem)", mudahale_plani: "Müdahale planı önerisi (kapalı sistem)",
   deneme_analizi: "Deneme analizi (kapalı sistem)", profil_analizi: "Profil analizi (kapalı sistem)", supervizyon: "Süpervizyon raporu (kapalı sistem)",
@@ -43386,6 +43424,15 @@ function AsistanEkrani({
                 <li>Worker adresi yukarıdakinden farklıysa (ör. hesap adın farklıysa) doğru adresi "Worker adresi" kutusuna yaz.</li>
                 <li>☁️ Ücretsiz Model'i seçip <b>Bağlantıyı test et</b>'e bas.</li>
               </ol>
+              <div data-testid="tavily-kurulum" style={{ fontSize: 11.5, color: TEXT, background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 8, padding: "6px 8px", marginBottom: 8, lineHeight: 1.5 }}>
+                <b>🌐 İnternet araması (isteğe bağlı):</b> Asistanın güncel bilgiyi (mevzuat, sınav takvimi, MEB duyuruları) kaynak linkiyle araması için:
+                <ol style={{ margin: "4px 0 0 16px", padding: 0 }}>
+                  <li><b>app.tavily.com</b>'a Google hesabınla gir; kredi kartı istemez, ayda 1000 arama ücretsiz. Açılan sayfadaki <b>API Key</b>'i (tvly- ile başlar) kopyala.</li>
+                  <li>Cloudflare'de <b>pdr-asistan</b> → <b>Settings</b> → <b>Variables and Secrets</b> → <b>Add</b> → Type: <b>Secret</b>, Name: <b>TAVILY_API_KEY</b>, Value: kopyaladığın anahtar → kaydet.</li>
+                  <li><b>Edit code</b> → içindekini sil → aşağıdaki güncel kodu yapıştır → <b>Deploy</b>.</li>
+                </ol>
+                Arama sorgusuna öğrenci adı gitmez (asistan engellenir, kalkan da kodlar); yalnız genel konu aranır.
+              </div>
               <div style={{ fontSize: 11, color: MUTED, marginBottom: 6 }}>Günlük ücretsiz kota (10.000 "neuron") bir gün içinde dolarsa model hata verir; ertesi gün kendiliğinden yenilenir. O sırada 🧠 Claude'a geçebilirsin.</div>
               <button onClick={() => { try { navigator.clipboard.writeText(PDR_ASISTAN_WORKER_KODU); alert("Worker kodu kopyalandı."); } catch (e) { alert("Kopyalanamadı; aşağıdaki kutudan elle seçip kopyala."); } }} style={{ padding: "7px 11px", borderRadius: 8, border: "none", background: ACCENT, color: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", marginBottom: 6 }}>📋 Worker kodunu kopyala</button>
               <textarea readOnly value={PDR_ASISTAN_WORKER_KODU} rows={6} style={{ ...inp, fontFamily: "monospace", fontSize: 10.5 }} />

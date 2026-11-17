@@ -39499,7 +39499,7 @@ function lgsZorlukNedenleri(q) {
 function lgsZorlukNedenMetni(q) { const n = lgsZorlukNedenleri(q); return (n.zor.length ? "zorlaştıran: " + n.zor.map(x => x[1]).join(", ") : "belirgin zorlaştırıcı yok") + (n.kolay.length ? "; kolaylaştıran: " + n.kolay.map(x => x[1]).join(", ") : ""); }
 function LgsNedenGruplari({ n }) { const isaret = { "+": "🔺", "-": "🔻", "0": "▫️" };
   return (<>{n.gruplar.map(([ad, l]) => <div key={ad} data-neden-grup={ad} style={{ marginTop: 4 }}>
-    <div style={{ fontWeight: 800 }}>{ad} <span style={{ fontWeight: 500, color: MUTED }}>{l.some(x => x[0] === "+") ? `· ${l.filter(x => x[0] === "+").length} zorlaştırıcı` : "· zorlaştırıcı yok"}</span></div>
+    <div style={{ fontWeight: 800 }}>{ad} <span style={{ fontWeight: 500, color: MUTED }}>{l.some(x => x[0] === "+") ? `· ${l.filter(x => x[0] === "+").length} şey zorlaştırıyor` : "· bu yönden zor değil"}</span></div>
     {l.length ? l.map((x, i) => <div key={i} style={{ paddingLeft: 6 }}>{isaret[x[0]]} <b>{x[1]}:</b> {x[2]}</div>) : <div style={{ paddingLeft: 6, color: MUTED }}>Bu başlıkta belirgin bir etken yok.</div>}
   </div>)}</>); }
 // Soru satırında "❓ neden" düğmesi: zorluk derecesinin nedenlerini üç başlıkta, açıklamalarıyla gösterir
@@ -39512,7 +39512,7 @@ function LgsZorlukNeden({ q }) {
     {acik && <div data-zorluk-neden-kutu style={{ flexBasis: "100%", background: "#F8FAFC", border: `1px solid ${renk}`, borderRadius: 8, padding: "6px 8px", fontSize: 11, lineHeight: 1.5, color: "#0F172A" }}>
       <div style={{ fontWeight: 900, color: renk }}>Bu soru neden "{LGS_ZORLUK_AD[q.zorluk]}"?</div>
       <LgsNedenGruplari n={n} />
-      <div style={{ fontSize: 10, color: MUTED, marginTop: 4 }}>🔺 zorlaştırır · 🔻 kolaylaştırır · ▫️ nötr. Yakınlık: şıkların birbirine benzerliği (sayılarda değerlerin yakınlığı, sözelde ortak ifadeler). Çeldiricilik: yakınlık + yanlış şıkların metindeki ifadeleri ya da sorudaki sayılardan tek işlemle çıkan ara sonuçları kullanması + şık uzunluklarının dengesi. Düzeyler gerçek LGS sorularına göredir (LGS'nin en yüksek %25'i "yüksek"). Bu iki ölçüm zorluk derecesinin hesabına katılmaz; ayrıca gösterilir.</div>
+      <div style={{ fontSize: 10, color: MUTED, marginTop: 4 }}>🔺 zorlaştırır · 🔻 kolaylaştırır · ▫️ yalnız bilgi. Başlıktaki sayı, o başlıktaki 🔺 maddelerin sayısıdır. Yakınlık: şıkların birbirine benzerliği (sayılarda değerlerin yakınlığı, sözelde ortak ifadeler). Çeldiricilik: yakınlık + yanlış şıkların metindeki ifadeleri ya da sorudaki sayılardan tek işlemle çıkan ara sonuçları kullanması + şık uzunluklarının dengesi. Düzeyler gerçek LGS sorularına göredir (LGS'nin en yüksek %25'i "yüksek"). Bu iki ölçüm zorluk derecesinin hesabına katılmaz; ayrıca gösterilir.</div>
     </div>}
   </>);
 }

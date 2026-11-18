@@ -5240,6 +5240,60 @@ function DevamsizlikEkrani({ ogrenciler, setOgrenciler, kademe, aktifYil, setTab
     setManuelNeden("Bilinmiyor");
   }
 
+  const [fotoSatirlar, setFotoSatirlar] = useState(null);
+  const [fotoOkunuyor, setFotoOkunuyor] = useState(false);
+  const [fotoHata, setFotoHata] = useState("");
+  async function handleFotoYukle(e) {
+    const dosyalar = Array.from(e.target.files || []).slice(0, 4);
+    e.target.value = "";
+    if (!dosyalar.length) return;
+    setFotoOkunuyor(true); setFotoHata(""); setFotoSatirlar(null); setSonuc(null);
+    try {
+      const resimler = await Promise.all(dosyalar.map(devFotoKucult));
+      const satirlar = await devFotoOku(resimler);
+      if (!satirlar.length) throw new Error("Fotoğrafta devamsızlık satırı bulunamadı.");
+      setFotoSatirlar(satirlar.map((r, i) => {
+        const o = yilOgrencileri.find(x => pdrAyniOgrenci(x.studentName, x.className, r.ad, r.sinif, x.numara, r.numara));
+        return { ...r, id: i, bulunan: o ? { studentName: o.studentName, className: o.className, numara: o.numara } : null, sec: !!o };
+      }));
+    } catch (err) {
+      setFotoHata(/iptal|durdur|kalkan/i.test(String(err && err.message)) ? "Gönderim iptal edildi; fotoğraf yapay zekâya gitmedi." : "Fotoğraf okunamadı: " + (err && err.message || err));
+    }
+    setFotoOkunuyor(false);
+  }
+  async function handleFotoKaydet() {
+    const secili = (fotoSatirlar || []).filter(r => r.sec && r.bulunan && !isNaN(parseInt(r.gun)));
+    if (!secili.length) return;
+    const yeniOgrenciler = [...ogrenciler];
+    const esikGecenler = [];
+    let islenen = 0;
+    const yeniTarih = excelTarihi || today();
+    for (const r of secili) {
+      const idx = yeniOgrenciler.findIndex(o => pdrAyniOgrenci(o.studentName, o.className, r.bulunan.studentName, r.bulunan.className, o.numara, r.bulunan.numara));
+      if (idx < 0) continue;
+      const gun = parseInt(r.gun);
+      const eskiGecmis = yeniOgrenciler[idx].devamsizlikGecmisi || [];
+      const eskiSon = eskiGecmis[eskiGecmis.length - 1];
+      yeniOgrenciler[idx] = { ...yeniOgrenciler[idx], devamsizlikGecmisi: [...eskiGecmis, { tarih: yeniTarih, gun, neden: r.neden || undefined }] };
+      if (devamsizlikEsikYeniGecisMi(eskiSon?.gun, gun)) esikGecenler.push({ ogr: yeniOgrenciler[idx], gun, tarih: yeniTarih });
+      islenen++;
+    }
+    setOgrenciler(yeniOgrenciler);
+    await saveOgrenciler(yeniOgrenciler);
+    if (esikGecenler.length > 0) {
+      const yeniHatirlatmalar = esikGecenler.map(({ ogr, gun, tarih }) => ({
+        id: uid(), studentName: ogr.studentName, className: ogr.className, numara: ogr.numara,
+        metin: `Devamsızlık ${gun} güne ulaştı (Takip Edilmeli eşiği) — veliyle görüşmeyi değerlendir.`,
+        tarih, tur: "genel", ramTarihi: "", kaynak: "otomatik_devamsizlik", olusturmaTarihi: today(), tamamlandi: false,
+      }));
+      const guncelHatirlatmalar = [...yeniHatirlatmalar, ...(hatirlatmalar || [])];
+      setHatirlatmalar(guncelHatirlatmalar);
+      await saveHatirlatmalar(guncelHatirlatmalar);
+    }
+    setSonuc({ islenen, eslesmeyen: (fotoSatirlar || []).filter(r => !r.bulunan).map(r => r.ad + " (öğrenci bulunamadı)"), esikGecenSayisi: esikGecenler.length });
+    setFotoSatirlar(null);
+  }
+
   function handleExcelYukle(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -5384,7 +5438,38 @@ function DevamsizlikEkrani({ ogrenciler, setOgrenciler, kademe, aktifYil, setTab
           {excelYukleniyor ? "⏳ İşleniyor…" : "📂 Excel Dosyası Seç (.xlsx)"}
           <input data-asistan="excel-dosya-devamsizlik" type="file" accept=".xlsx,.xls,.csv" onChange={handleExcelYukle} style={{ display:"none" }} disabled={excelYukleniyor} />
         </label>
+        <label style={{ display:"block", width:"100%", padding:12, background:"#fff", border:"2px dashed #C0392B", borderRadius:12, textAlign:"center", color:"#C0392B", fontWeight:700, cursor:"pointer", boxSizing:"border-box", marginTop:10 }}>
+          {fotoOkunuyor ? "⏳ Fotoğraf okunuyor…" : "📷 Fotoğraf / Ekran Görüntüsü Yükle"}
+          <input data-testid="devamsizlik-foto" type="file" accept="image/*" multiple onChange={handleFotoYukle} style={{ display:"none" }} disabled={fotoOkunuyor} />
+        </label>
+        <div style={{ fontSize:10.5, color:MUTED, marginTop:6, lineHeight:1.5 }}>Fotoğrafta öğrenci adları göründüğü için göndermeden önce sana sorulur. Okunan satırları kaydetmeden önce sen kontrol edersin.</div>
+        {fotoHata && <div style={{ fontSize:11.5, color:"#C0392B", marginTop:6, fontWeight:600 }}>⚠️ {fotoHata}</div>}
       </div>
+
+      {fotoSatirlar && (
+        <div data-testid="devamsizlik-foto-onizleme" style={{ background:CARD, border:`2px solid #C0392B`, borderRadius:12, padding:12, marginBottom:16 }}>
+          <div style={{ fontSize:13, fontWeight:800, color:"#C0392B", marginBottom:4 }}>📷 Fotoğraftan okunan satırlar ({fotoSatirlar.length})</div>
+          <div style={{ fontSize:11, color:MUTED, marginBottom:8, lineHeight:1.5 }}>Kontrol et: yanlış okunan günü düzelt, istemediğini işaretten çıkar. Programda bulunamayan öğrenciler kaydedilmez. Tarih: {excelTarihi}</div>
+          {fotoSatirlar.map(r => (
+            <div key={r.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 0", borderBottom:`1px solid ${BORDER}`, opacity: r.bulunan ? 1 : 0.55 }}>
+              <input type="checkbox" checked={!!r.sec} disabled={!r.bulunan} onChange={e => setFotoSatirlar(fotoSatirlar.map(x => x.id === r.id ? { ...x, sec: e.target.checked } : x))} />
+              <div style={{ flex:1, minWidth:0, fontSize:12, color:TEXT, overflowWrap:"anywhere" }}>
+                <b>{r.bulunan ? r.bulunan.studentName : r.ad}</b> <span style={{ color:MUTED }}>({r.bulunan ? r.bulunan.className : (r.sinif || "?")})</span>
+                {!r.bulunan && <div style={{ fontSize:10.5, color:"#B07D1A" }}>Programda bulunamadı</div>}
+              </div>
+              <input type="number" min="0" value={isNaN(r.gun) ? "" : r.gun} onChange={e => setFotoSatirlar(fotoSatirlar.map(x => x.id === r.id ? { ...x, gun: parseInt(e.target.value) } : x))}
+                style={{ width:56, padding:"5px 6px", border:`1px solid ${BORDER}`, borderRadius:8, fontSize:12.5, textAlign:"center" }} />
+              <span style={{ fontSize:10.5, color:MUTED }}>gün</span>
+            </div>
+          ))}
+          <div style={{ display:"flex", gap:8, marginTop:10 }}>
+            <button data-testid="devamsizlik-foto-kaydet" onClick={handleFotoKaydet} disabled={!fotoSatirlar.some(r => r.sec && r.bulunan)} style={{ flex:1, padding:"9px", background:"#C0392B", color:"#fff", border:"none", borderRadius:8, fontSize:12.5, fontWeight:700, cursor:"pointer" }}>
+              Seçilenleri Kaydet ({fotoSatirlar.filter(r => r.sec && r.bulunan).length})
+            </button>
+            <button onClick={() => setFotoSatirlar(null)} style={{ padding:"9px 14px", background:"none", border:`1px solid ${BORDER}`, color:MUTED, borderRadius:8, fontSize:12.5, cursor:"pointer" }}>Vazgeç</button>
+          </div>
+        </div>
+      )}
 
       {sonuc && (
         <div data-asistan="excel-sonuc" style={{ background:"#E6F5EE", borderRadius:8, padding:10, marginBottom:16 }}>
@@ -47230,6 +47315,33 @@ function lgsOnTemizle(ham) {
     else v[id] = String(x).trim().slice(0, a.tip === "uzun" ? 800 : 200);
   });
   return v;
+}
+// Devamsızlık listesi fotoğrafı: küçültür, yapay zekâya satır satır okutur (sonucu danışman onaylar)
+function devFotoKucult(file) {
+  return lgsOnResimYukle(file).then(img => {
+    const sc = Math.min(1, 1800 / Math.max(img.naturalWidth, img.naturalHeight));
+    const cv = document.createElement("canvas"); cv.width = Math.round(img.naturalWidth * sc); cv.height = Math.round(img.naturalHeight * sc);
+    cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+    return cv.toDataURL("image/jpeg", 0.85);
+  });
+}
+async function devFotoOku(resimler) {
+  const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-6", max_tokens: 4000,
+      system: `Sen bir veri çıkarma asistanısın. Görseller, e-Okul / okul devamsızlık raporunun ekran görüntüsü ya da fotoğrafıdır (tablo: öğrenci, sınıf, numara, devamsızlık günü). Her öğrenci satırı için SADECE bir JSON dizisi döndür, başka hiçbir şey yazma:
+[{"ad":"Ad Soyad","sinif":"8-A","numara":"123","gun":4,"neden":""}]
+KURALLAR: Görmediğin ya da emin olmadığın değeri uydurma; sütun yoksa "" yaz. "gun" yalnızca sayı olsun (toplam devamsızlık günü; özürlü/özürsüz ayrı sütunlarsa toplamını yaz, görünmüyorsa özürsüz gün sütununu kullan). Başlık, toplam ve boş satırları ekleme. Aynı öğrenci iki kez geçiyorsa bir kez yaz.`,
+      messages: [{ role: "user", content: [...resimler.map(u => ({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: u.split(",")[1] } })), { type: "text", text: "Devamsızlık satırlarını JSON dizisi olarak ver." }] }],
+    }),
+  });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((j && (j.error && (j.error.message || j.error))) || "Okuma başarısız");
+  const metin = ((j.content || []).find(c => c.type === "text") || {}).text || "";
+  const m = /\[[\s\S]*\]/.exec(metin); if (!m) throw new Error("Satırlar okunamadı");
+  const dizi = JSON.parse(m[0]);
+  return (Array.isArray(dizi) ? dizi : []).map(r => ({ ad: String(r.ad || "").trim(), sinif: String(r.sinif || "").trim(), numara: String(r.numara || "").trim(), gun: parseInt(String(r.gun ?? "").trim()), neden: String(r.neden || "").trim() })).filter(r => r.ad && !isNaN(r.gun));
 }
 async function lgsOnFotoOku(resimler) {
   const alanlar = LGS_ON_BOLUMLER.filter(b => !b.ogretmen).flatMap(b => b.a.map(([id, tip, etiket, sec]) => `${id} (${tip}${sec ? ": " + sec.join(" | ") : ""}) = ${etiket}`)).join("\n");

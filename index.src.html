@@ -5243,18 +5243,26 @@ function DevamsizlikEkrani({ ogrenciler, setOgrenciler, kademe, aktifYil, setTab
   const [fotoSatirlar, setFotoSatirlar] = useState(null);
   const [fotoOkunuyor, setFotoOkunuyor] = useState(false);
   const [fotoHata, setFotoHata] = useState("");
+  const [maskeIstek, setMaskeIstek] = useState(null);
+  const [fotoSinif, setFotoSinif] = useState("");
   async function handleFotoYukle(e) {
     const dosyalar = Array.from(e.target.files || []).slice(0, 4);
     e.target.value = "";
     if (!dosyalar.length) return;
     setFotoOkunuyor(true); setFotoHata(""); setFotoSatirlar(null); setSonuc(null);
     try {
-      const resimler = await Promise.all(dosyalar.map(devFotoKucult));
+      const resimler = [];
+      for (const d of dosyalar) {
+        const m = await new Promise(res => setMaskeIstek({ dosya: d, res }));
+        if (!m) throw new Error("iptal");
+        resimler.push(m);
+      }
       const satirlar = await devFotoOku(resimler);
       if (!satirlar.length) throw new Error("Fotoğrafta devamsızlık satırı bulunamadı.");
       setFotoSatirlar(satirlar.map((r, i) => {
-        const o = yilOgrencileri.find(x => pdrAyniOgrenci(x.studentName, x.className, r.ad, r.sinif, x.numara, r.numara));
-        return { ...r, id: i, bulunan: o ? { studentName: o.studentName, className: o.className, numara: o.numara } : null, sec: !!o };
+        const sn = r.sinif || fotoSinif;
+        const o = yilOgrencileri.find(x => pdrAyniOgrenci(x.studentName, x.className, r.ad, sn, x.numara, r.numara));
+        return { ...r, sinif: sn, id: i, bulunan: o ? { studentName: o.studentName, className: o.className, numara: o.numara } : null, sec: !!o };
       }));
     } catch (err) {
       setFotoHata(/iptal|durdur|kalkan/i.test(String(err && err.message)) ? "Gönderim iptal edildi; fotoğraf yapay zekâya gitmedi." : "Fotoğraf okunamadı: " + (err && err.message || err));
@@ -5290,7 +5298,7 @@ function DevamsizlikEkrani({ ogrenciler, setOgrenciler, kademe, aktifYil, setTab
       setHatirlatmalar(guncelHatirlatmalar);
       await saveHatirlatmalar(guncelHatirlatmalar);
     }
-    setSonuc({ islenen, eslesmeyen: (fotoSatirlar || []).filter(r => !r.bulunan).map(r => r.ad + " (öğrenci bulunamadı)"), esikGecenSayisi: esikGecenler.length });
+    setSonuc({ islenen, eslesmeyen: (fotoSatirlar || []).filter(r => !r.bulunan).map(r => (r.ad || ("No " + r.numara)) + " (öğrenci bulunamadı)"), esikGecenSayisi: esikGecenler.length });
     setFotoSatirlar(null);
   }
 
@@ -5442,7 +5450,10 @@ function DevamsizlikEkrani({ ogrenciler, setOgrenciler, kademe, aktifYil, setTab
           {fotoOkunuyor ? "⏳ Fotoğraf okunuyor…" : "📷 Fotoğraf / Ekran Görüntüsü Yükle"}
           <input data-testid="devamsizlik-foto" type="file" accept="image/*" multiple onChange={handleFotoYukle} style={{ display:"none" }} disabled={fotoOkunuyor} />
         </label>
-        <div style={{ fontSize:10.5, color:MUTED, marginTop:6, lineHeight:1.5 }}>Fotoğrafta öğrenci adları göründüğü için göndermeden önce sana sorulur. Okunan satırları kaydetmeden önce sen kontrol edersin.</div>
+        <input value={fotoSinif} onChange={e => setFotoSinif(e.target.value)} placeholder="Sınıf (fotoğrafta yazmıyorsa, ör. 8-A)"
+          style={{ width:"100%", padding:"7px 10px", border:`1px solid ${BORDER}`, borderRadius:8, fontSize:12, boxSizing:"border-box", marginTop:8 }} />
+        <div style={{ fontSize:10.5, color:MUTED, marginTop:6, lineHeight:1.5 }}>Fotoğrafı seçince isim sütununu parmağınla karartırsın; yapay zekâya yalnız numara, sınıf ve gün gider. Okunan satırları kaydetmeden önce sen kontrol edersin.</div>
+        {maskeIstek && <DevFotoMaske dosya={maskeIstek.dosya} onIptal={() => { maskeIstek.res(null); setMaskeIstek(null); }} onTamam={(url) => { maskeIstek.res(url); setMaskeIstek(null); }} />}
         {fotoHata && <div style={{ fontSize:11.5, color:"#C0392B", marginTop:6, fontWeight:600 }}>⚠️ {fotoHata}</div>}
       </div>
 
@@ -5454,7 +5465,7 @@ function DevamsizlikEkrani({ ogrenciler, setOgrenciler, kademe, aktifYil, setTab
             <div key={r.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 0", borderBottom:`1px solid ${BORDER}`, opacity: r.bulunan ? 1 : 0.55 }}>
               <input type="checkbox" checked={!!r.sec} disabled={!r.bulunan} onChange={e => setFotoSatirlar(fotoSatirlar.map(x => x.id === r.id ? { ...x, sec: e.target.checked } : x))} />
               <div style={{ flex:1, minWidth:0, fontSize:12, color:TEXT, overflowWrap:"anywhere" }}>
-                <b>{r.bulunan ? r.bulunan.studentName : r.ad}</b> <span style={{ color:MUTED }}>({r.bulunan ? r.bulunan.className : (r.sinif || "?")})</span>
+                <b>{r.bulunan ? r.bulunan.studentName : (r.ad || ("No " + r.numara))}</b> <span style={{ color:MUTED }}>({r.bulunan ? r.bulunan.className : (r.sinif || "?")})</span>
                 {!r.bulunan && <div style={{ fontSize:10.5, color:"#B07D1A" }}>Programda bulunamadı</div>}
               </div>
               <input type="number" min="0" value={isNaN(r.gun) ? "" : r.gun} onChange={e => setFotoSatirlar(fotoSatirlar.map(x => x.id === r.id ? { ...x, gun: parseInt(e.target.value) } : x))}
@@ -47316,6 +47327,49 @@ function lgsOnTemizle(ham) {
   });
   return v;
 }
+// Fotoğrafta isim sütununu parmakla karartma (karartılan yer yapay zekâya hiç gitmez)
+function DevFotoMaske({ dosya, onTamam, onIptal }) {
+  const cvRef = useRef(null), imgRef = useRef(null);
+  const [kutular, setKutular] = useState([]), [cizim, setCizim] = useState(null), [hazir, setHazir] = useState(false);
+  const bas = useRef(null);
+  const ciz = (ks, gecici) => {
+    const cv = cvRef.current, im = imgRef.current; if (!cv || !im) return;
+    const cx = cv.getContext("2d"); cx.drawImage(im, 0, 0, cv.width, cv.height);
+    cx.fillStyle = "#000"; [...ks, ...(gecici ? [gecici] : [])].forEach(k => cx.fillRect(k.x, k.y, k.w, k.h));
+  };
+  useEffect(() => {
+    let iptal = false;
+    lgsOnResimYukle(dosya).then(im => {
+      if (iptal) return; imgRef.current = im;
+      const sc = Math.min(1, 1800 / Math.max(im.naturalWidth, im.naturalHeight));
+      const cv = cvRef.current; cv.width = Math.round(im.naturalWidth * sc); cv.height = Math.round(im.naturalHeight * sc);
+      ciz([], null); setHazir(true);
+    }).catch(() => onIptal());
+    return () => { iptal = true; };
+  }, []);
+  const nokta = (e) => { const cv = cvRef.current, r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) * cv.width / r.width, y: (e.clientY - r.top) * cv.height / r.height }; };
+  const kutu = (a, b) => ({ x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(a.x - b.x), h: Math.abs(a.y - b.y) });
+  const asagi = (e) => { e.preventDefault(); try { e.target.setPointerCapture(e.pointerId); } catch (x) {} bas.current = nokta(e); };
+  const hareket = (e) => { if (!bas.current) return; const k = kutu(bas.current, nokta(e)); setCizim(k); ciz(kutular, k); };
+  const yukari = (e) => { if (!bas.current) return; const k = kutu(bas.current, nokta(e)); bas.current = null; setCizim(null); const yeni = (k.w > 6 && k.h > 6) ? [...kutular, k] : kutular; setKutular(yeni); ciz(yeni, null); };
+  const gonder = () => onTamam(cvRef.current.toDataURL("image/jpeg", 0.85), kutular.length);
+  return (
+    <div data-testid="devamsizlik-maske" style={{ position:"fixed", inset:0, zIndex:100000, background:"rgba(0,0,0,0.85)", display:"flex", flexDirection:"column", padding:12 }}>
+      <div style={{ color:"#fff", fontSize:13, lineHeight:1.5, marginBottom:8 }}>
+        <b>İsim sütununu parmağınla karart.</b> Karartılan yer yapay zekâya gitmez. Numara, sınıf ve gün görünür kalsın. Birden fazla alan karartabilirsin.
+      </div>
+      <div style={{ flex:1, overflow:"auto", background:"#222", borderRadius:8 }}>
+        <canvas ref={cvRef} onPointerDown={asagi} onPointerMove={hareket} onPointerUp={yukari} onPointerCancel={yukari} style={{ width:"100%", touchAction:"none", display: hazir ? "block" : "none" }} />
+        {!hazir && <div style={{ color:"#fff", padding:20 }}>⏳ Fotoğraf açılıyor…</div>}
+      </div>
+      <div style={{ display:"flex", gap:8, marginTop:10 }}>
+        <button onClick={onIptal} style={{ padding:"10px 14px", background:"none", border:"1px solid #fff", color:"#fff", borderRadius:8, fontSize:13 }}>Vazgeç</button>
+        <button onClick={() => { const y = kutular.slice(0, -1); setKutular(y); ciz(y, null); }} disabled={!kutular.length} style={{ padding:"10px 14px", background:"none", border:"1px solid #fff", color:"#fff", borderRadius:8, fontSize:13, opacity: kutular.length ? 1 : 0.4 }}>↩ Geri al</button>
+        <button data-testid="devamsizlik-maske-gonder" onClick={gonder} disabled={!hazir} style={{ flex:1, padding:"10px", background:"#C0392B", color:"#fff", border:"none", borderRadius:8, fontSize:13, fontWeight:700 }}>Devam ({kutular.length} alan karartıldı)</button>
+      </div>
+    </div>
+  );
+}
 // Devamsızlık listesi fotoğrafı: küçültür, yapay zekâya satır satır okutur (sonucu danışman onaylar)
 function devFotoKucult(file) {
   return lgsOnResimYukle(file).then(img => {
@@ -47330,7 +47384,7 @@ async function devFotoOku(resimler) {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       model: "claude-sonnet-4-6", max_tokens: 4000,
-      system: `Sen bir veri çıkarma asistanısın. Görseller, e-Okul / okul devamsızlık raporunun ekran görüntüsü ya da fotoğrafıdır (tablo: öğrenci, sınıf, numara, devamsızlık günü). Her öğrenci satırı için SADECE bir JSON dizisi döndür, başka hiçbir şey yazma:
+      system: `Sen bir veri çıkarma asistanısın. Görseller, e-Okul / okul devamsızlık raporunun ekran görüntüsü ya da fotoğrafıdır (tablo: öğrenci, sınıf, numara, devamsızlık günü). İsim sütunu gizlenmiş (siyah) olabilir; o zaman "ad" alanını "" yaz, satırı numaraya göre oku. Her öğrenci satırı için SADECE bir JSON dizisi döndür, başka hiçbir şey yazma:
 [{"ad":"Ad Soyad","sinif":"8-A","numara":"123","gun":4,"neden":""}]
 KURALLAR: Görmediğin ya da emin olmadığın değeri uydurma; sütun yoksa "" yaz. "gun" yalnızca sayı olsun (toplam devamsızlık günü; özürlü/özürsüz ayrı sütunlarsa toplamını yaz, görünmüyorsa özürsüz gün sütununu kullan). Başlık, toplam ve boş satırları ekleme. Aynı öğrenci iki kez geçiyorsa bir kez yaz.`,
       messages: [{ role: "user", content: [...resimler.map(u => ({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: u.split(",")[1] } })), { type: "text", text: "Devamsızlık satırlarını JSON dizisi olarak ver." }] }],
@@ -47341,7 +47395,7 @@ KURALLAR: Görmediğin ya da emin olmadığın değeri uydurma; sütun yoksa "" 
   const metin = ((j.content || []).find(c => c.type === "text") || {}).text || "";
   const m = /\[[\s\S]*\]/.exec(metin); if (!m) throw new Error("Satırlar okunamadı");
   const dizi = JSON.parse(m[0]);
-  return (Array.isArray(dizi) ? dizi : []).map(r => ({ ad: String(r.ad || "").trim(), sinif: String(r.sinif || "").trim(), numara: String(r.numara || "").trim(), gun: parseInt(String(r.gun ?? "").trim()), neden: String(r.neden || "").trim() })).filter(r => r.ad && !isNaN(r.gun));
+  return (Array.isArray(dizi) ? dizi : []).map(r => ({ ad: String(r.ad || "").trim(), sinif: String(r.sinif || "").trim(), numara: String(r.numara || "").trim(), gun: parseInt(String(r.gun ?? "").trim()), neden: String(r.neden || "").trim() })).filter(r => (r.ad || r.numara) && !isNaN(r.gun));
 }
 async function lgsOnFotoOku(resimler) {
   const alanlar = LGS_ON_BOLUMLER.filter(b => !b.ogretmen).flatMap(b => b.a.map(([id, tip, etiket, sec]) => `${id} (${tip}${sec ? ": " + sec.join(" | ") : ""}) = ${etiket}`)).join("\n");

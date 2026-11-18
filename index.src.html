@@ -55862,6 +55862,16 @@ export default function App() {
     setDenemeAiLoading(false);
   }
 
+  const [kutAdDuz, setKutAdDuz] = useState(null);
+  async function handleKutuphaneAdDegistir() {
+    if (!kutAdDuz) return;
+    const yeni = String(kutAdDuz.deger || "").trim();
+    if (!yeni) { setKutAdDuz(null); return; }
+    const u = kutuphane.map(k => k.id === kutAdDuz.id ? { ...k, baslik: yeni } : k);
+    setKutuphane(u);
+    setKutAdDuz(null);
+    await saveKutuphane(u);
+  }
   async function handleKutuphaneDelete(id) {
     pdrKutuphaneMetinSil(id);
     const u = kutuphane.filter(k => k.id !== id);
@@ -58064,18 +58074,34 @@ function pdrBaslangicSekmesi() {
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 700, fontSize: 14, color: TEXT, marginBottom: 2, overflowWrap: "anywhere" }}>
+                        {kutAdDuz && kutAdDuz.id === k.id ? (
+                          <span style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                            <input data-testid="kutuphane-ad-input" autoFocus value={kutAdDuz.deger} onChange={e => setKutAdDuz({ id: k.id, deger: e.target.value })}
+                              onKeyDown={e => { if (e.key === "Enter") handleKutuphaneAdDegistir(); if (e.key === "Escape") setKutAdDuz(null); }}
+                              style={{ flex: 1, minWidth: 160, fontSize: 13, padding: "5px 8px", border: `1px solid ${BORDER}`, borderRadius: 8 }} />
+                            <button data-testid="kutuphane-ad-kaydet" onClick={handleKutuphaneAdDegistir} style={{ background: ACCENT, color: "#fff", border: "none", borderRadius: 8, padding: "5px 10px", fontSize: 12, cursor: "pointer" }}>Kaydet</button>
+                            <button onClick={() => setKutAdDuz(null)} style={{ background: "none", border: `1px solid ${BORDER}`, color: MUTED, borderRadius: 8, padding: "5px 10px", fontSize: 12, cursor: "pointer" }}>Vazgeç</button>
+                          </span>
+                        ) : (<>
                         {k.tur === "yonetmelik" ? "📜" : "📄"} {k.baslik}
                         {k.tur === "yonetmelik" && <span style={{ marginLeft:6, background:"#EEF2FF", color:BLUE, borderRadius:8, padding:"1px 6px", fontSize:9, fontWeight:800 }}>YÖNETMELİK</span>}
+                        </>)}
                       </div>
                       <div style={{ fontSize: 11, color: MUTED, overflowWrap: "anywhere" }}>{k.tarih} · {k.dosyaAdi}</div>
                       <div data-testid="kutuphane-rozet" style={{ fontSize: 10.5, fontWeight: 700, marginTop: 3, color: k.tamMetin ? "#166534" : "#92400E" }}>
                         {k.tamMetin ? `📖 Tamamı öğrenildi${k.sayfa ? ` · ${k.sayfa} sayfa` : ""} · ≈${Math.round((k.karakter || 0) / 7).toLocaleString("tr-TR")} kelime${k.bolumSayisi > 1 ? ` · ${k.bolumSayisi} bölüm` : ""}` : "Yalnız özet biliniyor — tamamı öğrenilsin istersen kaynağı yeniden yükle"}
                       </div>
                     </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0 }}>
+                    <button data-testid="kutuphane-ad-degistir" onClick={() => setKutAdDuz({ id: k.id, deger: k.baslik || "" })} style={{
+                      background: "none", border: `1px solid ${BORDER}`, color: TEXT,
+                      borderRadius: 8, padding: "3px 10px", fontSize: 11, cursor: "pointer"
+                    }}>✏️ Adı değiştir</button>
                     <button onClick={() => handleKutuphaneDelete(k.id)} style={{
                       background: "none", border: "1px solid #F28B82", color: "#C5221F",
-                      borderRadius: 8, padding: "3px 10px", fontSize: 11, cursor: "pointer", flexShrink: 0
+                      borderRadius: 8, padding: "3px 10px", fontSize: 11, cursor: "pointer"
                     }}>Sil</button>
+                    </div>
                   </div>
                 </div>
                 <div style={{ padding: "12px 16px", fontSize: 12, color: TEXT, lineHeight: 1.7, whiteSpace: "pre-wrap", background: "#FAFDF7" }}>

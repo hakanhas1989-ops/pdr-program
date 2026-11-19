@@ -40106,7 +40106,7 @@ function dersKitabiOzetMetni(ders, unite) {
   return al.map(a => `${a.unite} › ${a.ad} (s. ${a.s}-${a.e}): LGS ${a.lgs}, MEBİ ${a.mebi}, örnek ${a.ornek}, yaprak ${a.yaprak} benzer soru; kitapta ${a.ogeler.length} öğe, ${a.ogeler.filter(o => o.d === 0).length} tanesine benzer soru yok`).join("\n")
     + (kv.length ? `\nKAVRAMLAR (çıkmış soru sayısı): ${kv.filter(k => k.toplam).slice(0, 25).map(k => `${k.ad} s.${k.ana}: LGS ${k.say.lgs}/MEBİ ${k.say.mebi}/örnek ${k.say.ornek}/yaprak ${k.say.yaprak}`).join("; ")}\nHİÇ SORU ÇIKMAMIŞ KAVRAMLAR: ${kv.filter(k => !k.toplam).map(k => `${k.ad} (s.${k.ana})`).join(", ")}` : "");
 }
-function DkKavramlar({ V, unite, acikK, setAcikK, ac, soruAc }) {
+function DkKavramlar({ V, unite, acikK, setAcikK, ac, soruAc, sadeceYeni }) {
   const kv = V.kavramlar.filter(k => k.unite === unite), enCok = Math.max(1, ...kv.map(k => k.toplam));
   const lgsde = kv.filter(k => k.say.lgs > 0), digerde = kv.filter(k => !k.say.lgs && k.toplam > 0), hic = kv.filter(k => !k.toplam).sort((a, b) => a.ana - b.ana);
   const mavi = "#0E7490", RENK = { lgs: "#C2410C", mebi: "#1D4ED8", ornek: "#166534", yaprak: "#B45309" }, AD = { lgs: "LGS", mebi: "MEBİ", ornek: "Örnek", yaprak: "Yaprak" };
@@ -40127,9 +40127,10 @@ function DkKavramlar({ V, unite, acikK, setAcikK, ac, soruAc }) {
   if (!kv.length) return <div style={{ fontSize: 11, color: MUTED }}>Bu ünite için kavram analizi yok.</div>;
   return (<div data-testid="dk-kavramlar">
     <div style={{ fontSize: 10.5, color: MUTED, lineHeight: 1.4, marginBottom: 4 }}>{V.A.gorunum === "alt" ? "Matematik soruları çoğu zaman kavramın adını söylemeden sorulur (ör. EBOB demeden ortak bölen problemi); bu yüzden burada yalnız adı geçen sorular sayılır. Alt konulara göre görünüm daha güvenilirdir. " : ""}{V.beceri ? "Kavramın kitapta hangi etkinliklerde işlendiği ve bu konudaki çıkmış soruların kaçında adının geçtiği (seçenekler dahil)." : "Kitaptaki kavramların hangi sayfada geçtiği ve çıkmış sorularda kaç kez kullanıldığı."} Bir soru birden çok kavrama sayılabilir. Kavrama dokununca sorular ve sayfalar açılır.</div>
-    <div style={{ fontSize: 11.5, fontWeight: 900, color: "#C2410C", margin: "4px 0 2px" }}>🟧 LGS'de çıkmış kavramlar ({lgsde.length})</div>
-    {lgsde.map(satir)}
-    {digerde.length > 0 && <><div style={{ fontSize: 11.5, fontWeight: 900, color: "#1D4ED8", margin: "8px 0 2px" }}>🟦 LGS'de henüz çıkmamış, MEB deneme/örnek/yaprakta çıkmış ({digerde.length})</div>{digerde.map(satir)}</>}
+    {sadeceYeni && <div style={{ fontSize: 10.5, color: "#B91C1C", marginBottom: 3 }}>"Yalnız sorulmamışlar" açık: sadece hiç soru çıkmamış kavramlar gösteriliyor.</div>}
+    {!sadeceYeni && <><div style={{ fontSize: 11.5, fontWeight: 900, color: "#C2410C", margin: "4px 0 2px" }}>🟧 LGS'de çıkmış kavramlar ({lgsde.length})</div>
+    {lgsde.map(satir)}</>}
+    {!sadeceYeni && digerde.length > 0 && <><div style={{ fontSize: 11.5, fontWeight: 900, color: "#1D4ED8", margin: "8px 0 2px" }}>🟦 LGS'de henüz çıkmamış, MEB deneme/örnek/yaprakta çıkmış ({digerde.length})</div>{digerde.map(satir)}</>}
     {hic.length > 0 && <><div data-testid="dk-hic" style={{ fontSize: 11.5, fontWeight: 900, color: "#B91C1C", margin: "8px 0 3px" }}>⬜ Kitapta var, hiç soru çıkmamış ({hic.length})</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>{hic.map(k => <span key={k.ad} style={{ fontSize: 11, border: "1px solid #FECACA", background: "#FEF2F2", borderRadius: 8, padding: "2px 6px", display: "inline-flex", gap: 4, alignItems: "center" }}>{k.ad} {sayfaBtn(k.ana, k.ad)}</span>)}</div></>}
   </div>);
@@ -40143,7 +40144,7 @@ function LgsDersKitabiListesi({ onSayfaAc }) {
   const mavi = "#0E7490", cizgi = "1px dashed #A5F3FC";
   const ac = (p) => onSayfaAc && onSayfaAc("kitap:" + V.A.k, p);
   const soruAc = (ref) => { const q = lgsSoruBul(ref)[0]; if (q && onSayfaAc) onSayfaAc(q.kitapcik, q.sayfa, q); };
-  const firsat = (() => { const say = {}, l = []; V.ogeler.filter(o => (!tur || o.tur === tur)).slice().sort((a, b) => b.skor - a.skor).forEach(o => { if (l.length < 12 && (say[o.alt] || 0) < 2) { l.push(o); say[o.alt] = (say[o.alt] || 0) + 1; } }); return l; })();
+  const firsat = (() => { const say = {}, l = []; V.ogeler.filter(o => (!tur || o.tur === tur) && (!sadeceYeni || o.d === 0)).slice().sort((a, b) => b.skor - a.skor).forEach(o => { if (l.length < 12 && (say[o.alt] || 0) < 2) { l.push(o); say[o.alt] = (say[o.alt] || 0) + 1; } }); return l; })();
   const satir = (o, i, alt) => { const q = o.yakin ? lgsSoruBul(o.yakin)[0] : null, d = DK_DURUM[o.d]; return (
     <div key={o.p + "_" + i} data-dk-oge={o.p} style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", fontSize: 11, padding: "3px 0", borderBottom: "1px solid #ECFEFF" }}>
       <button onClick={() => ac(o.p)} style={{ fontSize: 10.5, padding: "1px 6px", borderRadius: 6, border: "1px solid #A5F3FC", background: "#fff", color: mavi, cursor: "pointer", flexShrink: 0 }}>s. {o.p}</button>
@@ -40160,7 +40161,7 @@ function LgsDersKitabiListesi({ onSayfaAc }) {
       <select data-testid="dk-tur" value={tur} onChange={e => setTur(e.target.value)} style={{ padding: "4px 6px", borderRadius: 8, border: "1px solid #A5F3FC", fontSize: 11.5 }}>
         <option value="">Bütün öğe türleri</option>{Object.entries(DK_TUR).map(([k, [ik, ad]]) => <option key={k} value={k}>{ik} {ad}</option>)}
       </select>
-      <label style={{ fontSize: 11.5, display: "flex", alignItems: "center", gap: 4 }}><input type="checkbox" checked={sadeceYeni} onChange={e => setSadeceYeni(e.target.checked)} /> Yalnız sorulmamışlar</label>
+      <label style={{ fontSize: 11.5, display: "flex", alignItems: "center", gap: 4 }}><input data-testid="dk-sadece-yeni" type="checkbox" checked={sadeceYeni} onChange={e => { setSadeceYeni(e.target.checked); setAcikA(null); }} /> Yalnız sorulmamışlar{sadeceYeni ? ` (${V.ogeler.filter(o => o.d === 0 && (!tur || o.tur === tur)).length} öğe)` : ""}</label>
     </div>
     <div data-testid="dk-firsat" style={{ background: "#ECFEFF", border: "1px solid #A5F3FC", borderRadius: 10, padding: "7px 9px", marginBottom: 8 }}>
       <div style={{ fontSize: 12, fontWeight: 900, color: mavi, marginBottom: 3 }}>🎯 Gözden kaçmasın: kitapta var, henüz az sorulmuş</div>
@@ -40174,10 +40175,10 @@ function LgsDersKitabiListesi({ onSayfaAc }) {
           <button data-testid="dk-gorunum-kavram" onClick={() => setGorunum("kavram")} style={{ flex: 1, padding: "5px", borderRadius: 8, border: "1px solid #A5F3FC", background: gorunum === "kavram" ? "#CFFAFE" : "#fff", color: mavi, fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>🔑 Kavramlara göre</button>
           <button data-testid="dk-gorunum-alt" onClick={() => setGorunum("alt")} style={{ flex: 1, padding: "5px", borderRadius: 8, border: "1px solid #A5F3FC", background: gorunum === "alt" ? "#CFFAFE" : "#fff", color: mavi, fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>{V.beceri ? "📑 Temalara göre" : "📑 Alt konulara göre"}</button>
         </div>}
-        {ua && gorunum === "kavram" && <DkKavramlar V={V} unite={u} acikK={acikK} setAcikK={setAcikK} ac={ac} soruAc={soruAc} />}
-        {ua && gorunum === "alt" && al.map(a => { const [ad, renk, zemin] = dkAltDurum(a), aa = acikA === a.i, og = a.ogeler.filter(o => (!sadeceYeni || o.d === 0) && (!tur || o.tur === tur)); return (
+        {ua && gorunum === "kavram" && <DkKavramlar V={V} unite={u} acikK={acikK} setAcikK={setAcikK} ac={ac} soruAc={soruAc} sadeceYeni={sadeceYeni} />}
+        {ua && gorunum === "alt" && al.filter(a => !sadeceYeni && !tur || a.ogeler.some(o => (!sadeceYeni || o.d === 0) && (!tur || o.tur === tur))).map(a => { const [ad, renk, zemin] = dkAltDurum(a), og = a.ogeler.filter(o => (!sadeceYeni || o.d === 0) && (!tur || o.tur === tur)), aa = acikA === a.i || ((sadeceYeni || tur) && acikA !== -a.i - 1); return (
           <div key={a.i} data-dk-alt={a.i} style={{ borderTop: cizgi, padding: "5px 0" }}>
-            <div onClick={() => setAcikA(x => x === a.i ? null : a.i)} style={{ cursor: "pointer", fontSize: 11.5, fontWeight: 800, color: TEXT }}>{a.ad} <span style={{ fontWeight: 500, color: MUTED }}>· s. {a.s}–{a.e}</span> {a.tm ? <span style={{ fontSize: 10, fontWeight: 800, color: "#0E7490", background: "#CFFAFE", borderRadius: 8, padding: "1px 6px" }}>kitapta işlendiği yer</span> : a.dg ? <span style={{ fontSize: 10, fontWeight: 800, color: "#6B21A8", background: "#F3E8FF", borderRadius: 8, padding: "1px 6px" }}>kitabın kendi testleri</span> : <span style={{ fontSize: 10, fontWeight: 800, color: renk, background: zemin, borderRadius: 8, padding: "1px 6px" }}>{ad}</span>} {aa ? "▲" : "▼"}</div>
+            <div onClick={() => setAcikA(aa ? -a.i - 1 : a.i)} style={{ cursor: "pointer", fontSize: 11.5, fontWeight: 800, color: TEXT }}>{a.ad} <span style={{ fontWeight: 500, color: MUTED }}>· s. {a.s}–{a.e}</span> {a.tm ? <span style={{ fontSize: 10, fontWeight: 800, color: "#0E7490", background: "#CFFAFE", borderRadius: 8, padding: "1px 6px" }}>kitapta işlendiği yer</span> : a.dg ? <span style={{ fontSize: 10, fontWeight: 800, color: "#6B21A8", background: "#F3E8FF", borderRadius: 8, padding: "1px 6px" }}>kitabın kendi testleri</span> : <span style={{ fontSize: 10, fontWeight: 800, color: renk, background: zemin, borderRadius: 8, padding: "1px 6px" }}>{ad}</span>} {aa ? "▲" : "▼"}</div>
             <div style={{ fontSize: 10.5, color: MUTED }}>{a.tm ? `Bu temada bu konuyla ilgili ${a.ogeler.filter(o => o.tur === "e").length} etkinlik${a.ogeler.some(o => o.tur === "k") ? ` ve ${a.ogeler.filter(o => o.tur === "k").length} ölçme sorusu` : ""} var.` : a.dg ? `Bölüm sonu ve ünite değerlendirmelerindeki ${a.ogeler.length} çoktan seçmeli soru; her biri için LGS/MEBİ/örnek/yaprakta benzeri arandı.` : `Benzer soru: LGS ${a.lgs} · MEBİ ${a.mebi} · örnek ${a.ornek} · yaprak ${a.yaprak} · kitapta ${a.ogeler.length} öğe (${a.ogeler.filter(o => o.d === 0).length} sorulmamış)`}</div>
             {aa && <div style={{ marginTop: 3 }}>{og.length ? og.map((o, i) => satir(o, i)) : <div style={{ fontSize: 11, color: MUTED }}>Bu filtreye uyan öğe yok.</div>}</div>}
           </div>); })}

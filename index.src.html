@@ -40107,6 +40107,40 @@ function dersKitabiOzetMetni(ders, unite) {
   return al.map(a => `${a.unite} › ${a.ad} (s. ${a.s}-${a.e}): LGS ${a.lgs}, MEBİ ${a.mebi}, örnek ${a.ornek}, yaprak ${a.yaprak} benzer soru; kitapta ${a.ogeler.length} öğe, ${a.ogeler.filter(o => o.d === 0).length} tanesine benzer soru yok`).join("\n")
     + (kv.length ? `\nKAVRAMLAR (çıkmış soru sayısı): ${kv.filter(k => k.toplam).slice(0, 25).map(k => `${k.ad} s.${k.ana}: LGS ${k.say.lgs}/MEBİ ${k.say.mebi}/örnek ${k.say.ornek}/yaprak ${k.say.yaprak}`).join("; ")}\nHİÇ SORU ÇIKMAMIŞ KAVRAMLAR: ${kv.filter(k => !k.toplam).map(k => `${k.ad} (s.${k.ana})`).join(", ")}` : "");
 }
+// Ders Kitabı ekranındaki soru düğmeleri: zorluk rengi + kısa analiz
+function dkSoruAd(q) { return q.kaynak === "lgs" ? `${q.yil} · ${q.no}` : q.kaynak === "yaprak" ? `${yaprakTestAd(q.kitapcik).split(" · ")[0]} · ${q.no}` : `${lgsKitapcikAd(q.kitapcik).replace(/^MEB /, "").replace(/ (Sayısal|Sözel)$/, "")} · ${q.no}`; }
+function dkSoruIpucu(q) {
+  const p = [`Zorluk: ${LGS_ZORLUK_AD[q.zorluk] || "belirsiz"}`];
+  if (q.oran != null) p.push(`doğru cevaplanma %${q.oran}`);
+  if (q.celYuzde) p.push(`çeldiricilik %${q.celYuzde}`);
+  if (q.kokSoz) p.push(`${q.kokSoz + (q.secSoz || 0)} sözcük`);
+  if (q.gorsel) p.push("görselli"); if (q.olumsuz) p.push("olumsuz kök");
+  if (q.bec && q.bec.length) p.push("beceri: " + q.bec.map(b => (LGS_BECERI[b] || [b])[0]).join(", "));
+  return p.join(" · ");
+}
+function DkSoruCip({ q, onClick, etiket }) {
+  const z = q.zorluk || 0, r = LGS_ZORLUK_RENK[z];
+  return <button data-dk-soru={q.kitapcik + ":" + q.no} title={dkSoruIpucu(q)} onClick={onClick} style={{ fontSize: 10, padding: "1px 6px", borderRadius: 6, border: `1.5px solid ${r}`, background: r + "14", color: TEXT, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 3 }}>
+    <span style={{ width: 7, height: 7, borderRadius: 4, background: r, display: "inline-block" }} />{etiket || dkSoruAd(q)}<span style={{ color: r, fontWeight: 800 }}>{z ? LGS_ZORLUK_AD[z] : ""}</span>{q.gorsel ? <span title="görselli">🖼</span> : null}
+  </button>;
+}
+function DkSoruOzet({ qs }) {
+  if (!qs.length) return null;
+  const say = [0, 0, 0, 0, 0]; qs.forEach(q => say[q.zorluk || 0]++);
+  const ort = (f) => { const l = qs.map(f).filter(x => x != null && x > 0); return l.length ? Math.round(l.reduce((a, b) => a + b, 0) / l.length) : null; };
+  const cel = ort(q => q.celYuzde), oran = ort(q => q.oran), soz = ort(q => (q.kokSoz || 0) + (q.secSoz || 0));
+  const gor = Math.round(100 * qs.filter(q => q.gorsel).length / qs.length);
+  const bc = {}; qs.forEach(q => (q.bec || []).forEach(b => bc[b] = (bc[b] || 0) + 1));
+  const bec = Object.entries(bc).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([b, n]) => `${(LGS_BECERI[b] || [b])[0]} (${n})`);
+  const enZor = qs.slice().sort((a, b) => (b.zorluk || 0) - (a.zorluk || 0) || (a.oran ?? 101) - (b.oran ?? 101))[0];
+  return (<div data-testid="dk-soru-ozet" style={{ background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: 8, padding: "5px 7px", margin: "4px 0", fontSize: 10.5, lineHeight: 1.5 }}>
+    <div style={{ display: "flex", height: 7, borderRadius: 4, overflow: "hidden", marginBottom: 3 }}>{[1, 2, 3, 4, 0].map(z => say[z] ? <div key={z} title={`${LGS_ZORLUK_AD[z]}: ${say[z]}`} style={{ flex: say[z], background: LGS_ZORLUK_RENK[z] }} /> : null)}</div>
+    <div>{[1, 2, 3, 4].filter(z => say[z]).map(z => <span key={z} style={{ color: LGS_ZORLUK_RENK[z], fontWeight: 800, marginRight: 6 }}>{LGS_ZORLUK_AD[z]} {say[z]}</span>)}{say[0] ? <span style={{ color: MUTED }}>belirsiz {say[0]}</span> : null}</div>
+    <div style={{ color: MUTED }}>{[oran != null ? `LGS'de doğru cevaplanma ort. %${oran}` : null, cel != null ? `çeldiricilik ort. %${cel}` : null, soz != null ? `ort. ${soz} sözcük` : null, `görselli %${gor}`].filter(Boolean).join(" · ")}</div>
+    {bec.length > 0 && <div style={{ color: MUTED }}>En çok ölçülen beceri: {bec.join(", ")}</div>}
+    {enZor && enZor.zorluk >= 3 && <div style={{ color: MUTED }}>En zor soru: <b style={{ color: LGS_ZORLUK_RENK[enZor.zorluk] }}>{dkSoruAd(enZor)}</b> ({LGS_ZORLUK_AD[enZor.zorluk]}{enZor.oran != null ? `, doğru %${enZor.oran}` : ""})</div>}
+  </div>);
+}
 function DkKavramlar({ V, ders, unite, acikK, setAcikK, ac, soruAc, sadeceYeni }) {
   const kv = V.kavramlar.filter(k => k.unite === unite), enCok = Math.max(1, ...kv.map(k => k.toplam));
   const lgsde = kv.filter(k => k.say.lgs > 0), digerde = kv.filter(k => !k.say.lgs && k.toplam > 0), hic = kv.filter(k => !k.toplam).sort((a, b) => a.ana - b.ana);
@@ -40121,13 +40155,14 @@ function DkKavramlar({ V, ders, unite, acikK, setAcikK, ac, soruAc, sadeceYeni }
       </div>
       {acik && <div style={{ marginTop: 3 }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 3, alignItems: "center", fontSize: 10.5 }}>Kitapta geçtiği sayfalar: {k.sayfalar.map(p => sayfaBtn(p))}</div>
+        <DkSoruOzet qs={k.refs.map(r => lgsSoruBul(r, ders)[0]).filter(Boolean)} />
         {["lgs", "mebi", "ornek", "yaprak"].filter(t => k.say[t]).map(t => <div key={t} style={{ display: "flex", flexWrap: "wrap", gap: 3, alignItems: "center", marginTop: 3, fontSize: 10.5 }}><span style={{ color: RENK[t], fontWeight: 800 }}>{AD[t]}:</span>
-          {k.refs.filter(r => { const x = r.split(":")[0]; return t === "lgs" ? /^\d/.test(x) : x[0] === { mebi: "m", ornek: "o", yaprak: "y" }[t]; }).map(r => { const q = lgsSoruBul(r, ders)[0]; return q ? <button key={r} onClick={() => soruAc(r)} style={{ fontSize: 10, padding: "1px 5px", borderRadius: 6, border: `1px solid ${RENK[t]}55`, background: "#fff", color: RENK[t], cursor: "pointer" }}>{t === "lgs" ? `${q.yil} · ${q.no}` : t === "yaprak" ? `${yaprakTestAd(q.kitapcik).split(" · ")[0]} · ${q.no}` : `${lgsKitapcikAd(q.kitapcik).replace(/^MEB /, "").replace(/ (Sayısal|Sözel)$/, "")} · ${q.no}`}</button> : null; })}</div>)}
+          {k.refs.filter(r => { const x = r.split(":")[0]; return t === "lgs" ? /^\d/.test(x) : x[0] === { mebi: "m", ornek: "o", yaprak: "y" }[t]; }).map(r => { const q = lgsSoruBul(r, ders)[0]; return q ? <DkSoruCip key={r} q={q} onClick={() => soruAc(r)} /> : null; })}</div>)}
       </div>}
     </div>); };
   if (!kv.length) return <div style={{ fontSize: 11, color: MUTED }}>Bu ünite için kavram analizi yok.</div>;
   return (<div data-testid="dk-kavramlar">
-    <div style={{ fontSize: 10.5, color: MUTED, lineHeight: 1.4, marginBottom: 4 }}>{V.A.gorunum === "alt" ? "Matematik soruları çoğu zaman kavramın adını söylemeden sorulur (ör. EBOB demeden ortak bölen problemi); bu yüzden burada yalnız adı geçen sorular sayılır. Alt konulara göre görünüm daha güvenilirdir. " : ""}{V.beceri ? "Kavramın kitapta hangi etkinliklerde işlendiği ve bu konudaki çıkmış soruların kaçında adının geçtiği (seçenekler dahil)." : "Kitaptaki kavramların hangi sayfada geçtiği ve çıkmış sorularda kaç kez kullanıldığı."} Bir soru birden çok kavrama sayılabilir. Kavrama dokununca sorular ve sayfalar açılır.</div>
+    <div style={{ fontSize: 10.5, color: MUTED, lineHeight: 1.4, marginBottom: 4 }}>{V.A.gorunum === "alt" ? "Matematik soruları çoğu zaman kavramın adını söylemeden sorulur (ör. EBOB demeden ortak bölen problemi); bu yüzden burada yalnız adı geçen sorular sayılır. Alt konulara göre görünüm daha güvenilirdir. " : ""}{V.beceri ? "Kavramın kitapta hangi etkinliklerde işlendiği ve bu konudaki çıkmış soruların kaçında adının geçtiği (seçenekler dahil)." : "Kitaptaki kavramların hangi sayfada geçtiği ve çıkmış sorularda kaç kez kullanıldığı."} Bir soru birden çok kavrama sayılabilir. Kavrama dokununca sorular ve sayfalar açılır. Soru düğmesinin rengi zorluğu gösterir: <span style={{ color: LGS_ZORLUK_RENK[1], fontWeight: 800 }}>kolay</span> · <span style={{ color: LGS_ZORLUK_RENK[2], fontWeight: 800 }}>orta</span> · <span style={{ color: LGS_ZORLUK_RENK[3], fontWeight: 800 }}>zor</span> · <span style={{ color: LGS_ZORLUK_RENK[4], fontWeight: 800 }}>çok zor</span>; 🖼 görselli soru. Soruyu açınca 🔍 Beceriler düğmesinde ayrıntılı analiz (neden zor, çeldiriciler) var.</div>
     {sadeceYeni && <div style={{ fontSize: 10.5, color: "#B91C1C", marginBottom: 3 }}>"Yalnız sorulmamışlar" açık: sadece hiç soru çıkmamış kavramlar gösteriliyor.</div>}
     {!sadeceYeni && <><div style={{ fontSize: 11.5, fontWeight: 900, color: "#C2410C", margin: "4px 0 2px" }}>🟧 LGS'de çıkmış kavramlar ({lgsde.length})</div>
     {lgsde.map(satir)}</>}
@@ -40152,7 +40187,7 @@ function LgsDersKitabiListesi({ onSayfaAc }) {
       <span title={(DK_TUR[o.tur] || [])[1]} style={{ flexShrink: 0 }}>{(DK_TUR[o.tur] || ["•"])[0]}</span>
       <span style={{ flex: 1, minWidth: 140 }}>{o.et}{alt ? <span style={{ color: MUTED }}> · {alt}</span> : null}</span>
       <span style={{ color: d[1], fontWeight: 700, flexShrink: 0 }}>{d[0]}</span>
-      {q ? <button onClick={() => soruAc(o.yakin)} style={{ fontSize: 10, padding: "1px 6px", borderRadius: 6, border: "1px solid #E5E7EB", background: "#fff", color: TEXT, cursor: "pointer", flexShrink: 0 }}>≈ {lgsKitapcikAd(q.kitapcik).replace(/^MEB /, "")} {q.no}</button> : null}
+      {q ? <span style={{ flexShrink: 0 }}><DkSoruCip q={q} onClick={() => soruAc(o.yakin)} etiket={"≈ " + dkSoruAd(q)} /></span> : null}
     </div>); };
   const uniteler = V.A.uniteler;
   return (<div data-testid="ders-kitabi-liste">

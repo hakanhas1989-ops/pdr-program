@@ -40141,7 +40141,12 @@ function DkSoruOzet({ qs }) {
     {enZor && enZor.zorluk >= 3 && <div style={{ color: MUTED }}>En zor soru: <b style={{ color: LGS_ZORLUK_RENK[enZor.zorluk] }}>{dkSoruAd(enZor)}</b> ({LGS_ZORLUK_AD[enZor.zorluk]}{enZor.oran != null ? `, doğru %${enZor.oran}` : ""})</div>}
   </div>);
 }
-function DkKavramlar({ V, ders, unite, acikK, setAcikK, ac, soruAc, sadeceYeni }) {
+function dkZorSuz(qs, zSira, zSuz) {
+  let l = qs.filter(q => !zSuz || (zSuz === "zor" ? (q.zorluk || 0) >= 3 : (q.zorluk || 0) >= 1 && (q.zorluk || 0) <= 2));
+  if (zSira) l = l.slice().sort((a, b) => zSira === "zor" ? (b.zorluk || 0) - (a.zorluk || 0) || (a.oran ?? 101) - (b.oran ?? 101) : ((a.zorluk || 9) - (b.zorluk || 9)) || (b.oran ?? -1) - (a.oran ?? -1));
+  return l;
+}
+function DkKavramlar({ V, ders, unite, acikK, setAcikK, ac, soruAc, sadeceYeni, zSira = "", setZSira, zSuz = "", setZSuz }) {
   const kv = V.kavramlar.filter(k => k.unite === unite), enCok = Math.max(1, ...kv.map(k => k.toplam));
   const lgsde = kv.filter(k => k.say.lgs > 0), digerde = kv.filter(k => !k.say.lgs && k.toplam > 0), hic = kv.filter(k => !k.toplam).sort((a, b) => a.ana - b.ana);
   const mavi = "#0E7490", RENK = { lgs: "#C2410C", mebi: "#1D4ED8", ornek: "#166534", yaprak: "#B45309" }, AD = { lgs: "LGS", mebi: "MEBİ", ornek: "Örnek", yaprak: "Yaprak" };
@@ -40156,13 +40161,21 @@ function DkKavramlar({ V, ders, unite, acikK, setAcikK, ac, soruAc, sadeceYeni }
       {acik && <div style={{ marginTop: 3 }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 3, alignItems: "center", fontSize: 10.5 }}>Kitapta geçtiği sayfalar: {k.sayfalar.map(p => sayfaBtn(p))}</div>
         <DkSoruOzet qs={k.refs.map(r => lgsSoruBul(r, ders)[0]).filter(Boolean)} />
-        {["lgs", "mebi", "ornek", "yaprak"].filter(t => k.say[t]).map(t => <div key={t} style={{ display: "flex", flexWrap: "wrap", gap: 3, alignItems: "center", marginTop: 3, fontSize: 10.5 }}><span style={{ color: RENK[t], fontWeight: 800 }}>{AD[t]}:</span>
-          {k.refs.filter(r => { const x = r.split(":")[0]; return t === "lgs" ? /^\d/.test(x) : x[0] === { mebi: "m", ornek: "o", yaprak: "y" }[t]; }).map(r => { const q = lgsSoruBul(r, ders)[0]; return q ? <DkSoruCip key={r} q={q} onClick={() => soruAc(r)} /> : null; })}</div>)}
+        {(() => { const tum = k.refs.map(r => ({ r, q: lgsSoruBul(r, ders)[0] })).filter(x => x.q), gos = dkZorSuz(tum.map(x => x.q), zSira, zSuz), refOf = (q) => tum.find(x => x.q === q).r;
+          return <>{(zSira || zSuz) && <div style={{ fontSize: 10, color: MUTED, marginTop: 3 }}>{gos.length} / {tum.length} soru gösteriliyor{zSira ? (zSira === "zor" ? " · zordan kolaya" : " · kolaydan zora") : ""}</div>}
+          {["lgs", "mebi", "ornek", "yaprak"].map(t => { const l = gos.filter(q => q.kaynak === t); return l.length ? <div key={t} style={{ display: "flex", flexWrap: "wrap", gap: 3, alignItems: "center", marginTop: 3, fontSize: 10.5 }}><span style={{ color: RENK[t], fontWeight: 800 }}>{AD[t]}:</span>{l.map(q => <DkSoruCip key={refOf(q)} q={q} onClick={() => soruAc(refOf(q))} />)}</div> : null; })}
+          {!gos.length && <div style={{ fontSize: 10.5, color: MUTED, marginTop: 3 }}>Bu süzgece uyan soru yok.</div>}</>; })()}
       </div>}
     </div>); };
   if (!kv.length) return <div style={{ fontSize: 11, color: MUTED }}>Bu ünite için kavram analizi yok.</div>;
   return (<div data-testid="dk-kavramlar">
     <div style={{ fontSize: 10.5, color: MUTED, lineHeight: 1.4, marginBottom: 4 }}>{V.A.gorunum === "alt" ? "Matematik soruları çoğu zaman kavramın adını söylemeden sorulur (ör. EBOB demeden ortak bölen problemi); bu yüzden burada yalnız adı geçen sorular sayılır. Alt konulara göre görünüm daha güvenilirdir. " : ""}{V.beceri ? "Kavramın kitapta hangi etkinliklerde işlendiği ve bu konudaki çıkmış soruların kaçında adının geçtiği (seçenekler dahil)." : "Kitaptaki kavramların hangi sayfada geçtiği ve çıkmış sorularda kaç kez kullanıldığı."} Bir soru birden çok kavrama sayılabilir. Kavrama dokununca sorular ve sayfalar açılır. Soru düğmesinin rengi zorluğu gösterir: <span style={{ color: LGS_ZORLUK_RENK[1], fontWeight: 800 }}>kolay</span> · <span style={{ color: LGS_ZORLUK_RENK[2], fontWeight: 800 }}>orta</span> · <span style={{ color: LGS_ZORLUK_RENK[3], fontWeight: 800 }}>zor</span> · <span style={{ color: LGS_ZORLUK_RENK[4], fontWeight: 800 }}>çok zor</span>; 🖼 görselli soru. Soruyu açınca 🔍 Beceriler düğmesinde ayrıntılı analiz (neden zor, çeldiriciler) var.</div>
+    {setZSira && <div data-testid="dk-zorluk-kontrol" style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center", margin: "2px 0 6px", fontSize: 10.5 }}>
+      <span style={{ fontWeight: 800, color: TEXT }}>Sorular:</span>
+      {[["", "Hepsi"], ["zor", "🟠🔴 Yalnız zor"], ["kolay", "🟢🔵 Yalnız kolay-orta"]].map(([v, ad]) => <button key={"s" + v} data-dk-zsuz={v || "hepsi"} onClick={() => setZSuz(v)} style={{ padding: "2px 7px", borderRadius: 7, border: "1px solid #CBD5E1", background: zSuz === v ? "#0E7490" : "#fff", color: zSuz === v ? "#fff" : TEXT, fontSize: 10.5, cursor: "pointer" }}>{ad}</button>)}
+      <span style={{ fontWeight: 800, color: TEXT, marginLeft: 4 }}>Sırala:</span>
+      {[["", "Kaynağa göre"], ["zor", "Zordan kolaya"], ["kolay", "Kolaydan zora"]].map(([v, ad]) => <button key={"r" + v} data-dk-zsira={v || "kaynak"} onClick={() => setZSira(v)} style={{ padding: "2px 7px", borderRadius: 7, border: "1px solid #CBD5E1", background: zSira === v ? "#0E7490" : "#fff", color: zSira === v ? "#fff" : TEXT, fontSize: 10.5, cursor: "pointer" }}>{ad}</button>)}
+    </div>}
     {sadeceYeni && <div style={{ fontSize: 10.5, color: "#B91C1C", marginBottom: 3 }}>"Yalnız sorulmamışlar" açık: sadece hiç soru çıkmamış kavramlar gösteriliyor.</div>}
     {!sadeceYeni && <><div style={{ fontSize: 11.5, fontWeight: 900, color: "#C2410C", margin: "4px 0 2px" }}>🟧 LGS'de çıkmış kavramlar ({lgsde.length})</div>
     {lgsde.map(satir)}</>}
@@ -40173,6 +40186,7 @@ function DkKavramlar({ V, ders, unite, acikK, setAcikK, ac, soruAc, sadeceYeni }
 }
 function LgsDersKitabiListesi({ onSayfaAc }) {
   const dersler = Object.keys(DERS_KITABI_ANALIZ);
+  const [zSira, setZSira] = useState(""), [zSuz, setZSuz] = useState("");
   const [gorunum, setGorunum] = useState((DERS_KITABI_ANALIZ[Object.keys(DERS_KITABI_ANALIZ)[0]] || {}).gorunum || "kavram"), [acikK, setAcikK] = useState(null);
   const [ders, setDers] = useState(dersler[0]), [acikU, setAcikU] = useState(null), [acikA, setAcikA] = useState(null), [sadeceYeni, setSadeceYeni] = useState(false), [tur, setTur] = useState("");
   const V = useMemo(() => dersKitabiVeri(ders), [ders]);
@@ -40211,7 +40225,7 @@ function LgsDersKitabiListesi({ onSayfaAc }) {
           <button data-testid="dk-gorunum-kavram" onClick={() => setGorunum("kavram")} style={{ flex: 1, padding: "5px", borderRadius: 8, border: "1px solid #A5F3FC", background: gorunum === "kavram" ? "#CFFAFE" : "#fff", color: mavi, fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>🔑 Kavramlara göre</button>
           <button data-testid="dk-gorunum-alt" onClick={() => setGorunum("alt")} style={{ flex: 1, padding: "5px", borderRadius: 8, border: "1px solid #A5F3FC", background: gorunum === "alt" ? "#CFFAFE" : "#fff", color: mavi, fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>{V.beceri ? "📑 Temalara göre" : "📑 Alt konulara göre"}</button>
         </div>}
-        {ua && gorunum === "kavram" && <DkKavramlar V={V} ders={ders} unite={u} acikK={acikK} setAcikK={setAcikK} ac={ac} soruAc={soruAc} sadeceYeni={sadeceYeni} />}
+        {ua && gorunum === "kavram" && <DkKavramlar V={V} ders={ders} unite={u} acikK={acikK} setAcikK={setAcikK} ac={ac} soruAc={soruAc} sadeceYeni={sadeceYeni} zSira={zSira} setZSira={setZSira} zSuz={zSuz} setZSuz={setZSuz} />}
         {ua && gorunum === "alt" && al.filter(a => !sadeceYeni && !tur || a.ogeler.some(o => (!sadeceYeni || o.d === 0) && (!tur || o.tur === tur))).map(a => { const [ad, renk, zemin] = dkAltDurum(a), og = a.ogeler.filter(o => (!sadeceYeni || o.d === 0) && (!tur || o.tur === tur)), aa = acikA === a.i || ((sadeceYeni || tur) && acikA !== -a.i - 1); return (
           <div key={a.i} data-dk-alt={a.i} style={{ borderTop: cizgi, padding: "5px 0" }}>
             <div onClick={() => setAcikA(aa ? -a.i - 1 : a.i)} style={{ cursor: "pointer", fontSize: 11.5, fontWeight: 800, color: TEXT }}>{a.ad} <span style={{ fontWeight: 500, color: MUTED }}>· s. {a.s}–{a.e}</span> {a.tm ? <span style={{ fontSize: 10, fontWeight: 800, color: "#0E7490", background: "#CFFAFE", borderRadius: 8, padding: "1px 6px" }}>kitapta işlendiği yer</span> : a.dg ? <span style={{ fontSize: 10, fontWeight: 800, color: "#6B21A8", background: "#F3E8FF", borderRadius: 8, padding: "1px 6px" }}>kitabın kendi testleri</span> : <span style={{ fontSize: 10, fontWeight: 800, color: renk, background: zemin, borderRadius: 8, padding: "1px 6px" }}>{ad}</span>} {aa ? "▲" : "▼"}</div>

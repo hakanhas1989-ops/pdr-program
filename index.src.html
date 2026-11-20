@@ -4534,13 +4534,18 @@ function pdrCozumYanitCozHam(t) {
   if (adim.length >= 2) return { onkosul: [], adimlar: adim.slice(0, 8).map(x => { const [b, ...r] = x.split(/:\s+/); return r.length ? { baslik: b.replace(/\*+/g, ""), aciklama: r.join(": ").replace(/\*+/g, ""), soru: "", ipucu: "" } : { baslik: "Adım", aciklama: x.replace(/\*+/g, ""), soru: "", ipucu: "" }; }) };
   throw new Error("Yanıtta adımlar bulunamadı. Uygulamadan JSON biçiminde yanıt istemeyi deneyin.");
 }
-function pdrCozumYontemOku() { try { return JSON.parse(localStorage.getItem("pdr_cozum_gemini") || "{}"); } catch (e) { return {}; } }
+function pdrCozumYontemOku() { try { const y = JSON.parse(localStorage.getItem("pdr_cozum_gemini") || "{}");
+    // Asistandaki gibi: varsayılan Gemini 3.6 Flash; eski 3.8 seçimi bir kez 3.6'ya taşınır (3.8 sık yoğun, günde birkaç istek)
+    if (!y.gemini36Gecis) { if (!y.model || y.model === "gemini-3.8-flash" || y.model === "gemini-3.5-flash-lite") y.model = "gemini-3.6-flash"; y.gemini36Gecis = true; try { localStorage.setItem("pdr_cozum_gemini", JSON.stringify(y)); } catch (e) {} }
+    return y; } catch (e) { return {}; } }
 function pdrCozumYontemYaz(v) { try { localStorage.setItem("pdr_cozum_gemini", JSON.stringify(v)); } catch (e) {} }
-const PDR_GEMINI_VARSAYILAN = { url: "https://pdr-gemini.hakanhas1989.workers.dev", model: "gemini-3.8-flash" };
+const PDR_GEMINI_VARSAYILAN = { url: "https://pdr-gemini.hakanhas1989.workers.dev", model: "gemini-3.6-flash" };
 // Seçilen model meşgulse sırayla denenecek yedekler (en yeniden eskiye; hafif "lite" modeller daha az yoğundur)
 // Yedek sırası yalnızca Gemini ücretsiz katmanında görünen modellerden oluşur (Kasım 2026);
 // ücretsiz listede olmayan 3.7 Flash ve 3.5 Flash çıkarıldı, 3.1 Flash-Lite eklendi.
-const PDR_GEMINI_YEDEK = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-flash-latest", "gemini-flash-lite-latest"];
+// Asistanla aynı düzen (Kasım 2026): 3.6 Flash önerilen; 3.8 güçlü ama sık yoğun; Flash-Lite görselli/JSON yanıtta güvenilmez olduğundan en sona
+const PDR_GEMINI_YEDEK = ["gemini-3.6-flash", "gemini-3.8-flash", "gemini-flash-latest", "gemini-3.1-flash-lite"];
+const PDR_COZUM_MODELLER = [["gemini-3.6-flash", "Gemini 3.6 Flash — önerilen, güçlü ve hızlı"], ["gemini-3.8-flash", "Gemini 3.8 Flash — en güçlü ama sık yoğun, günde ~4-5 soru"]];
 async function pdrCozumOzelIste(soru, metin, kanvas, bolge) {
   const yon = pdrCozumYontemOku();
   if (yon.gemini) {
@@ -4552,6 +4557,7 @@ async function pdrCozumOzelIste(soru, metin, kanvas, bolge) {
     let d = null, bagKoptu = false, sonHata = "";
     modelDongu: for (let mi = 0; mi < sira.length && mi < 7; mi++) {
       model = sira[mi]; denenen.push(model);
+      if (typeof pdrCozumOzelIste.__ilerle === "function") pdrCozumOzelIste.__ilerle(mi === 0 ? `${model} hazırlıyor…` : `${denenen[mi - 1]} yoğun, ${model} deneniyor…`);
       for (let yogun = 0; yogun < 2; ) {
         // Yeni Gemini modelleri önce "düşünür"; düşünme de yanıt sınırından yer, bu yüzden sınır geniş tutulur
         let res; try { res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model, max_tokens: 8000, system: PDR_COZUM_SISTEM, messages: [{ role: "user", content }] }) }); }
@@ -4566,7 +4572,7 @@ async function pdrCozumOzelIste(soru, metin, kanvas, bolge) {
         const yeni = (msj.match(/use\s+(?:models\/)?(gemini-[a-z0-9.\-]*[a-z0-9])/i) || [])[1];
         if (yeni && !denenen.includes(yeni)) { const eski = sira.indexOf(yeni, mi + 1); if (eski > 0) sira.splice(eski, 1); sira.splice(mi + 1, 0, yeni); if (mi === 0) pdrCozumYontemYaz({ ...pdrCozumYontemOku(), model: yeni }); continue modelDongu; }
         // Model bulunamadı / kapatıldı / kotası doldu → sıradaki model
-        if (res.status === 404 || res.status === 429 || /not found|no longer available|not supported|kota/i.test(msj)) continue modelDongu;
+        if (res.status === 404 || res.status === 429 || res.status === 524 || res.status === 504 || res.status === 502 || /not found|no longer available|not supported|kota|quota|RESOURCE_EXHAUSTED|timed? ?out/i.test(msj)) continue modelDongu;
         // Geçici yoğunluk → bir kez bekleyip aynı modeli dene, olmazsa sıradaki model
         if (/high demand|overloaded|UNAVAILABLE|try again later/i.test(msj) || res.status === 503 || res.status === 500) { yogun++; if (yogun < 2) await new Promise(ok => setTimeout(ok, pdrCozumOzelIste.__bekle || 3000)); continue; }
         throw new Error(msj);
@@ -4626,10 +4632,10 @@ function KitapSayfaGosterici({ kitap, kitapAd, sayfa, aralik, ofset = 0, onKapat
     setIsaretAcik(false); setIsaret(null); setNotGizle(false);
     try { const r = await pdrSoruCozumCiz(sfRef.current.sf, sfRef.current.vp, soru, cizim.current, ozelVeri || null); setCozum(r); setCozumAcik(true);
       if (!ozelVeri) { const kay = (await pdrCozumOku())[cozumAnahtar]; if (kay) { setOzel(kay); await pdrSoruCozumCiz(sfRef.current.sf, sfRef.current.vp, soru, cizim.current, kay); } } } catch (e) { setCozum({ hata: (e && e.message) || String(e) }); setCozumAcik(true); } }
-  const [ozelOnay, setOzelOnay] = useState(false);
-  async function ozelIste() { if (!cozum || cozum.hata) return; setOzelOnay(false); setOzelDurum("hazirlaniyor"); setCevapGoster(false);
+  const [ozelOnay, setOzelOnay] = useState(false), [ozelIlerle, setOzelIlerle] = useState("");
+  async function ozelIste() { if (!cozum || cozum.hata) return; setOzelOnay(false); setOzelDurum("hazirlaniyor"); setOzelIlerle(""); pdrCozumOzelIste.__ilerle = setOzelIlerle; setCevapGoster(false);
     window.__pdrKalkanDosyaTekOnay = true;   // danışman aşağıdaki kutuda "Gönder"e bastı: bu tek gönderimde tarayıcı onayı sorulmaz
-    try { const c = kanvas.current; c.__vpW = sfRef.current.vp.width; const j = await pdrCozumOzelIste(soru, cozum.metin, c, cozum.bolge); setOzel(j); await pdrCozumKaydet(cozumAnahtar, j); await cozumAc(j); setOzelDurum(""); } catch (e) { setOzelDurum("hata:" + ((e && e.message) || e)); } window.__pdrKalkanDosyaTekOnay = false; setYontem(pdrCozumYontemOku()); }
+    try { const c = kanvas.current; c.__vpW = sfRef.current.vp.width; const j = await pdrCozumOzelIste(soru, cozum.metin, c, cozum.bolge); setOzel(j); await pdrCozumKaydet(cozumAnahtar, j); await cozumAc(j); setOzelDurum(""); } catch (e) { setOzelDurum("hata:" + ((e && e.message) || e)); } window.__pdrKalkanDosyaTekOnay = false; pdrCozumOzelIste.__ilerle = null; setOzelIlerle(""); setYontem(pdrCozumYontemOku()); }
   useEffect(() => { setS(sayfa); }, [sayfa]);
   async function isaretle() { setCozumAcik(false); setCozum(null); if (isaretAcik) { setIsaretAcik(false); setIsaret(null); const c = cizim.current; if (c) c.getContext("2d").clearRect(0, 0, c.width, c.height); return; }
     try { const r = await pdrSoruBeceriIsaretle(sfRef.current.sf, sfRef.current.vp, soru, cizim.current); setIsaret(r); setIsaretAcik(true); } catch (e) { setIsaret({ hata: (e && e.message) || String(e) }); setIsaretAcik(true); } }
@@ -4710,7 +4716,7 @@ function KitapSayfaGosterici({ kitap, kitapAd, sayfa, aralik, ofset = 0, onKapat
               {ozel && ozel.celdirici && <div style={{ marginTop: 4 }}><b>⚠ Dikkat (çeldirici):</b> {pdrUstYaz(ozel.celdirici)}</div>}
               {ozel && ozel.cevap && <div style={{ marginTop: 4 }}>{cevapGoster ? <span><b>✅ Cevap:</b> {pdrUstYaz(ozel.cevap)}</span> : <button data-cozum-cevap onClick={() => setCevapGoster(true)} style={{ padding: "4px 9px", borderRadius: 7, border: "1px solid #FDBA74", background: "#FFF7ED", cursor: "pointer", fontSize: 11.5, fontWeight: 700 }}>Önce kendin dene — cevabı göster</button>}</div>}
               {!ozel && <div style={{ marginTop: 6 }}>
-                <button data-cozum-ozel onClick={() => setOzelOnay(true)} disabled={ozelDurum === "hazirlaniyor"} style={{ padding: "6px 10px", borderRadius: 8, border: "none", background: "#EA580C", color: "#fff", fontWeight: 800, fontSize: 12, cursor: "pointer" }}>{ozelDurum === "hazirlaniyor" ? "Hazırlanıyor…" : "🤖 Bu soruya özel adımları hazırla"}</button>
+                <button data-cozum-ozel onClick={() => setOzelOnay(true)} disabled={ozelDurum === "hazirlaniyor"} style={{ padding: "6px 10px", borderRadius: 8, border: "none", background: "#EA580C", color: "#fff", fontWeight: 800, fontSize: 12, cursor: "pointer" }}>{ozelDurum === "hazirlaniyor" ? (yontem.gemini && ozelIlerle ? "Hazırlanıyor… " + ozelIlerle : "Hazırlanıyor…") : "🤖 Bu soruya özel adımları hazırla"}</button>
                 {ozelOnay && <div data-cozum-onay style={{ marginTop: 5, background: "#FFF7ED", border: "1px solid #FDBA74", borderRadius: 8, padding: "6px 8px", fontSize: 11.5, lineHeight: 1.45 }}>📎 Bu sorunun <b>görseli</b> (yalnız kitapçık sayfasından kesilen soru) ve metni {yontem.gemini ? <b>Google Gemini'ye (ücretsiz kota)</b> : <b>seçili yapay zekâya (ücretli, API anahtarınızla)</b>} gönderilecek. Öğrenci bilgisi gönderilmez.
                   <div style={{ display: "flex", gap: 6, marginTop: 4 }}><button data-cozum-onay-gonder onClick={ozelIste} style={{ padding: "5px 10px", borderRadius: 7, border: "none", background: "#EA580C", color: "#fff", fontWeight: 800, fontSize: 11.5, cursor: "pointer" }}>Gönder</button><button onClick={() => setOzelOnay(false)} style={{ padding: "5px 10px", borderRadius: 7, border: "1px solid #FDBA74", background: "#fff", fontWeight: 700, fontSize: 11.5, cursor: "pointer" }}>Vazgeç</button></div></div>}
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 5, flexWrap: "wrap" }}>
@@ -4722,7 +4728,10 @@ function KitapSayfaGosterici({ kitap, kitapAd, sayfa, aralik, ofset = 0, onKapat
                 </div>
                 {yontem.gemini && <div data-gemini-ayar style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 4, fontSize: 10.5 }}>
                   <input value={yontem.url || PDR_GEMINI_VARSAYILAN.url} onChange={e => { const y = { ...yontem, url: e.target.value.trim() }; setYontem(y); pdrCozumYontemYaz(y); }} style={{ flex: 2, minWidth: 180, fontSize: 10.5, padding: "3px 5px", borderRadius: 6, border: "1px solid #FDBA74" }} title="Cloudflare'deki pdr-gemini worker adresi" />
-                  <input value={yontem.model || PDR_GEMINI_VARSAYILAN.model} onChange={e => { const y = { ...yontem, model: e.target.value.trim() }; setYontem(y); pdrCozumYontemYaz(y); }} style={{ flex: 1, minWidth: 110, fontSize: 10.5, padding: "3px 5px", borderRadius: 6, border: "1px solid #FDBA74" }} title="Gemini model adı (Google değiştirirse buradan güncellenir)" />
+                  <select data-testid="cozum-gemini-model" value={PDR_COZUM_MODELLER.some(m => m[0] === (yontem.model || PDR_GEMINI_VARSAYILAN.model)) ? (yontem.model || PDR_GEMINI_VARSAYILAN.model) : "__diger"} onChange={e => { const v = e.target.value; const y = { ...yontem, model: v === "__diger" ? (window.prompt("Gemini model adı:", yontem.model || "") || yontem.model || PDR_GEMINI_VARSAYILAN.model).trim() : v }; setYontem(y); pdrCozumYontemYaz(y); }} style={{ flex: 1, minWidth: 150, fontSize: 10.5, padding: "3px 5px", borderRadius: 6, border: "1px solid #FDBA74" }} title="Seçilen model yoğunsa sıradaki modele kendiliğinden geçilir">
+                    {PDR_COZUM_MODELLER.map(([id, ad]) => <option key={id} value={id}>{ad}</option>)}
+                    <option value="__diger">{PDR_COZUM_MODELLER.some(m => m[0] === (yontem.model || PDR_GEMINI_VARSAYILAN.model)) ? "Başka model adı yaz…" : `Elle: ${yontem.model}`}</option>
+                  </select>
                 </div>}
                 <div style={{ fontSize: 10, color: MUTED, marginTop: 3, lineHeight: 1.45 }}>{yontem.gemini ? "🆓 Gemini: sorunun görüntüsü ve metni Google'ın ücretsiz Gemini API'sine (Cloudflare'deki pdr-gemini worker üzerinden) gönderilir; şekilli soruları okuyabilir. Ücretsiz kotada günlük istek sınırı vardır ve Google içeriği kendi geliştirmesi için kullanabilir." : pdrAiSecili().tur === "ucretsiz" ? "🆓 Ücretsiz model seçili: yalnız soru metni gönderilir, şekil gönderilmez (ücretsiz modeller görseli okuyamaz). Şekilli Matematik/Fen sorularında Claude daha doğru sonuç verir. Ücretsiz model yanıt veremezse ve ayarlarda yedek açıksa Claude'a geçilir." : "Sorunun metni ve görüntüsü yapay zekâya gönderilir."} Öğrenci bilgisi gönderilmez. Sonuç kaydedilir; aynı soru için bir daha istenmez.{yontem.gemini ? " Gemini seçimi yalnız çözüm yolu içindir." : " Bu seçim programın genel yapay zekâ seçimidir (üst çubuktaki 🤖 ile aynı)."}</div>
                 {ozelDurum.startsWith("hata") && <div style={{ color: "#B91C1C", fontSize: 11 }}>Hazırlanamadı: {ozelDurum.slice(5)}</div>}

@@ -55208,6 +55208,7 @@ const SEMA_DALLARI = [
       { tab: "mudahale_kutuphane", label: "📁 Müdahale Programları" },
       { tab: "oog_mudahale", label: "🧩 ÖÖG Müdahale Programı" },
       { tab: "metin_calisma", label: "📖 Metinle Çalışma" },
+      { tab: "etki_analizi", label: "📈 Ön Test – Son Test Etki Analizi" },
       { tab: "prof_danisma", label: "🎓 Prof. Hakan" },
       { tab: "asistan", label: "🤖 Asistan" },
     ] },
@@ -55243,6 +55244,7 @@ const SEMA_ICERIK = {
   gorusme_takvimi: [["Ay / hafta görünümü"]],
   mudahale: [["AI destekli bireysel plan"], ["Oturum takibi ve Gelişim Hızı"], ["Müdahale programlarından oturum önerisi"]],
   belgeler: [["Sevk yazısı, dönem raporu, veli mektubu"]],
+  etki_analizi: [["Müdahale/grup çalışmasının ön-son test puanlarıyla etki analizi"], ["Anlamlılık, etki büyüklüğü, öğrenci bazında güvenilir değişim"], ["Rapora hazır metin, grafik ve yazdırma"]],
   evrak_takip: [["Yıl boyu evrak listesi, hedef tarih, geciken/yaklaşan uyarısı"], ["Programdaki kayıtlardan ipucu (risk haritası, sevk, görüşme sayıları)"]],
   net_haritasi: [["Net gelişimi ve kazanım trendi"], ["Hata tipi ve boş bırakma analizi"], ["Yanlış Analizi kalıcı, geçmişi tutuluyor", true], ["Belgeden okunan netler Deneme'ye de kaydedilir", true], ["Deneme Değerlendirme Raporu"]],
   konu_haritasi: [["Konu bazlı çalışma takibi, 8. sınıf 266 kazanım"], ["Konu başına beklenen soru ve öncelik listesi"], ["Bu hafta derslerde (tahmini) + kitap sayfası", true], ["LGS Beceri Haritası (17 beceri)", true], ["Ön Koşul Köprüsü ve psikoeğitim rehberi", true], ["Geçmiş LGS 2022–2026: Çözdür ve beceri analizi", true], ["MEBİ denemeleri ve MEB örnek soruları analizi", true], ["Tahmin paneli ve 2027 LGS Tahmini Deneme", true], ["Soru üzerinde çözüm yolu (AI / Gemini)", true]],
@@ -56698,12 +56700,145 @@ function EvrakTakipEkrani({ aktifYil, records, sevkler, riskHaritasi, sosyometri
   );
 }
 // ===== EVRAK TAKİP PANOSU BİTİŞ =====
+// ===== ÖN TEST – SON TEST ETKİ ANALİZİ (müdahale / psikoeğitim / grup çalışması) =====
+// İstatistik: bağımlı örneklem t testi, Cohen d (d_av ve d_z), Güvenilir Değişim İndeksi (Jacobson-Truax RCI)
+function etkiBetacf(a, b, x) { const MAXIT = 200, EPS = 3e-12, FPMIN = 1e-300; let qab = a + b, qap = a + 1, qam = a - 1, c = 1, d = 1 - qab * x / qap; if (Math.abs(d) < FPMIN) d = FPMIN; d = 1 / d; let h = d;
+  for (let m = 1; m <= MAXIT; m++) { const m2 = 2 * m; let aa = m * (b - m) * x / ((qam + m2) * (a + m2)); d = 1 + aa * d; if (Math.abs(d) < FPMIN) d = FPMIN; c = 1 + aa / c; if (Math.abs(c) < FPMIN) c = FPMIN; d = 1 / d; h *= d * c;
+    aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2)); d = 1 + aa * d; if (Math.abs(d) < FPMIN) d = FPMIN; c = 1 + aa / c; if (Math.abs(c) < FPMIN) c = FPMIN; d = 1 / d; const del = d * c; h *= del; if (Math.abs(del - 1) < EPS) break; } return h; }
+function etkiGammaln(x) { const c = [76.18009172947146, -86.50532032941677, 24.01409824083091, -1.231739572450155, 0.1208650973866179e-2, -0.5395239384953e-5]; let y = x, t = x + 5.5; t -= (x + 0.5) * Math.log(t); let s = 1.000000000190015; for (const k of c) s += k / ++y; return -t + Math.log(2.5066282746310005 * s / x); }
+function etkiIbeta(a, b, x) { if (x <= 0) return 0; if (x >= 1) return 1; const bt = Math.exp(etkiGammaln(a + b) - etkiGammaln(a) - etkiGammaln(b) + a * Math.log(x) + b * Math.log(1 - x)); return x < (a + 1) / (a + b + 2) ? bt * etkiBetacf(a, b, x) / a : 1 - bt * etkiBetacf(b, a, 1 - x) / b; }
+function etkiTp(t, df) { return etkiIbeta(df / 2, 0.5, df / (df + t * t)); } // iki yönlü p
+function etkiHesapla(satirlar, yon, guvenirlik) {
+  const l = satirlar.map(r => ({ ...r, on: parseFloat(String(r.on).replace(",", ".")), son: parseFloat(String(r.son).replace(",", ".")) })).filter(r => !isNaN(r.on) && !isNaN(r.son));
+  const n = l.length; if (n < 2) return { n, hata: "En az 2 öğrencinin hem ön hem son puanı gerekli." };
+  const ort = a => a.reduce((x, y) => x + y, 0) / a.length, ss = (a, m) => Math.sqrt(a.reduce((x, y) => x + (y - m) ** 2, 0) / (a.length - 1));
+  const on = l.map(r => r.on), son = l.map(r => r.son), fark = l.map(r => (r.son - r.on) * yon);
+  const mOn = ort(on), mSon = ort(son), mF = ort(fark), sOn = ss(on, mOn), sSon = ss(son, mSon), sF = ss(fark, mF);
+  const t = sF > 0 ? mF / (sF / Math.sqrt(n)) : (mF ? Infinity : 0), df = n - 1, p = isFinite(t) ? etkiTp(Math.abs(t), df) : 0;
+  const dz = sF > 0 ? mF / sF : null, sav = (sOn + sSon) / 2, dav = sav > 0 ? mF / sav : null, J = 1 - 3 / (4 * df - 1), gav = dav != null ? dav * J : null;
+  const r = Math.min(0.99, Math.max(0.3, parseFloat(String(guvenirlik).replace(",", ".")) || 0.8)), seFark = sOn * Math.sqrt(2 * (1 - r));
+  const kisi = l.map(x => { const deg = (x.son - x.on) * yon, rci = seFark > 0 ? deg / seFark : null; return { ...x, deg, rci, durum: rci == null ? "?" : rci >= 1.96 ? "iyilesti" : rci <= -1.96 ? "kotulesti" : "degismedi" }; });
+  const say = { iyilesti: kisi.filter(k => k.durum === "iyilesti").length, degismedi: kisi.filter(k => k.durum === "degismedi").length, kotulesti: kisi.filter(k => k.durum === "kotulesti").length };
+  const buyukluk = (d) => d == null ? "hesaplanamadı" : Math.abs(d) >= 0.8 ? "büyük" : Math.abs(d) >= 0.5 ? "orta" : Math.abs(d) >= 0.2 ? "küçük" : "önemsiz";
+  return { n, mOn, mSon, sOn, sSon, mF, sF, t, df, p, dz, dav, gav, r, seFark, kisi, say, buyukluk: buyukluk(gav), yon };
+}
+function etkiYorum(R, olcek) {
+  if (!R || R.hata) return "";
+  const yonAd = R.yon > 0 ? "artış" : "azalma", anlamli = R.p < 0.05, f = (x, k = 2) => (x == null || !isFinite(x)) ? "—" : x.toFixed(k).replace(".", ",");
+  return `${R.n} öğrencide ${olcek || "ölçek"} ortalaması ön testte ${f(R.mOn)}, son testte ${f(R.mSon)} oldu (istenen yönde ortalama ${R.mF >= 0 ? "" : "ters yönde "}${f(Math.abs(R.mF))} puan ${R.mF >= 0 ? yonAd : "değişim"}). `
+    + `Fark istatistiksel olarak ${anlamli ? "anlamlıdır" : "anlamlı değildir"} (t(${R.df}) = ${f(R.t)}, p ${R.p < 0.001 ? "< 0,001" : "= " + f(R.p, 3)}). Etki büyüklüğü ${R.buyukluk} düzeydedir (Hedges g = ${f(R.gav)}). `
+    + `Bireysel olarak ${R.say.iyilesti} öğrencide güvenilir iyileşme, ${R.say.degismedi} öğrencide anlamlı değişim yok${R.say.kotulesti ? `, ${R.say.kotulesti} öğrencide güvenilir kötüleşme` : ""} görüldü (RCI, güvenirlik ${f(R.r)}).`
+    + (R.n < 10 ? " Öğrenci sayısı 10'un altında olduğu için sonuç dikkatle yorumlanmalıdır." : "") + (anlamli ? "" : " Anlamlı fark çıkmaması programın etkisiz olduğunu kesin göstermez; örneklem küçüklüğü ve ölçme zamanı da etkili olabilir.");
+}
+function EtkiGrafik({ R }) {
+  if (!R || R.hata) return null;
+  const W = 340, sat = 22, H = 40 + R.kisi.length * sat, tum = R.kisi.flatMap(k => [k.on, k.son]), min = Math.min(...tum), max = Math.max(...tum), pad = (max - min) * 0.08 || 1;
+  const x = v => 100 + (W - 160) * (v - (min - pad)) / ((max + pad) - (min - pad));
+  const RN = { iyilesti: "#15803D", degismedi: "#64748B", kotulesti: "#B91C1C", "?": "#64748B" };
+  return (<svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", maxWidth: 520, display: "block" }} data-testid="etki-grafik">
+    <text x="100" y="12" fontSize="9" fill="#64748B">○ ön  ● son · yeşil: güvenilir iyileşme, kırmızı: kötüleşme</text>
+    {R.kisi.map((k, i) => { const y = 30 + i * sat; return <g key={i}>
+      <text x="2" y={y + 3} fontSize="9.5" fill="#1B2A22">{String(k.ad || `Öğrenci ${i + 1}`).slice(0, 16)}</text>
+      <line x1={x(k.on)} x2={x(k.son)} y1={y} y2={y} stroke={RN[k.durum]} strokeWidth="2.5" />
+      <circle cx={x(k.on)} cy={y} r="4" fill="#fff" stroke={RN[k.durum]} strokeWidth="1.5" /><circle cx={x(k.son)} cy={y} r="4" fill={RN[k.durum]} />
+      <text x={W - 2} y={y + 3} fontSize="8.5" fill="#64748B" textAnchor="end">{k.on}→{k.son}</text></g>; })}
+  </svg>);
+}
+async function etkiOku() { try { const r = await window.storage.get("pdr-on-son-test"); return (r && r.value && JSON.parse(r.value)) || []; } catch (e) { return []; } }
+async function etkiKaydet(l) { try { await window.storage.set("pdr-on-son-test", JSON.stringify(l)); } catch (e) {} }
+function EtkiAnaliziEkrani({ kayitliListesi, aktifYil, grupCalismalari }) {
+  const bos = () => ({ id: uid(), baslik: "", olcek: "", yon: 1, guvenirlik: "0,80", onTarih: "", sonTarih: "", satirlar: [{ ad: "", on: "", son: "" }, { ad: "", on: "", son: "" }, { ad: "", on: "", son: "" }], yil: aktifYil });
+  const [liste, setListe] = useState([]), [f, setF] = useState(bos()), [yapistir, setYapistir] = useState(""), [msj, setMsj] = useState("");
+  useEffect(() => { etkiOku().then(setListe); }, []);
+  const R = useMemo(() => etkiHesapla(f.satirlar, f.yon, f.guvenirlik), [f]);
+  const set = (k, v) => setF({ ...f, [k]: v }), satir = (i, k, v) => setF({ ...f, satirlar: f.satirlar.map((r, j) => j === i ? { ...r, [k]: v } : r) });
+  const yapistirUygula = () => { const l = yapistir.split(/\r?\n/).map(s => s.split(/\t|;|\s{2,}/).map(x => x.trim()).filter(x => x !== "")).filter(a => a.length >= 2);
+    const yeni = l.map(a => { const sayi = a.filter(x => /^-?\d+([.,]\d+)?$/.test(x)), ad = a.filter(x => !/^-?\d+([.,]\d+)?$/.test(x)).join(" "); return sayi.length >= 2 ? { ad, on: sayi[0], son: sayi[1] } : null; }).filter(Boolean);
+    if (!yeni.length) { setMsj("Yapıştırılan metinde 'ad  ön  son' biçiminde satır bulunamadı."); return; }
+    setF({ ...f, satirlar: [...f.satirlar.filter(r => r.ad || r.on || r.son), ...yeni] }); setYapistir(""); setMsj(`${yeni.length} satır eklendi.`); };
+  const kaydet = async () => { if (!f.baslik.trim()) { setMsj("Önce çalışmaya bir başlık ver."); return; } const l = [{ ...f, kayitTarih: today(), ozet: R && !R.hata ? { n: R.n, gav: R.gav, p: R.p } : null }, ...liste.filter(x => x.id !== f.id)]; setListe(l); await etkiKaydet(l); setMsj("✓ Kaydedildi."); };
+  const sil = async (id) => { if (!window.confirm("Bu analiz silinsin mi?")) return; const l = liste.filter(x => x.id !== id); setListe(l); await etkiKaydet(l); if (f.id === id) setF(bos()); };
+  const f2 = (x, k = 2) => (x == null || !isFinite(x)) ? "—" : x.toFixed(k).replace(".", ",");
+  const yazdir = () => { if (!R || R.hata) return; const e = (t) => String(t == null ? "" : t).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+    const svg = document.querySelector('[data-testid="etki-grafik"]'); const RN = { iyilesti: "Güvenilir iyileşme", degismedi: "Anlamlı değişim yok", kotulesti: "Güvenilir kötüleşme", "?": "—" };
+    ootBelgeAc(`<!DOCTYPE html><html lang="tr"><head><meta charset="utf-8"><title>Ön Test – Son Test Analizi</title><style>body{font-family:Arial,sans-serif;font-size:12px;margin:16px;color:#1B2A22}h1{font-size:17px;margin:0 0 4px}table{border-collapse:collapse;width:100%;margin:8px 0}th,td{border:1px solid #CBD5E1;padding:4px 6px;text-align:left}th{background:#F1F5F9}.k{display:inline-block;border:1px solid #CBD5E1;border-radius:8px;padding:6px 10px;margin:3px}</style></head><body>
+    <h1>📈 Ön Test – Son Test Etki Analizi</h1><div><b>${e(f.baslik)}</b> · Ölçek: ${e(f.olcek || "—")} · ${f.yon > 0 ? "Yüksek puan istenen yönde" : "Düşük puan istenen yönde"} · Ön test: ${e(f.onTarih || "—")} · Son test: ${e(f.sonTarih || "—")}</div>
+    <div style="margin:8px 0"><span class="k">n = ${R.n}</span><span class="k">Ön ort. ${f2(R.mOn)} (ss ${f2(R.sOn)})</span><span class="k">Son ort. ${f2(R.mSon)} (ss ${f2(R.sSon)})</span><span class="k">t(${R.df}) = ${f2(R.t)}, p ${R.p < 0.001 ? "< 0,001" : "= " + f2(R.p, 3)}</span><span class="k">Hedges g = ${f2(R.gav)} (${R.buyukluk})</span><span class="k">d<sub>z</sub> = ${f2(R.dz)}</span></div>
+    <p>${e(etkiYorum(R, f.olcek))}</p>${svg ? svg.outerHTML : ""}
+    <table><tr><th>Öğrenci</th><th>Ön</th><th>Son</th><th>Değişim (istenen yönde)</th><th>RCI</th><th>Sonuç</th></tr>${R.kisi.map((k, i) => `<tr><td>${e(k.ad || "Öğrenci " + (i + 1))}</td><td>${k.on}</td><td>${k.son}</td><td>${f2(k.deg, 1)}</td><td>${f2(k.rci)}</td><td>${RN[k.durum]}</td></tr>`).join("")}</table>
+    <div style="font-size:10.5px;color:#64748B">Yöntem: bağımlı örneklem t testi; etki büyüklüğü Hedges g (ön ve son test standart sapmalarının ortalamasıyla, küçük örneklem düzeltmeli; 0,2 küçük, 0,5 orta, 0,8 büyük); bireysel değişim Jacobson-Truax Güvenilir Değişim İndeksi (|RCI| ≥ 1,96). Hazırlayan: Rehberlik Servisi.</div></body></html>`, "Ön Test – Son Test Analizi"); };
+  const inp = { fontSize: 12, padding: "6px 8px", borderRadius: 7, border: `1px solid ${BORDER}`, boxSizing: "border-box" };
+  const adlar = (kayitliListesi || []).map(o => o.name || o.studentName).filter(Boolean);
+  const grupKonu = [...new Set((grupCalismalari || []).filter(g => !g.yil || g.yil === aktifYil).map(g => g.konu).filter(Boolean))].slice(0, 30);
+  return (
+    <div data-testid="etki-analizi" style={{ padding: 16, paddingBottom: 110, maxWidth: 680 }}>
+      <div style={{ fontSize: 18, fontWeight: 900 }}>📈 Ön Test – Son Test Etki Analizi</div>
+      <div style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.5, margin: "4px 0 10px" }}>Bir müdahale programı, psikoeğitim ya da grup çalışmasının öncesinde ve sonrasında uygulanan ölçeğin puanlarını gir. Program ortalama değişimi, anlamlılığı, etki büyüklüğünü ve hangi öğrencide güvenilir değişim olduğunu hesaplar; rapora hazır metin ve grafik verir. Veriler yalnız bu programda saklanır, hiçbir yere gönderilmez.</div>
+      <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+        <input list="etki-grup" value={f.baslik} onChange={e => set("baslik", e.target.value)} placeholder="Çalışmanın adı (ör. 8-A Sınav Kaygısı Psikoeğitimi)" style={inp} />
+        <datalist id="etki-grup">{grupKonu.map(k => <option key={k} value={k} />)}</datalist>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <input value={f.olcek} onChange={e => set("olcek", e.target.value)} placeholder="Ölçek (ör. Sınav Kaygısı Ölçeği)" style={{ ...inp, flex: "2 1 160px" }} />
+          <label style={{ fontSize: 11, color: MUTED, flex: "1 1 120px" }}>Güvenirlik (alfa)<input value={f.guvenirlik} onChange={e => set("guvenirlik", e.target.value)} style={{ ...inp, width: "100%" }} title="Ölçeğin Cronbach alfa katsayısı; bilinmiyorsa 0,80 bırak" /></label>
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {[[1, "⬆ Yüksek puan istenen (ör. özsaygı)"], [-1, "⬇ Düşük puan istenen (ör. kaygı)"]].map(([v, ad]) => <button key={v} data-etki-yon={v} onClick={() => set("yon", v)} style={{ flex: "1 1 150px", padding: 6, borderRadius: 8, border: `1px solid ${f.yon === v ? ACCENT : BORDER}`, background: f.yon === v ? "#E6F5EE" : "#fff", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>{ad}</button>)}
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <label style={{ fontSize: 11, color: MUTED, flex: 1 }}>Ön test tarihi<input type="date" value={f.onTarih} onChange={e => set("onTarih", e.target.value)} style={{ ...inp, width: "100%" }} /></label>
+          <label style={{ fontSize: 11, color: MUTED, flex: 1 }}>Son test tarihi<input type="date" value={f.sonTarih} onChange={e => set("sonTarih", e.target.value)} style={{ ...inp, width: "100%" }} /></label>
+        </div>
+        <datalist id="etki-adlar">{adlar.map((a, i) => <option key={i} value={a} />)}</datalist>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 64px 64px 26px", gap: 4, fontSize: 10.5, color: MUTED, fontWeight: 700 }}><span>Öğrenci (isteğe bağlı)</span><span>Ön</span><span>Son</span><span /></div>
+        {f.satirlar.map((r, i) => <div key={i} data-etki-satir={i} style={{ display: "grid", gridTemplateColumns: "1fr 64px 64px 26px", gap: 4 }}>
+          <input list="etki-adlar" value={r.ad} onChange={e => satir(i, "ad", e.target.value)} placeholder={`Öğrenci ${i + 1}`} style={inp} />
+          <input inputMode="decimal" value={r.on} onChange={e => satir(i, "on", e.target.value)} style={inp} />
+          <input inputMode="decimal" value={r.son} onChange={e => satir(i, "son", e.target.value)} style={inp} />
+          <button onClick={() => setF({ ...f, satirlar: f.satirlar.filter((_, j) => j !== i) })} style={{ border: "none", background: "none", color: "#B91C1C", cursor: "pointer", fontSize: 14 }} title="Satırı kaldır">✕</button>
+        </div>)}
+        <button data-testid="etki-satir-ekle" onClick={() => setF({ ...f, satirlar: [...f.satirlar, { ad: "", on: "", son: "" }] })} style={{ padding: 6, borderRadius: 8, border: `1px dashed ${BORDER}`, background: "#fff", fontSize: 11.5, cursor: "pointer" }}>+ Öğrenci ekle</button>
+        <details><summary style={{ fontSize: 11.5, color: "#0E7490", cursor: "pointer" }}>📋 Excel'den yapıştır (ad · ön · son sütunları)</summary>
+          <textarea data-testid="etki-yapistir" value={yapistir} onChange={e => setYapistir(e.target.value)} rows={4} placeholder={"Ayşe\t42\t30\nMehmet\t38\t35"} style={{ ...inp, width: "100%", marginTop: 4 }} />
+          <button onClick={yapistirUygula} style={{ marginTop: 4, padding: "5px 10px", borderRadius: 7, border: `1px solid ${ACCENT}`, background: "#fff", color: ACCENT, fontSize: 11.5, cursor: "pointer" }}>Satırlara ekle</button>
+        </details>
+      </div>
+      {msj && <div style={{ fontSize: 11.5, color: ACCENT, marginTop: 6 }}>{msj}</div>}
+      <div data-testid="etki-sonuc" style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 10, marginTop: 10 }}>
+        {R.hata ? <div style={{ fontSize: 12, color: MUTED }}>{R.hata}</div> : <>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 6, marginBottom: 8 }}>
+            {[["Ortalama değişim", `${R.mF >= 0 ? "+" : ""}${f2(R.mF)} (istenen yönde)`, R.mF >= 0 ? ACCENT : "#B91C1C"], ["Anlamlılık", R.p < 0.05 ? `Anlamlı (p ${R.p < 0.001 ? "< 0,001" : "= " + f2(R.p, 3)})` : `Anlamlı değil (p = ${f2(R.p, 3)})`, R.p < 0.05 ? ACCENT : "#B45309"], ["Etki büyüklüğü", `${R.buyukluk} (g = ${f2(R.gav)})`, "#1D4ED8"], ["Bireysel", `✓ ${R.say.iyilesti} · = ${R.say.degismedi}${R.say.kotulesti ? ` · ✗ ${R.say.kotulesti}` : ""}`, TEXT]].map(([b, d, r]) =>
+              <div key={b} style={{ border: `1px solid ${BORDER}`, borderRadius: 9, padding: "6px 8px" }}><div style={{ fontSize: 10.5, color: MUTED }}>{b}</div><div style={{ fontSize: 12.5, fontWeight: 800, color: r }}>{d}</div></div>)}
+          </div>
+          <div style={{ fontSize: 10.5, color: MUTED, marginBottom: 6 }}>n = {R.n} · Ön {f2(R.mOn)} (ss {f2(R.sOn)}) → Son {f2(R.mSon)} (ss {f2(R.sSon)}) · t({R.df}) = {f2(R.t)} · d<sub>z</sub> = {f2(R.dz)}</div>
+          <EtkiGrafik R={R} />
+          <div data-testid="etki-yorum" style={{ fontSize: 12, lineHeight: 1.55, marginTop: 8, background: "#F8FAFC", borderRadius: 8, padding: 8 }}>{etkiYorum(R, f.olcek)}</div>
+        </>}
+        <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+          <button data-testid="etki-kaydet" onClick={kaydet} style={{ flex: 1, padding: 8, borderRadius: 9, border: "none", background: ACCENT, color: "#fff", fontWeight: 800, fontSize: 12, cursor: "pointer" }}>💾 Kaydet</button>
+          <button onClick={yazdir} disabled={!!R.hata} style={{ flex: 1, padding: 8, borderRadius: 9, border: `1px solid ${ACCENT}`, background: "#fff", color: ACCENT, fontWeight: 800, fontSize: 12, cursor: "pointer", opacity: R.hata ? 0.5 : 1 }}>🖨️ Rapor</button>
+          <button onClick={() => { setF(bos()); setMsj(""); }} style={{ padding: "8px 12px", borderRadius: 9, border: `1px solid ${BORDER}`, background: "#fff", fontSize: 12, cursor: "pointer" }}>Yeni</button>
+        </div>
+      </div>
+      {liste.length > 0 && <div style={{ marginTop: 12 }}>
+        <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 5 }}>Kayıtlı analizler</div>
+        {liste.map(x => <div key={x.id} style={{ display: "flex", gap: 6, alignItems: "center", background: CARD, border: `1px solid ${BORDER}`, borderRadius: 9, padding: "6px 8px", marginBottom: 5 }}>
+          <div style={{ flex: 1, minWidth: 0, cursor: "pointer" }} onClick={() => { setF(x); setMsj(""); }}>
+            <div style={{ fontSize: 12, fontWeight: 800 }}>{x.baslik}</div>
+            <div style={{ fontSize: 10.5, color: MUTED }}>{x.olcek || "—"} · {x.kayitTarih}{x.ozet ? ` · n=${x.ozet.n}, g=${f2(x.ozet.gav)}, p${x.ozet.p < 0.001 ? "<0,001" : "=" + f2(x.ozet.p, 3)}` : ""}</div>
+          </div>
+          <button onClick={() => sil(x.id)} style={{ border: "none", background: "none", color: "#B91C1C", cursor: "pointer" }}>Sil</button>
+        </div>)}
+      </div>}
+    </div>
+  );
+}
+// ===== ÖN TEST – SON TEST ETKİ ANALİZİ BİTİŞ =====
 const TABS_TUMU = [
     { key: "ogrenciler", label: "👥 Öğrenciler" },
     { key: "yeni", label: "📝 Görüşme Notu" },
     { key: "profil_merkez", label: "📋 Profil" },
-    { key: "mudahale", label: "🎯 Müdahale", grup: ["mudahale","mudahale_kutuphane","oog_mudahale","metin_calisma"],
-      grupEtiketler: { mudahale: "🎯 Müdahale Planı", mudahale_kutuphane: "📁 Müdahale Programları", oog_mudahale: "🧩 ÖÖG Programı", metin_calisma: "📖 Metinle Çalışma" } },
+    { key: "mudahale", label: "🎯 Müdahale", grup: ["mudahale","mudahale_kutuphane","oog_mudahale","metin_calisma","etki_analizi"],
+      grupEtiketler: { mudahale: "🎯 Müdahale Planı", mudahale_kutuphane: "📁 Müdahale Programları", oog_mudahale: "🧩 ÖÖG Programı", metin_calisma: "📖 Metinle Çalışma", etki_analizi: "📈 Etki Analizi" } },
     { key: "sinif_profili", label: "🏫 Sınıf" },
     { key: "devamsizlik", label: "📅 Devamsızlık" },
     { key: "risk", label: "⚠ Risk" },
@@ -56749,6 +56884,7 @@ const SEKME_ACIKLAMALARI = {
   hatirlatici: "Kendine bıraktığın hatırlatma / yapılacaklar listesi.",
   gorusme_takvimi: "Planlanan ve geçmiş görüşmeleri takvim görünümünde gösterir.",
   belgeler: "Sevk yazısı, MEB dönem raporu, veli mektubu gibi belgeleri oluştur.",
+  etki_analizi: "Bir müdahale ya da grup çalışmasının öncesi ve sonrasında uygulanan ölçek puanlarından ortalama değişim, anlamlılık, etki büyüklüğü ve öğrenci bazında güvenilir değişim; rapora hazır metin.",
   evrak_takip: "Yıl boyu hazırlanacak rehberlik evraklarının listesi: hedef tarih, tamamlandı işareti, geciken/yaklaşan uyarısı; programdaki kayıtlardan ipucu.",
   kutuphane: "Yönetmelik/makale gibi referans kaynaklarını yükle — AI önerilerinde otomatik kullanılır.",
   kazanimlar: "Kademeye göre kazanım listelerine göz atmak için.",
@@ -58738,6 +58874,8 @@ function pdrBaslangicSekmesi() {
             pasPerformanslar={pasPerformanslar} pasDegerlendirmeler={pasDegerlendirmeler} mudahalePlan={mudahalePlan} kademe={kademe} oogDegerlendirmeler={oogDegerlendirmeler}
             mudahalePlanKaydet={async (v) => { setMudahalePlan(v); await saveMudahalePlan(v); }} />
         )}
+
+        {tab === "etki_analizi" && <EtkiAnaliziEkrani kayitliListesi={kayitliListesi} aktifYil={aktifYil} grupCalismalari={grupCalismalari} />}
 
         {tab === "metin_calisma" && (
           <MetinCalismaEkrani kayitliListesi={kayitliListesi} aktifOgrenci={aktifOgrenci} setAktifOgrenci={setAktifOgrenci} records={records} riskHaritasi={riskHaritasi} aktifYil={aktifYil} />

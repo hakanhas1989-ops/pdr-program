@@ -55184,6 +55184,7 @@ const SEMA_DALLARI = [
       { tab: "gorusme_takvimi", label: "📅 Takvim" },
       { tab: "mudahale", label: "🎯 Müdahale" },
       { tab: "belgeler", label: "📑 Belgeler" },
+      { tab: "evrak_takip", label: "🗂 Evrak Takibi" },
     ] },
   { key: "akademik", label: "📈 Akademik Takip", renk: PURPLE,
     aciklama: "Sınav sonuçları ve yıllık rehberlik kazanımları planı.",
@@ -55242,6 +55243,7 @@ const SEMA_ICERIK = {
   gorusme_takvimi: [["Ay / hafta görünümü"]],
   mudahale: [["AI destekli bireysel plan"], ["Oturum takibi ve Gelişim Hızı"], ["Müdahale programlarından oturum önerisi"]],
   belgeler: [["Sevk yazısı, dönem raporu, veli mektubu"]],
+  evrak_takip: [["Yıl boyu evrak listesi, hedef tarih, geciken/yaklaşan uyarısı"], ["Programdaki kayıtlardan ipucu (risk haritası, sevk, görüşme sayıları)"]],
   net_haritasi: [["Net gelişimi ve kazanım trendi"], ["Hata tipi ve boş bırakma analizi"], ["Yanlış Analizi kalıcı, geçmişi tutuluyor", true], ["Belgeden okunan netler Deneme'ye de kaydedilir", true], ["Deneme Değerlendirme Raporu"]],
   konu_haritasi: [["Konu bazlı çalışma takibi, 8. sınıf 266 kazanım"], ["Konu başına beklenen soru ve öncelik listesi"], ["Bu hafta derslerde (tahmini) + kitap sayfası", true], ["LGS Beceri Haritası (17 beceri)", true], ["Ön Koşul Köprüsü ve psikoeğitim rehberi", true], ["Geçmiş LGS 2022–2026: Çözdür ve beceri analizi", true], ["MEBİ denemeleri ve MEB örnek soruları analizi", true], ["Tahmin paneli ve 2027 LGS Tahmini Deneme", true], ["Soru üzerinde çözüm yolu (AI / Gemini)", true]],
   deneme: [["Deneme sonuçları, toplu Excel"], ["Geçmiş dönem ortalaması, yüzdelik dilim"], ["Net Yükseltme Kontrol Listesi"], ["LGS Çalışma Programı (kişisel, haftalık)"], ["Aylık Çalışma Programı (Kolay / Orta / Zor)", true]],
@@ -56586,6 +56588,116 @@ function PdrSekmeRozeti({ etiket, renk, zeminRenk, kenarRenk }) {
   );
 }
 
+// ===== EVRAK TAKİP PANOSU (yıl boyu hazırlanacak rehberlik evrakları; durum + yaklaşan/geciken uyarısı) =====
+// Varsayılan liste ortaokul rehberlik servisi için önerilen tarihlerle gelir; adlar ve tarihler danışman tarafından değiştirilebilir.
+const EVRAK_VARSAYILAN = [
+  { id: "yillik_program", ad: "Okul Rehberlik ve Psikolojik Danışma Programı (yıllık plan)", ay: 9, gun: 30, kat: "Planlama" },
+  { id: "komisyon_1", ad: "RPD Hizmetleri Yürütme Komisyonu toplantısı ve tutanağı (yıl başı)", ay: 9, gun: 30, kat: "Planlama" },
+  { id: "sinif_plan", ad: "Sınıf rehberlik planlarının sınıf rehber öğretmenlerinden toplanması", ay: 10, gun: 15, kat: "Planlama" },
+  { id: "kriz_ekip", ad: "Psikososyal koruma, önleme ve krize müdahale ekibi / planı", ay: 10, gun: 31, kat: "Planlama", oto: "kriz" },
+  { id: "kaynastirma", ad: "Kaynaştırma / özel eğitim öğrenci listesi ve BEP geliştirme birimi toplantısı", ay: 10, gun: 31, kat: "Özel eğitim" },
+  { id: "veli_toplanti", ad: "Veli bilgilendirme toplantısı / veli görüşmeleri", ay: 10, gun: 31, kat: "Veli", oto: "veli" },
+  { id: "risk_haritasi", ad: "Okul risk haritası", ay: 11, gun: 30, kat: "Tarama", oto: "risk" },
+  { id: "ogrenci_tanima", ad: "Öğrenci tanıma çalışmaları (bilgi formları, sosyometri)", ay: 11, gun: 30, kat: "Tarama", oto: "sosyometri" },
+  { id: "lgs_bilgi", ad: "8. sınıflar LGS ve sınav sistemi bilgilendirmesi (öğrenci + veli)", ay: 11, gun: 30, kat: "Eğitsel / mesleki", oto: "lgs" },
+  { id: "donem1_rapor", ad: "1. dönem rehberlik faaliyetleri değerlendirmesi / raporu", ay: 1, gun: 22, kat: "Rapor", oto: "gorusme" },
+  { id: "komisyon_2", ad: "RPD Hizmetleri Yürütme Komisyonu toplantısı (2. dönem başı)", ay: 2, gun: 15, kat: "Planlama" },
+  { id: "ram_sevk", ad: "RAM yönlendirmeleri ve sonuç takibi", ay: 3, gun: 31, kat: "Özel eğitim", oto: "sevk" },
+  { id: "onleyici", ad: "Önleyici çalışmalar (ihmal-istismar, bağımlılık, akran zorbalığı) kayıtları", ay: 4, gun: 30, kat: "Önleyici", oto: "grup" },
+  { id: "tercih", ad: "LGS tercih danışmanlığı planı ve tercih dönemi çalışmaları", ay: 6, gun: 30, kat: "Eğitsel / mesleki" },
+  { id: "yil_sonu_rapor", ad: "Yıl sonu rehberlik hizmetleri değerlendirme raporu", ay: 6, gun: 20, kat: "Rapor", oto: "gorusme" },
+  { id: "komisyon_3", ad: "Yıl sonu RPD Hizmetleri Yürütme Komisyonu toplantısı", ay: 6, gun: 20, kat: "Planlama" },
+];
+function evrakTarihCoz(t) { const s = String(t || ""); let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s); if (m) return new Date(+m[1], +m[2] - 1, +m[3]); m = /^(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})/.exec(s); if (m) return new Date(+m[3], +m[2] - 1, +m[1]); return null; }
+function evrakIso(d) { return d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}` : ""; }
+function evrakYilAraligi(aktifYil) { const y1 = parseInt(String(aktifYil || "").slice(0, 4)) || new Date().getFullYear(); return { y1, bas: new Date(y1, 8, 1), son: new Date(y1 + 1, 7, 31) }; }
+function evrakVarsayilanTarih(e, aktifYil) { const { y1 } = evrakYilAraligi(aktifYil); return evrakIso(new Date(e.ay >= 9 ? y1 : y1 + 1, e.ay - 1, e.gun)); }
+// Programdaki kayıtlardan ipucu (danışman yine kendisi işaretler)
+function evrakOtoIpucu(oto, d, aktifYil) {
+  const { bas, son } = evrakYilAraligi(aktifYil), yilda = (t, yil) => { if (yil) return yil === aktifYil; const x = evrakTarihCoz(t); return !x || (x >= bas && x <= son); };
+  if (oto === "risk") { const n = (d.riskHaritasi || []).filter(r => !r.yil || r.yil === aktifYil).length; return n ? `Programda bu yıl ${n} öğrencinin risk haritası kaydı var.` : "Programda bu yıl risk haritası kaydı yok."; }
+  if (oto === "sosyometri") { const n = (d.sosyometri || []).filter(r => yilda(r.tarih, r.yil)).length; return n ? `Programda ${n} sosyometri kaydı var.` : "Programda bu yıl sosyometri kaydı yok."; }
+  if (oto === "kriz") { const n = (d.krizKayitlari || []).filter(r => yilda(r.tarih, r.yil)).length; return `Programda bu yıl ${n} kriz müdahale kaydı var.`; }
+  if (oto === "grup") { const l = (d.grupCalismalari || []).filter(r => yilda(r.tarih, r.yil)); const on = l.filter(r => /istismar|ihmal|bağımlı|bagimli|zorbal|madde|güvenli internet|teknoloji/i.test(`${r.konu || ""} ${r.tur || ""} ${r.not || ""}`)).length; return `Programda bu yıl ${l.length} grup/sınıf çalışması var${on ? `, ${on} tanesi önleyici konularda` : ""}.`; }
+  if (oto === "lgs") { const l = (d.grupCalismalari || []).filter(r => yilda(r.tarih, r.yil) && /lgs|sınav sistemi|sinav sistemi|tercih/i.test(`${r.konu || ""} ${r.not || ""}`)).length; return l ? `Programda LGS konulu ${l} grup çalışması var.` : "Programda LGS konulu grup çalışması kaydı yok."; }
+  if (oto === "veli") { const n = (d.records || []).filter(r => r.meetingType === "Veli" && yilda(r.date)).length, g = (d.grupCalismalari || []).filter(r => yilda(r.tarih, r.yil) && /veli/i.test(`${r.hedefKitle || ""} ${r.tur || ""} ${r.konu || ""}`)).length; return `Programda bu yıl ${n} veli görüşmesi${g ? ` ve ${g} veli toplantısı/grup çalışması` : ""} var.`; }
+  if (oto === "sevk") { const l = (d.sevkler || []).filter(r => yilda(r.tarih, r.yil)), b = l.filter(r => r.sonucBekleniyor).length; return `Programda bu yıl ${l.length} sevk var${b ? `; ${b} tanesinin sonucu bekleniyor` : ""}.`; }
+  if (oto === "gorusme") { const l = (d.records || []).filter(r => yilda(r.date)); const t = (x) => l.filter(r => r.meetingType === x).length; return `Rapor için hazır sayılar: ${l.length} görüşme (öğrenci ${t("Öğrenci")}, veli ${t("Veli")}, öğretmen ${t("Öğretmen")}). Belgeler → MEB Rapor bölümünden hazırlanabilir.`; }
+  return "";
+}
+async function evrakOku() { try { const r = await window.storage.get("pdr-evrak-takip"); return (r && r.value && JSON.parse(r.value)) || {}; } catch (e) { return {}; } }
+async function evrakKaydet(v) { try { await window.storage.set("pdr-evrak-takip", JSON.stringify(v)); } catch (e) {} }
+function evrakListesi(veri, aktifYil) {
+  const y = (veri && veri[aktifYil]) || {}, durum = y.durum || {}, bugun = new Date(); bugun.setHours(0, 0, 0, 0);
+  const tum = [...EVRAK_VARSAYILAN.filter(e => !(y.gizli || []).includes(e.id)), ...(y.ozel || [])].map(e => {
+    const d = durum[e.id] || {}, hedef = d.hedef || e.hedef || evrakVarsayilanTarih(e, aktifYil), ht = evrakTarihCoz(hedef), kalan = ht ? Math.round((ht - bugun) / 86400000) : null;
+    const hal = d.tamam ? "tamam" : d.gerekYok ? "gerekyok" : kalan == null ? "bekliyor" : kalan < 0 ? "gecikti" : kalan <= 14 ? "yaklasiyor" : "bekliyor";
+    return { ...e, ...d, hedef, kalan, hal };
+  });
+  return tum.sort((a, b) => String(a.hedef).localeCompare(String(b.hedef)));
+}
+function EvrakTakipEkrani({ aktifYil, records, sevkler, riskHaritasi, sosyometri, krizKayitlari, grupCalismalari }) {
+  const [veri, setVeri] = useState(null), [filtre, setFiltre] = useState("hepsi"), [acik, setAcik] = useState(null), [yeniAd, setYeniAd] = useState(""), [yeniTarih, setYeniTarih] = useState("");
+  useEffect(() => { evrakOku().then(setVeri); }, []);
+  if (!veri) return <div style={{ padding: 16, color: MUTED }}>⏳ Yükleniyor…</div>;
+  const liste = evrakListesi(veri, aktifYil), d = { records, sevkler, riskHaritasi, sosyometri, krizKayitlari, grupCalismalari };
+  const yaz = async (fn) => { const y = { durum: {}, ozel: [], gizli: [], ...(veri[aktifYil] || {}) }; fn(y); const v = { ...veri, [aktifYil]: y }; setVeri(v); await evrakKaydet(v); };
+  const durumYaz = (id, ek) => yaz(y => { y.durum = { ...y.durum, [id]: { ...(y.durum[id] || {}), ...ek } }; });
+  const say = (h) => liste.filter(e => e.hal === h).length;
+  const RENK = { tamam: ["#166534", "#DCFCE7", "✓ Tamam"], gecikti: ["#B91C1C", "#FEE2E2", "Gecikti"], yaklasiyor: ["#B45309", "#FEF3C7", "Yaklaşıyor"], bekliyor: ["#475569", "#F1F5F9", "Bekliyor"], gerekyok: ["#64748B", "#F8FAFC", "Gerek yok"] };
+  const gos = liste.filter(e => filtre === "hepsi" || (filtre === "acik" ? !["tamam", "gerekyok"].includes(e.hal) : e.hal === filtre));
+  const tarihTr = (t) => { const x = evrakTarihCoz(t); return x ? x.toLocaleDateString("tr-TR", { day: "numeric", month: "long" }) : "—"; };
+  const yazdir = () => { const e = (t) => String(t || "").replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+    ootBelgeAc(`<!DOCTYPE html><html lang="tr"><head><meta charset="utf-8"><title>Evrak Takibi</title><style>body{font-family:Arial,sans-serif;font-size:12px;margin:16px}h1{font-size:17px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #CBD5E1;padding:5px;text-align:left;vertical-align:top}th{background:#F1F5F9}</style></head><body><h1>🗂 Rehberlik Servisi Evrak Takibi · ${e(aktifYil)}</h1><p>Tamam: ${say("tamam")} · Geciken: ${say("gecikti")} · Yaklaşan (14 gün): ${say("yaklasiyor")} · Bekleyen: ${say("bekliyor")}</p><table><tr><th>Evrak</th><th>Hedef tarih</th><th>Durum</th><th>Not</th></tr>${liste.map(x => `<tr><td>${e(x.ad)}</td><td>${e(tarihTr(x.hedef))}</td><td>${e(RENK[x.hal][2])}${x.tamam && x.tamamTarih ? " (" + e(tarihTr(x.tamamTarih)) + ")" : ""}</td><td>${e(x.not)}</td></tr>`).join("")}</table></body></html>`, "Evrak Takibi"); };
+  return (
+    <div data-testid="evrak-takip" style={{ padding: 16, paddingBottom: 110, maxWidth: 680 }}>
+      <div style={{ fontSize: 18, fontWeight: 900, color: TEXT }}>🗂 Evrak Takibi <span style={{ fontSize: 12, color: MUTED, fontWeight: 600 }}>· {aktifYil}</span></div>
+      <div style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.5, margin: "4px 0 10px" }}>Yıl boyunca hazırlanması gereken rehberlik evrakları. Tarihler önerilendir; okulunun takvimine göre değiştirebilir, listede olmayan evrakı ekleyebilir, gereksiz olanı gizleyebilirsin. Program ilgili kayıtları (risk haritası, sevk, görüşme sayıları…) evrakın altında ipucu olarak gösterir; tamamlandı işaretini sen koyarsın.</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 10 }}>
+        {[["acik", `Açık (${liste.length - say("tamam") - say("gerekyok")})`], ["gecikti", `Geciken (${say("gecikti")})`], ["yaklasiyor", `Yaklaşan (${say("yaklasiyor")})`], ["tamam", `Tamam (${say("tamam")})`], ["hepsi", `Hepsi (${liste.length})`]].map(([k, ad]) =>
+          <button key={k} data-evrak-filtre={k} onClick={() => setFiltre(k)} style={{ padding: "5px 10px", borderRadius: 8, border: `1px solid ${k === "gecikti" && say("gecikti") ? "#FCA5A5" : BORDER}`, background: filtre === k ? ACCENT : "#fff", color: filtre === k ? "#fff" : (k === "gecikti" && say("gecikti") ? "#B91C1C" : TEXT), fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>{ad}</button>)}
+        <button onClick={yazdir} style={{ padding: "5px 10px", borderRadius: 8, border: `1px solid ${BORDER}`, background: "#fff", fontSize: 11.5, cursor: "pointer" }}>🖨️ Yazdır</button>
+      </div>
+      <div style={{ height: 8, background: "#E2E8F0", borderRadius: 5, overflow: "hidden", marginBottom: 10 }}><div style={{ width: `${Math.round(100 * (say("tamam") + say("gerekyok")) / Math.max(1, liste.length))}%`, height: 8, background: ACCENT }} /></div>
+      {gos.map(x => { const [rk, zm, ad] = RENK[x.hal], ip = x.oto ? evrakOtoIpucu(x.oto, d, aktifYil) : "", ac = acik === x.id; return (
+        <div key={x.id} data-evrak={x.id} style={{ background: CARD, border: `1px solid ${x.hal === "gecikti" ? "#FCA5A5" : BORDER}`, borderRadius: 10, padding: "8px 10px", marginBottom: 6 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+            <input type="checkbox" checked={!!x.tamam} onChange={e => durumYaz(x.id, { tamam: e.target.checked, tamamTarih: e.target.checked ? evrakIso(new Date()) : "", gerekYok: false })} style={{ marginTop: 3, width: 17, height: 17 }} title="Tamamlandı" />
+            <div style={{ flex: 1, minWidth: 0 }} onClick={() => setAcik(ac ? null : x.id)}>
+              <div style={{ fontSize: 12.5, fontWeight: 800, color: x.tamam ? MUTED : TEXT, textDecoration: x.tamam ? "line-through" : "none", cursor: "pointer" }}>{x.ad}</div>
+              <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>
+                <span style={{ color: rk, background: zm, borderRadius: 6, padding: "0 6px", fontWeight: 800, marginRight: 6 }}>{ad}{x.hal === "gecikti" ? ` · ${-x.kalan} gün` : x.hal === "yaklasiyor" ? ` · ${x.kalan} gün kaldı` : ""}</span>
+                Hedef: {tarihTr(x.hedef)}{x.tamam && x.tamamTarih ? ` · tamamlandı ${tarihTr(x.tamamTarih)}` : ""}{x.kat ? ` · ${x.kat}` : ""}
+              </div>
+              {ip && <div style={{ fontSize: 10.5, color: "#0E7490", marginTop: 2 }}>💡 {ip}</div>}
+              {x.not && !ac && <div style={{ fontSize: 10.5, color: TEXT, marginTop: 2 }}>📝 {x.not}</div>}
+            </div>
+          </div>
+          {ac && <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 5, paddingLeft: 25 }}>
+            <label style={{ fontSize: 11, color: MUTED }}>Hedef tarih: <input type="date" value={evrakIso(evrakTarihCoz(x.hedef))} onChange={e => durumYaz(x.id, { hedef: e.target.value })} style={{ fontSize: 12, padding: 3, borderRadius: 6, border: `1px solid ${BORDER}` }} /></label>
+            <textarea defaultValue={x.not || ""} onBlur={e => durumYaz(x.id, { not: e.target.value.slice(0, 500) })} placeholder="Not (ör. hangi klasörde, kime teslim edildi)" rows={2} style={{ fontSize: 12, padding: 5, borderRadius: 6, border: `1px solid ${BORDER}`, resize: "vertical" }} />
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <button onClick={() => durumYaz(x.id, { gerekYok: !x.gerekYok, tamam: false })} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 7, border: `1px solid ${BORDER}`, background: "#fff", cursor: "pointer" }}>{x.gerekYok ? "Gerek yok işaretini kaldır" : "Bu yıl gerek yok"}</button>
+              {EVRAK_VARSAYILAN.some(e => e.id === x.id)
+                ? <button onClick={() => { if (window.confirm("Bu evrak bu yılın listesinden gizlensin mi?")) yaz(y => { y.gizli = [...(y.gizli || []), x.id]; }); }} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 7, border: `1px solid ${BORDER}`, background: "#fff", cursor: "pointer" }}>Listeden gizle</button>
+                : <button onClick={() => { if (window.confirm("Bu evrak listeden kaldırılsın mı?")) yaz(y => { y.ozel = (y.ozel || []).filter(o => o.id !== x.id); }); }} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 7, border: "1px solid #FCA5A5", color: "#B91C1C", background: "#fff", cursor: "pointer" }}>Kaldır</button>}
+            </div>
+          </div>}
+        </div>); })}
+      {!gos.length && <div style={{ fontSize: 12, color: MUTED, padding: 10 }}>Bu süzgece uyan evrak yok.</div>}
+      <div style={{ background: CARD, border: `1px dashed ${BORDER}`, borderRadius: 10, padding: 10, marginTop: 10 }}>
+        <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 5 }}>➕ Evrak ekle</div>
+        <input value={yeniAd} onChange={e => setYeniAd(e.target.value)} placeholder="Evrak adı (ör. Kariyer günü etkinlik raporu)" style={{ width: "100%", boxSizing: "border-box", fontSize: 12, padding: 6, borderRadius: 7, border: `1px solid ${BORDER}`, marginBottom: 5 }} />
+        <div style={{ display: "flex", gap: 6 }}>
+          <input type="date" value={yeniTarih} onChange={e => setYeniTarih(e.target.value)} style={{ flex: 1, fontSize: 12, padding: 5, borderRadius: 7, border: `1px solid ${BORDER}` }} />
+          <button data-testid="evrak-ekle" disabled={!yeniAd.trim() || !yeniTarih} onClick={() => { const o = { id: "ozel_" + uid(), ad: yeniAd.trim().slice(0, 150), hedef: yeniTarih, kat: "Eklenen" }; yaz(y => { y.ozel = [...(y.ozel || []), o]; }); setYeniAd(""); setYeniTarih(""); }} style={{ padding: "5px 12px", borderRadius: 7, border: "none", background: ACCENT, color: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", opacity: yeniAd.trim() && yeniTarih ? 1 : 0.5 }}>Ekle</button>
+        </div>
+        {(veri[aktifYil] && (veri[aktifYil].gizli || []).length) ? <button onClick={() => yaz(y => { y.gizli = []; })} style={{ marginTop: 6, fontSize: 11, background: "none", border: "none", color: "#0E7490", cursor: "pointer", padding: 0 }}>Gizlenen {(veri[aktifYil].gizli || []).length} evrakı geri getir</button> : null}
+      </div>
+    </div>
+  );
+}
+// ===== EVRAK TAKİP PANOSU BİTİŞ =====
 const TABS_TUMU = [
     { key: "ogrenciler", label: "👥 Öğrenciler" },
     { key: "yeni", label: "📝 Görüşme Notu" },
@@ -56601,8 +56713,8 @@ const TABS_TUMU = [
     { key: "sinif_sunumu", label: "📽️ Sınıf Sunumu" },
     { key: "hatirlatici", label: "📅 Zaman", grup: ["hatirlatici","gorusme_takvimi"],
       grupEtiketler: { hatirlatici: "🔔 Hatırlatıcı", gorusme_takvimi: "📅 Takvim" } },
-    { key: "belgeler", label: "📑 Kayıtlar", grup: ["belgeler","kutuphane","kazanimlar"],
-      grupEtiketler: { belgeler: "📑 Belgeler", kutuphane: "📚 Kütüphane", kazanimlar: "📘 Kazanımlar" } },
+    { key: "belgeler", label: "📑 Kayıtlar", grup: ["belgeler","evrak_takip","kutuphane","kazanimlar"],
+      grupEtiketler: { belgeler: "📑 Belgeler", evrak_takip: "🗂 Evrak Takibi", kutuphane: "📚 Kütüphane", kazanimlar: "📘 Kazanımlar" } },
     { key: "grup_calismalari", label: "🏫 Okul Çapı", grup: ["grup_calismalari","kriz","sosyometri"],
       grupEtiketler: { grup_calismalari: "👪 Grup Çalışmaları", kriz: "🚨 Kriz Müdahale", sosyometri: "🤝 Sosyometri" } },
     { key: "uyum_izleme", label: "🔍 Uyum İzleme" },
@@ -56637,6 +56749,7 @@ const SEKME_ACIKLAMALARI = {
   hatirlatici: "Kendine bıraktığın hatırlatma / yapılacaklar listesi.",
   gorusme_takvimi: "Planlanan ve geçmiş görüşmeleri takvim görünümünde gösterir.",
   belgeler: "Sevk yazısı, MEB dönem raporu, veli mektubu gibi belgeleri oluştur.",
+  evrak_takip: "Yıl boyu hazırlanacak rehberlik evraklarının listesi: hedef tarih, tamamlandı işareti, geciken/yaklaşan uyarısı; programdaki kayıtlardan ipucu.",
   kutuphane: "Yönetmelik/makale gibi referans kaynaklarını yükle — AI önerilerinde otomatik kullanılır.",
   kazanimlar: "Kademeye göre kazanım listelerine göz atmak için.",
   grup_calismalari: "Sınıfa ya da okula yönelik grup etkinliklerini kaydet (öğrenciye değil sınıfa/yıla bağlıdır).",
@@ -58636,6 +58749,7 @@ function pdrBaslangicSekmesi() {
 
         {/* ── KAZANIMLAR ───────────────────────────────────────────── */}
         {tab === "kazanimlar" && <KazanimlarSekmesi kademe={kademe} />}
+        {tab === "evrak_takip" && <EvrakTakipEkrani aktifYil={aktifYil} records={records} sevkler={sevkler} riskHaritasi={riskHaritasi} sosyometri={sosyometri} krizKayitlari={krizKayitlari} grupCalismalari={grupCalismalari} />}
 
         {/* ── İSTATİSTİK ───────────────────────────────────────────── */}
         {tab === "grup_calismalari" && (

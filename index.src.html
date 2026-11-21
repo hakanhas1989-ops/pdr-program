@@ -40229,6 +40229,122 @@ function DkKavramlar({ V, ders, unite, acikK, setAcikK, ac, soruAc, sadeceYeni, 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>{hic.map(k => <span key={k.ad} style={{ fontSize: 11, border: "1px solid #FECACA", background: "#FEF2F2", borderRadius: 8, padding: "2px 6px", display: "inline-flex", gap: 4, alignItems: "center" }}>{k.ad} {sayfaBtn(k.ana, k.ad)}</span>)}</div></>}
   </div>);
 }
+// ===== KİTAPTAN TEKRAR PLANI (öğrenciye özel; denemelerdeki yanlışlar + Konu Haritası + ders kitabı analizi + soru bankası) =====
+function lgsKitapUnite(ders, konu) { return ders === "Din Kültürü" && /Hz\. Musa/.test(konu) ? "Kader İnancı" : konu; }
+// Öğrencinin tekrar etmesi gereken konular: işaretlenmiş LGS/MEBİ denemelerindeki yanlışlar + Konu Haritası'nda %75'in altındaki konular
+async function lgsTekrarKonulari(ogrAnahtar, ogrVerisi) {
+  const v = await lgsDenemeOku(), kayit = (ogrAnahtar && v[ogrAnahtar]) || [], K = {}, cozulen = new Set();
+  kayit.forEach(k => { cozulen.add(k.kitapcik); lgsDenemeAnaliz(k.kitapcik, k.isaret).konular.forEach(x => { const y = K[x.ders + "|" + x.konu] = K[x.ders + "|" + x.konu] || { ders: x.ders, konu: x.konu, hata: 0, sayi: 0, deneme: 0 }; y.hata += x.hata; y.sayi += x.sayi; y.deneme++; }); });
+  Object.entries(ogrVerisi || {}).forEach(([ders, kl]) => { const H = LGS_KONU_HARITASI[ders]; if (!H) return;
+    H.forEach(({ konu }) => { const yz = konuDegeriAl(kl, konu); if (yz > 0 && yz < 75) { const y = K[ders + "|" + konu] = K[ders + "|" + konu] || { ders, konu, hata: 0, sayi: 0, deneme: 0 }; y.yuzde = yz; } }); });
+  const agir = (d, k) => { const H = LGS_KONU_HARITASI[d] || [], x = H.find(z => z.konu === k), m = Math.max(1, ...H.map(z => z.gecmisSoru || 0)); return x ? (x.gecmisSoru || 0) / m : 0; };
+  const l = Object.values(K).map(x => ({ ...x, oran: x.sayi ? Math.round(100 * x.hata / x.sayi) : null, oncelik: x.hata * (1 + x.deneme) + (x.yuzde != null ? (75 - x.yuzde) / 15 : 0) + 2 * agir(x.ders, x.konu) }));
+  return { konular: l.sort((a, b) => b.oncelik - a.oncelik), cozulen: [...cozulen], denemeSay: kayit.length };
+}
+// Bir konu için: kitapta okunacak yerler + kolaydan zora soru seti
+function lgsTekrarKonuPaketi(x, cozulen, soruSay = 6) {
+  const V = DERS_KITABI_ANALIZ[x.ders] ? dersKitabiVeri(x.ders) : null, unite = lgsKitapUnite(x.ders, x.konu), kitap = [];
+  if (V) {
+    const al = V.altlar.filter(a => a.unite === unite && !a.dg && (V.beceri ? a.tm : !a.tm));
+    if (V.beceri) { // her temadan konunun işlendiği bir etkinlik (en çok 4 tema)
+      al.slice().sort((a, b) => a.s - b.s).forEach(a => { const o = a.ogeler.find(o => o.tur === "e") || a.ogeler[0]; if (o && kitap.length < 4) kitap.push({ s: o.p, e: o.p, ad: o.et, neden: a.ad.split(" — ")[0] }); }); }
+    else {
+      const cok = al.slice().sort((a, b) => b.wq - a.wq).slice(0, 2), az = al.filter(a => !cok.includes(a) && a.ogeler.length).sort((a, b) => b.bosluk - a.bosluk)[0];
+      [...cok, ...(az ? [az] : [])].sort((a, b) => a.s - b.s).forEach(a => kitap.push({ s: a.s, e: a.e, ad: a.ad, neden: a === az ? "kitapta var, az sorulmuş" : `çok soruldu: ${a.toplam} benzer soru` }));
+    }
+    const ogeler = V.beceri ? [] : V.ogeler.filter(o => o.d === 0 && !["r", "a", "n"].includes(o.tur) && !o.zayif && V.altlar[o.alt] && V.altlar[o.alt].unite === unite && !V.altlar[o.alt].dg).sort((a, b) => b.skor - a.skor).slice(0, 1);
+    ogeler.forEach(o => kitap.push({ s: o.p, e: o.p, ad: o.et, neden: "hiç sorulmamış kitap öğesi", oge: true }));
+  }
+  // Soru seti: öğrencinin çözdüğü kitapçıklar hariç; çok yanlış varsa kolaydan başlar
+  const havuz = lgsSorular().filter(q => q.ders === x.ders && q.konu === x.konu && q.kaynak !== "tahmin" && !cozulen.includes(q.kitapcik));
+  const plan = (x.oran == null || x.oran >= 50) ? [1, 1, 2, 2, 3, 3] : [1, 2, 2, 3, 3, 4];
+  const kaynakSira = { lgs: 0, mebi: 1, ornek: 2, yaprak: 3 }, sec = [], kullan = new Set();
+  plan.slice(0, soruSay).forEach(z => {
+    const aday = havuz.filter(q => !kullan.has(q) && (q.zorluk || 2) === z).sort((a, b) => sec.filter(s => s.kitapcik === a.kitapcik).length - sec.filter(s => s.kitapcik === b.kitapcik).length || kaynakSira[a.kaynak] - kaynakSira[b.kaynak] || (a.oran ?? 50) - (b.oran ?? 50))[0]
+      || havuz.filter(q => !kullan.has(q)).sort((a, b) => Math.abs((a.zorluk || 2) - z) - Math.abs((b.zorluk || 2) - z))[0];
+    if (aday) { kullan.add(aday); sec.push(aday); } });
+  sec.sort((a, b) => (a.zorluk || 2) - (b.zorluk || 2));
+  return { ...x, unite, kitap, sorular: sec, havuzSay: havuz.length };
+}
+function lgsTekrarPlaniKur(liste, cozulen, hafta) {
+  const paket = liste.slice(0, Math.min(liste.length, hafta * 2)).map(x => lgsTekrarKonuPaketi(x, cozulen));
+  const haftalar = Array.from({ length: hafta }, (_, i) => ({ no: i + 1, konular: paket.slice(i * 2, i * 2 + 2) }));
+  return { haftalar, paket };
+}
+function lgsTekrarPlaniHtml(ogr, plan, hafta) {
+  const e = (t) => String(t == null ? "" : t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const kitapAd = (d) => (DERS_KITABI_ANALIZ[d] && DERS_KITABI_ANALIZ[d].ad) || `8. Sınıf ${d} ders kitabı`;
+  const konuBlok = (p) => `<div class="konu"><h3>${e(p.ders)} · ${e(p.konu)}</h3><div class="neden">${p.hata ? `Denemelerde ${p.hata} yanlış${p.sayi ? ` / ${p.sayi} soru` : ""}${p.deneme > 1 ? ` (${p.deneme} denemede)` : ""}` : ""}${p.hata && p.yuzde != null ? " · " : ""}${p.yuzde != null ? `Konu Haritası: %${p.yuzde} bitirildi` : ""}</div>
+    <table><tr><th style="width:24%">Gün</th><th>Yapılacak</th><th style="width:9%">✓</th></tr>
+    <tr><td>1. gün · Kitaptan oku</td><td>${p.kitap.length ? `<b>${e(kitapAd(p.ders))}</b><ul>${p.kitap.map(k => `<li>s. ${k.s}${k.e > k.s ? "–" + k.e : ""}: ${e(k.ad)} <i>(${e(k.neden)})</i></li>`).join("")}</ul>Okurken bilgi kutularını, görsel altı açıklamaları ve "Unutmayalım / Bilgi Notu" kutularını atlama; her sayfadan 2 anahtar bilgiyi defterine yaz.` : "Bu konu için ders kitabı analizi yok: konuyu kitaptan baştan oku, anahtar bilgileri yaz."}</td><td></td></tr>
+    <tr><td>2. gün · Sorular (kolay → orta)</td><td>${p.sorular.filter(q => (q.zorluk || 2) <= 2).map(q => `${e(lgsKitapcikAd(q.kitapcik))} · soru ${q.no} <span class="z z${q.zorluk || 0}">${e(LGS_ZORLUK_AD[q.zorluk || 0])}</span>`).join("<br>") || "—"}</td><td></td></tr>
+    <tr><td>3. gün · Sorular (zor) + yanlış analizi</td><td>${p.sorular.filter(q => (q.zorluk || 2) >= 3).map(q => `${e(lgsKitapcikAd(q.kitapcik))} · soru ${q.no} <span class="z z${q.zorluk || 0}">${e(LGS_ZORLUK_AD[q.zorluk || 0])}</span>`).join("<br>") || "—"}<div class="ipucu">Yanlış yaptığın her soruda: soru kökünü kendi cümlenle yaz, hangi bilgiyi bilmediğini bul, kitapta o sayfaya dön.</div></td><td></td></tr></table></div>`;
+  return `<!DOCTYPE html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Kitaptan Tekrar Planı</title><style>
+  body{font-family:Arial,sans-serif;color:#1B2A22;margin:18px;font-size:12.5px;line-height:1.45}h1{font-size:18px;margin:0 0 2px;color:#0E7490}h2{font-size:14.5px;margin:16px 0 6px;background:#ECFEFF;border-left:4px solid #0E7490;padding:5px 8px}h3{font-size:13px;margin:8px 0 2px}
+  .ust{color:#475569;margin-bottom:8px}.neden{color:#64748B;font-size:11.5px;margin-bottom:4px}table{width:100%;border-collapse:collapse;margin-bottom:6px}th,td{border:1px solid #CBD5E1;padding:5px 6px;vertical-align:top;text-align:left}th{background:#F1F5F9;font-size:11.5px}ul{margin:3px 0 4px 16px;padding:0}
+  .z{font-size:10.5px;font-weight:700;border-radius:6px;padding:0 5px}.z1{color:#15803D}.z2{color:#2563EB}.z3{color:#C2410C}.z4{color:#991B1B}.ipucu{color:#64748B;font-size:11px;margin-top:4px}.konu{page-break-inside:avoid}.alt{margin-top:14px;font-size:11px;color:#64748B}
+  @media print{.noprint{display:none!important}body{margin:10mm}}</style></head><body>
+  <h1>📗 Kitaptan Tekrar Planı</h1><div class="ust"><b>${e(ogr.ad)}</b>${ogr.sinif ? " · " + e(ogr.sinif) : ""} · ${hafta} hafta · Hazırlanma: ${e(new Date().toLocaleDateString("tr-TR"))}</div>
+  <div class="ust">Her hafta 2 konu, her konu için 3 gün: önce ders kitabından okuma, sonra kolaydan zora sorular. Soru numaraları MEB'in yayımladığı denemeler, örnek sorular ve yaprak testlerindendir; daha önce çözdüğün denemelerden soru verilmez.</div>
+  ${plan.haftalar.map(h => `<h2>${h.no}. hafta</h2>${h.konular.length ? h.konular.map(konuBlok).join("") : `<div>Genel tekrar: önceki haftalarda yanlış yaptığın soruları yeniden çöz; her dersten bir MEBİ denemesi çöz.</div>`}`).join("")}
+  <div class="alt">Hazırlayan: Rehberlik Servisi. Sıralama: denemelerdeki yanlış sayısı, kaç denemede tekrarlandığı, Konu Haritası'ndaki bitirme oranı ve konunun LGS'deki ağırlığı.</div></body></html>`;
+}
+function LgsTekrarPlaniPaneli({ seciliAd, seciliSinif, ogrAnahtar, ogrVerisi, onSayfaAc }) {
+  const [acik, setAcik] = useState(false), [veri, setVeri] = useState(null), [hafta, setHafta] = useState(3), [secim, setSecim] = useState({}), [plan, setPlan] = useState(null), [durum, setDurum] = useState("");
+  useEffect(() => { setVeri(null); setPlan(null); setSecim({}); }, [ogrAnahtar]);
+  async function yukle() { setDurum("yukleniyor"); const v = await lgsTekrarKonulari(ogrAnahtar, ogrVerisi); setVeri(v); const s = {}; v.konular.slice(0, 6).forEach(x => { s[x.ders + "|" + x.konu] = true; }); setSecim(s); setDurum(""); }
+  useEffect(() => { if (acik && ogrAnahtar && !veri) yukle(); }, [acik, ogrAnahtar]);
+  const mavi = "#0E7490";
+  const kur = () => { const l = veri.konular.filter(x => secim[x.ders + "|" + x.konu]); setPlan(lgsTekrarPlaniKur(l, veri.cozulen, hafta)); };
+  // Elle konu ekleme: LGS konu listesinden
+  const [ekDers, setEkDers] = useState(""), [ekKonu, setEkKonu] = useState("");
+  const ekle = () => { if (!ekDers || !ekKonu || !veri) return; const k = ekDers + "|" + ekKonu; if (!veri.konular.some(x => x.ders + "|" + x.konu === k)) setVeri({ ...veri, konular: [...veri.konular, { ders: ekDers, konu: ekKonu, hata: 0, sayi: 0, deneme: 0, oran: null, oncelik: 0, elle: true }] }); setSecim({ ...secim, [k]: true }); setEkKonu(""); };
+  return (
+    <div data-testid="lgs-tekrar-plani" style={{ background: "#F0FDFA", border: "1px solid #99F6E4", borderRadius: 12, padding: "9px 11px", marginBottom: 14 }}>
+      <div onClick={() => setAcik(a => !a)} style={{ fontSize: 13, fontWeight: 900, color: mavi, cursor: "pointer" }}>📗 Kitaptan Tekrar Planı {acik ? "▲" : "▼"}</div>
+      {!acik && <div style={{ fontSize: 10.5, color: MUTED, marginTop: 2 }}>Öğrencinin zayıf konularına göre ders kitabı sayfaları + kolaydan zora soru seti, haftalık ve yazdırılabilir.</div>}
+      {acik && !seciliAd && <div style={{ fontSize: 11.5, color: MUTED, marginTop: 6 }}>Önce yukarıdan bir öğrenci seç.</div>}
+      {acik && seciliAd && (durum === "yukleniyor" || !veri) && <div style={{ fontSize: 11.5, color: MUTED, marginTop: 6 }}>⏳ Hazırlanıyor…</div>}
+      {acik && seciliAd && veri && <div style={{ marginTop: 6 }}>
+        <div style={{ fontSize: 10.5, color: MUTED, lineHeight: 1.45, marginBottom: 5 }}>Konular şu verilerden seçildi: {veri.denemeSay ? <b>{veri.denemeSay} işaretli denemedeki yanlışlar</b> : "işaretli deneme yok"} ve Konu Haritası'nda %75'in altında kalan konular. İstediğin konuyu çıkarabilir ya da aşağıdan ekleyebilirsin. Daha önce çözdüğü denemelerden soru verilmez.</div>
+        {!veri.konular.length && <div style={{ fontSize: 11.5, color: "#B45309", marginBottom: 5 }}>Bu öğrenci için yanlış işaretlenmiş deneme ya da düşük Konu Haritası kaydı yok. Aşağıdan konu ekleyerek plan kurabilirsin (Geçmiş LGS Soruları'nda denemenin yanlışlarını işaretlemek en doğru sonucu verir).</div>}
+        {veri.konular.slice(0, 14).map(x => { const k = x.ders + "|" + x.konu; return (
+          <label key={k} style={{ display: "flex", gap: 6, alignItems: "flex-start", fontSize: 11.5, padding: "2px 0" }}>
+            <input type="checkbox" checked={!!secim[k]} onChange={e => setSecim({ ...secim, [k]: e.target.checked })} />
+            <span><b>{x.konu}</b> <span style={{ color: MUTED }}>· {x.ders}{x.hata ? ` · ${x.hata} yanlış${x.deneme > 1 ? ` (${x.deneme} denemede)` : ""}` : ""}{x.yuzde != null ? ` · Konu Haritası %${x.yuzde}` : ""}{x.elle ? " · elle eklendi" : ""}</span></span>
+          </label>); })}
+        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", margin: "5px 0" }}>
+          <select value={ekDers} onChange={e => { setEkDers(e.target.value); setEkKonu(""); }} style={{ fontSize: 11.5, padding: 4, borderRadius: 7 }}><option value="">+ Konu ekle: ders</option>{Object.keys(LGS_KONU_HARITASI).map(d => <option key={d}>{d}</option>)}</select>
+          {ekDers && <select value={ekKonu} onChange={e => setEkKonu(e.target.value)} style={{ fontSize: 11.5, padding: 4, borderRadius: 7, maxWidth: 200 }}><option value="">konu seç</option>{(LGS_KONU_HARITASI[ekDers] || []).map(k => <option key={k.konu}>{k.konu}</option>)}</select>}
+          {ekKonu && <button onClick={ekle} style={{ fontSize: 11.5, padding: "3px 9px", borderRadius: 7, border: `1px solid ${mavi}`, background: "#fff", color: mavi, cursor: "pointer" }}>Ekle</button>}
+        </div>
+        <div style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap", marginBottom: 6 }}>
+          <span style={{ fontSize: 11.5, fontWeight: 800 }}>Süre:</span>
+          {[2, 3, 4].map(h => <button key={h} onClick={() => setHafta(h)} style={{ padding: "3px 9px", borderRadius: 7, border: `1px solid ${mavi}`, background: hafta === h ? mavi : "#fff", color: hafta === h ? "#fff" : mavi, fontSize: 11.5, cursor: "pointer" }}>{h} hafta</button>)}
+          <span style={{ fontSize: 10.5, color: MUTED }}>(haftada 2 konu → en çok {hafta * 2} konu)</span>
+        </div>
+        <button data-testid="tekrar-plani-kur" onClick={kur} disabled={!Object.values(secim).some(Boolean)} style={{ width: "100%", padding: 8, borderRadius: 9, border: "none", background: mavi, color: "#fff", fontWeight: 800, fontSize: 12.5, cursor: "pointer", opacity: Object.values(secim).some(Boolean) ? 1 : 0.5 }}>📗 Planı oluştur</button>
+        {plan && <div data-testid="tekrar-plani-sonuc" style={{ marginTop: 8 }}>
+          <button data-testid="tekrar-plani-yazdir" onClick={() => ootBelgeAc(lgsTekrarPlaniHtml({ ad: seciliAd, sinif: seciliSinif }, plan, hafta), "Kitaptan Tekrar Planı")} style={{ width: "100%", padding: 7, borderRadius: 9, border: `1px solid ${mavi}`, background: "#fff", color: mavi, fontWeight: 800, fontSize: 12, cursor: "pointer", marginBottom: 6 }}>🖨️ Yazdır / öğrenciye ver</button>
+          {plan.haftalar.map(h => <div key={h.no} style={{ marginBottom: 6 }}>
+            <div style={{ fontSize: 12, fontWeight: 900, color: mavi, borderBottom: "1px solid #99F6E4", marginBottom: 3 }}>{h.no}. hafta</div>
+            {!h.konular.length && <div style={{ fontSize: 11, color: MUTED }}>Genel tekrar: önceki haftaların yanlışları + her dersten bir MEBİ denemesi.</div>}
+            {h.konular.map(p => <div key={p.ders + p.konu} style={{ background: "#fff", border: "1px solid #CCFBF1", borderRadius: 8, padding: "5px 7px", marginBottom: 4 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 800 }}>{p.konu} <span style={{ fontWeight: 500, color: MUTED }}>· {p.ders}</span></div>
+              <div style={{ fontSize: 10.5, color: MUTED, marginTop: 2 }}>1. gün · Kitaptan oku:</div>
+              {p.kitap.length ? p.kitap.map((k, i) => <div key={i} style={{ display: "flex", gap: 5, alignItems: "center", fontSize: 11, padding: "1px 0" }}>
+                <button onClick={() => onSayfaAc && onSayfaAc("kitap:" + DERS_KITABI_ANALIZ[p.ders].k, k.s)} style={{ fontSize: 10, padding: "1px 6px", borderRadius: 6, border: "1px solid #A5F3FC", background: "#fff", color: mavi, cursor: "pointer", flexShrink: 0 }}>s. {k.s}{k.e > k.s ? "–" + k.e : ""}</button>
+                <span>{k.ad} <i style={{ color: MUTED }}>({k.neden})</i></span></div>) : <div style={{ fontSize: 11, color: MUTED }}>Bu ders için kitap analizi yok.</div>}
+              <div style={{ fontSize: 10.5, color: MUTED, marginTop: 3 }}>2.–3. gün · Sorular (kolaydan zora){p.havuzSay ? "" : " — bu konuda bankada çözülmemiş soru kalmadı"}:</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>{p.sorular.map(q => <DkSoruCip key={q.kitapcik + q.ders + q.no} q={q} onClick={() => onSayfaAc && onSayfaAc(q.kitapcik, q.sayfa, q)} />)}</div>
+            </div>)}
+          </div>)}
+        </div>}
+      </div>}
+    </div>
+  );
+}
+// ===== KİTAPTAN TEKRAR PLANI BİTİŞ =====
 function LgsDersKitabiListesi({ onSayfaAc }) {
   const dersler = Object.keys(DERS_KITABI_ANALIZ);
   const [zSira, setZSira] = useState(""), [zSuz, setZSuz] = useState("");
@@ -40406,6 +40522,7 @@ function KonuHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, kon
       {!liseMi && <LgsBuHaftaPaneli aktifYil={aktifYil} onDurum={setLgsDurum} />}
       {!liseMi && <LgsBeceriPaneli ogrVerisi={seciliAd ? ogrVerisi : null} seciliAd={seciliAd} />}
       {!liseMi && <LgsGecmisPaneli seciliAd={seciliAd} ogrAnahtar={ogrAnahtar} onSayfaAc={lgsSayfaAc} />}
+      {!liseMi && <LgsTekrarPlaniPaneli seciliAd={seciliAd} seciliSinif={seciliSinif} ogrAnahtar={ogrAnahtar} ogrVerisi={ogrVerisi} onSayfaAc={lgsSayfaAc} />}
       {lgsGosterici && <KitapSayfaGosterici {...lgsGosterici} onKapat={() => setLgsGosterici(null)} onKitapYukle={async (k, f) => { try { await pdrKitapKaydet(k, f, null); } catch (e) {} }} />}
 
       {liseMi && (

@@ -56778,22 +56778,22 @@ function EtkiAnaliziEkrani({ kayitliListesi, aktifYil, grupCalismalari }) {
         <input list="etki-grup" value={f.baslik} onChange={e => set("baslik", e.target.value)} placeholder="Çalışmanın adı (ör. 8-A Sınav Kaygısı Psikoeğitimi)" style={inp} />
         <datalist id="etki-grup">{grupKonu.map(k => <option key={k} value={k} />)}</datalist>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          <input value={f.olcek} onChange={e => set("olcek", e.target.value)} placeholder="Ölçek (ör. Sınav Kaygısı Ölçeği)" style={{ ...inp, flex: "2 1 160px" }} />
-          <label style={{ fontSize: 11, color: MUTED, flex: "1 1 120px" }}>Güvenirlik (alfa)<input value={f.guvenirlik} onChange={e => set("guvenirlik", e.target.value)} style={{ ...inp, width: "100%" }} title="Ölçeğin Cronbach alfa katsayısı; bilinmiyorsa 0,80 bırak" /></label>
+          <input value={f.olcek} onChange={e => set("olcek", e.target.value)} placeholder="Ölçek (ör. Sınav Kaygısı Ölçeği)" style={{ ...inp, flex: "2 1 160px", minWidth: 0 }} />
+          <label style={{ fontSize: 11, color: MUTED, flex: "1 1 120px", minWidth: 0 }}>Güvenirlik (alfa)<input value={f.guvenirlik} onChange={e => set("guvenirlik", e.target.value)} style={{ ...inp, width: "100%" }} title="Ölçeğin Cronbach alfa katsayısı; bilinmiyorsa 0,80 bırak" /></label>
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {[[1, "⬆ Yüksek puan istenen (ör. özsaygı)"], [-1, "⬇ Düşük puan istenen (ör. kaygı)"]].map(([v, ad]) => <button key={v} data-etki-yon={v} onClick={() => set("yon", v)} style={{ flex: "1 1 150px", padding: 6, borderRadius: 8, border: `1px solid ${f.yon === v ? ACCENT : BORDER}`, background: f.yon === v ? "#E6F5EE" : "#fff", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>{ad}</button>)}
         </div>
         <div style={{ display: "flex", gap: 6 }}>
-          <label style={{ fontSize: 11, color: MUTED, flex: 1 }}>Ön test tarihi<input type="date" value={f.onTarih} onChange={e => set("onTarih", e.target.value)} style={{ ...inp, width: "100%" }} /></label>
-          <label style={{ fontSize: 11, color: MUTED, flex: 1 }}>Son test tarihi<input type="date" value={f.sonTarih} onChange={e => set("sonTarih", e.target.value)} style={{ ...inp, width: "100%" }} /></label>
+          <label style={{ fontSize: 11, color: MUTED, flex: "1 1 0", minWidth: 0 }}>Ön test tarihi<input type="date" value={f.onTarih} onChange={e => set("onTarih", e.target.value)} style={{ ...inp, width: "100%", minWidth: 0, maxWidth: "100%" }} /></label>
+          <label style={{ fontSize: 11, color: MUTED, flex: "1 1 0", minWidth: 0 }}>Son test tarihi<input type="date" value={f.sonTarih} onChange={e => set("sonTarih", e.target.value)} style={{ ...inp, width: "100%", minWidth: 0, maxWidth: "100%" }} /></label>
         </div>
         <datalist id="etki-adlar">{adlar.map((a, i) => <option key={i} value={a} />)}</datalist>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 64px 64px 26px", gap: 4, fontSize: 10.5, color: MUTED, fontWeight: 700 }}><span>Öğrenci (isteğe bağlı)</span><span>Ön</span><span>Son</span><span /></div>
-        {f.satirlar.map((r, i) => <div key={i} data-etki-satir={i} style={{ display: "grid", gridTemplateColumns: "1fr 64px 64px 26px", gap: 4 }}>
-          <input list="etki-adlar" value={r.ad} onChange={e => satir(i, "ad", e.target.value)} placeholder={`Öğrenci ${i + 1}`} style={inp} />
-          <input inputMode="decimal" value={r.on} onChange={e => satir(i, "on", e.target.value)} style={inp} />
-          <input inputMode="decimal" value={r.son} onChange={e => satir(i, "son", e.target.value)} style={inp} />
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,58px) minmax(0,58px) 24px", gap: 4, fontSize: 10.5, color: MUTED, fontWeight: 700 }}><span>Öğrenci (isteğe bağlı)</span><span>Ön</span><span>Son</span><span /></div>
+        {f.satirlar.map((r, i) => <div key={i} data-etki-satir={i} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,58px) minmax(0,58px) 24px", gap: 4 }}>
+          <input list="etki-adlar" value={r.ad} onChange={e => satir(i, "ad", e.target.value)} placeholder={`Öğrenci ${i + 1}`} style={{ ...inp, width: "100%", minWidth: 0 }} />
+          <input inputMode="decimal" size={3} value={r.on} onChange={e => satir(i, "on", e.target.value)} style={{ ...inp, width: "100%", minWidth: 0 }} />
+          <input inputMode="decimal" size={3} value={r.son} onChange={e => satir(i, "son", e.target.value)} style={{ ...inp, width: "100%", minWidth: 0 }} />
           <button onClick={() => setF({ ...f, satirlar: f.satirlar.filter((_, j) => j !== i) })} style={{ border: "none", background: "none", color: "#B91C1C", cursor: "pointer", fontSize: 14 }} title="Satırı kaldır">✕</button>
         </div>)}
         <button data-testid="etki-satir-ekle" onClick={() => setF({ ...f, satirlar: [...f.satirlar, { ad: "", on: "", son: "" }] })} style={{ padding: 6, borderRadius: 8, border: `1px dashed ${BORDER}`, background: "#fff", fontSize: 11.5, cursor: "pointer" }}>+ Öğrenci ekle</button>

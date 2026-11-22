@@ -54,6 +54,10 @@ self.addEventListener("fetch", (event) => {
       event.request.url.includes("workers.dev")) {
     return;
   }
+  // PDF görüntüleyici ve PDF'ler: önbelleğe alma (büyük dosyalar; görüntüleyici parça parça indirir)
+  if (event.request.url.includes("/pdfjs/") || /\.pdf(\?|#|$)/i.test(event.request.url)) {
+    return;
+  }
 
   const isHTML = event.request.mode === "navigate" ||
     event.request.url.endsWith("index.html") ||

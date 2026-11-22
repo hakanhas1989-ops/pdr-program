@@ -1756,59 +1756,6 @@ async function pdrPdfJsYukle() {
   window.pdfjsLib.GlobalWorkerOptions.workerSrc = kok + "pdf.worker.min.js";
   return window.pdfjsLib;
 }
-// ===== PROGRAM İÇİ PDF SAYFA GÖRÜNTÜLEYİCİ =====
-// Etkinlik / müdahale PDF'leri dış görüntüleyici (mozilla.github.io) yerine burada açılır:
-// o site başka adresteki PDF'leri artık yüklemiyor. pdf.js yalnız gereken sayfayı indirir (parça parça).
-function pdrPdfSayfaAc(url, sayfa, baslik) {
-  try { window.dispatchEvent(new CustomEvent("pdr-pdf-ac", { detail: { url, sayfa: Math.max(1, parseInt(sayfa, 10) || 1), baslik: baslik || "" } })); }
-  catch (e) { window.open(url, "_blank"); }
-}
-const PDR_PDF_BELGE_ONBELLEK = {};
-function PdrPdfGoruntuleyici() {
-  const [acik, setAcik] = useState(null);
-  const [sayfa, setSayfa] = useState(1), [toplam, setToplam] = useState(0), [durum, setDurum] = useState(""), [olcek, setOlcek] = useState(1);
-  const kanvas = useRef(null), kap = useRef(null);
-  useEffect(() => { const f = (e) => { setAcik(e.detail); setSayfa(e.detail.sayfa); setOlcek(1); }; window.addEventListener("pdr-pdf-ac", f); return () => window.removeEventListener("pdr-pdf-ac", f); }, []);
-  useEffect(() => {
-    if (!acik) return; let iptal = false, gorev = null;
-    (async () => {
-      try {
-        setDurum("Sayfa yükleniyor…");
-        const lib = await pdrPdfJsYukle();
-        let belge = PDR_PDF_BELGE_ONBELLEK[acik.url];
-        if (!belge) { belge = await lib.getDocument({ url: acik.url, rangeChunkSize: 262144, disableAutoFetch: true, disableStream: true }).promise; PDR_PDF_BELGE_ONBELLEK[acik.url] = belge; }
-        if (iptal) return; setToplam(belge.numPages);
-        const s = Math.min(Math.max(1, sayfa), belge.numPages), pg = await belge.getPage(s);
-        if (iptal) return;
-        const gen = Math.max(280, Math.min(1100, (kap.current && kap.current.clientWidth) || 360) - 8);
-        const v0 = pg.getViewport({ scale: 1 }), dpr = Math.min(2, window.devicePixelRatio || 1), sc = gen / v0.width * olcek, v = pg.getViewport({ scale: sc * dpr });
-        const c = kanvas.current; if (!c) return; c.width = v.width; c.height = v.height; c.style.width = (v.width / dpr) + "px"; c.style.height = (v.height / dpr) + "px";
-        gorev = pg.render({ canvasContext: c.getContext("2d"), viewport: v }); await gorev.promise; if (!iptal) setDurum("");
-      } catch (e) { if (!iptal && !(e && e.name === "RenderingCancelledException")) setDurum("Sayfa açılamadı. İnternet bağlantınızı kontrol edin ya da 'Tarayıcıda aç'ı deneyin."); }
-    })();
-    return () => { iptal = true; try { gorev && gorev.cancel(); } catch (e) {} };
-  }, [acik, sayfa, olcek]);
-  if (!acik) return null;
-  const dug = { padding: "8px 12px", borderRadius: 8, border: "1px solid #CBD5E1", background: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", minWidth: 40 };
-  return (
-    <div data-testid="pdr-pdf-goruntuleyici" style={{ position: "fixed", inset: 0, zIndex: 2147483000, background: "#1E293B", display: "flex", flexDirection: "column" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px", background: "#fff", flexWrap: "wrap" }}>
-        <button onClick={() => setAcik(null)} style={{ ...dug, background: "#1F2421", color: "#fff", border: "none" }}>✕ Kapat</button>
-        <div style={{ flex: 1, minWidth: 120, fontSize: 12.5, fontWeight: 700, color: "#1F2421", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{acik.baslik}</div>
-        <button onClick={() => setSayfa(x => Math.max(1, x - 1))} disabled={sayfa <= 1} style={dug}>◀</button>
-        <span style={{ fontSize: 12.5, fontWeight: 700 }}>{sayfa}{toplam ? ` / ${toplam}` : ""}</span>
-        <button onClick={() => setSayfa(x => toplam ? Math.min(toplam, x + 1) : x + 1)} disabled={toplam && sayfa >= toplam} style={dug}>▶</button>
-        <button onClick={() => setOlcek(x => Math.max(0.6, +(x - 0.2).toFixed(1)))} style={dug}>−</button>
-        <button onClick={() => setOlcek(x => Math.min(3, +(x + 0.2).toFixed(1)))} style={dug}>+</button>
-        <a href={acik.url} target="_blank" rel="noopener" style={{ ...dug, textDecoration: "none", color: "#1F2421", fontSize: 12 }}>Tarayıcıda aç</a>
-      </div>
-      <div ref={kap} style={{ flex: 1, overflow: "auto", display: "flex", justifyContent: olcek > 1 ? "flex-start" : "center", alignItems: "flex-start", padding: 4 }}>
-        <canvas ref={kanvas} style={{ background: "#fff", boxShadow: "0 4px 20px rgba(0,0,0,0.4)" }} />
-      </div>
-      {durum && <div style={{ position: "absolute", top: "45%", left: 0, right: 0, textAlign: "center", color: "#fff", fontSize: 14, fontWeight: 700, padding: 16 }}>{durum}</div>}
-    </div>
-  );
-}
 async function pdrPdfMetinCikar(file, enFazlaSayfa = 8, enFazlaKarakter = 60000, ilerle) {
   const lib = await pdrPdfJsYukle();
   const pdf = await lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
@@ -5114,7 +5061,7 @@ function MudahaleKutuphanesiEkrani({ kayitliListesi, records, aktifOgrenci, setA
   function pdfAc(o) {
     const url = MUDAHALE_PDF_MAP[o.programKey];
     if (!url) return;
-    pdrPdfSayfaAc(url, o.sayfa, "");
+    window.open(`https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(url)}#page=${o.sayfa}`, "_blank");
   }
 
   return (
@@ -5760,7 +5707,7 @@ function KazanimlarSekmesi({ kademe }) {
       )}
       {buHafta && buHafta.durum !== "bitti" && (() => {
         const pdfRawUrl = KAZANIM_PDF_MAP[`${sinif}-${cilt}`];
-        const ac = (k) => pdfRawUrl && k.sayfa ? () => pdrPdfSayfaAc(pdfRawUrl, k.sayfa, k.etkinlik) : undefined;
+        const ac = (k) => pdfRawUrl && k.sayfa ? () => window.open(`https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(pdfRawUrl)}#page=${k.sayfa}`, "_blank") : undefined;
         const k = buHafta.simdi, stil = KAZANIM_ALAN_STIL[k.alan] || KAZANIM_ALAN_STIL["Tüm Alanlar"];
         return (
           <div data-testid="srp-bu-hafta" style={{ background: "#F3EEFB", border: "2px solid #6A4C93", borderRadius: 12, padding: "12px 14px", marginBottom: 14 }}>
@@ -5800,7 +5747,7 @@ function KazanimlarSekmesi({ kademe }) {
                   const pdfRawUrl = KAZANIM_PDF_MAP[`${sinif}-${cilt}`];
                   const pdfSayfa = pdfRawUrl ? k.sayfa : null;
                   return (
-                    <div key={i} onClick={pdfSayfa ? () => pdrPdfSayfaAc(pdfRawUrl, pdfSayfa, k.etkinlik) : undefined}
+                    <div key={i} onClick={pdfSayfa ? () => window.open(`https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(pdfRawUrl)}#page=${pdfSayfa}`, "_blank") : undefined}
                       style={{ background: CARD, border: `1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderLeft: stil ? `4px solid ${stil.renk}` : `1px solid ${BORDER}`, borderRadius: 10, padding: "10px 12px", marginBottom: 8, cursor: pdfSayfa ? "pointer" : "default" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 4 }}>
                         <div style={{ fontWeight: 700, fontSize: 13, color: TEXT }}>{buHafta && buHafta.durum === "bu" && buHafta.simdi === k && <span style={{ fontSize: 9, fontWeight: 800, color: "#fff", background: "#6A4C93", borderRadius: 6, padding: "2px 6px", marginRight: 6, verticalAlign: "middle" }}>BU HAFTA</span>}{k.etkinlik}</div>
@@ -42923,7 +42870,7 @@ Kısa ve pratik yaz, Markdown kullanma.`}]
                     const pdfRawUrl = KAZANIM_PDF_MAP[`${e.sinif}-${e.cilt}`];
                     const pdfSayfa = pdfRawUrl ? e.sayfa : null;
                     return (
-                      <div key={i} onClick={pdfSayfa ? () => pdrPdfSayfaAc(pdfRawUrl, pdfSayfa, e.etkinlik) : undefined}
+                      <div key={i} onClick={pdfSayfa ? () => window.open(`https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(pdfRawUrl)}#page=${pdfSayfa}`, "_blank") : undefined}
                         style={{ background:"#fff", borderRadius:8, padding:"9px 11px", cursor:pdfSayfa?"pointer":"default", border:pdfSayfa?`1px solid ${PURPLE}`:"1px solid transparent" }}>
                         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:6 }}>
                           <div style={{ fontSize:12, fontWeight:700, color:TEXT }}>{e.sinif}. Sınıftan: "{e.etkinlik}"</div>
@@ -42980,7 +42927,7 @@ Kısa ve pratik yaz, Markdown kullanma.`}]
                         const pdfRawUrl = KAZANIM_PDF_MAP[`${e.sinif}-${e.cilt}`];
                         const pdfSayfa = pdfRawUrl ? e.sayfa : null;
                         return (
-                          <div key={i} onClick={pdfSayfa ? () => pdrPdfSayfaAc(pdfRawUrl, pdfSayfa, e.etkinlik) : undefined}
+                          <div key={i} onClick={pdfSayfa ? () => window.open(`https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(pdfRawUrl)}#page=${pdfSayfa}`, "_blank") : undefined}
                             style={{ background:BG, borderRadius:8, padding:"7px 10px", cursor:pdfSayfa?"pointer":"default", border:pdfSayfa?`1px solid ${BORDER}`:"none" }}>
                             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:6 }}>
                               <div style={{ fontSize:12, fontWeight:700, color:TEXT }}>{e.etkinlik}</div>
@@ -59469,7 +59416,7 @@ class PdrHataYakalayici extends React.Component {
 const container=document.getElementById("root");
 const root=ReactDOM.createRoot(container);
 window.__pdrAuthReady.then(() => {
-  root.render(React.createElement(PdrHataYakalayici, null, React.createElement(React.Fragment, null, React.createElement(App), React.createElement(PdrPdfGoruntuleyici))));
+  root.render(React.createElement(PdrHataYakalayici, null, React.createElement(App)));
   window.pdrSplashGizle();
 });
 </script>

@@ -8604,7 +8604,7 @@ function LiseTaramaPaneli({ seciliAd, seciliSinif, seciliNumara, liseTaramalar, 
             <LiseDuzeyProfili dersSonuclari={sonuc.dersSonuclari} ogrenciSinif={seciliSinif} />
             <div style={{fontSize:9, color:MUTED, lineHeight:1.6, marginTop:6, textAlign:"center"}}>
               Her set 5 soru · %100=5/5 · %80=4/5 · <b>%60=3/5 (geçme eşiği)</b> · %40=2/5<br/>
-              Mor kesik çizgi: öğrencinin sınıfı · <b>Kalın çerçeve: test sonucuna göre düzeyi</b><br/>Koyu satırlar <b>ortak ders</b> — genel düzey yalnızca onlardan hesaplanır
+              Mor kesik çizgi: öğrencinin şu anki sınıfı · <b>Kalın çerçeve: test sonucuna göre düzeyi</b> (9. sınıfı geçemediyse "9 altı" sütunu)<br/>Koyu satırlar <b>ortak ders</b> — genel düzey yalnızca onlardan hesaplanır
             </div>
           </div>
 
@@ -9146,17 +9146,21 @@ function LiseDuzeyProfili({ dersSonuclari, ogrenciSinif, esik }) {
   const dersler = LISE_DERSLER.filter(d => dersSonuclari[d.key] && !dersSonuclari[d.key].hicUygulanmadi);
   if (dersler.length === 0) return null;
 
-  const G = 320, solStun = 66, sagStun = 46, ustBaslik = 40, satirY = 30;
-  const gw = G - solStun - sagStun;
+  const G = 356, solStun = 66, sagStun = 58, ustBaslik = 40, satirY = 30;
+  const altG = 30;
+  const gw = G - solStun - sagStun - altG;
   const hucreG = gw / LISE_SINIFLAR.length;
   const yukseklik = ustBaslik + dersler.length * satirY + 6;
-  const X = i => solStun + i * hucreG;
+  const X = i => solStun + altG + i * hucreG;
   const cizgiX = sinifDuzeyi ? X(LISE_SINIFLAR.indexOf(sinifDuzeyi)) + hucreG / 2 : null;
 
   return (
     <svg viewBox={`0 0 ${G} ${yukseklik}`} width="100%" height={yukseklik}
          style={{ display: "block", overflow: "visible" }} role="img"
          aria-label="Derslere göre lise düzey profili">
+      <text x={solStun + altG / 2} y={31} textAnchor="middle" fontSize="8.5" fontWeight="700" fill="#7A7A72">9 altı</text>
+      <rect x={G - sagStun + 1} y={21} width={sagStun - 2} height="15" rx="7.5" fill="#1F2421" />
+      <text x={G - sagStun / 2} y={32} textAnchor="middle" fontSize="8.5" fontWeight="800" fill="#fff">test düzeyi</text>
       {LISE_SINIFLAR.map((s, i) => (
         <text key={s} x={X(i) + hucreG / 2} y={31} textAnchor="middle"
               fontSize="9.5" fontWeight="700" fill="#7A7A72">{s}. sınıf</text>
@@ -9186,6 +9190,8 @@ function LiseDuzeyProfili({ dersSonuclari, ogrenciSinif, esik }) {
             </text>
             <text x={6} y={y + 21} fontSize="6.8" fontWeight="800"
                   fill={ortak ? "#3730A3" : "#999"}>{ortak ? "ORTAK" : "ALAN"}</text>
+            <rect x={solStun + 3} y={y + 2} width={altG - 6} height={satirY - 8} rx="4" fill={ds.islevselSinif === null ? "#FDECEA" : "none"} stroke={ds.islevselSinif === null ? "#1F2421" : "#E5E7EB"} strokeWidth={ds.islevselSinif === null ? 2.2 : 1} strokeDasharray={ds.islevselSinif === null ? "0" : "2 2"} />
+            {ds.islevselSinif === null && <text x={solStun + altG / 2} y={y + satirY / 2 + 1} textAnchor="middle" fontSize="9" fontWeight="900" fill="#C0392B">↓</text>}
             {LISE_SINIFLAR.map((s, i) => {
               const sp = ds.sinifPuanlari[s];
               const gecti = sp && sp.yuzde >= gecmeEsigi;
@@ -9204,8 +9210,9 @@ function LiseDuzeyProfili({ dersSonuclari, ogrenciSinif, esik }) {
                 </g>
               );
             })}
-            <text x={G - sagStun + 4} y={y + 15} fontSize="9.5" fontWeight="900"
-                  fill={ds.islevselSinif === null ? "#C0392B" : "#1A8C5B"}>
+            <rect x={G - sagStun + 1} y={y + 3} width={sagStun - 2} height={satirY - 10} rx="6" fill={ds.islevselSinif === null ? "#FDECEA" : "#E6F5EE"} stroke="#1F2421" strokeWidth="1.4" />
+            <text x={G - sagStun / 2} y={y + 15} textAnchor="middle" fontSize="9.5" fontWeight="900"
+                  fill={ds.islevselSinif === null ? "#C0392B" : "#166534"}>
               {ds.islevselSinif === null ? "9 altı" : `${ds.islevselSinif}. sınıf`}
             </text>
           </g>
@@ -49515,17 +49522,21 @@ function AkademikDuzeyProfili({ dersSonuclari, ogrenciSinif, esik }) {
   const dersler = AKADEMIK_DERSLER.filter(d => dersSonuclari[d.key] && !dersSonuclari[d.key].hicUygulanmadi);
   if (dersler.length === 0) return null;
 
-  const G = 320, solStun = 62, sagStun = 46, ustBaslik = 40, satirY = 30;
-  const gw = G - solStun - sagStun;
+  const G = 356, solStun = 62, sagStun = 58, ustBaslik = 40, satirY = 30;
+  const altG = 30;
+  const gw = G - solStun - sagStun - altG;
   const hucreG = gw / AKADEMIK_SINIFLAR.length;
   const yukseklik = ustBaslik + dersler.length * satirY + 6;
-  const X = i => solStun + i * hucreG;
+  const X = i => solStun + altG + i * hucreG;
   const cizgiX = sinifDuzeyi ? X(AKADEMIK_SINIFLAR.indexOf(sinifDuzeyi)) + hucreG / 2 : null;
 
   return (
     <svg viewBox={`0 0 ${G} ${yukseklik}`} width="100%" height={yukseklik}
          style={{ display: "block", overflow: "visible" }} role="img"
          aria-label="Derslere göre akademik düzey profili">
+      <text x={solStun + altG / 2} y={31} textAnchor="middle" fontSize="8.5" fontWeight="700" fill="#7A7A72">5 altı</text>
+      <rect x={G - sagStun + 1} y={21} width={sagStun - 2} height="15" rx="7.5" fill="#1F2421" />
+      <text x={G - sagStun / 2} y={32} textAnchor="middle" fontSize="8.5" fontWeight="800" fill="#fff">test düzeyi</text>
       {AKADEMIK_SINIFLAR.map((s, i) => (
         <text key={s} x={X(i) + hucreG / 2} y={31} textAnchor="middle"
               fontSize="10" fontWeight="700" fill="#7A7A72">{s}. sınıf</text>
@@ -49547,6 +49558,8 @@ function AkademikDuzeyProfili({ dersSonuclari, ogrenciSinif, esik }) {
         return (
           <g key={ders.key}>
             <text x={0} y={y + 15} fontSize="9" fontWeight="700" fill="#1F2421">{akademikDersKisaAd(ders)}</text>
+            <rect x={solStun + 3} y={y + 2} width={altG - 6} height={satirY - 8} rx="4" fill={ds.islevselSeviye === null ? "#FDECEA" : "none"} stroke={ds.islevselSeviye === null ? "#1F2421" : "#E5E7EB"} strokeWidth={ds.islevselSeviye === null ? 2.2 : 1} strokeDasharray={ds.islevselSeviye === null ? "0" : "2 2"} />
+            {ds.islevselSeviye === null && <text x={solStun + altG / 2} y={y + satirY / 2 + 1} textAnchor="middle" fontSize="9" fontWeight="900" fill="#C0392B">↓</text>}
             {AKADEMIK_SINIFLAR.map((s, i) => {
               const kp = ds.kademePuanlari[s];
               const gecti = kp && kp.yuzde >= gecmeEsigi;
@@ -49565,8 +49578,9 @@ function AkademikDuzeyProfili({ dersSonuclari, ogrenciSinif, esik }) {
                 </g>
               );
             })}
-            <text x={G - sagStun + 4} y={y + 15} fontSize="9.5" fontWeight="900"
-                  fill={ds.islevselSeviye === null ? "#C0392B" : "#1A8C5B"}>
+            <rect x={G - sagStun + 1} y={y + 3} width={sagStun - 2} height={satirY - 10} rx="6" fill={ds.islevselSeviye === null ? "#FDECEA" : "#E6F5EE"} stroke="#1F2421" strokeWidth="1.4" />
+            <text x={G - sagStun / 2} y={y + 15} textAnchor="middle" fontSize="9.5" fontWeight="900"
+                  fill={ds.islevselSeviye === null ? "#C0392B" : "#166534"}>
               {ds.islevselSeviye === null ? "5 altı" : `${ds.islevselSeviye}. sınıf`}
             </text>
           </g>
@@ -49838,7 +49852,7 @@ function AkademikTaramaPaneli({ seciliAd, seciliSinif, seciliNumara, akademikTar
             <AkademikDuzeyProfili dersSonuclari={sonuc} ogrenciSinif={seciliSinif} />
             <div style={{fontSize:9, color:MUTED, lineHeight:1.6, marginTop:6, textAlign:"center"}}>
               Her set 5 soru · %100=5/5 · %80=4/5 · <b>%60=3/5 (geçme eşiği)</b> · %40=2/5<br/>
-              Mor kesik çizgi: öğrencinin sınıfı · <b>Kalın çerçeve: test sonucuna göre düzeyi</b> · Yeşil: eşiği geçti · Kırmızı: takıldığı set · Gri kesik kutu: uygulanmadı
+              Mor kesik çizgi: öğrencinin şu anki sınıfı · <b>Kalın çerçeve: test sonucuna göre düzeyi</b> (5. sınıfı geçemediyse "5 altı" sütunu) · Yeşil: eşiği geçti · Kırmızı: takıldığı set · Gri kesik kutu: uygulanmadı
             </div>
           </div>
           <div style={{display:"flex", flexDirection:"column", gap:10}}>

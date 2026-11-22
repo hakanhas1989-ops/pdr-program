@@ -5621,6 +5621,33 @@ function DevamsizlikEkrani({ ogrenciler, setOgrenciler, kademe, aktifYil, setTab
   );
 }
 
+// ── Sınıf rehberlik planı: "bu hafta hangi etkinlik" tahmini ──
+// Plan tarihleri "14-18 Eylül" / "28 Eylül-2 Ekim" biçimindedir; Eylül–Aralık
+// eğitim yılının başladığı yıla, Ocak–Ağustos sonraki yıla aittir.
+const SRP_AYLAR = ["ocak","şubat","mart","nisan","mayıs","haziran","temmuz","ağustos","eylül","ekim","kasım","aralık"];
+function srpTarihAraligi(tarih, bugun) {
+  const m = String(tarih || "").toLocaleLowerCase("tr").match(/^(\d{1,2})(?:\s+([a-zçğıöşü]+))?\s*-\s*(\d{1,2})\s+([a-zçğıöşü]+)/);
+  if (!m) return null;
+  const b = bugun || new Date(), basYil = b.getMonth() >= 7 ? b.getFullYear() : b.getFullYear() - 1;
+  const ay2 = SRP_AYLAR.indexOf(m[4]), ay1 = m[2] ? SRP_AYLAR.indexOf(m[2]) : ay2;
+  if (ay1 < 0 || ay2 < 0) return null;
+  const yil = a => a >= 7 ? basYil : basYil + 1;
+  const bas = new Date(yil(ay1), ay1, +m[1]), bit = new Date(yil(ay2), ay2, +m[3], 23, 59);
+  return [bas, bit];
+}
+// Bugüne denk gelen etkinlik; yoksa (tatil/hafta sonu) sıradaki. { simdi, siradaki, durum }
+function srpBuHafta(veri, bugun) {
+  const b = bugun || new Date();
+  const l = (veri || []).map((k, i) => ({ k, i, r: srpTarihAraligi(k.tarih, b) })).filter(x => x.r).sort((x, y) => x.r[0] - y.r[0]);
+  if (!l.length) return null;
+  const pzt = new Date(b); pzt.setHours(0, 0, 0, 0); pzt.setDate(pzt.getDate() - ((pzt.getDay() + 6) % 7));
+  const paz = new Date(pzt); paz.setDate(paz.getDate() + 6); paz.setHours(23, 59);
+  let idx = l.findIndex(x => x.r[0] <= paz && x.r[1] >= pzt);
+  let durum = "bu";
+  if (idx < 0) { idx = l.findIndex(x => x.r[0] > paz); durum = idx < 0 ? "bitti" : "sonraki"; }
+  if (idx < 0) return { simdi: l[l.length - 1].k, siradaki: null, durum };
+  return { simdi: l[idx].k, siradaki: l[idx + 1] ? l[idx + 1].k : null, durum };
+}
 function KazanimlarSekmesi({ kademe }) {
   const aktifKademe = KADEME_SINIF_LISTESI[kademe] ? kademe : "ortaokul";
   const sinifListesi = KADEME_SINIF_LISTESI[aktifKademe];
@@ -5647,13 +5674,14 @@ function KazanimlarSekmesi({ kademe }) {
             <button key={s} onClick={() => { setSinif(s); setAcikAylar({}); }} style={{
               padding: "20px 0", background: CARD, border: `1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius: 12,
               fontSize: 20, fontWeight: 800, color: ACCENT, cursor: "pointer"
-            }}>{s}. Sınıf</button>
+            }}>{s}. Sınıf{(() => { const bh = srpBuHafta(kazanimVeriKaynagi(aktifKademe, cilt, s)); return bh && bh.durum !== "bitti" ? <div style={{ fontSize: 11, fontWeight: 600, color: MUTED, marginTop: 6, padding: "0 8px", lineHeight: 1.35 }}>{bh.durum === "bu" ? "Bu hafta" : "Sıradaki"}: <b style={{ color: TEXT }}>{bh.simdi.etkinlik}</b></div> : null; })()}</button>
           ))}
         </div>
       </div>
     );
   }
   const veri = kazanimVeriKaynagi(aktifKademe, cilt, sinif) || [];
+  const buHafta = srpBuHafta(veri);
   const aylar = [];
   veri.forEach(k => { if (!aylar.includes(k.ay)) aylar.push(k.ay); });
 
@@ -5677,6 +5705,26 @@ function KazanimlarSekmesi({ kademe }) {
           ))}
         </div>
       )}
+      {buHafta && buHafta.durum !== "bitti" && (() => {
+        const pdfRawUrl = KAZANIM_PDF_MAP[`${sinif}-${cilt}`];
+        const ac = (k) => pdfRawUrl && k.sayfa ? () => window.open(`https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(pdfRawUrl)}#page=${k.sayfa}`, "_blank") : undefined;
+        const k = buHafta.simdi, stil = KAZANIM_ALAN_STIL[k.alan] || KAZANIM_ALAN_STIL["Tüm Alanlar"];
+        return (
+          <div data-testid="srp-bu-hafta" style={{ background: "#F3EEFB", border: "2px solid #6A4C93", borderRadius: 12, padding: "12px 14px", marginBottom: 14 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: "#6A4C93", letterSpacing: 0.4 }}>📍 {buHafta.durum === "bu" ? "BU HAFTA (TAHMİNİ)" : "SIRADAKİ ETKİNLİK (TAHMİNİ)"} · {k.tarih}</div>
+            <div onClick={ac(k)} style={{ cursor: ac(k) ? "pointer" : "default", marginTop: 6 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                <div style={{ fontSize: 15, fontWeight: 800, color: TEXT }}>{k.etkinlik}</div>
+                {stil && <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 800, color: stil.renk, background: stil.bg, borderRadius: 6, padding: "2px 6px", alignSelf: "flex-start" }}>{stil.kisaltma}</span>}
+              </div>
+              <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.5, marginTop: 3 }}>{k.kazanim}</div>
+              {ac(k) && <div style={{ marginTop: 6, fontSize: 11, color: "#6A4C93", fontWeight: 700 }}>📄 Etkinliği Aç (sayfa {k.sayfa}) →</div>}
+            </div>
+            {buHafta.siradaki && <div onClick={ac(buHafta.siradaki)} style={{ marginTop: 8, paddingTop: 8, borderTop: "1px dashed #C4B5E0", fontSize: 11.5, color: MUTED, cursor: ac(buHafta.siradaki) ? "pointer" : "default" }}>Sonraki hafta: <b style={{ color: TEXT }}>{buHafta.siradaki.etkinlik}</b> · {buHafta.siradaki.tarih}</div>}
+            <div style={{ marginTop: 6, fontSize: 10, color: MUTED }}>Yıllık plandaki tarihlere göre tahmindir; okulunuzda öne ya da geride olabilir.</div>
+          </div>
+        );
+      })()}
       {veri.length === 0 && (
         <div style={{ fontSize: 13, color: MUTED, padding: "20px 0", textAlign: "center" }}>Bu kademe/cilt için henüz veri eklenmedi.</div>
       )}
@@ -5702,7 +5750,7 @@ function KazanimlarSekmesi({ kademe }) {
                     <div key={i} onClick={pdfSayfa ? () => window.open(`https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(pdfRawUrl)}#page=${pdfSayfa}`, "_blank") : undefined}
                       style={{ background: CARD, border: `1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderLeft: stil ? `4px solid ${stil.renk}` : `1px solid ${BORDER}`, borderRadius: 10, padding: "10px 12px", marginBottom: 8, cursor: pdfSayfa ? "pointer" : "default" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 4 }}>
-                        <div style={{ fontWeight: 700, fontSize: 13, color: TEXT }}>{k.etkinlik}</div>
+                        <div style={{ fontWeight: 700, fontSize: 13, color: TEXT }}>{buHafta && buHafta.durum === "bu" && buHafta.simdi === k && <span style={{ fontSize: 9, fontWeight: 800, color: "#fff", background: "#6A4C93", borderRadius: 6, padding: "2px 6px", marginRight: 6, verticalAlign: "middle" }}>BU HAFTA</span>}{k.etkinlik}</div>
                         {stil && <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 800, color: stil.renk, background: stil.bg, borderRadius: 6, padding: "2px 6px" }}>{stil.kisaltma}</span>}
                       </div>
                       <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.5, marginBottom: 4 }}>{k.kazanim}</div>

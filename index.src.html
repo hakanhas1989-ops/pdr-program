@@ -5840,6 +5840,38 @@ const SINAV_KAYGISI_BELIRTILER = {
   duygusal: { label: "💭 Duygusal Belirtiler", maddeler: ["Huzursuzluk, endişe","Kendine güvensizlik, yetersizlik hissi","Karamsarlık","Hata yapma korkusu","Kendini sürekli eleştirme","Aşırı heyecan, panik hali","Sinirlilik, tahammülsüzlük","Üzüntü, isteksizlik","Başarısızlık korkusu"] },
 };
 
+// ── Boş form yazdırma (genel) — çıktı alıp elle doldurmak için A4 form ──
+// gruplar: [{ baslik, maddeler:[metin] }], secenekler: ["Hiç", ...] (işaretleme sütunları) | null,
+// tip: "likert" (seçenek sütunları) | "isaret" (tek kutu, iki sütun) | "tamamla" (cümle + yazma satırı)
+function pdrBosFormHtml({ baslik, yonerge, bilgi, gruplar, secenekler, tip = "likert", ad, sinif, altNot }) {
+  const e = (t) => String(t == null ? "" : t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const temiz = (t) => String(t || "").replace(/^[^A-Za-z0-9ÇĞİÖŞÜçğıöşü(]+/, "").trim();
+  const alanlar = (bilgi || ["Adı Soyadı", "Sınıfı", "Tarih"]).map((b, i) => { const deger = i === 0 ? ad : (/sınıf/i.test(b) ? sinif : ""); return `<div style="flex:${i === 0 ? 1.4 : 1}">${e(b)}: <b>${e(deger || "")}</b></div>`; }).join("");
+  let no = 0, govde = "";
+  if (tip === "likert") {
+    govde = gruplar.map(g => `${g.baslik ? `<h2>${e(temiz(g.baslik))}</h2>` : ""}<table><tr><th class="no">No</th><th style="text-align:left">Madde</th>${secenekler.map(x => `<th class="k">${e(x)}</th>`).join("")}</tr>${g.maddeler.map(m => `<tr><td class="no">${++no}</td><td>${e(m)}</td>${secenekler.map(() => `<td class="k"><span class="kutu"></span></td>`).join("")}</tr>`).join("")}</table>`).join("");
+  } else if (tip === "isaret") {
+    govde = gruplar.map(g => `${g.baslik ? `<h2>${e(temiz(g.baslik))}</h2>` : ""}<div class="iki">${g.maddeler.map(m => `<div class="im"><span class="kutu"></span><b>${++no}.</b> ${e(m)}</div>`).join("")}</div>`).join("");
+  } else {
+    govde = gruplar.map(g => `${g.baslik ? `<h2>${e(temiz(g.baslik))}</h2>` : ""}${g.maddeler.map(m => `<div class="tm"><b>${++no}.</b> ${e(String(m).replace(/[.…]+\s*$/, ""))} <span class="cz"></span></div>`).join("")}`).join("");
+  }
+  return `<!DOCTYPE html><html lang="tr"><head><meta charset="utf-8"><title>${e(baslik)}</title><style>
+@page{size:A4;margin:11mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#1C2B24;margin:0;padding:6px;font-size:11px;line-height:1.35}
+h1{font-size:16px;margin:0 0 6px;text-align:center}h2{font-size:12px;margin:10px 0 4px;break-after:avoid}
+.bilgi{display:flex;gap:12px;margin:4px 0 8px}.bilgi div{border-bottom:1px solid #555;padding-bottom:2px}
+.yon{font-size:10.5px;color:#333;margin-bottom:6px;border:1px solid #CBD5CF;border-radius:6px;padding:5px 7px;background:#F6F9F7}
+table{width:100%;border-collapse:collapse;margin-bottom:4px}th,td{border:1px solid #999;padding:3px 5px;vertical-align:middle}tr{break-inside:avoid}
+th{background:#EEF2EE;font-size:9.5px}td.no,th.no{width:24px;text-align:center}td.k,th.k{width:52px;text-align:center}
+.kutu{display:inline-block;width:11px;height:11px;border:1.5px solid #333;border-radius:2px;vertical-align:middle;margin-right:5px;flex:none}
+.iki{columns:2;column-gap:16px}.im{break-inside:avoid;padding:2px 0;font-size:10.5px;display:flex;gap:2px;align-items:flex-start}.im .kutu{margin-top:1px}
+.tm{break-inside:avoid;padding:6px 0 2px;font-size:11.5px;display:flex;gap:4px;align-items:flex-end}.tm .cz{flex:1;border-bottom:1px dotted #555;min-height:14px;margin-left:4px}
+.alt{margin-top:8px;font-size:9.5px;color:#555}</style></head><body>
+<h1>${e(baslik)}</h1><div class="bilgi">${alanlar}</div>${yonerge ? `<div class="yon">${e(yonerge)}</div>` : ""}${govde}
+${altNot ? `<div class="alt">${e(altNot)}</div>` : ""}<div class="alt">Rehberlik Servisi</div></body></html>`;
+}
+function PdrBosFormDugme({ olustur, ad, testid }) {
+  return <button data-testid={testid} onClick={() => ootBelgeAc(olustur(), ad)} style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${ACCENT}`, background: "#fff", color: ACCENT, fontSize: 11.5, fontWeight: 700, cursor: "pointer", marginBottom: 10 }}>🖨️ Boş form yazdır</button>;
+}
 // Sınav Kaygısı — çıktı alıp elle doldurulacak boş form (A4, tek sayfa)
 function sinavKaygiBosFormHtml(ad, sinif) {
   const e = (t) => String(t == null ? "" : t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -6540,6 +6572,7 @@ function BenlikOlcegiPaneli({ seciliAd, seciliSinif, seciliNumara, kademe,
           <b>Nasıl uygulanır:</b> Maddeleri öğrenciye oku ya da ekranı çevirip kendisi işaretlesin. Doğru/yanlış cevap olmadığını, not verilmeyeceğini söyle. Her derste aynı 6 madde sorulur — bu bilinçlidir, dersler arası karşılaştırmanın geçerli olması için maddelerin eşdeğer olması gerekir.
         </div>
       </div>
+      <PdrBosFormDugme testid="benlik-bos-form" ad="Akademik Benlik Formu" olustur={() => pdrBosFormHtml({ baslik: "Derslerde Kendimi Nasıl Görüyorum?", ad: seciliAd, sinif: seciliSinif, yonerge: "Her cümleyi oku ve sana ne kadar uyduğunu düşünerek bir kutuyu işaretle. Doğru ya da yanlış cevap yoktur, not verilmeyecek. Kendin için en doğru olanı işaretle.", gruplar: [{ baslik: "Genel", maddeler: BENLIK_GENEL_MADDELER.map(m => m.metin) }, ...dersler.map(d => ({ baslik: d.ad, maddeler: BENLIK_DERS_KOKLERI.map(k => k.metin.replace("{DERS}", d.maddeAd)) }))], secenekler: BENLIK_LIKERT.map(x => x.etiket) })} />
 
       {!sonuc.hicCevaplanmadi && (
         <div style={{background:"#fff", border:`1px solid ${BORDER}`, borderRadius:12, padding:14, marginBottom:16}}>
@@ -36724,6 +36757,7 @@ KURALLAR:
                 const liseOnerisi = mesleklEgilimLiseOnerisiHesapla(mesleklEgilimSonucHesapla(isaretli));
                 return (
                   <>
+                    <PdrBosFormDugme testid="mesleki-bos-form" ad="Mesleki Egilim Formu" olustur={() => pdrBosFormHtml({ baslik: "Mesleki Eğilim Belirleme Formu", tip: "isaret", ad: seciliAd, sinif: seciliSinif, yonerge: "Aşağıdaki etkinlikleri oku. Yapmaktan hoşlanacağını düşündüğün her etkinliğin başındaki kutuyu işaretle. İstediğin kadar madde işaretleyebilirsin; hoşlanmayacaklarını boş bırak.", gruplar: [{ maddeler: MESLEKI_EGILIM_MADDELERI }] })} />
                     <label style={{ display:"block", width:"100%", padding:14, background:"#fff", border:`2px dashed ${PURPLE}`, borderRadius:12, textAlign:"center", color:PURPLE, fontWeight:700, cursor:"pointer", marginBottom:12, boxSizing:"border-box" }}>
                       {mesEgilimYukleniyor ? "⏳ Cevap kağıdı okunuyor…" : "📄 İşaretli Cevap Kağıdını Yükle (PDF ya da Fotoğraf)"}
                       <input type="file" accept="application/pdf,image/*" onChange={e=>handleMesEgilimPdfSec(e.target.files?.[0])} style={{ display:"none" }} disabled={mesEgilimYukleniyor} />
@@ -36781,6 +36815,7 @@ KURALLAR:
                 const puanRenk = { "+": "#1A8C5B", "-": "#C0392B", "0": MUTED };
                 return (
                   <>
+                    <PdrBosFormDugme testid="beier-bos-form" ad="Cumle Tamamlama Formu" olustur={() => pdrBosFormHtml({ baslik: "Cümle Tamamlama Formu", tip: "tamamla", ad: seciliAd, sinif: seciliSinif, yonerge: "Aşağıda yarım bırakılmış cümleler var. Her cümleyi aklına ilk gelen düşünceyle tamamla. Doğru ya da yanlış cevap yoktur; çok düşünmeden, içinden geldiği gibi yaz.", gruplar: [{ maddeler: BEIER_FORM_A_MADDELER }] })} />
                     <label style={{ display:"block", width:"100%", padding:14, background:"#fff", border:`2px dashed ${PURPLE}`, borderRadius:12, textAlign:"center", color:PURPLE, fontWeight:700, cursor:"pointer", marginBottom:12, boxSizing:"border-box" }}>
                       {beierYukleniyor ? "⏳ Cevap kağıdı okunuyor…" : "📄 Doldurulmuş Kağıdı Yükle (PDF ya da Fotoğraf)"}
                       <input type="file" accept="application/pdf,image/*" onChange={e=>handleBeierPdfSec(e.target.files?.[0])} style={{ display:"none" }} disabled={beierYukleniyor} />
@@ -36882,6 +36917,7 @@ KURALLAR:
                 const altOlcekBul = (no) => SCAS_ALT_OLCEKLER.find(a => a.maddeler.includes(no));
                 return (
                   <>
+                    <PdrBosFormDugme testid="scas-bos-form" ad="Cocuk Kaygi Olcegi Formu" olustur={() => pdrBosFormHtml({ baslik: "Çocuklar İçin Kaygı Ölçeği", ad: seciliAd, sinif: seciliSinif, yonerge: "Aşağıda çocukların yaşayabileceği bazı durumlar yazılı. Her cümleyi oku ve bunun sana ne sıklıkla olduğunu gösteren kutuyu işaretle. Doğru ya da yanlış cevap yoktur.", gruplar: [{ maddeler: SCAS_MADDELER }], secenekler: ["Hiç", "Bazen", "Sık Sık", "Her Zaman"] })} />
                     <label style={{ display:"block", width:"100%", padding:14, background:"#fff", border:`2px dashed ${PURPLE}`, borderRadius:12, textAlign:"center", color:PURPLE, fontWeight:700, cursor:"pointer", marginBottom:12, boxSizing:"border-box" }}>
                       {scasYukleniyor ? "⏳ Form okunuyor…" : "📄 Doldurulmuş Formu Yükle (PDF ya da Fotoğraf)"}
                       <input type="file" accept="application/pdf,image/*" onChange={e=>handleScasPdfSec(e.target.files?.[0])} style={{ display:"none" }} disabled={scasYukleniyor} />
@@ -49010,6 +49046,7 @@ function OOGPaneli({ seciliAd, seciliSinif, seciliNumara, oogDegerlendirmeler, s
       <div style={{background:"#EEF2FF", border:`1px solid #c7ccf5`, borderRadius:10, padding:"10px 12px", marginBottom:14, fontSize:11, color:"#3B4FD8", lineHeight:1.6}}>
         🧩 Bu bir <b>tarama aracıdır, tanı koymaz</b>. Öğrenciyi gözlemleyerek her maddeyi işaretle. Şüphe düzeyi yüksek çıkarsa RAM/uzman yönlendirmesi önerilir.
       </div>
+      <PdrBosFormDugme testid="oog-bos-form" ad="OOG On Tarama Formu" olustur={() => pdrBosFormHtml({ baslik: "Özel Öğrenme Güçlüğü Ön-Tarama Gözlem Formu", bilgi: ["Öğrencinin Adı Soyadı", "Sınıfı", "Dolduran", "Tarih"], ad: seciliAd, sinif: seciliSinif, yonerge: "Öğrenciyi sınıf içinde gözlemleyerek her davranışın ne sıklıkla görüldüğünü işaretleyiniz. Gözlem fırsatı olmadıysa 'Gözlenemedi' kutusunu işaretleyiniz. Bu form bir tarama aracıdır, tanı koymaz.", gruplar: OOG_KATEGORILER.map(k => ({ baslik: k.label, maddeler: k.sorular })), secenekler: [...OOG_SECENEKLER.map(x => x.label), "Gözlenemedi"] })} />
 
       {sonuc.tamamlananSoru > 0 && (
         <div style={{background:sonuc.seviye.bg, border:`1px solid ${sonuc.seviye.color}33`, borderRadius:12, padding:14, marginBottom:16, textAlign:"center"}}>
@@ -49129,6 +49166,7 @@ function CASTPaneli({ seciliAd, seciliSinif, seciliNumara, castDegerlendirmeler,
       <div style={{background:"#E7F5F6", border:`1px solid #a9d4d8`, borderRadius:10, padding:"10px 12px", marginBottom:14, fontSize:11, color:"#2A6F77", lineHeight:1.6}}>
         🔬 Bu ölçek, uluslararası kullanılan <b>CAST (Childhood Autism Spectrum Test)</b> ölçeğinin yapısından esinlenerek hazırlanmış <b>özgün bir tarama aracıdır, tanı koymaz</b>. Her maddeyi öğrenciyi gözlemleyerek Evet/Hayır olarak işaretle. Şüphe düzeyi yüksek çıkarsa RAM/uzman (çocuk psikiyatristi) yönlendirmesi önerilir.
       </div>
+      <PdrBosFormDugme testid="cast-bos-form" ad="Sosyal Iletisim Tarama Formu" olustur={() => pdrBosFormHtml({ baslik: "Sosyal İletişim Gelişimi Tarama Formu", bilgi: ["Öğrencinin Adı Soyadı", "Sınıfı", "Dolduran", "Tarih"], ad: seciliAd, sinif: seciliSinif, yonerge: "Her ifadeyi öğrenciyi düşünerek okuyunuz ve uygun kutuyu işaretleyiniz. Emin değilseniz ya da gözlem fırsatı olmadıysa 'Gözlenemedi' kutusunu işaretleyiniz. Bu form bir tarama aracıdır, tanı koymaz.", gruplar: [...CAST_KATEGORILER, CAST_EK_KATEGORI].map(k => ({ baslik: k.label, maddeler: k.sorular })), secenekler: [...CAST_SECENEKLER.map(x => x.label), "Gözlenemedi"] })} />
 
       {sonuc.cevaplananSoru > 0 && (
         <div style={{background:sonuc.seviye.bg, border:`1px solid ${sonuc.seviye.color}33`, borderRadius:12, padding:14, marginBottom:16, textAlign:"center"}}>
@@ -49277,6 +49315,7 @@ function PASPaneli({ seciliAd, seciliSinif, seciliNumara, pasDegerlendirmeler, s
       <div style={{background:"#EAF0F7", border:`1px solid #b7c6dc`, borderRadius:10, padding:"10px 12px", marginBottom:14, fontSize:11, color:"#3D5A80", lineHeight:1.6}}>
         🧠 Bu ölçek, uluslararası kullanılan <b>CAS (Cognitive Assessment System)</b> ölçeğinin dayandığı PASS kuramının 4 süreç alanından (Planlama, Dikkat, Eşzamanlı İşlemleme, Ardışık İşlemleme) esinlenerek hazırlanmış <b>özgün bir gözlem/tarama aracıdır; tanı koymaz, IQ ölçmez</b>. Öğrenciyi gözlemleyerek her maddeyi işaretle.
       </div>
+      <PdrBosFormDugme testid="pas-bos-form" ad="Bilissel Surecler Gozlem Formu" olustur={() => pdrBosFormHtml({ baslik: "Bilişsel Süreçler (PASS) Gözlem Formu", bilgi: ["Öğrencinin Adı Soyadı", "Sınıfı", "Dolduran", "Tarih"], ad: seciliAd, sinif: seciliSinif, yonerge: "Öğrencinin sınıf ve görüşme ortamındaki davranışlarını düşünerek her maddenin ne sıklıkla görüldüğünü işaretleyiniz. Gözlem fırsatı olmadıysa 'Gözlenemedi' kutusunu işaretleyiniz. Tanı amaçlı değildir.", gruplar: PAS_KATEGORILER.map(k => ({ baslik: k.label, maddeler: k.sorular })), secenekler: [...PAS_SECENEKLER.map(x => x.label), "Gözlenemedi"] })} />
 
       {sonuc.tamamlananSoru > 0 && (
         <div style={{background:sonuc.seviye.bg, border:`1px solid ${sonuc.seviye.color}33`, borderRadius:12, padding:14, marginBottom:16, textAlign:"center"}}>

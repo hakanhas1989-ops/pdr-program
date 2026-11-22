@@ -37048,6 +37048,44 @@ KURALLAR:
 
           </div>
           <div className="pgt-sag">
+          {/* Tarama sonuçları (ayrı kaydedilen ölçekler) — Akademik Düzey vb. */}
+          {(() => {
+            const bul = (l) => (l || []).find(o => pdrAyniOgrenci(o.studentName, o.className, seciliAd, seciliSinif, o.numara, seciliNumara));
+            const akad = bul(akademikTaramalar);
+            const akadOzet = akad ? (() => { const r = akad.sonuc || akademikTaramaSonucHesapla(akad.cevaplar || {}); return AKADEMIK_DERSLER.map(d => { const x = r[d.key]; if (!x || x.hicUygulanmadi) return null; return { ad: d.kisa.replace(/^[^A-Za-zÇĞİÖŞÜçğıöşü]+/, ""), duzey: x.islevselSeviye === null ? "5 altı" : x.islevselSeviye === 8 ? "8. sınıf ✓" : `${x.islevselSeviye}. sınıf`, zayif: x.islevselSeviye === null }; }).filter(Boolean); })() : [];
+            const liste = [
+              ["akademik", "📚 Akademik Düzey Taraması", akad],
+              ["ilkokul", "🎒 İlkokul Düzey Taraması", bul(ilkokulTaramalar)],
+              ["lise", "🏫 Lise Düzey Taraması", bul(liseTaramalar)],
+              ["benlik", "🪞 Akademik Benlik Ölçeği", bul(benlikOlcekleri)],
+              ["oog", "🧩 ÖÖG Ön-Tarama", bul(oogDegerlendirmeler)],
+              ["cast", "🔬 Sosyal İletişim Taraması", bul(castDegerlendirmeler)],
+              ["pas", "🧠 Bilişsel Süreçler Taraması", bul(pasDegerlendirmeler)],
+              ["bilpro", "🧠 BİLPRO", bul(bilproDegerlendirmeler)],
+            ].filter(x => x[2]);
+            if (!liste.length) return null;
+            return (
+              <div data-testid="tarama-sonuclari" style={{ marginBottom: 12 }}>
+                <label style={{ ...lbl, marginBottom: 8 }}>TARAMA SONUÇLARI ({liste.length})</label>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {liste.map(([k, ad, r]) => (
+                    <button key={k} data-tarama={k} onClick={() => { setSeciliTest && setSeciliTest(null); setKategori(k); try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) {} }} style={{ textAlign: "left", background: CARD, border: `1px solid ${BORDER}`, boxShadow: "0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius: 10, padding: "10px 12px", cursor: "pointer", font: "inherit" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: TEXT }}>{ad}</span>
+                        <span style={{ fontSize: 11, color: MUTED, whiteSpace: "nowrap" }}>{r.date || r.tarih || ""}</span>
+                      </div>
+                      {k === "akademik" && akadOzet.length > 0 && (
+                        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 6 }}>
+                          {akadOzet.map(o => <span key={o.ad} style={{ fontSize: 11, padding: "2px 7px", borderRadius: 999, background: o.zayif ? "#FDECEA" : "#E6F5EE", color: o.zayif ? "#B91C1C" : "#166534", fontWeight: 700 }}>{o.ad}: {o.duzey}</span>)}
+                        </div>
+                      )}
+                      <div style={{ fontSize: 10.5, color: ACCENT, marginTop: 4 }}>Ayrıntı için dokun →</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
           {/* Geçmiş kayıtlar */}
           <TestZamanCizelgesi kayitlar={kayitlar} />
           <div>

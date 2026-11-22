@@ -8604,7 +8604,7 @@ function LiseTaramaPaneli({ seciliAd, seciliSinif, seciliNumara, liseTaramalar, 
             <LiseDuzeyProfili dersSonuclari={sonuc.dersSonuclari} ogrenciSinif={seciliSinif} />
             <div style={{fontSize:9, color:MUTED, lineHeight:1.6, marginTop:6, textAlign:"center"}}>
               Her set 5 soru · %100=5/5 · %80=4/5 · <b>%60=3/5 (geçme eşiği)</b> · %40=2/5<br/>
-              Koyu satırlar <b>ortak ders</b> — genel düzey yalnızca onlardan hesaplanır · Sağdaki: işlevsel düzey
+              Mor kesik çizgi: öğrencinin sınıfı · <b>Kalın çerçeve: test sonucuna göre düzeyi</b><br/>Koyu satırlar <b>ortak ders</b> — genel düzey yalnızca onlardan hesaplanır
             </div>
           </div>
 
@@ -9110,9 +9110,9 @@ function IlkokulDuzeyEgrisi({ sonuc, ogrenciSinif, esik }) {
         <g>
           <line x1={cizgiX} y1={20} x2={cizgiX} y2={Y - alt + 4}
                 stroke="#6A4C93" strokeWidth="1.6" strokeDasharray="4 3" />
-          <rect x={Math.max(0, Math.min(G - 54, cizgiX - 27))} y={0} width="54" height="15" rx="7.5" fill="#6A4C93" />
-          <text x={Math.max(27, Math.min(G - 27, cizgiX))} y={11} textAnchor="middle"
-                fontSize="9" fontWeight="800" fill="#fff">buradasın</text>
+          <rect x={Math.max(0, Math.min(G - 72, cizgiX - 36))} y={0} width="72" height="15" rx="7.5" fill="#6A4C93" />
+          <text x={Math.max(36, Math.min(G - 36, cizgiX))} y={11} textAnchor="middle"
+                fontSize="9" fontWeight="800" fill="#fff">şu anki sınıfı</text>
         </g>
       )}
 
@@ -9165,9 +9165,9 @@ function LiseDuzeyProfili({ dersSonuclari, ogrenciSinif, esik }) {
         <g>
           <line x1={cizgiX} y1={34} x2={cizgiX} y2={yukseklik - 2}
                 stroke="#6A4C93" strokeWidth="1.6" strokeDasharray="4 3" />
-          <rect x={cizgiX - 27} y={2} width="54" height="15" rx="7.5" fill="#6A4C93" />
+          <rect x={cizgiX - 36} y={2} width="72" height="15" rx="7.5" fill="#6A4C93" />
           <text x={cizgiX} y={13} textAnchor="middle" fontSize="9"
-                fontWeight="800" fill="#fff">buradasın</text>
+                fontWeight="800" fill="#fff">şu anki sınıfı</text>
         </g>
       )}
       {dersler.map((ders, r) => {
@@ -9200,6 +9200,7 @@ function LiseDuzeyProfili({ dersSonuclari, ogrenciSinif, esik }) {
                         fill={!sp ? "#BBB" : gecti ? "#fff" : "#C0392B"}>
                     {sp ? `%${sp.yuzde}` : "–"}
                   </text>
+                  {ds.islevselSinif === s && <rect x={X(i)} y={y} width={hucreG} height={satirY - 4} rx="5" fill="none" stroke="#1F2421" strokeWidth="2.2" />}
                 </g>
               );
             })}
@@ -9341,7 +9342,7 @@ function IlkokulTaramaPaneli({ seciliAd, seciliSinif, seciliNumara, ilkokulTaram
               })}
             </div>
             <div style={{fontSize:9, color:MUTED, textAlign:"center", marginTop:5, lineHeight:1.6}}>
-              Mor kesik çizgi öğrencinin bulunduğu sınıf · Yeşil nokta eşiği geçti · Kırmızı nokta geçemedi
+              Mor kesik çizgi: öğrencinin sınıfı · Yeşil nokta eşiği geçti · Kırmızı nokta geçemedi
             </div>
           </div>
 
@@ -49534,9 +49535,9 @@ function AkademikDuzeyProfili({ dersSonuclari, ogrenciSinif, esik }) {
         <g>
           <line x1={cizgiX} y1={34} x2={cizgiX} y2={yukseklik - 2}
                 stroke="#6A4C93" strokeWidth="1.6" strokeDasharray="4 3" />
-          <rect x={cizgiX - 27} y={2} width="54" height="15" rx="7.5" fill="#6A4C93" />
+          <rect x={cizgiX - 36} y={2} width="72" height="15" rx="7.5" fill="#6A4C93" />
           <text x={cizgiX} y={13} textAnchor="middle" fontSize="9"
-                fontWeight="800" fill="#fff">buradasın</text>
+                fontWeight="800" fill="#fff">şu anki sınıfı</text>
         </g>
       )}
 
@@ -49560,6 +49561,7 @@ function AkademikDuzeyProfili({ dersSonuclari, ogrenciSinif, esik }) {
                         fill={!kp ? "#BBB" : gecti ? "#fff" : "#C0392B"}>
                     {kp ? `%${kp.yuzde}` : "–"}
                   </text>
+                  {ds.islevselSeviye === s && <rect x={X(i)} y={y} width={hucreG} height={satirY - 4} rx="5" fill="none" stroke="#1F2421" strokeWidth="2.2" />}
                 </g>
               );
             })}
@@ -49836,7 +49838,7 @@ function AkademikTaramaPaneli({ seciliAd, seciliSinif, seciliNumara, akademikTar
             <AkademikDuzeyProfili dersSonuclari={sonuc} ogrenciSinif={seciliSinif} />
             <div style={{fontSize:9, color:MUTED, lineHeight:1.6, marginTop:6, textAlign:"center"}}>
               Her set 5 soru · %100=5/5 · %80=4/5 · <b>%60=3/5 (geçme eşiği)</b> · %40=2/5<br/>
-              Yeşil: eşiği geçti · Kırmızı: takıldığı set · Kesik: uygulanmadı · Sağdaki: işlevsel düzey
+              Mor kesik çizgi: öğrencinin sınıfı · <b>Kalın çerçeve: test sonucuna göre düzeyi</b> · Yeşil: eşiği geçti · Kırmızı: takıldığı set · Gri kesik kutu: uygulanmadı
             </div>
           </div>
           <div style={{display:"flex", flexDirection:"column", gap:10}}>

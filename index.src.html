@@ -5046,7 +5046,7 @@ function MudahaleKutuphanesiEkrani({ kayitliListesi, records, aktifOgrenci, setA
   }
 
   return (
-    <div style={{ padding: 16, maxWidth: 640 }}>
+    <div style={{ padding: 16, maxWidth: 1280, margin: "0 auto" }}>
       <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 4, color:PURPLE }}>📁 Müdahale Programları</div>
       <div style={{ fontSize: 12, color: MUTED, marginBottom: 16, lineHeight: 1.5 }}>
         {MUDAHALE_PROGRAMLARI.length} kaynak programdan (Akademik Beceriler, Akran Zorbalığı Yapan/Maruz Kalan, Sosyal Duygusal Beceriler — Farkındalık/Psikoeğitim/Müdahale, Psikolojik Sağlamlık, Akran Nezaketi) toplam {havuz.length} oturum. Anahtar kelime ara ya da bir öğrenci seçip AI'ın görüşme notlarına göre önermesini iste — her iki yolda da sonuca tıklayınca PDF'in ilgili sayfası açılır.
@@ -5404,7 +5404,7 @@ function DevamsizlikEkrani({ ogrenciler, setOgrenciler, kademe, aktifYil, setTab
   }
 
   return (
-    <div style={{ padding: 16, maxWidth: 640 }}>
+    <div style={{ padding: 16, maxWidth: 1280, margin: "0 auto" }}>
       <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 4, color:"#C0392B" }}>📅 Devamsızlık</div>
       <div style={{ fontSize: 12, color: MUTED, marginBottom: 16, lineHeight: 1.5 }}>
         E-okul'dan aldığın devamsızlık raporunu Excel ile toplu yükle, ya da tek bir öğrencinin gününü aşağıdan elle gir. Her ikisi de aynı geçmişe tarihli kayıt olarak eklenir, üzerine yazmaz — Sınıf sekmesindeki rozet ve aşağıdaki dağılım kutucukları otomatik güncellenir.
@@ -36361,7 +36361,7 @@ KURALLAR:
   const lbl = { fontSize:11, fontWeight:600, color:MUTED, display:"block", marginBottom:3 };
 
   return (
-    <div style={{ padding: 16, maxWidth: 560 }}>
+    <div style={{ padding: 16, maxWidth: 1280, margin: "0 auto" }}>
       <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 4 }}>🧪 Testler</div>
       <div style={{ fontSize: 12, color: MUTED, marginBottom: 16, lineHeight: 1.5 }}>
         Program hiçbir testi uygulamaz — burada sadece başka bir ortamda uyguladığın standart test/envanterlerin sonucunu kaydedersin. Kayıtlar öğrenci raporuna otomatik eklenir.
@@ -38089,7 +38089,7 @@ function HatirlaticiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, hati
   const MOR = PURPLE, MOR_ACIK = PURPLE_LIGHT;
 
   return (
-    <div style={{ padding: 16, maxWidth: 560 }}>
+    <div style={{ padding: 16, maxWidth: 1280, margin: "0 auto" }}>
       <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 4, color:MOR }}>🔔 Hatırlatıcı</div>
       <div style={{ fontSize: 12, color: MUTED, marginBottom: 16, lineHeight: 1.5 }}>
         Öğrencilerle ilgili takip edilecek şeyleri buradan görebilirsin — elle ekleyebilir, ya da görüşme notunu AI ile özetlerken önerilen hatırlatmayı onaylayabilirsin. Tarihe göre otomatik gruplanır.
@@ -40507,7 +40507,7 @@ function KonuHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, kon
   const KONU_TAMAMLAMA_SECENEKLER = [25, 50, 75, 100];
 
   return (
-    <div style={{ padding: 16, maxWidth: 640 }}>
+    <div style={{ padding: 16, maxWidth: 1280, margin: "0 auto" }}>
       <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 4, color:PURPLE }}>📚 Konu Haritası <span style={{fontSize:12, fontWeight:700, background:PURPLE_LIGHT, color:PURPLE, borderRadius:8, padding:"2px 8px", marginLeft:4}}>{liseMi ? sinavTip.toUpperCase() : "LGS"}</span></div>
       <div style={{ fontSize: 12, color: MUTED, marginBottom: liseMi?10:16, lineHeight: 1.5 }}>
         Görüşme sırasında öğrencinin ne kadarını bitirdiğini işaretle (%25/%50/%75/%100) — ders başlığındaki yüzde, konuların ortalamasına göre otomatik hesaplanır. {liseMi ? <>Konunun yanındaki sayı, o konudan son 8 yılda (2018-2025) {sinavTip.toUpperCase()}'de kaç soru çıktığını gösterir; henüz bitmemiş ama sık çıkan konulara öncelik verilebilir.</> : <>Konunun yanındaki sayı, o konudan bir LGS'de ortalama kaç soru çıktığını gösterir (2018, 2019, 2021, 2022, 2024, 2025, 2026 ortalaması; 2020 ve 2023 yalnız 1. dönemi kapsadığı için katılmadı). Konular en çok soru çıkandan aza sıralıdır.</>}
@@ -41209,7 +41209,7 @@ Sade, somut, öğretmenin doğrudan kullanabileceği şekilde yaz. Markdown kull
   const inp = { width:"100%", padding:"9px 11px", border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius:9, fontSize:13, boxSizing:"border-box" };
 
   return (
-    <div style={{ padding: 16, maxWidth: 640 }}>
+    <div style={{ padding: 16, maxWidth: 1280, margin: "0 auto" }}>
       <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 4, color:PURPLE }}>🎯 Net Haritası {kademe && <span style={{fontSize:12, fontWeight:700, background:PURPLE_LIGHT, color:PURPLE, borderRadius:8, padding:"2px 8px", marginLeft:4}}>{sinavBaglami.sinavAdi}</span>}</div>
       <div style={{ fontSize: 12, color: MUTED, marginBottom: 16, lineHeight: 1.5 }}>
         Deneme sonuç belgesini (PDF ya da ekran görüntüsü) yükle — AI, ders ve kazanım bazında hangi konularda eksik olduğunu otomatik çıkarır. Deneme sekmesindeki ders-bazlı net takibi ayrı, bu konu-seviyesinde ek bir analiz.
@@ -51336,7 +51336,7 @@ function GorusmeTakvimiEkrani({ records, aktifYil }) {
   const yilToplam = aylikVeri.reduce((s, a) => s + a.toplamGorusme, 0);
 
   return (
-    <div style={{ padding: 16, maxWidth: 640 }}>
+    <div style={{ padding: 16, maxWidth: 1280, margin: "0 auto" }}>
       <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 4, color:BLUE }}>📅 Görüşme Takvimi</div>
       <div style={{ fontSize: 12, color: MUTED, marginBottom: 16, lineHeight: 1.5 }}>
         {aktifYil} eğitim-öğretim yılında yapılan öğrenci görüşmeleri, ay ve hafta bazında listelenir. Veri, Görüşme Notu sekmesinde kaydettiğin her görüşmeden otomatik oluşur — burada ayrıca bir şey girmen gerekmez.
@@ -54958,7 +54958,7 @@ function AyarlarEkrani({ ogrenciler, setOgrenciler, records, setRecords, profile
   }
 
   return (
-    <div style={{ maxWidth: 520 }}>
+    <div style={{ maxWidth: 1280, margin: "0 auto" }}>
       <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 6 }}>⚙️ Ayarlar</div>
 
       <div style={{ background: "#ECFDF5", borderRadius: 12, padding: 14, marginBottom: 16 }}>
@@ -56652,7 +56652,7 @@ function EvrakTakipEkrani({ aktifYil, records, sevkler, riskHaritasi, sosyometri
   const yazdir = () => { const e = (t) => String(t || "").replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
     ootBelgeAc(`<!DOCTYPE html><html lang="tr"><head><meta charset="utf-8"><title>Evrak Takibi</title><style>body{font-family:Arial,sans-serif;font-size:12px;margin:16px}h1{font-size:17px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #CBD5E1;padding:5px;text-align:left;vertical-align:top}th{background:#F1F5F9}</style></head><body><h1>🗂 Rehberlik Servisi Evrak Takibi · ${e(aktifYil)}</h1><p>Tamam: ${say("tamam")} · Geciken: ${say("gecikti")} · Yaklaşan (14 gün): ${say("yaklasiyor")} · Bekleyen: ${say("bekliyor")}</p><table><tr><th>Evrak</th><th>Hedef tarih</th><th>Durum</th><th>Not</th></tr>${liste.map(x => `<tr><td>${e(x.ad)}</td><td>${e(tarihTr(x.hedef))}</td><td>${e(RENK[x.hal][2])}${x.tamam && x.tamamTarih ? " (" + e(tarihTr(x.tamamTarih)) + ")" : ""}</td><td>${e(x.not)}</td></tr>`).join("")}</table></body></html>`, "Evrak Takibi"); };
   return (
-    <div data-testid="evrak-takip" style={{ padding: 16, paddingBottom: 110, maxWidth: 680 }}>
+    <div data-testid="evrak-takip" style={{ padding: 16, paddingBottom: 110, maxWidth: 1280, margin: "0 auto" }}>
       <div style={{ fontSize: 18, fontWeight: 900, color: TEXT }}>🗂 Evrak Takibi <span style={{ fontSize: 12, color: MUTED, fontWeight: 600 }}>· {aktifYil}</span></div>
       <div style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.5, margin: "4px 0 10px" }}>Yıl boyunca hazırlanması gereken rehberlik evrakları. Tarihler önerilendir; okulunun takvimine göre değiştirebilir, listede olmayan evrakı ekleyebilir, gereksiz olanı gizleyebilirsin. Program ilgili kayıtları (risk haritası, sevk, görüşme sayıları…) evrakın altında ipucu olarak gösterir; tamamlandı işaretini sen koyarsın.</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 10 }}>
@@ -56771,7 +56771,7 @@ function EtkiAnaliziEkrani({ kayitliListesi, aktifYil, grupCalismalari }) {
   const adlar = (kayitliListesi || []).map(o => o.name || o.studentName).filter(Boolean);
   const grupKonu = [...new Set((grupCalismalari || []).filter(g => !g.yil || g.yil === aktifYil).map(g => g.konu).filter(Boolean))].slice(0, 30);
   return (
-    <div data-testid="etki-analizi" style={{ padding: 16, paddingBottom: 110, maxWidth: 680 }}>
+    <div data-testid="etki-analizi" style={{ padding: 16, paddingBottom: 110, maxWidth: 1280, margin: "0 auto" }}>
       <div style={{ fontSize: 18, fontWeight: 900 }}>📈 Ön Test – Son Test Etki Analizi</div>
       <div style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.5, margin: "4px 0 10px" }}>Bir müdahale programı, psikoeğitim ya da grup çalışmasının öncesinde ve sonrasında uygulanan ölçeğin puanlarını gir. Program ortalama değişimi, anlamlılığı, etki büyüklüğünü ve hangi öğrencide güvenilir değişim olduğunu hesaplar; rapora hazır metin ve grafik verir. Veriler yalnız bu programda saklanır, hiçbir yere gönderilmez.</div>
       <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 10, display: "flex", flexDirection: "column", gap: 6 }}>

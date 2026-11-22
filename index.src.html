@@ -279,6 +279,13 @@ body {
   .pgt-kartlar{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:start}
   .pgt-kartlar>div{margin:0!important}
 }
+/* Tablet/bilgisayar: iki sütunlu ekranlar (telefonda değişmez) */
+@media (min-width: 1000px){
+  .pdr-iki{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;align-items:start}
+  .pdr-iki>.pi-sol{order:1;min-width:0}.pdr-iki>.pi-sag{order:2;min-width:0}
+  .pdr-sutun2{columns:2;column-gap:18px}
+  .pdr-sutun2>*{break-inside:avoid;-webkit-column-break-inside:avoid}
+}
 </style>
 </head>
 <body>
@@ -5422,6 +5429,7 @@ function DevamsizlikEkrani({ ogrenciler, setOgrenciler, kademe, aktifYil, setTab
         E-okul'dan aldığın devamsızlık raporunu Excel ile toplu yükle, ya da tek bir öğrencinin gününü aşağıdan elle gir. Her ikisi de aynı geçmişe tarihli kayıt olarak eklenir, üzerine yazmaz — Sınıf sekmesindeki rozet ve aşağıdaki dağılım kutucukları otomatik güncellenir.
       </div>
 
+      <div className="pdr-iki"><div className="pi-sol">
       {/* Tek öğrenci manuel güncelleme */}
       <div style={{ background:CARD, border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius:12, padding:14, marginBottom:14 }}>
         <div style={{ fontSize:13, fontWeight:800, color:TEXT, marginBottom:8 }}>🔍 Tek Öğrenci Güncelle</div>
@@ -5540,6 +5548,7 @@ function DevamsizlikEkrani({ ogrenciler, setOgrenciler, kademe, aktifYil, setTab
         </div>
       )}
 
+      </div><div className="pi-sag">
       {/* Devamsız öğrenciler listesi */}
       {/* Devamsızlık Dağılımı — kategori ve sayı, Risk Dağılımı kutucuklarıyla aynı stil */}
       {devamsizOgrenciler.length > 0 && (() => {
@@ -5607,6 +5616,7 @@ function DevamsizlikEkrani({ ogrenciler, setOgrenciler, kademe, aktifYil, setTab
           ))}
         </div>
       )}
+      </div></div>
     </div>
   );
 }
@@ -23057,6 +23067,7 @@ function IsciRaporuEkrani({ hatirlatmalar, setHatirlatmalar, ogrenciler, riskLis
         Hiçbir şeyi senden habersiz yazmaz — öneriler onayına sunulur.
       </div>
 
+      <div className="pdr-sutun2">
       {/* A) Günlük Özet */}
       <div style={kutu}>
         <div onClick={() => setAcikBolum(acikBolum === "ozet" ? null : "ozet")} style={baslikStil(acikBolum === "ozet")}>
@@ -23195,6 +23206,7 @@ function IsciRaporuEkrani({ hatirlatmalar, setHatirlatmalar, ogrenciler, riskLis
             )}
           </div>
         )}
+      </div>
       </div>
     </div>
   );
@@ -38114,6 +38126,7 @@ function HatirlaticiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, hati
         Öğrencilerle ilgili takip edilecek şeyleri buradan görebilirsin — elle ekleyebilir, ya da görüşme notunu AI ile özetlerken önerilen hatırlatmayı onaylayabilirsin. Tarihe göre otomatik gruplanır.
       </div>
 
+      <div className="pdr-iki"><div className="pi-sol">
       <BildirimDurumu />
       <BulutSenkronAraci />
 
@@ -38187,6 +38200,7 @@ function HatirlaticiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, hati
         </div>
       )}
 
+      </div><div className="pi-sag">
       {/* Çok öğrencili kullanım için filtre */}
       {toplamAktif > 5 && (
         <input value={filtreMetni} onChange={e=>setFiltreMetni(e.target.value)} placeholder="🔍 Öğrenci veya sınıfa göre filtrele…" style={{...inp, marginBottom:14}} />
@@ -38244,6 +38258,7 @@ function HatirlaticiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, hati
           </div>
         </div>
       )}
+      </div></div>
     </div>
   );
 }
@@ -54991,6 +55006,7 @@ function AyarlarEkrani({ ogrenciler, setOgrenciler, records, setRecords, profile
         <AiModelSecici panel />
       </div>
 
+      <div className="pdr-sutun2">
       {onTumOzellikler && (
         <div style={{ background: "#F3F0FF", borderRadius: 12, padding: 14, marginBottom: 16 }}>
           <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 14, color: PURPLE }}>📖 Tüm Özellikler</div>
@@ -55137,6 +55153,7 @@ function AyarlarEkrani({ ogrenciler, setOgrenciler, records, setRecords, profile
       </div>
       <KayipKayitBul records={records} setRecords={setRecords} uyumIzleme={uyumIzleme} bdtAnaliz={bdtAnaliz} bireyiTanima={bireyiTanima} ogrenciler={ogrenciler} setOgrenciler={setOgrenciler} aktifYil={aktifYil} />
       <EkranBekcisiAyar />
+      </div>
     </div>
   );
 }
@@ -57453,6 +57470,7 @@ function pdrBaslangicSekmesi() {
         {tab === "yeni" && (
           <div>
             <div>
+              <div className="pdr-iki"><div className="pi-sol">
               {/* Öğrenci seç */}
               <div style={{ marginBottom:12 }}>
                 <label style={{ fontSize:11, fontWeight:600, color:MUTED, display:"block", marginBottom:4 }}>ÖĞRENCİ</label>
@@ -57624,6 +57642,7 @@ function pdrBaslangicSekmesi() {
                   </select>
                 </>
               )}
+              </div><div className="pi-sag">
               {/* Ham not */}
               <label style={{ fontSize:11, fontWeight:600, color:MUTED, display:"block", marginBottom:4 }}>{gorusmeFormu ? "EK NOT (İSTEĞE BAĞLI)" : "GÖRÜŞME NOTU"}</label>
               <textarea data-asistan="gorusme-not" placeholder="Görüşme notlarını buraya yazın..." value={form.raw} onChange={e=>setForm(f=>({...f,raw:e.target.value}))} rows={5} style={{ width:"100%", padding:"9px 11px", border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius:9, fontSize:13, resize:"vertical", boxSizing:"border-box", marginBottom:10 }} />
@@ -57757,6 +57776,7 @@ function pdrBaslangicSekmesi() {
               <button data-asistan="gorusme-kaydet" onClick={handleSave} disabled={!form.studentName.trim()||!(form.summary.trim()||form.raw.trim()||(gorusmeFormu && pdrFormDoluSayisi(pdrFormSablon(gorusmeFormu.sablon), gorusmeFormu)))} style={{ width:"100%", padding:"13px", background:form.studentName&&(form.summary||form.raw||(gorusmeFormu && pdrFormDoluSayisi(pdrFormSablon(gorusmeFormu.sablon), gorusmeFormu)))?PURPLE:BORDER, color:form.studentName&&(form.summary||form.raw||(gorusmeFormu && pdrFormDoluSayisi(pdrFormSablon(gorusmeFormu.sablon), gorusmeFormu)))?"#fff":MUTED, border:"none", borderRadius:12, fontSize:15, fontWeight:800, cursor:"pointer" }}>
                 {saved?"✓ Kaydedildi!":digerKatilimcilar.length>0?`💾 ${1+digerKatilimcilar.length} Öğrenciye Kaydet`:"💾 Görüşmeyi Kaydet"}
               </button>
+              </div></div>
             </div>
           </div>
         )}
@@ -58566,6 +58586,7 @@ function pdrBaslangicSekmesi() {
               </div>
             </div>
 
+            <div className="pdr-iki"><div className="pi-sag">
             {/* Yeni risk ekle */}
             <div style={{ background: CARD, border: `1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius: 12, padding: 14, marginBottom: 16 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: TEXT, marginBottom: 10 }}>+ Yeni Risk Kaydı</div>
@@ -58688,7 +58709,9 @@ function pdrBaslangicSekmesi() {
                 }}>{riskAiLoading ? "⏳ AI risk analizi yapıyor…" : "✦ AI Analiz Et ve Kaydet"}</button>
               </div>
             </div>
+            </div>
 
+            <div className="pi-sol">
             {/* Aktif riskler */}
             {(() => {
               const aktif = riskListesi.filter(r => !r.kapandi);
@@ -58823,6 +58846,7 @@ function pdrBaslangicSekmesi() {
                 </>
               );
             })()}
+            </div></div>
           </div>
         )}
 

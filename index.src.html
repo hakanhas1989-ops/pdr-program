@@ -5840,6 +5840,52 @@ const SINAV_KAYGISI_BELIRTILER = {
   duygusal: { label: "💭 Duygusal Belirtiler", maddeler: ["Huzursuzluk, endişe","Kendine güvensizlik, yetersizlik hissi","Karamsarlık","Hata yapma korkusu","Kendini sürekli eleştirme","Aşırı heyecan, panik hali","Sinirlilik, tahammülsüzlük","Üzüntü, isteksizlik","Başarısızlık korkusu"] },
 };
 
+// ── Öneri kutucukları: serbest metin alanlarının altında, dokununca metne eklenir/çıkarılır ──
+const ONERI_LISTELERI = {
+  guclu: ["Görsel hafızası iyi", "Resim yapmayı seviyor", "Arkadaşlarına yardım eder", "Sorumluluk alır", "Kurallara uyar", "Sözel ifadesi iyi", "El becerileri gelişmiş", "Müziğe yatkın", "Spora ve fiziksel etkinliklere yatkın", "Meraklı, soru sorar", "Sabırlı ve sakin", "İş birliğine açık", "Güler yüzlü ve sevecen", "Hayal gücü güçlü", "Teknolojiyi iyi kullanır", "Matematiksel işlemlerde başarılı", "Etkinliklere katılır", "Ödevlerini düzenli yapar", "Öğretmenle iletişimi iyi", "Tekrarla iyi öğrenir"],
+  ilgi: ["Resim / boyama", "Müzik", "Futbol", "Basketbol / voleybol", "Dans", "Bilgisayar oyunları", "Hayvanlar", "Doğa ve bahçe", "Kitap okuma", "Hikâye dinleme", "Lego / yapboz", "Çizgi film", "Yemek yapma", "El işi", "Araba ve taşıtlar", "Bilim deneyleri", "Drama / tiyatro", "Bisiklet", "Yüzme"],
+  pekistirec: ["Sözel övgü", "Sınıfta görev alma", "Çıkartma / yıldız", "Bilgisayarda serbest zaman", "Sevdiği oyunu oynama", "Tebrik kartı", "Veliye olumlu not", "Çalışmasının panoda sergilenmesi", "Öğretmen yardımcısı olma", "Arkadaşlarıyla oyun süresi", "Resim yapma zamanı", "Müzik dinleme", "Teneffüse ilk çıkma", "Küçük ödül (kalem, silgi)", "Puan / jeton tablosu"],
+  kedAile: ["Aile iş birliğine açık", "Aile okulla düzenli iletişimde", "Aile destek eğitimini takip ediyor", "Akademik başarı beklentisi yüksek", "Okuma-yazmayı öğrenmesini bekliyor", "Sosyal uyum öncelikli", "Öz bakım becerilerinin gelişmesini istiyor", "Aile desteğe ihtiyaç duyuyor", "Evde çalışma ortamı sınırlı", "Kardeşleriyle ilişkisi iyi", "Ebeveynler ayrı yaşıyor"],
+  kedGozlem: ["Dikkat süresi kısa", "Yönergeleri tekrar ister", "Somut materyalle daha iyi anlıyor", "Bireysel çalışmada daha başarılı", "Grup çalışmasına katılıyor", "Çabuk yoruluyor", "Motivasyonu yüksek", "Desteği kabul ediyor", "Akranlarıyla uyumlu", "Ödevlerini tamamlıyor"],
+  sevk: ["Akademik başarıda belirgin düşüş", "Okuma-yazmada güçlük gözlendi", "Dikkat ve odaklanma güçlüğü", "Yoğun kaygı / sınav kaygısı", "Uzun süreli mutsuzluk ve isteksizlik", "Öfke kontrolünde güçlük", "Akran ilişkilerinde sorun", "Sürekli devamsızlık", "Uyku / iştah değişikliği (veli bildirimi)", "Aile içi sorunlar", "Okula uyum güçlüğü", "Kendine zarar verme belirtisi", "Okul içi destek yetersiz kaldı", "Veli talebi"],
+  adim: ["Nefes ve gevşeme egzersizi öğret", "Düşünce kaydı tut", "Veli görüşmesi yap", "Ders öğretmeniyle görüş", "Haftalık bireysel görüşme planla", "Davranış sözleşmesi hazırla", "Ödül / pekiştireç tablosu oluştur", "Haftalık çalışma programı hazırla", "Sınıf içi oturma düzenini değiştir", "Akran desteği eşleştir", "Psikoeğitim materyali ver", "2 hafta sonra izleme görüşmesi yap", "Gerekirse RAM'a yönlendir"],
+  aileTutum: ["Destekleyici", "Aşırı koruyucu", "Otoriter", "İlgisiz", "Tutarsız", "Başarı beklentisi yüksek", "Okulla iş birliğine açık", "İletişim kurmakta zorlanıyor", "Ebeveynler ayrı", "Kalabalık aile", "Ekonomik güçlük", "Anne ve baba çalışıyor"],
+  risk: ["Derslere ilgisi azaldı", "Ödevlerini yapmıyor", "Sık devamsızlık", "Arkadaşlarından uzaklaştı", "Sınıfta sık uyarı alıyor", "Akran çatışmaları yaşıyor", "İçe kapanma / ağlama gözlendi", "Öfke patlamaları", "Öğretmen bildirimi", "Veli bildirimi", "Kendi başvurusu", "Ekran / telefon kullanımı fazla"],
+  rapor: ["Düzenli bireysel görüşmelere devam edilmesi", "Veli ile iş birliğinin sürdürülmesi", "Ders öğretmenleriyle bilgi paylaşımı", "Haftalık çalışma programı uygulanması", "Olumlu davranışların pekiştirilmesi", "Akran desteğinin artırılması", "Sosyal etkinliklere katılımın desteklenmesi", "Ekran süresinin sınırlandırılması", "Uyku düzeninin düzenlenmesi", "Gerekirse RAM'a yönlendirilmesi", "Bir ay sonra izleme görüşmesi yapılması"],
+  testGozlem: ["Yönergeyi hemen anladı", "Yönerge tekrar edildi", "Acele etti", "Yavaş ve dikkatli çalıştı", "Yorgunluk belirtisi gösterdi", "Kaygılı görünüyordu", "Motivasyonu yüksekti", "Sık ara verdi", "Dikkati dağıldı", "İş birliğine açıktı"],
+};
+function oneriKacis(t) { return String(t).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+function oneriVarMi(metin, o, satir) {
+  const m = String(metin || "");
+  return satir ? m.split("\n").some(l => l.replace(/^\s*\d+[.)]\s*/, "").trim() === o) : new RegExp(`(^|[,;\\n]\\s*)${oneriKacis(o)}\\s*(?=[,;\\n.]|$)`, "i").test(m);
+}
+function oneriDegistir(metin, o, satir) {
+  const m = String(metin || "");
+  if (satir) {
+    const satirlar = m.split("\n").filter(l => l.trim());
+    const var_ = satirlar.some(l => l.replace(/^\s*\d+[.)]\s*/, "").trim() === o);
+    const yeni = var_ ? satirlar.filter(l => l.replace(/^\s*\d+[.)]\s*/, "").trim() !== o) : [...satirlar, o];
+    const numarali = !satirlar.length || satirlar.every(l => /^\s*\d+[.)]/.test(l));
+    return yeni.map((l, i) => numarali ? `${i + 1}. ${l.replace(/^\s*\d+[.)]\s*/, "").trim()}` : l).join("\n");
+  }
+  if (oneriVarMi(m, o, false)) return m.replace(new RegExp(`(^|[,;\\n]\\s*)${oneriKacis(o)}\\s*(?=[,;\\n.]|$)`, "i"), "").replace(/^[,;\s]+/, "").replace(/\s*,\s*,/g, ",").trim();
+  const t = m.replace(/[\s,;]+$/, "");
+  return t ? `${t}, ${o}` : o;
+}
+function OneriCipleri({ deger, setDeger, liste, satir, renk = "#5B3FC4", ilk = 10 }) {
+  const [hepsi, setHepsi] = useState(false);
+  const l = ONERI_LISTELERI[liste] || [];
+  const gor = hepsi ? l : l.slice(0, ilk);
+  return (
+    <div data-oneri={liste} style={{ display: "flex", gap: 4, flexWrap: "wrap", margin: "5px 0 10px" }}>
+      <span style={{ fontSize: 10.5, color: MUTED, alignSelf: "center" }}>Öneri:</span>
+      {gor.map(o => { const s = oneriVarMi(deger, o, satir); return (
+        <button key={o} type="button" onClick={() => setDeger(oneriDegistir(deger, o, satir))} style={{ padding: "3px 8px", borderRadius: 999, border: `1px solid ${s ? renk : "#D5D9E0"}`, background: s ? renk : "#fff", color: s ? "#fff" : "#334155", fontSize: 11, cursor: "pointer", lineHeight: 1.4 }}>{s ? "✓ " : "+ "}{o}</button>
+      ); })}
+      {l.length > ilk && <button type="button" onClick={() => setHepsi(!hepsi)} style={{ padding: "3px 8px", borderRadius: 999, border: "none", background: "none", color: renk, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>{hepsi ? "Daha az" : `+${l.length - ilk} daha`}</button>}
+    </div>
+  );
+}
 // ── Boş form yazdırma (genel) — çıktı alıp elle doldurmak için A4 form ──
 // gruplar: [{ baslik, maddeler:[metin] }], secenekler: ["Hiç", ...] (işaretleme sütunları) | null,
 // tip: "likert" (seçenek sütunları) | "isaret" (tek kutu, iki sütun) | "tamamla" (cümle + yazma satırı)
@@ -25278,6 +25324,7 @@ function RaporModalIc({ rapor, onKapat }) {
           <div>
             <div style={{ fontSize: 10, fontWeight: 700, color: "#6E5AAE", marginBottom: 3 }}>Öneriler ve yönlendirmeler (raporun sonunda görünür)</div>
             <textarea value={oneriler} onChange={e => setOneriler(e.target.value)} rows={3} placeholder="Okul, aile ve öğrenci için öneriler, yönlendirmeler…" style={{ width: "100%", boxSizing: "border-box", padding: "7px 9px", border: "1px solid #D5CBEF", borderRadius: 8, fontSize: 12, background: "#fff", resize: "vertical", fontFamily: "inherit" }} />
+            <OneriCipleri liste="rapor" deger={oneriler} setDeger={setOneriler} />
           </div>
         </div>
       )}
@@ -33066,13 +33113,13 @@ function KEDPaneli({ seciliAd, seciliSinif, seciliNumara, ogrenciler, testKayitl
               <div style={{ flex: "0 0 150px" }}>{etiket("DESTEK EĞİTİM (SAAT/HAFTA)")}<input inputMode="numeric" value={V.destekSaat || ""} onChange={e => set("destekSaat", e.target.value.replace(/\D/g, ""))} style={girdi} /></div>
               <div style={{ flex: "1 1 200px" }}>{etiket("DESTEK EĞİTİM DERSLERİ")}<div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>{KED_DERSLER.map(d => <button key={d.k} onClick={() => set("destekDersler", (V.destekDersler || []).includes(d.k) ? V.destekDersler.filter(x => x !== d.k) : [...(V.destekDersler || []), d.k])} style={oyBtn(KED_RENK, (V.destekDersler || []).includes(d.k), { padding: "5px 9px", fontSize: 11.5 })}>{d.ad}</button>)}</div></div>
             </div>
-            {etiket("GÜÇLÜ YÖNLERİ")}<textarea rows={2} value={V.guclu || ""} onChange={e => set("guclu", e.target.value)} style={girdi} placeholder="Örn. görsel hafızası iyi, resim yapmayı seviyor, arkadaşlarına yardım ediyor" />
-            {etiket("İLGİ ALANLARI")}<input value={V.ilgiler || ""} onChange={e => set("ilgiler", e.target.value)} style={girdi} />
-            {etiket("ONU NE MOTİVE EDİYOR (PEKİŞTİREÇLER)")}<input value={V.pekistirec || ""} onChange={e => set("pekistirec", e.target.value)} style={girdi} placeholder="Örn. övgü, sınıfta görev alma, çıkartma, bilgisayarda serbest zaman" />
+            {etiket("GÜÇLÜ YÖNLERİ")}<textarea rows={2} value={V.guclu || ""} onChange={e => set("guclu", e.target.value)} style={girdi} placeholder="Örn. görsel hafızası iyi, resim yapmayı seviyor, arkadaşlarına yardım ediyor" /><OneriCipleri liste="guclu" deger={V.guclu} setDeger={v => set("guclu", v)} />
+            {etiket("İLGİ ALANLARI")}<input value={V.ilgiler || ""} onChange={e => set("ilgiler", e.target.value)} style={girdi} /><OneriCipleri liste="ilgi" deger={V.ilgiler} setDeger={v => set("ilgiler", v)} />
+            {etiket("ONU NE MOTİVE EDİYOR (PEKİŞTİREÇLER)")}<input value={V.pekistirec || ""} onChange={e => set("pekistirec", e.target.value)} style={girdi} placeholder="Örn. övgü, sınıfta görev alma, çıkartma, bilgisayarda serbest zaman" /><OneriCipleri liste="pekistirec" deger={V.pekistirec} setDeger={v => set("pekistirec", v)} />
             {etiket("ÖĞRENME ÖZELLİKLERİ")}
             {KED_OGRENME.map(t => <label key={t} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, padding: "2px 0", cursor: "pointer" }}><input type="checkbox" checked={(V.ogrenme || []).includes(t)} onChange={e => set("ogrenme", e.target.checked ? [...(V.ogrenme || []), t] : (V.ogrenme || []).filter(x => x !== t))} />{t}</label>)}
             {etiket("SAĞLIK / İLAÇ (VARSA)")}<input value={V.saglik || ""} onChange={e => set("saglik", e.target.value)} style={girdi} />
-            {etiket("AİLE BİLGİSİ VE BEKLENTİLERİ")}<textarea rows={2} value={V.aile || ""} onChange={e => set("aile", e.target.value)} style={girdi} />
+            {etiket("AİLE BİLGİSİ VE BEKLENTİLERİ")}<textarea rows={2} value={V.aile || ""} onChange={e => set("aile", e.target.value)} style={girdi} /><OneriCipleri liste="kedAile" deger={V.aile} setDeger={v => set("aile", v)} />
           </div>
         )}
         {sekme === "akademik" && (
@@ -33124,7 +33171,7 @@ function KEDPaneli({ seciliAd, seciliSinif, seciliNumara, ogrenciler, testKayitl
             <div style={{ fontSize: 13, fontWeight: 900, color: KED_RENK, marginBottom: 6 }}>Özet</div>
             {KED_DERSLER.map(d => { const o = kedDersOzet(V, d); if (!o.n) return null; const i = kedIslevselDuzey(V, d, kaynak); return <div key={d.k} style={{ fontSize: 12.5, padding: "4px 0", borderBottom: `1px dashed ${BORDER}` }}>{d.ikon} <b>{d.ad}</b>{i.metin ? ` · ${i.metin}` : ""} · <span style={{ color: "#15803D" }}>{o.bagimsiz.length} bağımsız</span> · <span style={{ color: "#B45309" }}>{o.destekle.length} destekle</span> · <span style={{ color: "#B91C1C" }}>{o.yapamiyor.length} yapamıyor</span>{(V.bepDersler || []).includes(d.k) ? " · BEP" : ""}</div>; })}
             {kedGelisimOzet(V).filter(a => a.n).map(a => <div key={a.k} style={{ fontSize: 12.5, padding: "4px 0", borderBottom: `1px dashed ${BORDER}` }}>{a.ikon} {a.ad}: <b>{a.ort}</b>/4{a.zayif.length ? <span style={{ color: "#B45309" }}> · destek: {a.zayif.length} davranış</span> : ""}</div>)}
-            {etiket("GÖZLEM VE NOTLAR (raporlara girer)")}<textarea rows={3} value={taslak.not || ""} onChange={e => setTaslak(t => ({ ...t, not: e.target.value }))} style={girdi} />
+            {etiket("GÖZLEM VE NOTLAR (raporlara girer)")}<textarea rows={3} value={taslak.not || ""} onChange={e => setTaslak(t => ({ ...t, not: e.target.value }))} style={girdi} /><OneriCipleri liste="kedGozlem" deger={taslak.not} setDeger={v => setTaslak(t => ({ ...t, not: v }))} />
             {etiket("BEP UYGULAMA TARİHLERİ")}
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <input type="date" value={kedTarihGiris(V.bepBaslangic)} onChange={e => set("bepBaslangic", kedTarihCikis(e.target.value))} style={{ ...girdi, flex: "1 1 140px", width: "auto" }} />
@@ -36154,6 +36201,7 @@ function D2Paneli({ seciliAd, seciliSinif, seciliNumara, seciliOgr, profiles2, s
         {uy.map((x, i) => <div key={i} style={{fontSize:11.5,color:"#B45309",marginBottom:4}}>⚠ {x}</div>)}
         <label style={lbl}>DANIŞMAN YORUMU / GÖZLEM</label>
         <textarea placeholder="Uygulama sırasındaki gözlem (yorgunluk, acele, yönerge…)" value={d2.yorum || ""} onChange={e => alan("yorum", e.target.value)} rows={2} style={{...inp,resize:"vertical"}} />
+        <OneriCipleri liste="testGozlem" deger={d2.yorum} setDeger={v => alan("yorum", v)} />
       </div>
       <button data-d2="kaydet" onClick={kaydet} style={{ width:"100%", padding:"11px", borderRadius:11, border:"none", background: PURPLE, color:"#fff", fontSize:13.5, fontWeight:800, cursor:"pointer" }}>D2 Sonucunu Kaydet</button>
       {durum && <div style={{fontSize:12,fontWeight:700,color:durum.startsWith("✓")?"#15803D":"#B45309",marginTop:6}}>{durum}</div>}
@@ -37477,7 +37525,8 @@ ${kademe ? "Planı öğrencinin yaş/gelişim dönemine uygun şekilde oluştur.
             <input data-asistan="mud-hedef" placeholder="örn. 3 haftada sınav kaygısını yönetebilir hale gelme" value={form.hedef} onChange={e=>setForm(f=>({...f,hedef:e.target.value}))} style={{...inp,marginBottom:10}} />
 
             <label style={lbl}>MÜDAHALE ADIMLARI</label>
-            <textarea data-asistan="mud-adimlar" placeholder="1. Nefes egzersizi öğret&#10;2. Düşünce kaydı tut&#10;3. Veli görüşmesi yap" value={form.adimlar} onChange={e=>setForm(f=>({...f,adimlar:e.target.value}))} rows={4} style={{...inp,resize:"vertical",marginBottom:10}} />
+            <textarea data-asistan="mud-adimlar" placeholder="1. Nefes egzersizi öğret&#10;2. Düşünce kaydı tut&#10;3. Veli görüşmesi yap" value={form.adimlar} onChange={e=>setForm(f=>({...f,adimlar:e.target.value}))} rows={4} style={{...inp,resize:"vertical",marginBottom:4}} />
+            <OneriCipleri liste="adim" satir deger={form.adimlar} setDeger={v => setForm(f => ({ ...f, adimlar: v }))} />
 
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
               <div>
@@ -41784,7 +41833,8 @@ function SevkTakipEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, sevkle
         </div>
 
         <label style={lbl}>SEVK NEDENİ</label>
-        <textarea placeholder="Sevk gerekçesi, klinik gözlemler..." value={form.sevkNedeni} onChange={e=>setForm(f=>({...f,sevkNedeni:e.target.value}))} rows={3} style={{...inp,resize:"vertical",marginBottom:10}} />
+        <textarea placeholder="Sevk gerekçesi, klinik gözlemler..." value={form.sevkNedeni} onChange={e=>setForm(f=>({...f,sevkNedeni:e.target.value}))} rows={3} style={{...inp,resize:"vertical",marginBottom:4}} />
+        <OneriCipleri liste="sevk" deger={form.sevkNedeni} setDeger={v => setForm(f => ({ ...f, sevkNedeni: v }))} />
 
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
           <div>
@@ -51163,6 +51213,7 @@ function ProfilMerkez({
                     <textarea placeholder="Aile tutumu, beklentiler…" value={prof2Form.aile_notu||""}
                       onChange={e=>setProf2Form(f=>({...f,aile_notu:e.target.value}))}
                       rows={2} style={{...inp,resize:"vertical"}} />
+                    <OneriCipleri liste="aileTutum" deger={prof2Form.aile_notu} setDeger={v => setProf2Form(f => ({ ...f, aile_notu: v }))} />
                   </div>
 
                   <button onClick={handleP2Kapali} disabled={prof2AiLoading} title="Yapay zekâ kullanmadan, cihazda ve ücretsiz" style={{
@@ -58772,6 +58823,7 @@ function pdrBaslangicSekmesi() {
                 <textarea data-asistan="risk-aciklama" placeholder="Risk durumu hakkında kısa açıklama…" value={riskForm.aciklama}
                   onChange={e => setRiskForm(f=>({...f, aciklama:e.target.value}))}
                   rows={2} style={{...inputStyle, resize:"vertical"}} />
+                <OneriCipleri liste="risk" renk="#C0392B" deger={riskForm.aciklama} setDeger={v => setRiskForm(f => ({ ...f, aciklama: v }))} />
               </div>
               <div style={{ marginBottom: 10 }}>
                 <label style={labelStyle}>TARİH (geçmiş bir görüşmeye ait risk giriyorsan geriye tarihleyebilirsin)</label>

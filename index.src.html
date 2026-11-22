@@ -267,6 +267,18 @@ body {
 }
 #pdr-login-overlay button:disabled { opacity: 0.6; cursor: default; }
 #pdr-login-error { color: #C0392B; font-size: 12px; margin-top: 8px; min-height: 16px; }
+/* Tablet/bilgisayar: Testler ve Konu Haritası üç sütun (telefonda değişmez) */
+@media (min-width: 1000px){
+  .pdr-genis-test,.pdr-genis-konu{display:grid;gap:18px;align-items:start}
+  .pdr-genis-test{grid-template-columns:minmax(0,.8fr) minmax(0,1.4fr) minmax(0,1fr);grid-template-areas:"bas bas bas" "sol orta sag"}
+  .pdr-genis-konu{grid-template-columns:minmax(0,1.15fr) minmax(0,1fr) minmax(0,.9fr);grid-template-areas:"bas bas bas" "sol orta sag"}
+  .pgt-bas,.pgk-bas{grid-area:bas}.pgt-sol,.pgk-sol{grid-area:sol}.pgt-orta,.pgk-orta{grid-area:orta}.pgt-sag,.pgk-sag{grid-area:sag}
+  .pdr-genis-test>.pgt-sol:last-child{grid-column:1/-1}
+  .pgt-sol,.pgt-orta,.pgt-sag,.pgk-sol,.pgk-orta,.pgk-sag{background:rgba(255,255,255,.55);border:1px solid #B9CFBE;border-radius:14px;padding:14px;min-width:0}
+  .pgk-orta:empty,.pgk-sag:empty{display:none}
+  .pgt-kartlar{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:start}
+  .pgt-kartlar>div{margin:0!important}
+}
 </style>
 </head>
 <body>
@@ -36361,12 +36373,14 @@ KURALLAR:
   const lbl = { fontSize:11, fontWeight:600, color:MUTED, display:"block", marginBottom:3 };
 
   return (
-    <div style={{ padding: 16, maxWidth: 1280, margin: "0 auto" }}>
+    <div className="pdr-genis-test" style={{ padding: 16, maxWidth: 1280, margin: "0 auto" }}>
+      <div className="pgt-bas">
       <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 4 }}>🧪 Testler</div>
       <div style={{ fontSize: 12, color: MUTED, marginBottom: 16, lineHeight: 1.5 }}>
         Program hiçbir testi uygulamaz — burada sadece başka bir ortamda uyguladığın standart test/envanterlerin sonucunu kaydedersin. Kayıtlar öğrenci raporuna otomatik eklenir.
       </div>
-
+      </div>
+      <div className="pgt-sol">
       {/* Mesleki Eğilim Testi — Google Forms/Excel toplu yükleme (öğrenci seçiminden bağımsız, sınıf/okul geneli) */}
       {topluYuklemeAcik ? (
         <MesEgilimTopluYukle testKayitlari={testKayitlari} setTestKayitlari={setTestKayitlari} ogrenciler={ogrenciler} onKapat={()=>setTopluYuklemeAcik(false)} />
@@ -36408,15 +36422,17 @@ KURALLAR:
           </>
         )}
       </div>
+      </div>
 
       {seciliAd && (
         <>
+          <div className="pgt-orta">
           {/* Kategori / test seçimi */}
           {!seciliTest && (
             <div style={{ marginBottom: 16 }}>
               <label style={{ ...lbl, marginBottom:6 }}>YENİ TEST SONUCU EKLE</label>
               {!kategori ? (
-                <div>
+                <div className="pgt-kartlar">
                   <div style={{ display:"flex", gap:8, marginBottom:8 }}>
                     <button onClick={()=>setKategori("objektif")} style={{ flex:1, padding:"14px 8px", borderRadius:12, border:`2px solid #3B4FD8`, background:"#EEF2FF", color:"#3B4FD8", fontSize:13, fontWeight:800, cursor:"pointer" }}>🔵 Objektif Testler</button>
                     <button onClick={()=>setKategori("projektif")} style={{ flex:1, padding:"14px 8px", borderRadius:12, border:`2px solid #9B87F0`, background:"#F3EEFB", color:"#9B87F0", fontSize:13, fontWeight:800, cursor:"pointer" }}>🟣 Projektif Testler</button>
@@ -36905,6 +36921,8 @@ KURALLAR:
             </div>
           )}
 
+          </div>
+          <div className="pgt-sag">
           {/* Geçmiş kayıtlar */}
           <TestZamanCizelgesi kayitlar={kayitlar} />
           <div>
@@ -37094,6 +37112,7 @@ KURALLAR:
                 })}
               </div>
             )}
+          </div>
           </div>
         </>
       )}
@@ -40507,24 +40526,12 @@ function KonuHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, kon
   const KONU_TAMAMLAMA_SECENEKLER = [25, 50, 75, 100];
 
   return (
-    <div style={{ padding: 16, maxWidth: 1280, margin: "0 auto" }}>
+    <div className={liseMi ? "" : "pdr-genis-konu"} style={{ padding: 16, maxWidth: 1280, margin: "0 auto" }}>
+      <div className="pgk-bas">
       <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 4, color:PURPLE }}>📚 Konu Haritası <span style={{fontSize:12, fontWeight:700, background:PURPLE_LIGHT, color:PURPLE, borderRadius:8, padding:"2px 8px", marginLeft:4}}>{liseMi ? sinavTip.toUpperCase() : "LGS"}</span></div>
       <div style={{ fontSize: 12, color: MUTED, marginBottom: liseMi?10:16, lineHeight: 1.5 }}>
         Görüşme sırasında öğrencinin ne kadarını bitirdiğini işaretle (%25/%50/%75/%100) — ders başlığındaki yüzde, konuların ortalamasına göre otomatik hesaplanır. {liseMi ? <>Konunun yanındaki sayı, o konudan son 8 yılda (2018-2025) {sinavTip.toUpperCase()}'de kaç soru çıktığını gösterir; henüz bitmemiş ama sık çıkan konulara öncelik verilebilir.</> : <>Konunun yanındaki sayı, o konudan bir LGS'de ortalama kaç soru çıktığını gösterir (2018, 2019, 2021, 2022, 2024, 2025, 2026 ortalaması; 2020 ve 2023 yalnız 1. dönemi kapsadığı için katılmadı). Konular en çok soru çıkandan aza sıralıdır.</>}
       </div>
-
-      {!liseMi && (
-        <button data-testid="lgs-dagilim-yazdir" onClick={() => ootBelgeAc(lgsSoruDagilimiHtml(), "LGS Soru Dağılımı")} style={{
-          display:"block", width:"100%", padding:"8px", borderRadius:9, border:`1px solid ${PURPLE}55`, background:PURPLE_LIGHT, color:PURPLE, fontSize:12, fontWeight:800, cursor:"pointer", marginBottom:14
-        }}>🖨️ LGS Soru Dağılımı Tablosu (yazdır / panoya as)</button>
-      )}
-      {!liseMi && <PdrKazanimPaneli varsayilanSinif={((/(\d+)/.exec(String(seciliSinif || "")) || [])[1]) || "8"} />}
-      {!liseMi && <LgsBuHaftaPaneli aktifYil={aktifYil} onDurum={setLgsDurum} />}
-      {!liseMi && <LgsBeceriPaneli ogrVerisi={seciliAd ? ogrVerisi : null} seciliAd={seciliAd} />}
-      {!liseMi && <LgsGecmisPaneli seciliAd={seciliAd} ogrAnahtar={ogrAnahtar} onSayfaAc={lgsSayfaAc} />}
-      {!liseMi && <LgsTekrarPlaniPaneli seciliAd={seciliAd} seciliSinif={seciliSinif} ogrAnahtar={ogrAnahtar} ogrVerisi={ogrVerisi} onSayfaAc={lgsSayfaAc} />}
-      {lgsGosterici && <KitapSayfaGosterici {...lgsGosterici} onKapat={() => setLgsGosterici(null)} onKitapYukle={async (k, f) => { try { await pdrKitapKaydet(k, f, null); } catch (e) {} }} />}
-
       {liseMi && (
         <div style={{ display:"flex", gap:6, marginBottom:16 }}>
           {["tyt","ayt"].map(t => (
@@ -40535,7 +40542,23 @@ function KonuHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, kon
           ))}
         </div>
       )}
-
+      </div>
+      <div className="pgk-orta">
+      {!liseMi && (
+        <button data-testid="lgs-dagilim-yazdir" onClick={() => ootBelgeAc(lgsSoruDagilimiHtml(), "LGS Soru Dağılımı")} style={{
+          display:"block", width:"100%", padding:"8px", borderRadius:9, border:`1px solid ${PURPLE}55`, background:PURPLE_LIGHT, color:PURPLE, fontSize:12, fontWeight:800, cursor:"pointer", marginBottom:14
+        }}>🖨️ LGS Soru Dağılımı Tablosu (yazdır / panoya as)</button>
+      )}
+      {!liseMi && <PdrKazanimPaneli varsayilanSinif={((/(\d+)/.exec(String(seciliSinif || "")) || [])[1]) || "8"} />}
+      {!liseMi && <LgsBuHaftaPaneli aktifYil={aktifYil} onDurum={setLgsDurum} />}
+      {!liseMi && <LgsBeceriPaneli ogrVerisi={seciliAd ? ogrVerisi : null} seciliAd={seciliAd} />}
+      {!liseMi && <LgsGecmisPaneli seciliAd={seciliAd} ogrAnahtar={ogrAnahtar} onSayfaAc={lgsSayfaAc} />}
+      </div>
+      <div className="pgk-sag">
+      {!liseMi && <LgsTekrarPlaniPaneli seciliAd={seciliAd} seciliSinif={seciliSinif} ogrAnahtar={ogrAnahtar} ogrVerisi={ogrVerisi} onSayfaAc={lgsSayfaAc} />}
+      </div>
+      {lgsGosterici && <KitapSayfaGosterici {...lgsGosterici} onKapat={() => setLgsGosterici(null)} onKitapYukle={async (k, f) => { try { await pdrKitapKaydet(k, f, null); } catch (e) {} }} />}
+      <div className="pgk-sol">
       {/* Öğrenci seçimi */}
       {seciliAd ? (
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", background:PURPLE, border:`1px solid ${PURPLE}`, borderRadius:10, padding:"8px 12px", marginBottom:16 }}>
@@ -40657,6 +40680,7 @@ function KonuHaritasiEkrani({ kayitliListesi, aktifOgrenci, setAktifOgrenci, kon
           })}
         </div>
       )}
+      </div>
     </div>
   );
 }

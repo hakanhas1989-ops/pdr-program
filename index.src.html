@@ -46786,31 +46786,50 @@ function pdrRiskOzetiHesapla(liste) {
 
 // Kalıcı risk özeti kartları — yükleme ekranı kapansa da her yerde canlı veriden hesaplanır, kaybolmaz.
 function RiskOzetKartlari({ ogrenciler, kompakt, baslik }) {
+  const [secili, setSecili] = useState(null);
   const { yuksek, orta, dusuk, veriliToplam } = pdrRiskOzetiHesapla(ogrenciler || []);
   if (veriliToplam === 0) return null;
   const sayiBoyut = kompakt ? 16 : 20;
   const etiketBoyut = kompakt ? 9 : 10;
   const pad = kompakt ? "6px" : "8px";
+  const KART = [
+    { k: "yuksek", sayi: yuksek, ad: "🔴 Yüksek Risk", aralik: "0-30 net", bg: "#FDECEA", renk: "#C0392B" },
+    { k: "orta", sayi: orta, ad: "🟡 Orta Risk", aralik: "30-55 net", bg: "#FDF6E3", renk: "#B07D1A" },
+    { k: "dusuk", sayi: dusuk, ad: "🟢 Düşük Risk", aralik: "55+ net", bg: "#E6F5EE", renk: "#1A8C5B" },
+  ];
+  const net = (o) => { const n = parseFloat(String(o.ort7sinif ?? "").replace(",", ".")); return isNaN(n) ? -1 : n; };
+  const liste = secili ? (ogrenciler || []).filter(o => o.risk7sinif === secili).slice().sort((a, b) => net(b) - net(a) || String(a.studentName || "").localeCompare(String(b.studentName || ""), "tr")) : [];
+  const sk = KART.find(x => x.k === secili);
   return (
     <div style={{ marginBottom: kompakt ? 10 : 14 }}>
       {baslik && <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 6 }}>{baslik}</div>}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-        <div style={{ background: "#FDECEA", borderRadius: 8, padding: pad, textAlign: "center" }}>
-          <div style={{ fontSize: sayiBoyut, fontWeight: 900, color: "#C0392B" }}>{yuksek}</div>
-          <div style={{ fontSize: etiketBoyut, color: "#C0392B", fontWeight: 700 }}>🔴 Yüksek Risk</div>
-          <div style={{ fontSize: etiketBoyut - 1, color: "#C0392B" }}>0-30 net</div>
-        </div>
-        <div style={{ background: "#FDF6E3", borderRadius: 8, padding: pad, textAlign: "center" }}>
-          <div style={{ fontSize: sayiBoyut, fontWeight: 900, color: "#B07D1A" }}>{orta}</div>
-          <div style={{ fontSize: etiketBoyut, color: "#B07D1A", fontWeight: 700 }}>🟡 Orta Risk</div>
-          <div style={{ fontSize: etiketBoyut - 1, color: "#B07D1A" }}>30-55 net</div>
-        </div>
-        <div style={{ background: "#E6F5EE", borderRadius: 8, padding: pad, textAlign: "center" }}>
-          <div style={{ fontSize: sayiBoyut, fontWeight: 900, color: "#1A8C5B" }}>{dusuk}</div>
-          <div style={{ fontSize: etiketBoyut, color: "#1A8C5B", fontWeight: 700 }}>🟢 Düşük Risk</div>
-          <div style={{ fontSize: etiketBoyut - 1, color: "#1A8C5B" }}>55+ net</div>
-        </div>
+        {KART.map(x => (
+          <button key={x.k} data-risk-kart={x.k} onClick={() => setSecili(secili === x.k ? null : x.k)} title="Öğrencileri listele" style={{ background: x.bg, borderRadius: 8, padding: pad, textAlign: "center", border: `2px solid ${secili === x.k ? x.renk : "transparent"}`, cursor: "pointer", font: "inherit" }}>
+            <div style={{ fontSize: sayiBoyut, fontWeight: 900, color: x.renk }}>{x.sayi}</div>
+            <div style={{ fontSize: etiketBoyut, color: x.renk, fontWeight: 700 }}>{x.ad}</div>
+            <div style={{ fontSize: etiketBoyut - 1, color: x.renk }}>{x.aralik}{secili === x.k ? " · ▲" : " · ▼"}</div>
+          </button>
+        ))}
       </div>
+      {sk && (
+        <div data-testid="risk-ogrenci-listesi" style={{ marginTop: 8, background: "#fff", border: `1px solid ${sk.renk}55`, borderRadius: 10, padding: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, gap: 8 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: sk.renk }}>{sk.ad} — {liste.length} öğrenci (net ortalaması yüksekten düşüğe)</div>
+            <button onClick={() => setSecili(null)} style={{ border: "none", background: "none", color: MUTED, cursor: "pointer", fontSize: 12 }}>Kapat ✕</button>
+          </div>
+          <div style={{ maxHeight: 360, overflowY: "auto" }}>
+            {liste.map((o, i) => (
+              <div key={o.id || i} style={{ display: "grid", gridTemplateColumns: "28px 1fr auto auto", gap: 8, alignItems: "center", padding: "5px 4px", borderTop: i ? "1px solid #EEF2EE" : "none", fontSize: 12 }}>
+                <span style={{ color: MUTED, textAlign: "right" }}>{i + 1}.</span>
+                <span style={{ fontWeight: 700, color: TEXT, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.studentName}</span>
+                <span style={{ color: MUTED, fontSize: 11 }}>{o.className}{o.numara ? ` · ${o.numara}` : ""}</span>
+                <span style={{ fontWeight: 800, color: sk.renk, minWidth: 52, textAlign: "right" }}>{net(o) >= 0 ? `${String(o.ort7sinif).replace(".", ",")} net` : "—"}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

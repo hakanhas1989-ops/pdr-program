@@ -5029,13 +5029,14 @@ function MudahaleKutuphanesiEkrani({ kayitliListesi, records, aktifOgrenci, setA
       const ogrGorusmeler = records.filter(r => pdrAyniOgrenci(r.studentName, r.className, seciliAd, seciliOgr?.className, r.numara, seciliOgr?.numara));
       const gorusmeler = pdrGorusmeListesiMetni(ogrGorusmeler, { limit: 8 });
       if (!gorusmeler) { alert("Bu öğrenci için görüşme notu bulunamadı."); setAiLoading(false); return; }
-      const havuzMetni = havuz.map(o => `- "${o.baslik}"${o.modul?` [${o.modul} modülü]`:""} — Program: ${o.programAdi} (Hedef kitle: ${o.hedefKitle}) — ${o.ozet}`).join("\n");
+      // Program filtresi (göz atma) seçili olsa bile öneri TÜM kütüphaneden yapılır; yoksa ör. yalnız akademik oturumlar gider
+      const havuzMetni = havuzTumu.map(o => `- "${o.baslik}"${o.modul?` [${o.modul} modülü]`:""} — Program: ${o.programAdi} (Hedef kitle: ${o.hedefKitle}) — ${o.ozet}`).join("\n");
       const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({
-          model:"claude-sonnet-4-6", max_tokens:700,
-          system:'Sen bir PDR uzmanısın. Görüşme notlarını okuyup, verilen bireysel müdahale programları kütüphanesinden öğrencinin ihtiyacına en uygun oturumu/oturumları seçersin. SADECE JSON formatında cevap verirsin.',
-          messages:[{role:"user", content:`Öğrenci: ${pdrAnonimKimlik(seciliAd, seciliOgr?.className, seciliOgr?.numara)}\n${gorusmeler}\n\nBİREYSEL MÜDAHALE PROGRAMLARI OTURUM KÜTÜPHANESİ:\n${havuzMetni}\n\nGörüşme temalarına EN UYGUN en fazla 3 oturum seç. SADECE şu JSON formatında cevap ver:\n[{"baslik": "Oturum Adı (listedeki gibi HARFİ HARFİNE aynı yaz)", "aciklama": "neden uygun olduğu, 1 kısa cümle"}]\nGerçekten uygun bir şey yoksa boş dizi [] döndür. Listede OLMAYAN bir oturum adı ASLA yazma — sadece verilen listeden birebir kopyala.`}]
+          model:"claude-sonnet-4-6", max_tokens:1500,
+          system:'Sen bir PDR uzmanısın. Görüşme notlarını okuyup öğrencinin İHTİYAÇ ALANLARINI ayırırsın (ör. akademik / okula uyum, arkadaşlık-aidiyet-sosyal ilişkiler, duygular-kaygı-özgüven, akran zorbalığı, teknoloji kullanımı, aile) ve verilen bireysel müdahale programları kütüphanesinden her alan için en uygun oturumları seçersin. Tek bir programa ya da tek bir alana yığılmazsın. SADECE JSON formatında cevap verirsin.',
+          messages:[{role:"user", content:`Öğrenci: ${pdrAnonimKimlik(seciliAd, seciliOgr?.className, seciliOgr?.numara)}\n${gorusmeler}\n\nBİREYSEL MÜDAHALE PROGRAMLARI OTURUM KÜTÜPHANESİ:\n${havuzMetni}\n\nÖnce notlardaki ayrı ihtiyaç alanlarını belirle; sonra en fazla 5 oturum seç: notlarda belirgin olan HER ihtiyaç alanından en az bir oturum olsun (ör. hem okula uyum/akademik hem arkadaşlık-aidiyet hem duygu/kaygı). Aynı programdan en fazla 2 oturum seç. SADECE şu JSON formatında cevap ver:\n[{"baslik": "Oturum Adı (listedeki gibi HARFİ HARFİNE aynı yaz)", "alan": "ihtiyaç alanı (2-3 kelime)", "aciklama": "neden uygun olduğu, 1 kısa cümle"}]\nGerçekten uygun bir şey yoksa boş dizi [] döndür. Listede OLMAYAN bir oturum adı ASLA yazma — sadece verilen listeden birebir kopyala.`}]
         })
       });
       const data = await res.json();
@@ -5045,10 +5046,10 @@ function MudahaleKutuphanesiEkrani({ kayitliListesi, records, aktifOgrenci, setA
       const parsed = JSON.parse(temiz);
       const eslesenler = (Array.isArray(parsed) ? parsed : []).map(oneri => {
         const oneriAdi = (oneri.baslik || "").trim().toLocaleLowerCase("tr").replace(/^["']|["']$/g, "");
-        const kayit = havuz.find(o => o.baslik.trim().toLocaleLowerCase("tr") === oneriAdi)
-          || havuz.find(o => oneriAdi.length > 3 && (o.baslik.trim().toLocaleLowerCase("tr").includes(oneriAdi) || oneriAdi.includes(o.baslik.trim().toLocaleLowerCase("tr"))));
-        return kayit ? { ...kayit, aciklama: oneri.aciklama || "", kaynak: "not", tarih: today() } : null;
-      }).filter(Boolean);
+        const kayit = havuzTumu.find(o => o.baslik.trim().toLocaleLowerCase("tr") === oneriAdi)
+          || havuzTumu.find(o => oneriAdi.length > 3 && (o.baslik.trim().toLocaleLowerCase("tr").includes(oneriAdi) || oneriAdi.includes(o.baslik.trim().toLocaleLowerCase("tr"))));
+        return kayit ? { ...kayit, aciklama: (oneri.alan ? `[${String(oneri.alan).slice(0, 40)}] ` : "") + (oneri.aciklama || ""), kaynak: "not", tarih: today() } : null;
+      }).filter((x, i, l) => x && l.findIndex(y => y && y.baslik === x.baslik && y.programKey === x.programKey) === i).slice(0, 5);
       // Asistanın önerileri silinmez; yalnız düğmenin eski önerileri yenilenir
       const eskiAsistan = (pdrSozlukOku(mudahaleOnerileri, seciliAd, seciliOgr?.className, seciliOgr?.numara) || []).filter(o => o && o.kaynak === "asistan");
       const birlesik = [...eslesenler, ...eskiAsistan];
@@ -15806,7 +15807,7 @@ function ksMpPuanla(g, ctx, o) {
     const plan = ksMpSonPlan(ctx, o);
     if (plan) baglam.push(plan.hedef, plan.adimlar);
     (ctx.records || []).filter(r => pdrAyniOgrenci(r.studentName, r.className, o.name, o.className, r.numara, o.numara))
-      .sort((a, b) => pdrTarihMs(b.date) - pdrTarihMs(a.date)).slice(0, 6).forEach(r => baglam.push(r.topic, r.altKonu || ""));
+      .sort((a, b) => pdrTarihMs(b.date) - pdrTarihMs(a.date)).slice(0, 6).forEach((r, i) => { baglam.push(r.topic, r.altKonu || ""); if (i < 3) baglam.push(String(pdrKayitMetni(r) || "").slice(0, 1500)); });
     try { pdrFormOgrKayitlari(ctx.records, o).slice(-3).forEach(r => { const sb = pdrFormSablon(r.form.sablon); pdrFormSorular(sb).filter(q => q.secenekler && q.bolum !== "Görüşme bilgileri").forEach(q => baglam.push(...pdrFormSeciliSade(q, r.form))); }); } catch (e) {}
   }
   const bk = [...new Set(ksMpKokler(baglam.join(" ")))];
@@ -15818,7 +15819,9 @@ function ksMpPuanla(g, ctx, o) {
     ak.forEach(k => { if (ksMpEslesir(k, bas)) puan += 6; else if (ksMpEslesir(k, ozet)) puan += 3; else if (ksMpEslesir(k, prog)) puan += 1; });
     bk.forEach(k => { if (ksMpEslesir(k, bas)) puan += 2; else if (ksMpEslesir(k, ozet)) puan += 1; });
     return { x, puan };
-  }).filter(y => y.puan > 0).sort((a, b) => b.puan - a.puan).slice(0, 12);
+  }).filter(y => y.puan > 0).sort((a, b) => b.puan - a.puan)
+    // Tek programa yığılmasın: listede her programdan en fazla 4 oturum
+    .filter(function (y) { this[y.x.programKey] = (this[y.x.programKey] || 0) + 1; return this[y.x.programKey] <= 4; }, {}).slice(0, 15);
 }
 function ksMpAra(g, ctx, o) {
   const puanli = ksMpPuanla(g, ctx, o);
@@ -15844,7 +15847,7 @@ function ksMpEsle(liste) {
     if (k && !bulunan.some(b => b.baslik === k.baslik && b.programKey === k.programKey)) bulunan.push({ ...k, aciklama: String((t && t.aciklama) || "").slice(0, 300) });
     else if (!k) bulunamayan.push(String(ham));
   });
-  return { bulunan: bulunan.slice(0, 3), bulunamayan };
+  return { bulunan: bulunan.slice(0, 5), bulunamayan };
 }
 // Kaydetmede kullanılacak oturumlar: modelin verdiği başlıklar; hiçbiri eşleşmezse öğrencinin görüşme
 // notları ve planıyla en çok örtüşen 3 oturum (danışman onay kutusunda hangilerinin seçildiğini görür)
@@ -15852,7 +15855,8 @@ function ksMpSecim(g, ctx, o) {
   const r = ksMpEsle(g.oturumlar);
   if (r.bulunan.length || !o) return { ...r, otomatik: false };
   const p = ksMpPuanla({ aranan: g.aranan || "" }, ctx, o) || [];
-  return { bulunan: p.slice(0, 3).map(y => ({ ...y.x, aciklama: "Görüşme notları ve planla en çok örtüşen oturum." })), bulunamayan: r.bulunamayan, otomatik: true };
+  const sec = []; p.forEach(y => { if (sec.length < 4 && sec.filter(z => z.x.programKey === y.x.programKey).length < 1) sec.push(y); });
+  return { bulunan: sec.map(y => ({ ...y.x, aciklama: "Görüşme notları ve planla en çok örtüşen oturum." })), bulunamayan: r.bulunamayan, otomatik: true };
 }
 // ===== ASİSTAN İŞ DEFTERİ BAŞLANGIÇ =====
 // Uzun işler (bir sınıfın tamamı, çok öğrencili tarama…) için plan + ilerleme kaydı.
@@ -16444,7 +16448,7 @@ const KS_ASISTAN_ARACLAR = {
     calistir: (g, ctx, o) => ksMpAra(g, ctx, o),
   },
   mudahale_programi_kaydet: {
-    aciklama: "mudahale_programi_ara'nın getirdiği oturumlardan seçtiklerini öğrencinin 'Müdahale Programları' önerilerine kaydeder (ONAY GEREKİR). oturumlar: en fazla 3, baslik aday listesindeki (ya da program_ara / program_oturumu sonucundaki) gibi BİREBİR; aciklama: neden uygun (1 kısa cümle). plana_ekle: true ise oturumlar öğrencinin devam eden en son müdahale planının adımlarına da eklenir. 'Görüşme notlarına göre öner' düğmesinin önerileri silinmez; ikisi ayrı görünür.",
+    aciklama: "mudahale_programi_ara'nın getirdiği oturumlardan seçtiklerini öğrencinin 'Müdahale Programları' önerilerine kaydeder (ONAY GEREKİR). oturumlar: en fazla 5 — öğrencinin farklı ihtiyaç alanlarını (ör. okula uyum/akademik, arkadaşlık-aidiyet, duygu/kaygı) kapsayacak şekilde, aynı programdan en fazla 2; baslik aday listesindeki (ya da program_ara / program_oturumu sonucundaki) gibi BİREBİR; aciklama: neden uygun (1 kısa cümle). plana_ekle: true ise oturumlar öğrencinin devam eden en son müdahale planının adımlarına da eklenir. 'Görüşme notlarına göre öner' düğmesinin önerileri silinmez; ikisi ayrı görünür.",
     girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "oturumlar": [{"baslik": "Kaygımı Fark Ediyorum", "aciklama": "..."}], "plana_ekle": true}', ogrenciIster: true, yazma: true, yontem: "hepsi",
     onayOzeti: (g, ctx, o) => {
       const r = ksMpSecim(g, ctx, o);
@@ -18583,7 +18587,7 @@ Sonuçlar sana <sonuc ad="..."> blokları olarak gelir. Sonra ya yeni araç ça�
 - Grup görüşmesi notlarında '[grup görüşmesi; bu öğrenciyle ilgili kısım]' yazan bölüm yalnız o öğrenciye aittir; diğer katılımcılarla ilgili cümleleri bu öğrenciye mal etme.
 - Danışman bir görüşmeyi anlatıp 'forma işle / formla kaydet' dediğinde ya da anlattığı görüşme açıkça bir forma uyuyorsa (davranış, veli, öğretmen, ilk görüşme, zorbalık, devamsızlık, sınav kaygısı, kriz): form_sablonu ile formu al, yalnız açıkça söylenenleri soru id'si ve BİREBİR seçenek metniyle ekranda_form_doldur'a ver. Tahminle işaretleme; söylenmeyeni boş bırak.
 - Form ile görüşülmüş öğrencide gidişat, seans hazırlığı ya da veli/öğretmen görüşü sorulduğunda form_analizi'ni kullan. Takipte değişimi sayılarla söyle; karşılaştırmada farklı görüşleri 'kim haklı' diye değil 'hangi ortamda/koşulda' diye yorumla; sonunda somut bir sonraki adım öner. Müdahale planı ya da süpervizyon yaparken formlu görüşme varsa form_analizi bulgularını da dayanak al.
-- Bir öğrenci için müdahale planı yaptığında ya da kaydettiğinde, ardından mudahale_programi_ara ile (aranan: planın anahtar kavramları, ogrenci: öğrenci) Müdahale Programları kütüphanesinden aday oturumları al; en uygun 1-3 oturumu seçip mudahale_programi_kaydet ile (plan kaydedildiyse plana_ekle: true) onaya sun. Danışman 'program/etkinlik/oturum öner' dediğinde de aynısını yap. Listede olmayan oturum adı uydurma.
+- Bir öğrenci için müdahale planı yaptığında ya da kaydettiğinde, ardından mudahale_programi_ara ile (aranan: planın anahtar kavramları, ogrenci: öğrenci) Müdahale Programları kütüphanesinden aday oturumları al; notlardaki her ihtiyaç alanı için en uygun oturumları (toplam en fazla 5, tek programa yığmadan) seçip mudahale_programi_kaydet ile (plan kaydedildiyse plana_ekle: true) onaya sun. Danışman 'program/etkinlik/oturum öner' dediğinde de aynısını yap. Listede olmayan oturum adı uydurma.
 - Bir araç sonucunda "🎓 SÜPERVİZÖR … düzeltme istedi" yazarsa notları uygula ve aracı düzeltilmiş içerikle hemen yeniden çağır; danışmana soru sorma. Süpervizör notu "uygun" ise yanıtında tek cümleyle belirtebilirsin.
 - Ders kitabı, "kitapta hangi sayfa", "hangi kavram hiç çıkmadı / en çok çıktı", ünite kavramları sorulduğunda ders_kitabi kullan; sayfa numarası ve soru sayısını araç sonucundan aynen ver.
 - Lise taban puanı, yüzdelik dilim, "kaç netle hangi okul", tercih listesi sorulduğunda lise_taban_puanlari kullan (Beylikdüzü, Esenyurt, Başakşehir, Büyükçekmece, Avcılar ayrıntılı). Öğrenci adı geçiyorsa önce deneme_analizi ile ortalama netini al. Araçta olmayan okulun puanını uydurma; değerlerin 2026 tabanı olduğunu ve her yıl değiştiğini söyle.

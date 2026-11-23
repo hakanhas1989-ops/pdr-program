@@ -32155,7 +32155,9 @@ function ootKilavuzHtml() {
 // Tamamen cihazda çalışır; yapay zekâ ya da internet kullanmaz.
 function ootBelgeAc(html, ad) {
   const cubuk = `<div class="noprint" style="position:sticky;top:0;background:#127C56;color:#fff;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;gap:8px;font-family:Arial,sans-serif;z-index:9"><b style="font-size:14px">${ad}</b><span><button onclick="window.print()" style="background:#fff;color:#127C56;border:none;border-radius:8px;padding:7px 14px;font-weight:800;cursor:pointer">🖨️ Yazdır / PDF</button> <button onclick="try{window.close()}catch(e){};setTimeout(function(){if(!window.closed)history.back()},150)" style="background:rgba(255,255,255,.2);color:#fff;border:1px solid #fff;border-radius:8px;padding:7px 12px;font-weight:700;cursor:pointer">✕</button></span></div><style>@media print{.noprint{display:none!important}}</style>`;
-  const tam = html.replace(/<body([^>]*)>/, `<body$1>${cubuk}`);
+  // Yazdırırken renkler/arka planlar kaybolmasın (tarayıcının "arka plan grafikleri" ayarı kapalı olsa da)
+  const renk = `<style>html,body,*{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important}</style>`;
+  const tam = (/<\/head>/i.test(html) ? html.replace(/<\/head>/i, renk + "</head>") : renk + html).replace(/<body([^>]*)>/, `<body$1>${cubuk}`);
   const mobil = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
   try {
     if (!mobil) { const w = window.open("", "_blank"); if (w && !w.closed) { w.document.open(); w.document.write(tam); w.document.close(); return; } }

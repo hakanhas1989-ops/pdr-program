@@ -18926,7 +18926,7 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
   if (secim && isDefteri.some(x => x.durum === "devam")) ["is_defteri", "is_defteri_yaz"].forEach(a => { if (!secim.liste.includes(a) && KS_ASISTAN_ARACLAR[a]) secim.liste.push(a); });
   const sistem = ksAsistanSistem(ayar, ctx, secim, kutuphaneListe, isDefteri);
   ksAsistanGecmisDuzenle(gecmis);
-  let toplamGiris = 0, toplamCikis = 0, toplamUcret = 0, toplamOnb = 0, sonGiden = "", model = "", yedek = false, yedekNeden = "", kritik = false, ekranIsi = false;
+  let toplamGiris = 0, toplamCikis = 0, toplamUcret = 0, toplamOnb = 0, sonGiden = "", model = "", yedek = false, yedekNeden = "", araYedekNeden = "", kritik = false, ekranIsi = false;
   let birikmis = "", devamBas = -1, devamSay = 0;   // yarıda kesilen yanıtın parçaları
   // 🎓 Süpervizyon durumu
   const supAcik = ayar.supervizyon !== false;
@@ -18937,7 +18937,9 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
   let supYanitYapildi = false, supRevizyonBas = -1, sonOgr = null;
   const supTopla = (y) => { toplamGiris += y.giris; toplamCikis += y.cikis; toplamUcret += y.ucretGiris ?? y.giris; toplamOnb += y.onbellek || 0; };
   const sonKullanici = String(([...gecmis].reverse().find(x => x.role === "user" && !String(x.content).startsWith("<sonuc")) || {}).content || "").replace(PDR_BAGLAM_RE, "");
-  const bitir = (yanit) => ({ yanit, giris: toplamGiris, cikis: toplamCikis, ucretGiris: toplamUcret, onbellek: toplamOnb, giden: sonGiden, model, yedek, yedekNeden, kritik, supervizyon });
+  // "yedek" son yanıtı üreten adıma göre belirlenir: son adım seçilen modelle bittiyse kart "yedek" demez;
+  // yalnız ara bir adım yedek modelle yapıldıysa bu, ayrı ve daha hafif bir notla gösterilir
+  const bitir = (yanit) => ({ yanit, giris: toplamGiris, cikis: toplamCikis, ucretGiris: toplamUcret, onbellek: toplamOnb, giden: sonGiden, model, yedek, yedekNeden, araYedekNeden: yedek ? "" : araYedekNeden, kritik, supervizyon });
   // Danışman "🎓 Süpervizöre sor" dediyse: önceki yanıtı incelet, gerekirse asistan düzeltsin
   if (ksSupManuelMi(sonKullanici)) {
     supYanitYapildi = true;
@@ -18996,7 +18998,7 @@ async function pdrAsistanCalistir({ gecmis, ayar, ctx, olay, onayIste, enFazlaTu
     let y;
     try { y = await ksAsistanModelCagir(ayar, sistem, gecmis, iptal); } catch (e) { ksAsistanDurdu(iptal); throw e; }
     ksAsistanDurdu(iptal);
-    toplamGiris += y.giris; toplamCikis += y.cikis; toplamUcret += y.ucretGiris ?? y.giris; toplamOnb += y.onbellek || 0; sonGiden = y.giden; model = y.model; yedek = yedek || y.yedek; if (y.yedekNeden) yedekNeden = y.yedekNeden;
+    toplamGiris += y.giris; toplamCikis += y.cikis; toplamUcret += y.ucretGiris ?? y.giris; toplamOnb += y.onbellek || 0; sonGiden = y.giden; model = y.model; if (y.yedek && y.yedekNeden) araYedekNeden = y.yedekNeden; yedek = !!y.yedek; yedekNeden = y.yedek ? (y.yedekNeden || "") : "";
     // Yarıda kaldığı tahmin edilen yanıta modelin "zaten bitmişti" cevabı (TAMAM) eklenmez
     if (devamSay > 0 && /^\s*tamam[.!]?\s*$/i.test(y.metin || "")) { y.metin = ""; y.kesildi = false; y.kesinKesildi = false; }
     gecmis.push({ role: "assistant", content: y.metin || "(boş yanıt)" });
@@ -43735,7 +43737,7 @@ async function pdrAsistanIstek(m, kullanilan, ctx) {
     const dolar = kullanilan.saglayici === "ucretsiz" ? null : ksAsistanMaliyet(s.model, s.ucretGiris ?? s.giris, s.cikis);
     if (dolar) S.toplamDolar += dolar;
     const dId = pdrDeneyimEkle({ soru: m, araclar: adimlar, model: s.model, duzeltme: S.sonDuzeltme }); S.sonDuzeltme = null;
-    S.gorunen = [...S.gorunen, { rol: "asistan", deneyimId: dId, soru: m, metin: pdrAsistanLatexTemizle(s.yanit), adimlar, supervizyon: s.supervizyon && s.supervizyon.length ? s.supervizyon : null, model: s.model, giris: s.giris, cikis: s.cikis, onbellek: s.onbellek || 0, dolar, giden: s.giden, kritik: s.kritik, yedek: s.yedek, yedekNeden: s.yedekNeden, ucretsiz: kullanilan.saglayici === "ucretsiz" }];
+    S.gorunen = [...S.gorunen, { rol: "asistan", deneyimId: dId, soru: m, metin: pdrAsistanLatexTemizle(s.yanit), adimlar, supervizyon: s.supervizyon && s.supervizyon.length ? s.supervizyon : null, model: s.model, giris: s.giris, cikis: s.cikis, onbellek: s.onbellek || 0, dolar, giden: s.giden, kritik: s.kritik, yedek: s.yedek, yedekNeden: s.yedekNeden, araYedekNeden: s.araYedekNeden || "", ucretsiz: kullanilan.saglayici === "ucretsiz" }];
     // Sesli modda cevap kendiliğinden okunur
     if (kullanilan.sesliMod && dinleyenVar()) pdrAsistanSesliOkuOrtak(S.gorunen.length - 1, s.yanit);
   } catch (e) {
@@ -44256,6 +44258,11 @@ function AsistanEkrani({
                   {setAsistanNotlari && <button data-testid="ogrenciye-kaydet" onClick={() => notDugmesi(i, m)} style={{ background: "none", border: "none", color: (m.kaydedildi || []).length ? "#166534" : ACCENT, fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: 0 }}>{(m.kaydedildi || []).length ? `✓ Kaydedildi (${m.kaydedildi.map(k => k.split("||")[0].split(" ")[0]).join(", ")})` : "📌 Öğrenciye kaydet"}</button>}
                   <button onClick={() => ac("g" + i)} style={{ background: "none", border: "none", color: ACCENT, fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: 0 }}>🔍 Modele ne gitti? {acik["g" + i] ? "▲" : "▼"}</button>
                 </span>
+              </div>
+            )}
+            {!m.hata && !m.durdu && !m.yedek && m.araYedekNeden && (
+              <div data-testid="asistan-ara-yedek" style={{ marginTop: 6, background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: 8, padding: "6px 9px", fontSize: 11, color: MUTED, lineHeight: 1.45, wordBreak: "break-word" }}>
+                ℹ️ Yanıt seçtiğin modelden geldi. Hazırlık adımlarından birinde model yoğundu, o adım yedek modelle yapıldı.<br />Neden: {m.araYedekNeden.replace(/^(\S+)/, (id) => modelAd(id))}
               </div>
             )}
             {!m.hata && !m.durdu && m.yedek && m.yedekNeden && (

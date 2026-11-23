@@ -15797,7 +15797,8 @@ function ksMpSonPlan(ctx, o) {
   const l = (pdrSozlukOku(ctx.mudahalePlan, o.name, o.className) || []).filter(p => p.durum === "Devam Ediyor");
   return l.sort((a, b) => pdrTarihMs(b.tarih) - pdrTarihMs(a.tarih))[0] || null;
 }
-function ksMpAra(g, ctx, o) {
+// Aday oturumları puanlar (ksMpAra ve kaydetmede başlık eşleşmezse yedek seçim için ortak)
+function ksMpPuanla(g, ctx, o) {
   const havuz = mudahaleOturumHavuzu();
   const aranan = ksMpKokler(g.aranan);
   let baglam = [];
@@ -15810,29 +15811,48 @@ function ksMpAra(g, ctx, o) {
   }
   const bk = [...new Set(ksMpKokler(baglam.join(" ")))];
   const ak = [...new Set(aranan)];
-  if (!ak.length && !bk.length) return "Aranacak kavram yok. aranan alanına ihtiyacın anahtar kavramlarını yaz (örn. \"kaygı, öfke, zorbalık, ders çalışma\").\nProgramlar: " + MUDAHALE_PROGRAMLARI.map(p => `${p.ad} (${p.oturumlar.length} oturum)`).join("; ");
-  const puanli = havuz.map(x => {
+  if (!ak.length && !bk.length) return null;
+  return havuz.map(x => {
     const bas = ksMpKokler(x.baslik + " " + (x.modul || "")), ozet = ksMpKokler(x.ozet), prog = ksMpKokler(x.programAdi + " " + x.hedefKitle);
     let puan = 0;
     ak.forEach(k => { if (ksMpEslesir(k, bas)) puan += 6; else if (ksMpEslesir(k, ozet)) puan += 3; else if (ksMpEslesir(k, prog)) puan += 1; });
     bk.forEach(k => { if (ksMpEslesir(k, bas)) puan += 2; else if (ksMpEslesir(k, ozet)) puan += 1; });
     return { x, puan };
   }).filter(y => y.puan > 0).sort((a, b) => b.puan - a.puan).slice(0, 12);
+}
+function ksMpAra(g, ctx, o) {
+  const puanli = ksMpPuanla(g, ctx, o);
+  if (!puanli) return "Aranacak kavram yok. aranan alanına ihtiyacın anahtar kavramlarını yaz (örn. \"kaygı, öfke, zorbalık, ders çalışma\").\nProgramlar: " + MUDAHALE_PROGRAMLARI.map(p => `${p.ad} (${p.oturumlar.length} oturum)`).join("; ");
   if (!puanli.length) return "Kütüphanede bu kavramlarla eşleşen oturum bulunamadı. Başka/eş anlamlı kavramlarla tekrar dene.\nProgramlar: " + MUDAHALE_PROGRAMLARI.map(p => `${p.ad} (${p.oturumlar.length} oturum)`).join("; ");
   return `Aday oturumlar (en uygundan başlayarak; kaydederken başlığı BİREBİR yaz):\n` + puanli.map((y, i) => `${i + 1}. "${y.x.baslik}"${y.x.modul ? ` [${y.x.modul}]` : ""} — ${y.x.programAdi} (Hedef kitle: ${y.x.hedefKitle}) — ${ksAsistanKisalt(y.x.ozet, 170)}`).join("\n");
 }
 function ksMpEsle(liste) {
   const havuz = mudahaleOturumHavuzu();
   const bulunan = [], bulunamayan = [];
-  (Array.isArray(liste) ? liste : []).slice(0, 5).forEach(t => {
-    const ad = String((t && (t.baslik || t)) || "").trim().replace(/^["'“”]+|["'“”]+$/g, "").toLocaleLowerCase("tr");
+  // Model listeyi farklı biçimlerde gönderebiliyor: tek metin, numaralı satırlar, "ad"/"title"/"oturum" alanlı nesneler
+  let l = liste;
+  if (typeof l === "string") l = l.split(/\n|;|\s*,\s*(?=["“])/).map(x => x.trim()).filter(Boolean);
+  else if (l && !Array.isArray(l) && typeof l === "object") l = [l];
+  const baslikAl = (t) => typeof t === "string" ? t : (t && (t.baslik || t.ad || t.title || t.oturum || t.oturum_adi || t.name || t.konu)) || "";
+  const sade = (x) => String(x || "").trim().replace(/^\s*\d+[.)]\s*/, "").replace(/^["'“”]+|["'“”]+$/g, "").replace(/\s*[\[(—–].*$/, "").replace(/^["'“”]+|["'“”]+$/g, "").trim().toLocaleLowerCase("tr");
+  (Array.isArray(l) ? l : []).slice(0, 5).forEach(t => {
+    const ham = baslikAl(t), ad = sade(ham), tam = String(ham).trim().replace(/^["'“”]+|["'“”]+$/g, "").toLocaleLowerCase("tr");
     if (!ad) return;
-    const k = havuz.find(o => o.baslik.trim().toLocaleLowerCase("tr") === ad)
-      || havuz.find(o => ad.length > 3 && (o.baslik.trim().toLocaleLowerCase("tr").includes(ad) || ad.includes(o.baslik.trim().toLocaleLowerCase("tr"))));
+    const kb = (o) => o.baslik.trim().toLocaleLowerCase("tr");
+    const k = havuz.find(o => kb(o) === tam || kb(o) === ad)
+      || havuz.find(o => ad.length > 3 && (kb(o).includes(ad) || ad.includes(kb(o))));
     if (k && !bulunan.some(b => b.baslik === k.baslik && b.programKey === k.programKey)) bulunan.push({ ...k, aciklama: String((t && t.aciklama) || "").slice(0, 300) });
-    else if (!k) bulunamayan.push(String(t && (t.baslik || t)));
+    else if (!k) bulunamayan.push(String(ham));
   });
   return { bulunan: bulunan.slice(0, 3), bulunamayan };
+}
+// Kaydetmede kullanılacak oturumlar: modelin verdiği başlıklar; hiçbiri eşleşmezse öğrencinin görüşme
+// notları ve planıyla en çok örtüşen 3 oturum (danışman onay kutusunda hangilerinin seçildiğini görür)
+function ksMpSecim(g, ctx, o) {
+  const r = ksMpEsle(g.oturumlar);
+  if (r.bulunan.length || !o) return { ...r, otomatik: false };
+  const p = ksMpPuanla({ aranan: g.aranan || "" }, ctx, o) || [];
+  return { bulunan: p.slice(0, 3).map(y => ({ ...y.x, aciklama: "Görüşme notları ve planla en çok örtüşen oturum." })), bulunamayan: r.bulunamayan, otomatik: true };
 }
 // ===== ASİSTAN İŞ DEFTERİ BAŞLANGIÇ =====
 // Uzun işler (bir sınıfın tamamı, çok öğrencili tarama…) için plan + ilerleme kaydı.
@@ -16427,12 +16447,12 @@ const KS_ASISTAN_ARACLAR = {
     aciklama: "mudahale_programi_ara'nın getirdiği oturumlardan seçtiklerini öğrencinin 'Müdahale Programları' önerilerine kaydeder (ONAY GEREKİR). oturumlar: en fazla 3, baslik aday listesindeki (ya da program_ara / program_oturumu sonucundaki) gibi BİREBİR; aciklama: neden uygun (1 kısa cümle). plana_ekle: true ise oturumlar öğrencinin devam eden en son müdahale planının adımlarına da eklenir. 'Görüşme notlarına göre öner' düğmesinin önerileri silinmez; ikisi ayrı görünür.",
     girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "oturumlar": [{"baslik": "Kaygımı Fark Ediyorum", "aciklama": "..."}], "plana_ekle": true}', ogrenciIster: true, yazma: true, yontem: "hepsi",
     onayOzeti: (g, ctx, o) => {
-      const r = ksMpEsle(g.oturumlar);
+      const r = ksMpSecim(g, ctx, o);
       const plan = g.plana_ekle ? ksMpSonPlan(ctx, o) : null;
-      return `📁 Müdahale programı önerisi\nÖğrenci: ${ksAsistanEtiket(o)}\n${r.bulunan.length ? r.bulunan.map(x => `• ${x.baslik} (${x.programAdi}${x.modul ? " — " + x.modul : ""})`).join("\n") : "⚠ Kütüphanede eşleşen oturum yok."}${r.bulunamayan.length ? `\n⚠ Bulunamadı: ${r.bulunamayan.join("; ")}` : ""}${g.plana_ekle ? (plan ? `\nPlana da eklenecek: ${ksAsistanKisalt(plan.hedef || "", 90)}` : "\n⚠ Devam eden plan yok; yalnız önerilere kaydedilecek.") : ""}`;
+      return `📁 Müdahale programı önerisi\nÖğrenci: ${ksAsistanEtiket(o)}\n${r.otomatik && r.bulunan.length ? "ℹ️ Modelin yazdığı başlıklar kütüphanede bulunamadı; görüşme notlarına en uygun oturumlar seçildi:\n" : ""}${r.bulunan.length ? r.bulunan.map(x => `• ${x.baslik} (${x.programAdi}${x.modul ? " — " + x.modul : ""})`).join("\n") : "⚠ Kütüphanede eşleşen oturum yok."}${r.bulunamayan.length ? `\n⚠ Bulunamadı: ${r.bulunamayan.join("; ")}` : ""}${g.plana_ekle ? (plan ? `\nPlana da eklenecek: ${ksAsistanKisalt(plan.hedef || "", 90)}` : "\n⚠ Devam eden plan yok; yalnız önerilere kaydedilecek.") : ""}`;
     },
     calistir: async (g, ctx, o) => {
-      const r = ksMpEsle(g.oturumlar);
+      const r = ksMpSecim(g, ctx, o);
       if (!r.bulunan.length) return "Kütüphanede eşleşen oturum bulunamadı; önce mudahale_programi_ara ile aday listesini al ve başlıkları birebir yaz.";
       if (!ctx.kaydet.mudahaleOnerileri) return "Öneriler bu ekrandan kaydedilemedi.";
       const yeni = r.bulunan.map(x => ({ ...x, kaynak: "asistan", tarih: today() }));

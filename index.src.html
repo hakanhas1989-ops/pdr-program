@@ -42470,7 +42470,7 @@ function YilSecimEkrani({ yillar, setYillar, aktifYil, setAktifYil, ogrenciler, 
 }
 
 // ── Özet Kartı Bileşeni (Seans Öncesi Hazırlık) ─────────────────────────────
-function OzetKarti({ ogrenci, ogrenciSinif, ogrRec, ogrP1, ogrP2, ogrRisk, denemeGirilen, denemeAvg, mudahalePlan, hazirlikNotlari, setHazirlikNotlari, ilerlemeNotlari, setIlerlemeNotlari, setTab, devamsizlikGecmisi, onDevamsizlikGuncelle, kademe, olayKayitlari, onOlayEkle, hedefOkullar, notNetleri, onHedefKaydet, ogrNumara, testKayitlari, setTestKayitlari, profiles2, setProfiles2 }) {
+function OzetKarti({ ogrenci, ogrenciSinif, ogrRec, ogrP1, ogrP2, ogrRisk, denemeGirilen, denemeAvg, mudahalePlan, hazirlikNotlari, setHazirlikNotlari, ilerlemeNotlari, setIlerlemeNotlari, setTab, devamsizlikGecmisi, onDevamsizlikGuncelle, kademe, olayKayitlari, onOlayEkle, hedefOkullar, notNetleri, onHedefKaydet, ogrNumara, testKayitlari, setTestKayitlari, profiles2, setProfiles2, bireyiTanima, setBireyiTanima }) {
   const [hazirlikAiLoading, setHazirlikAiLoading] = useState(false);
   const [ucretsizEtkinlikAlan, setUcretsizEtkinlikAlan] = useState(null);
   const [ucretsizEtkinlikArama, setUcretsizEtkinlikArama] = useState("");
@@ -42750,7 +42750,7 @@ Kısa ve pratik yaz, Markdown kullanma.`}]
           {kademe === "ortaokul" && onHedefKaydet && <PdrHedefOkulKarti hedefler={hedefOkullar || []} denemeGirilen={denemeGirilen} notNetleri={notNetleri || []} onKaydet={onHedefKaydet} />}
           <PdrOlcumKarti kayitlar={ogrRec} />
           {kademe === "ortaokul" && setTestKayitlari && <LgsOnFormKarti ogrAd={ogrenci} ogrSinif={ogrenciSinif} ogrNumara={ogrNumara} testKayitlari={testKayitlari || {}} setTestKayitlari={setTestKayitlari} hedefOkullar={hedefOkullar || []} onHedefKaydet={onHedefKaydet} profiles2={profiles2} setProfiles2={setProfiles2} />}
-          {setTestKayitlari && <VeliFormKarti ogrAd={ogrenci} ogrSinif={ogrenciSinif} ogrNumara={ogrNumara} testKayitlari={testKayitlari || {}} setTestKayitlari={setTestKayitlari} />}
+          {setTestKayitlari && <VeliFormKarti ogrAd={ogrenci} ogrSinif={ogrenciSinif} ogrNumara={ogrNumara} testKayitlari={testKayitlari || {}} setTestKayitlari={setTestKayitlari} bireyiTanima={bireyiTanima} setBireyiTanima={setBireyiTanima} />}
           <PdrYasamKarti kayitlar={ogrRec} ogrenci={ogrenci} formKayit={lgsOnSonKayit(testKayitlari, ogrenci, ogrenciSinif, ogrNumara)} />
           {/* Son görüşme */}
           {sonGorusme && (
@@ -46346,6 +46346,7 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
           {/* ÖZET — Canlı Öğrenci Kartı */}
           {aktifSekme === "ozet" && (
             <OzetKarti
+              bireyiTanima={bireyiTanima} setBireyiTanima={setBireyiTanima}
               ogrenci={seciliOgrenci}
               ogrenciSinif={seciliOgrenciSinif}
               ogrRec={ogrRec}
@@ -48329,6 +48330,28 @@ ${alanlar}`,
   const m = /\{[\s\S]*\}/.exec(metin); if (!m) throw new Error("Cevaplar okunamadı");
   return veliFormTemizle(JSON.parse(m[0]));
 }
+// Formdaki bilgileri Bireyi Tanıma kategorilerine madde olarak dönüştürür (danışman seçip onaylar)
+function veliFormBireyiTanimaMaddeleri(v) {
+  const c = (id, haric) => (Array.isArray(v[id]) ? v[id] : []).filter(x => !(haric || []).includes(x)).join(", ");
+  const t = (id) => String(v[id] || "").trim(), l = [], ekle = (kategori, metin) => { if (metin) l.push({ kategori, metin }); };
+  ekle("aile", c("anneBaba") ? `Anne-baba: ${c("anneBaba").toLocaleLowerCase("tr")}` : "");
+  ekle("aile", [t("kardes") ? `${t("kardes")} kardeş` : "", t("kacinci") ? `${t("kacinci")}. çocuk` : ""].filter(Boolean).join(", "));
+  ekle("aile", t("evde") ? `Evde yaşayanlar: ${t("evde")}` : ""); ekle("aile", t("bakim") ? `Bakımını üstlenen: ${t("bakim")}` : "");
+  ekle("aile", c("iliski") ? `Aile içi ilişkiler: ${c("iliski").toLocaleLowerCase("tr")}` : ""); ekle("aile", t("genogram") ? `Aile ağacı: ${t("genogram")}` : "");
+  ekle("sosyoekonomik", [t("anneIs") ? `anne: ${t("anneIs")}` : "", t("babaIs") ? `baba: ${t("babaIs")}` : ""].filter(Boolean).length ? `Ebeveyn iş/eğitim — ${[t("anneIs") ? `anne: ${t("anneIs")}` : "", t("babaIs") ? `baba: ${t("babaIs")}` : ""].filter(Boolean).join("; ")}` : "");
+  ekle("sosyoekonomik", t("evKosul") ? `Ev koşulları: ${t("evKosul")}` : ""); ekle("sosyoekonomik", t("aileZor") ? `Ailenin zorlandığı konular: ${t("aileZor")}` : "");
+  ekle("saglik", c("dogum", ["Zamanında", "Bilmiyorum"]) ? `Doğum/erken gelişim: ${c("dogum", ["Zamanında", "Bilmiyorum"]).toLocaleLowerCase("tr")}` : "");
+  ekle("saglik", c("saglik") || t("saglikAcik") ? `Sağlık: ${[c("saglik").toLocaleLowerCase("tr"), t("saglikAcik")].filter(Boolean).join(" — ")}` : "");
+  ekle("saglik", c("destek", ["Hayır"]) ? `Daha önce destek: ${c("destek", ["Hayır"])}${t("destekNerede") ? ` (${t("destekNerede")})` : ""}` : "");
+  ekle("saglik", t("aileBenzer") ? `Ailede benzer güçlük: ${t("aileBenzer")}` : "");
+  ekle("olaylar", t("olaylar") ? `Yaşam olayları: ${t("olaylar")}` : ""); ekle("olaylar", t("olaySonrasi") ? `Olaylardan sonra fark edilen: ${t("olaySonrasi")}` : "");
+  ekle("olaylar", t("zorDonem") && !/^(hay[ıi]r|yok)\b/i.test(t("zorDonem")) ? `Ailenin şu anki zor dönemi: ${t("zorDonem")}` : "");
+  ekle("ilgi", t("guclu") ? `Güçlü yanları: ${t("guclu")}` : ""); ekle("ilgi", t("ilgi") ? `İlgi alanları: ${t("ilgi")}` : ""); ekle("ilgi", t("parlar") ? `İyi olduğu alan: ${t("parlar")}` : "");
+  ekle("ilgi", c("arkadas") ? `Arkadaşlık: ${c("arkadas").toLocaleLowerCase("tr")}` : ""); ekle("ilgi", t("kurs") ? `Okul dışı kurs/spor: ${t("kurs")}` : "");
+  ekle("okul", v.okulTutum ? `Okula karşı tutumu: ${v.okulTutum.toLocaleLowerCase("tr")}` : ""); ekle("okul", t("sevdigiDers") ? `Sevdiği/iyi olduğu dersler: ${t("sevdigiDers")}` : "");
+  ekle("okul", t("zorDers") ? `Zorlandığı dersler: ${t("zorDers")}` : ""); ekle("okul", t("ogretmenIliski") ? `Öğretmenleriyle ilişkisi: ${t("ogretmenIliski")}` : ""); ekle("okul", t("devamsizlik") ? `Devamsızlık/geç kalma: ${t("devamsizlik")}` : "");
+  return l.map(x => ({ ...x, metin: x.metin + " (veli görüşme formu)" }));
+}
 function veliFormDoluHtml(kayit, ogr) {
   const E = pdrHtmlKac, v = (kayit && kayit.veri) || {}, t = veliFormTespitler(v);
   const deger = (a) => { const x = v[a.id]; if (x === undefined || x === "" || (Array.isArray(x) && !x.length)) return ""; return Array.isArray(x) ? x.join(", ") : a.tip === "olcek10" ? `${x} / 10` : String(x); };
@@ -48337,11 +48360,27 @@ function veliFormDoluHtml(kayit, ogr) {
 <h1>👪 Veli Görüşme Formu — ${E(ogr.ad || "")} ${ogr.sinif ? "· " + E(ogr.sinif) : ""}</h1><div style="color:#64748B">Rehberlik Servisi · ${E(kayit.tarih || "")}</div>
 ${t.length ? `<div class="t"><b>Dikkat edilecekler</b>${t.map(x => `<div>• ${E(x)}</div>`).join("")}</div>` : ""}${bol}</body></html>`;
 }
-function VeliFormKarti({ ogrAd, ogrSinif, ogrNumara, testKayitlari, setTestKayitlari }) {
+function VeliFormKarti({ ogrAd, ogrSinif, ogrNumara, testKayitlari, setTestKayitlari, bireyiTanima, setBireyiTanima }) {
+  const [aktar, setAktar] = useState(null);   // { kayitId, maddeler:[{kategori, metin, secili, varMi}] }
   const [acik, setAcik] = useState(false), [doldur, setDoldur] = useState(false), [v, setV] = useState({});
   const [durum, setDurum] = useState(""), [okunuyor, setOkunuyor] = useState(false), [kirpma, setKirpma] = useState(null);
   const dosyaRef = useRef(null);
-  useEffect(() => { setV({}); setDoldur(false); setDurum(""); setKirpma(null); }, [ogrAd, ogrSinif]);
+  useEffect(() => { setV({}); setDoldur(false); setDurum(""); setKirpma(null); setAktar(null); }, [ogrAd, ogrSinif]);
+  const btMevcut = (bireyiTanima || []).filter(b => pdrAyniOgrenci(b.studentName, b.className, ogrAd, ogrSinif, b.numara, ogrNumara));
+  function aktarAc(k) {
+    const m = veliFormBireyiTanimaMaddeleri(k.veri || {}).map(x => { const varMi = btMevcut.some(b => b.kategori === x.kategori && ksSade(b.metin) === ksSade(x.metin)); return { ...x, varMi, secili: !varMi }; });
+    setAktar({ kayitId: k.id, tarih: k.tarih, maddeler: m });
+  }
+  async function aktarOnayla() {
+    if (!aktar || !setBireyiTanima) return;
+    const sec = aktar.maddeler.filter(x => x.secili && !x.varMi);
+    if (!sec.length) { setAktar(null); return; }
+    const yeni = sec.map(x => ({ id: uid(), studentName: ogrAd, className: ogrSinif, numara: ogrNumara, kategori: x.kategori, metin: x.metin, tarih: aktar.tarih || today() }));
+    const guncel = [...yeni, ...(bireyiTanima || [])];
+    setBireyiTanima(guncel);
+    try { await saveBireyiTanima(guncel); setDurum(`✓ ${yeni.length} madde Bireyi Tanıma'ya eklendi`); } catch (e) { setDurum("⚠ Bireyi Tanıma kaydedilemedi — bağlantıyı kontrol edin."); }
+    setAktar(null);
+  }
   const tum = pdrSozlukOku(testKayitlari, ogrAd, ogrSinif, ogrNumara) || [];
   const kayitlar = tum.filter(k => k.tip === "veli_gorusme_form").sort((a, b) => pdrTarihMs(b.tarih) - pdrTarihMs(a.tarih) || String(b.id).localeCompare(String(a.id)));
   const ata = (id, x) => setV(s => { const y = { ...s }; if (x === undefined || x === "" || x === false || (Array.isArray(x) && !x.length)) delete y[id]; else y[id] = x; return y; });
@@ -48351,8 +48390,10 @@ function VeliFormKarti({ ogrAd, ogrSinif, ogrNumara, testKayitlari, setTestKayit
     try { await saveTestKayitlari(guncel); setDurum(mesaj); } catch (e) { setDurum("⚠ Kaydedilirken sorun oluştu — bağlantıyı kontrol edin."); }
   }
   async function kaydet() {
-    await yaz([{ id: uid(), tarih: today(), tip: "veli_gorusme_form", testAdi: "Veli Görüşme Formu", veri: { ...v, ozet: veliFormOzetMetni(v) } }, ...kayitlar], "✓ Veli görüşme formu kaydedildi");
+    const yeniKayit = { id: uid(), tarih: today(), tip: "veli_gorusme_form", testAdi: "Veli Görüşme Formu", veri: { ...v, ozet: veliFormOzetMetni(v) } };
+    await yaz([yeniKayit, ...kayitlar], "✓ Veli görüşme formu kaydedildi");
     setV({}); setDoldur(false);
+    if (setBireyiTanima && veliFormBireyiTanimaMaddeleri(yeniKayit.veri).length) aktarAc(yeniKayit);
   }
   async function fotoSec(files) {
     const l = [...(files || [])].filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|heic|webp)$/i.test(f.name || "")).slice(0, 2);
@@ -48419,6 +48460,29 @@ function VeliFormKarti({ ogrAd, ogrSinif, ogrNumara, testKayitlari, setTestKayit
               </div>
             </div>
           )}
+          {aktar && (
+            <div data-testid="veli-form-bt" style={{ background: "#F0FDFA", border: "1px solid #99F6E4", borderRadius: 10, padding: "8px 10px", marginBottom: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: "#0F766E", marginBottom: 2 }}>🧩 Bireyi Tanıma'ya aktar ({aktar.tarih})</div>
+              {aktar.maddeler.length === 0 ? <div style={{ fontSize: 11.5, color: MUTED }}>Bu formda aktarılacak bilgi yok.</div> : <>
+                <div style={{ fontSize: 10.5, color: MUTED, marginBottom: 6 }}>Eklemek istediklerinizi işaretleyin. Zaten kayıtlı olanlar soluk gösterilir.</div>
+                {BIREYI_TANIMA_KATEGORILER.filter(kt => aktar.maddeler.some(x => x.kategori === kt.key)).map(kt => (
+                  <div key={kt.key} style={{ marginBottom: 6 }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: TEXT }}>{kt.label}</div>
+                    {aktar.maddeler.map((x, i) => x.kategori !== kt.key ? null : (
+                      <label key={i} style={{ display: "flex", gap: 6, alignItems: "flex-start", fontSize: 11.5, color: x.varMi ? MUTED : TEXT, margin: "3px 0" }}>
+                        <input type="checkbox" data-testid="veli-form-bt-madde" disabled={x.varMi} checked={x.secili && !x.varMi} onChange={() => setAktar(a => ({ ...a, maddeler: a.maddeler.map((y, j) => j === i ? { ...y, secili: !y.secili } : y) }))} style={{ marginTop: 2 }} />
+                        <span>{x.metin}{x.varMi ? " — zaten kayıtlı" : ""}</span>
+                      </label>
+                    ))}
+                  </div>
+                ))}
+              </>}
+              <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                {aktar.maddeler.some(x => !x.varMi) && <button data-testid="veli-form-bt-onayla" onClick={aktarOnayla} style={{ ...btn("#0D9488", true), flex: 1 }}>✓ Seçilenleri ekle ({aktar.maddeler.filter(x => x.secili && !x.varMi).length})</button>}
+                <button onClick={() => setAktar(null)} style={btn(MUTED, false)}>{aktar.maddeler.some(x => !x.varMi) ? "Vazgeç" : "Kapat"}</button>
+              </div>
+            </div>
+          )}
           {durum && <div data-testid="veli-form-durum" style={{ fontSize: 11.5, color: durum.startsWith("⚠") ? "#B42318" : ACCENT, fontWeight: 700, marginBottom: 8 }}>{durum}</div>}
           {doldur && (
             <div>
@@ -48444,6 +48508,7 @@ function VeliFormKarti({ ogrAd, ogrSinif, ogrNumara, testKayitlari, setTestKayit
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                     <span style={{ fontSize: 12, fontWeight: 800, color: TEXT }}>{k.tarih}{k.veri && k.veri.yakinlik ? ` · ${k.veri.yakinlik}` : ""}</span>
                     <span style={{ display: "flex", gap: 6 }}>
+                      {setBireyiTanima && <button data-testid="veli-form-bt-ac" onClick={() => aktarAc(k)} style={btn("#0D9488", false)}>🧩 Bireyi Tanıma'ya aktar</button>}
                       <button onClick={() => ootBelgeAc(veliFormDoluHtml(k, { ad: ogrAd, sinif: ogrSinif }), "Veli Gorusme Formu - " + ogrAd)} style={btn("#1D4ED8", false)}>🖨️ Görüntüle</button>
                       <button data-testid="veli-form-sil" onClick={() => { if (window.confirm(`${k.tarih} tarihli form silinsin mi?`)) yaz(kayitlar.filter(x => x.id !== k.id), "Kayıt silindi"); }} style={btn("#B42318", false)}>Sil</button>
                     </span>

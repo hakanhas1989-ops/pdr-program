@@ -20003,7 +20003,7 @@ Sade, PDR diline uygun, somut yaz. Markdown kullanma.`;
 
 
 async function getAISummary(rawText) {
-  const res = await fetch("https://pdr-api.hakanhas1989.workers.dev", {
+  const istek = () => fetch("https://pdr-api.hakanhas1989.workers.dev", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -20057,7 +20057,17 @@ Boyle bir bilgi YOKSA sadece "Yok" yaz. Tahmin yurutme, sadece notta ACIKCA beli
       messages: [{ role: "user", content: rawText }],
     }),
   });
-  const data = await res.json();
+  let res;
+  try { res = await istek(); }
+  catch (e) {
+    // Mobil bağlantı anlık koptuysa bir kez daha dene
+    await new Promise(r => setTimeout(r, 1500));
+    try { res = await istek(); }
+    catch (e2) { throw new Error("İnternet bağlantısı kurulamadı ya da yanıt yarıda kesildi. Bağlantını kontrol edip tekrar dene; notun silinmedi."); }
+  }
+  let data = null;
+  try { data = await res.json(); } catch (e) { throw new Error("Yapay zekâ sunucusundan geçerli bir yanıt gelmedi (HTTP " + res.status + "). Biraz sonra tekrar dene; notun silinmedi."); }
+  if (data && data.error) throw new Error("Yapay zekâ hatası: " + (data.error.message || data.error));
   return data.content?.[0]?.text || "";
 }
 
@@ -56628,8 +56638,15 @@ export default function App() {
   async function handleSummarize() {
     if (!form.raw.trim()) return;
     setAiLoading(true);
-    const tamCevap = await getAISummary(pdrOzetMetniKur(form.raw,
-      pdrGorusmeGecmisiMetni(records, form.studentName, form.className, form.numara, null)));
+    let tamCevap;
+    try {
+      tamCevap = await getAISummary(pdrOzetMetniKur(form.raw,
+        pdrGorusmeGecmisiMetni(records, form.studentName, form.className, form.numara, null)));
+    } catch (e) {
+      setAiLoading(false);
+      try { pdrUyariBandi("⚠️ AI Özetle yapılamadı: " + ((e && e.message) || "bilinmeyen hata")); } catch (_) {}
+      return;
+    }
     // AI cevabı, özetin sonuna "---HATIRLATMA---" ve "---BIREYI_TANIMA---"
     // ayraçlarıyla iki ayrı tespit ekliyor — özeti temizleyip, ikisini de
     // ayrı ayrı gösteriyoruz. İkisi de sadece ÖNERİ; danışman onaylamadan

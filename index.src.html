@@ -46533,10 +46533,10 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
               { key:"gorusme", label:`Görüşme (${ogrRec.length})` },
               ...(ogrRec.some(r => r.form) ? [{ key:"formlar", label:`📋 Formlar (${ogrRec.filter(r => r.form).length})` }] : []),
               { key:"deneme", label:`Deneme (${Object.keys(ogrDeneme).length})` },
-              { key:"profil", label:"Profil" },
-              { key:"bireyi_tanima", label:"🔍 Bireyi Tanıma" },
-              { key:"bdt_analiz", label:"🧠 BDT Analiz" },
-              { key:"sinav_kaygisi", label:"😰 Sınav Kaygısı" },
+              { key:"profil", label:"Profil", sayi: (ogrP1 ? 1 : 0) + (ogrP2 ? 1 : 0) },
+              { key:"bireyi_tanima", label:"🔍 Bireyi Tanıma", sayi: (bireyiTanima || []).filter(b => pdrAyniOgrenci(b.studentName, b.className, seciliOgrenci, seciliOgrenciSinif, b.numara, seciliOgrenciNumara)).length },
+              { key:"bdt_analiz", label:"🧠 BDT Analiz", sayi: (bdtAnaliz || []).filter(b => pdrAyniOgrenci(b.studentName, b.className, seciliOgrenci, seciliOgrenciSinif, b.numara, seciliOgrenciNumara)).length },
+              { key:"sinav_kaygisi", label:"😰 Sınav Kaygısı", sayi: (() => { try { const k = (sinavKaygisi || {})[pdrOgrAnahtar(seciliOgrenci, seciliOgrenciSinif, seciliOgrenciNumara)]; return k && k.haftalar ? Object.values(k.haftalar).filter(h => h && ((h.toplam || 0) > 0 || (h.cevaplar || []).some(c => c !== null && c !== undefined))).length : 0; } catch (e) { return 0; } })() },
               { key:"asistan_notlari", label:`🤖 Asistan Notları (${(asistanNotlari || []).filter(n => pdrAyniOgrenci(n.studentName, n.className, seciliOgrenci, seciliOgrenciSinif, n.numara, seciliOgrenciNumara)).length})` },
             ].map(s => (
               <button key={s.key} data-asistan="ogr-sekme" data-deger={s.key} onClick={() => setAktifSekme(s.key)} style={{
@@ -46545,7 +46545,7 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
                 color:aktifSekme===s.key ? ACCENT : MUTED,
                 fontWeight:aktifSekme===s.key ? 700 : 500,
                 fontSize:11, cursor:"pointer", borderRadius:8
-              }}>{s.label}</button>
+              }}>{s.label}{s.sayi > 0 && <span data-testid="sekme-sayi" style={{ marginLeft:5, background:ACCENT, color:"#fff", borderRadius:999, padding:"1px 6px", fontSize:10, fontWeight:800 }}>{s.sayi}</span>}</button>
             ))}
           </div>
 

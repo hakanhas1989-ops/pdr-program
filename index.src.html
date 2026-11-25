@@ -18712,13 +18712,20 @@ async function ksAsistanModelCagir(ayar, sistem, mesajlar, iptal) {
   const geciciHata = (x) => hatali(x) && (pdrAsistanGeminiMi(x.model) || [429, 500, 502, 503, 504].includes(x.res.status) || /4002|3040|route|capacity|kapasite|timeout|high demand|overloaded/i.test(x.ham || ""));
   if (!claudeMi && geciciHata(r)) {
     // Zaman aşımı (524: model 100 sn içinde bitiremedi) ve kota dolu (429) aynı modelde tekrar denenmez — danışman boşuna beklemesin
-    if (!(pdrAsistanGeminiMi(r.model) && [429, 524].includes(r.res.status))) { await new Promise(ok => setTimeout(ok, 1500)); ksAsistanDurdu(iptal); r = await istek(r.model); }
+    // Gemini "yoğun" (503 / high demand) çoğu zaman birkaç saniyelik bir dalgalanmadır: 4 sn, olmazsa 8 sn bekleyip aynı modeli yeniden dene
+    const yogunMu = (x) => hatali(x) && pdrAsistanGeminiMi(x.model) && (x.res.status === 503 || /high demand|overloaded|unavailable/i.test(x.ham || ""));
+    if (yogunMu(r)) { for (const bekle of [4000, 8000]) { await new Promise(ok => setTimeout(ok, bekle)); ksAsistanDurdu(iptal); r = await istek(r.model); if (!yogunMu(r)) break; } }
+    else if (!(pdrAsistanGeminiMi(r.model) && [429, 524].includes(r.res.status))) { await new Promise(ok => setTimeout(ok, 1500)); ksAsistanDurdu(iptal); r = await istek(r.model); }
     // Gemini yoğun/kotası dolu → önce diğer ücretsiz Gemini modelleri (3.6 Flash, 3.5 Flash-Lite), sonra Cloudflare modelleri
     if (geciciHata(r) && pdrAsistanGeminiMi(r.model)) {
       const ilkHata = hataOzeti(r), ilkModel = r.model;
       // 3.8 ya da 4 Hydrogen yoğunsa 3.6 denenir; 3.6 yoğunsa doğrudan Gemma'ya geçilir (3.5 Flash-Lite çıkarıldı: araçları karıştırıyor, bulduğu öğrenciye güvenmiyordu)
       const gemYedek = (ilkModel === "gemini-3.8-flash" || ilkModel === "gemini-4-hydrogen") ? ["gemini-3.6-flash"] : [];
-      for (const gm of gemYedek) { ksAsistanDurdu(iptal); r = await istek(gm); if (!geciciHata(r)) { yedek = true; yedekNeden = ilkHata; break; } }
+      for (const gm of gemYedek) {
+        ksAsistanDurdu(iptal); r = await istek(gm);
+        if (yogunMu(r)) { await new Promise(ok => setTimeout(ok, 4000)); ksAsistanDurdu(iptal); r = await istek(gm); }
+        if (!geciciHata(r)) { yedek = true; yedekNeden = ilkHata; break; }
+      }
       if (geciciHata(r)) r = { ...r, model: ilkModel, __ilkHata: ilkHata + (gemYedek.length ? " — diğer Gemini modelleri de yoğundu" : "") };
     }
     if (geciciHata(r)) {

@@ -20053,6 +20053,34 @@ function gorusmeRehberEksikParcala(blok) {
   return m.length ? m.map(metin => ({ metin, secili: true })) : null;
 }
 
+// AI Özetle için hedef okul farkı: bu yılın en son denemesi (yoksa notta geçen net, o da yoksa 7. sınıf geçmiş deneme ortalaması)
+// ile öğrencinin hedef okulları (+ bu notta geçen okullar) arasındaki net ve puan farkı. Hesap programda yapılır, AI'ya bırakılmaz.
+function pdrOzetHedefFarki(ogr, ogrDen, dersler, notMetni) {
+  try {
+    const okullar = [...new Set([...((ogr && ogr.hedefOkullar) || []).map(h => h.okul), ...pdrNottakiOkullar(notMetni || "")])];
+    if (!okullar.length) return "";
+    const v = (x) => String(x).replace(".", ",");
+    const den = Object.entries(ogrDen || {}).filter(([k]) => k !== "7sinif").sort((a, b) => a[0] - b[0])
+      .map(([no, nets]) => ({ no, toplam: (dersler || []).reduce((t, d) => t + (parseFloat(nets[d.key]) || 0), 0) })).filter(x => x.toplam > 0);
+    let net = null, kaynak = "";
+    if (den.length) { net = +den[den.length - 1].toplam.toFixed(1); kaynak = `bu yılın son denemesi (${den.length}. deneme)`; }
+    else {
+      const nn = ((ogr && ogr.notNetleri) || []).slice().sort((a, b) => pdrTarihMs(a.tarih) - pdrTarihMs(b.tarih));
+      if (nn.length) { net = +nn[nn.length - 1].net; kaynak = `notta geçen net (${nn[nn.length - 1].tarih || "?"})`; }
+      else { const g = parseFloat(ogrDen && ogrDen["7sinif"] && ogrDen["7sinif"].ortalama); if (!isNaN(g) && g > 0) { net = +g.toFixed(1); kaynak = "geçen yılın (7. sınıf) deneme ortalaması"; } }
+    }
+    if (net === null) return "";
+    const puanNow = ksNetPuanTahmin(net).puan, l = pdrTabanListesi();
+    const satir = okullar.map(ok => {
+      const sx = l.filter(x => x.okul === ok && x.taban != null && !x.ozel).sort((a, b) => (b.taban || 0) - (a.taban || 0))[0];
+      if (!sx) return null;
+      const gereken = ksPuanNetTahmin(sx.taban), fn = +(gereken - net).toFixed(1), fp = Math.round(sx.taban - puanNow);
+      return `• ${sx.okul} (${sx.alan}): taban ${v(sx.taban.toFixed(2))} puan ≈ ${v(gereken)} net → ${fn > 0 ? `fark ≈ ${v(fn)} net / ≈ ${fp} puan` : "şu anki netiyle ulaşılıyor"}`;
+    }).filter(Boolean);
+    if (!satir.length) return "";
+    return `🎯 Hedef okul farkı — ${kaynak}: ${v(net)} net ≈ ${puanNow} puan\n${satir.join("\n")}\n(Net-puan dönüşümü yaklaşıktır; tabanlar 2026 yılının.)`;
+  } catch (e) { return ""; }
+}
 function GorusmeRehberiKarti({ form, records, bireyiTanima, hatirlatmalar, durum, setDurum }) {
   const [acik, setAcik] = useState(true);
   if (!form || !form.studentName) return null;
@@ -56774,9 +56802,11 @@ export default function App() {
   async function handleSummarize() {
     if (!form.raw.trim()) return;
     setAiLoading(true);
-    let tamCevap;
+    let tamCevap, hedefFark = "";
     try {
-      const gecmisVeRehber = [pdrGorusmeGecmisiMetni(records, form.studentName, form.className, form.numara, null), gorusmeRehberBaglam(rehberDurum)].filter(Boolean).join("\n\n");
+      hedefFark = kademe === "ortaokul" && form.studentName && !digerKatilimcilar.length ? pdrOzetHedefFarki((ogrenciler || []).find(x => pdrAyniOgrenci(x.studentName, x.className, form.studentName, form.className, x.numara, form.numara)), pdrSozlukOku(denemeler, form.studentName, form.className, form.numara), aktifDenemeDersleri, form.raw) : "";
+      const hedefBaglam = hedefFark ? `=== HEDEF OKUL HESABI (program hesapladı; özete yazma — program özetin sonuna kendisi ekleyecek. Değerlendirme'de bu farka sayı yazmadan kısaca değinebilirsin: ulaşılabilir / zorlayıcı / çok zorlayıcı) ===\n${hedefFark}` : "";
+      const gecmisVeRehber = [pdrGorusmeGecmisiMetni(records, form.studentName, form.className, form.numara, null), gorusmeRehberBaglam(rehberDurum), hedefBaglam].filter(Boolean).join("\n\n");
       tamCevap = await getAISummary(pdrOzetMetniKur(form.raw, gecmisVeRehber || null));
     } catch (e) {
       setAiLoading(false);
@@ -56802,7 +56832,7 @@ export default function App() {
     const ekParcalari = (gyParcalari[1] || "").split(/---EKSIK_KALANLAR---/i);
     const gecmisYilBlok = (ekParcalari[0] || "").trim();
     setOnerilenEksik(gorusmeRehberEksikParcala(ekParcalari[1] || ""));
-    setForm(f => ({ ...f, summary }));
+    setForm(f => ({ ...f, summary: hedefFark ? summary + "\n\n" + hedefFark : summary }));
     setOnerilenHatirlatma(pdrHatirlatmaBlokParcala(hatirlatmaBlok));
     // Bilişsel çarpıtma önerisi — güvenlik uyarısı varsa ayrı ve belirgin şekilde göster.
     if (bdtBlok && !/^yok/i.test(bdtBlok)) {
@@ -57035,7 +57065,8 @@ export default function App() {
     setRecords(updated); await saveRecords(updated);
     // 🎯 Notta hedef okul ya da deneme neti geçiyorsa öğrencinin kaydına eklemeyi öner (grup notunda her öğrenciye kendi kısmından)
     try {
-      const tespit = pdrNotTespitleri(ortakOzet, tumKatilimcilar, ogrenciler);
+      // Program'ın eklediği "🎯 Hedef okul farkı" satırları (deneme netleri, okul adları) nottan tespit sayılmaz
+      const tespit = pdrNotTespitleri(String(ortakOzet || "").replace(/🎯 Hedef okul farkı[\s\S]*$/, ""), tumKatilimcilar, ogrenciler);
       const ad = (k) => k.name.replace(/\s*\S*\*+\S*/g, "").trim() || k.name;
       let yeniOgr = ogrenciler, degisti = false;
       const okullu = tespit.filter(t => t.okullar.length);
@@ -58593,7 +58624,7 @@ function pdrBaslangicSekmesi() {
               {form.summary ? (
                 <div style={{ marginBottom:10 }}>
                   <label style={{ fontSize:11, fontWeight:600, color:MUTED, display:"block", marginBottom:4 }}>ÖZET</label>
-                  {(() => { const sup = pdrOzetDogrula(form.raw, form.summary); return sup.length ? (
+                  {(() => { const sup = pdrOzetDogrula(form.raw, String(form.summary || "").replace(/🎯 Hedef okul farkı[\s\S]*$/, "")); return sup.length ? (
                     <div data-testid="ozet-kontrol" style={{ background:"#FFF8E1", border:"1px solid #E9B949", borderRadius:9, padding:"7px 10px", fontSize:11.5, color:"#5C4400", marginBottom:6, lineHeight:1.5 }}>
                       <b>🔎 Kontrol et:</b> özette, notunda geçmeyen bilgi var — {sup.map((x, i) => <span key={i} style={{ background:"#FDE7A8", borderRadius:6, padding:"1px 6px", margin:"0 3px", fontWeight:800 }}>{x}</span>)}. Yapay zekâ bunu uydurmuş ya da yanlış aktarmış olabilir; doğru değilse özetten sil.
                     </div>) : null; })()}

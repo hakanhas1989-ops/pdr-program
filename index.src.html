@@ -15005,6 +15005,8 @@ const PDR_ASISTAN_MODELLER = {
     { id: "@cf/google/gemma-4-26b-a4b-it", ad: "Gemma 4 26B (Google) — çok dilli (önerilen)" },
     // Gemini 3.8 Flash: Cloudflare değil, çözüm yolunda kullanılan pdr-gemini worker'ı üzerinden Google'ın ücretsiz katmanına gider
     // 3.6 Flash önerilen: 3.8 Flash sık sık yoğunluk (503) veriyor ve ücretsiz kotası günde yaklaşık 20 istek (asistanla 4-5 soru)
+    // Gemini 4 Hydrogen: 12 Kasım 2026'da ücretsiz katmana girdi; Google ücretsiz kotasını sabit rakamla yayımlamıyor — yoğun/kota dolu olursa 3.6 Flash'a, sonra Gemma'ya düşer
+    { id: "gemini-4-hydrogen", ad: "Gemini 4 Hydrogen (Google) — en yeni, kotası belirsiz", gemini: true },
     { id: "gemini-3.6-flash", ad: "Gemini 3.6 Flash (Google) — önerilen, güçlü ve hızlı", gemini: true },
     { id: "gemini-3.8-flash", ad: "Gemini 3.8 Flash (Google) — en güçlü ama sık yoğun, günde ~4-5 soru", gemini: true },
     // Gemini yedeği: listede gösterilmez (gizli), yalnız kartta adı düzgün görünsün diye
@@ -18714,8 +18716,8 @@ async function ksAsistanModelCagir(ayar, sistem, mesajlar, iptal) {
     // Gemini yoğun/kotası dolu → önce diğer ücretsiz Gemini modelleri (3.6 Flash, 3.5 Flash-Lite), sonra Cloudflare modelleri
     if (geciciHata(r) && pdrAsistanGeminiMi(r.model)) {
       const ilkHata = hataOzeti(r), ilkModel = r.model;
-      // 3.8 yoğunsa 3.6 denenir; 3.6 yoğunsa doğrudan Gemma'ya geçilir (3.5 Flash-Lite çıkarıldı: araçları karıştırıyor, bulduğu öğrenciye güvenmiyordu)
-      const gemYedek = ilkModel === "gemini-3.8-flash" ? ["gemini-3.6-flash"] : [];
+      // 3.8 ya da 4 Hydrogen yoğunsa 3.6 denenir; 3.6 yoğunsa doğrudan Gemma'ya geçilir (3.5 Flash-Lite çıkarıldı: araçları karıştırıyor, bulduğu öğrenciye güvenmiyordu)
+      const gemYedek = (ilkModel === "gemini-3.8-flash" || ilkModel === "gemini-4-hydrogen") ? ["gemini-3.6-flash"] : [];
       for (const gm of gemYedek) { ksAsistanDurdu(iptal); r = await istek(gm); if (!geciciHata(r)) { yedek = true; yedekNeden = ilkHata; break; } }
       if (geciciHata(r)) r = { ...r, model: ilkModel, __ilkHata: ilkHata + (gemYedek.length ? " — diğer Gemini modelleri de yoğundu" : "") };
     }

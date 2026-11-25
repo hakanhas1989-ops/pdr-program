@@ -20004,6 +20004,105 @@ Sade, PDR diline uygun, somut yaz. Markdown kullanma.`;
 
 
 
+// ===== GÖRÜŞME REHBERİ BAŞLANGIÇ =====
+// Görüşme sırasında hızlı işaretlenen konu başlıkları. Dokununca: (boş) → ✓ konuşuldu → ? takip gerekli → (boş).
+// Yapay zekâya gitmez; yalnız "AI Özetle" çağrısında, eksik tespitinde konuşulanları bilsin diye başlık adları gönderilir.
+const GORUSME_REHBER_BASLIKLAR = {
+  "Akademik": ["Hedef okul / hedef", "Çalışma ortamı (oda, masa)", "Günlük çalışma saati", "Zorlandığı dersler", "Zorlandığı soru tipi", "Deneme sonuçları", "Dershane / kurs", "Telefon ve ekran süresi", "Uyku düzeni", "Ailenin beklentisi"],
+  "Sınav Kaygısı": ["Kaygının bedensel belirtileri", "Sınav anında yaşananlar", "Kaygılı düşünceler", "Uyku ve beslenme", "Ailenin tutumu", "Başa çıkma yolları", "Hedef ve beklenti"],
+  "Duygusal": ["Ne zamandır sürüyor", "Tetikleyen durumlar", "Bedensel belirtiler", "Uyku ve iştah", "Okul ve ders etkisi", "Destek aldığı kişiler", "Başa çıkma yolları", "Kendine zarar düşüncesi"],
+  "Davranış": ["Davranışın ne zaman olduğu", "Öncesi ve sonrası", "Sınıf / öğretmen gözlemi", "Ailedeki durum", "Akran etkisi", "Verilen yaptırımlar", "Güçlü yönleri"],
+  "Aile": ["Kimlerle yaşıyor", "Ebeveynlerle ilişki", "Kardeş ilişkisi", "Evdeki kurallar", "Aile içi çatışma", "Önemli değişiklikler", "Ev içi güvenlik"],
+  "Akran / Zorbalık": ["Ne oldu, kim, nerede", "Ne zamandır sürüyor", "Tanıklar", "Fiziksel / dijital mi", "Güvende hissediyor mu", "Kime anlattı", "Aile bilgisi", "Öğretmen bilgisi"],
+  "Devamsızlık": ["Devamsızlık sayısı / örüntüsü", "Hangi günler / dersler", "Gelmeme nedeni", "Sabah rutini ve uyku", "Okulla ilgili kaygı", "Ailenin bilgisi", "Sağlık durumu"],
+  "Öz Zarar": ["Düşüncenin sıklığı", "Plan / yöntem", "Önceki deneme", "Ulaşılabilir araçlar", "Koruyucu etkenler", "Güvenlik planı", "Veli bilgilendirme", "Yönlendirme"],
+  "Sağlık": ["Tanı / tedavi süreci", "Kullandığı ilaçlar", "Okulda dikkat edilecekler", "Devamsızlığa etkisi", "Duygusal etkisi", "Öğretmen bilgisi"],
+  "Madde Kullanımı": ["Hangi madde", "Sıklık / miktar", "Başlama yaşı ve nedeni", "Akran etkisi", "Aile bilgisi", "Bırakma isteği", "Yönlendirme"],
+  "Teknoloji / Ekran Bağımlılığı": ["Günlük süre", "Ne yapıyor (oyun, sosyal medya)", "Gece kullanımı / uyku", "Ders ve aile etkisi", "Evdeki kurallar", "Çevrim içi güvenlik"],
+  "Ekonomik Güçlük": ["Temel ihtiyaçlar", "Okul malzemesi", "Beslenme", "Aldığı yardımlar", "Çalışma durumu", "Yönlendirilebilecek kaynaklar"],
+  "Yas / Kayıp": ["Kaybın ne zaman olduğu", "Kayıpla ilişkisi", "Duygusal tepkiler", "Uyku ve iştah", "Okul etkisi", "Destek aldığı kişiler", "Ailedeki yas süreci"],
+  "Travma": ["Güvende mi (şu an)", "Olayın zamanı", "Yeniden yaşama / kaçınma", "Uyku ve kâbus", "Destek kişileri", "Yasal bildirim gereği", "Yönlendirme"],
+  "Özel Öğrenme Güçlüğü": ["Okuma", "Yazma", "Matematik", "Dikkat", "Öğretmen gözlemi", "Aile öyküsü", "RAM süreci"],
+  "Özel Eğitim": ["Rapor / tanı", "BEP durumu", "Destek eğitim", "Sınıf uyarlamaları", "Akran ilişkileri", "Veli iş birliği"],
+  "Kariyer / Gelecek Planlama": ["İlgi alanları", "Yetenekleri", "Değerleri", "Hedef meslek / okul", "Ailenin beklentisi", "Bilgi eksikleri"],
+  "_genel": ["Okulda nasıl gidiyor", "Arkadaşlıklar", "Aile ilişkileri", "Uyku ve beslenme", "Boş zaman / ilgi", "Kendini nasıl hissediyor"],
+};
+function gorusmeRehberBasliklari(konu) { return GORUSME_REHBER_BASLIKLAR[konu] || GORUSME_REHBER_BASLIKLAR._genel; }
+// Bu öğrencinin önceki görüşmelerinden kalan, henüz kapatılmamış "sonraki görüşmede sor" maddeleri (yeniden eskiye)
+function gorusmeRehberAciklar(records, ad, sinif, numara) {
+  if (!ad) return [];
+  const sonuc = [];
+  (records || []).filter(r => Array.isArray(r.acikSorular) && r.acikSorular.length && pdrAyniOgrenci(r.studentName, r.className, ad, sinif, r.numara, numara))
+    .forEach(r => r.acikSorular.forEach(a => { if (a && !a.tamam && a.metin) sonuc.push({ ...a, kayitId: r.id, kayitTarih: r.date || "" }); }));
+  const tarihSayi = (t) => { const x = String(t || ""); let m = x.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/); if (m) return +m[3] * 10000 + +m[2] * 100 + +m[1]; m = x.match(/(\d{4})-(\d{1,2})-(\d{1,2})/); return m ? +m[1] * 10000 + +m[2] * 100 + +m[3] : 0; };
+  return sonuc.sort((a, b) => tarihSayi(b.kayitTarih) - tarihSayi(a.kayitTarih)).slice(0, 10);
+}
+// AI Özetle'ye giden kısa bağlam: yalnız başlık adları (öğrenciye ait ayrıntı içermez)
+function gorusmeRehberBaglam(durum) {
+  const b = (durum && durum.basliklar) || {};
+  const ok = Object.keys(b).filter(k => b[k] === "ok"), takip = Object.keys(b).filter(k => b[k] === "?");
+  if (!ok.length && !takip.length) return "";
+  return `=== DANIŞMANIN GÖRÜŞME SIRASINDA İŞARETLEDİĞİ BAŞLIKLAR (özete yazma; yalnız EKSIK_KALANLAR bölümünde kullan) ===
+${ok.length ? "Konuşuldu: " + ok.join(", ") : ""}${ok.length && takip.length ? "\n" : ""}${takip.length ? "Takip gerekli / yarım kaldı: " + takip.join(", ") : ""}`;
+}
+// AI cevabındaki EKSIK_KALANLAR bloğunu maddelere ayırır
+function gorusmeRehberEksikParcala(blok) {
+  const t = String(blok || "").trim();
+  if (!t || /^yok\b/i.test(t)) return null;
+  const m = t.split("\n").map(s => s.replace(/^\s*(?:[-•*]|\d+[.)])\s*/, "").replace(/^"|"$/g, "").trim()).filter(s => s && !/^yok$/i.test(s) && s.length > 3).slice(0, 5);
+  return m.length ? m.map(metin => ({ metin, secili: true })) : null;
+}
+
+function GorusmeRehberiKarti({ form, records, bireyiTanima, hatirlatmalar, durum, setDurum }) {
+  const [acik, setAcik] = useState(true);
+  if (!form || !form.studentName) return null;
+  const d = durum || {};
+  const b = d.basliklar || {}, sorulan = d.sorulan || [];
+  const aciklar = gorusmeRehberAciklar(records, form.studentName, form.className, form.numara);
+  const hat = (hatirlatmalar || []).filter(h => !h.tamamlandi && pdrAyniOgrenci(h.studentName, h.className, form.studentName, form.className, h.numara, form.numara)).slice(0, 3);
+  const btVar = new Set((bireyiTanima || []).filter(x => pdrAyniOgrenci(x.studentName, x.className, form.studentName, form.className, x.numara, form.numara)).map(x => x.kategori));
+  const btBos = form.meetingType === "Öğretmen" ? [] : BIREYI_TANIMA_KATEGORILER.filter(k => !btVar.has(k.key));
+  const basliklar = gorusmeRehberBasliklari(form.topic);
+  const isaretSay = Object.values(b).filter(Boolean).length;
+  const dongu = (ad) => { const s = b[ad]; const yeni = !s ? "ok" : s === "ok" ? "?" : ""; const nb = { ...b }; if (yeni) nb[ad] = yeni; else delete nb[ad]; setDurum({ ...d, basliklar: nb }); };
+  const sorToggle = (id) => setDurum({ ...d, sorulan: sorulan.includes(id) ? sorulan.filter(x => x !== id) : [...sorulan, id] });
+  const kisaBT = (l) => l.replace(/^\S+\s/, "").split(" ve ")[0];
+  return (
+    <div data-testid="gorusme-rehberi" style={{ background:"#F0FDF4", border:"1.5px solid #86EFAC", borderRadius:12, padding:"9px 11px", marginBottom:10 }}>
+      <button onClick={() => setAcik(a => !a)} style={{ display:"flex", width:"100%", justifyContent:"space-between", alignItems:"center", background:"none", border:"none", padding:0, cursor:"pointer", fontSize:12, fontWeight:900, color:"#166534" }}>
+        <span>🧭 Görüşme rehberi{aciklar.length ? ` · ${aciklar.length} soru bekliyor` : ""}{isaretSay ? ` · ${isaretSay} işaret` : ""}</span>
+        <span style={{ fontSize:13 }}>{acik ? "▾" : "▸"}</span>
+      </button>
+      {acik && <div style={{ marginTop:7 }}>
+        {(aciklar.length > 0 || hat.length > 0) && <div style={{ marginBottom:8 }}>
+          <div style={{ fontSize:10.5, fontWeight:800, color:"#166534", marginBottom:4 }}>GEÇEN GÖRÜŞMELERDEN KALANLAR</div>
+          {aciklar.map(a => (
+            <label key={a.id} data-testid="rehber-acik" style={{ display:"flex", gap:7, alignItems:"flex-start", fontSize:12, lineHeight:1.4, marginBottom:4, cursor:"pointer", color: sorulan.includes(a.id) ? MUTED : TEXT, textDecoration: sorulan.includes(a.id) ? "line-through" : "none" }}>
+              <input type="checkbox" checked={sorulan.includes(a.id)} onChange={() => sorToggle(a.id)} style={{ marginTop:2 }} />
+              <span>{a.metin}{a.kayitTarih ? <span style={{ fontSize:10, color:MUTED }}> · {a.kayitTarih}</span> : null}</span>
+            </label>
+          ))}
+          {hat.map(h => <div key={h.id} style={{ fontSize:11.5, color:"#92400E", lineHeight:1.4, marginBottom:3 }}>🔔 {h.metin}{h.tarih ? ` (${h.tarih})` : ""}</div>)}
+          {aciklar.length > 0 && <div style={{ fontSize:10, color:MUTED }}>Sorduklarını işaretle; kaydedince kapanır.</div>}
+        </div>}
+        {btBos.length > 0 && <div style={{ fontSize:11.5, color:"#78350F", background:"#FFFBEB", borderRadius:8, padding:"5px 8px", marginBottom:8, lineHeight:1.45 }}>
+          📋 Bireyi Tanıma'da bilgi yok: {btBos.map(k => kisaBT(k.label)).join(", ")}
+        </div>}
+        <div style={{ fontSize:10.5, fontWeight:800, color:"#166534", marginBottom:4 }}>{form.topic ? `"${form.topic}" BAŞLIKLARI` : "GENEL BAŞLIKLAR (konu seçince değişir)"}</div>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
+          {basliklar.map(ad => { const s = b[ad]; return (
+            <button key={ad} data-testid="rehber-cip" onClick={() => dongu(ad)} style={{ padding:"5px 9px", borderRadius:999, fontSize:11.5, fontWeight:700, cursor:"pointer",
+              border:`1.5px solid ${s === "ok" ? "#16A34A" : s === "?" ? "#D97706" : "#CBD5E1"}`, background: s === "ok" ? "#DCFCE7" : s === "?" ? "#FEF3C7" : "#fff", color: s === "ok" ? "#166534" : s === "?" ? "#92400E" : TEXT }}>
+              {s === "ok" ? "✓ " : s === "?" ? "? " : ""}{ad}
+            </button>); })}
+        </div>
+        <div style={{ fontSize:10, color:MUTED, marginTop:5, lineHeight:1.45 }}>Bir kez dokun: ✓ konuşuldu · iki kez: ? takip gerekli · üç kez: temizle. AI Özetle eksik kalanları bulurken bu işaretleri dikkate alır.</div>
+      </div>}
+    </div>
+  );
+}
+// ===== GÖRÜŞME REHBERİ BİTİŞ =====
+
 async function getAISummary(rawText) {
   const istek = () => fetch("https://pdr-api.hakanhas1989.workers.dev", {
     method: "POST",
@@ -20028,7 +20127,7 @@ SADAKAT KURALLARI (ozet ve tum tespitler icin):
 
 BILGI KAYNAGI KURALI: Notta her bilginin kimden geldigini (ogrenci, anne/baba/veli, hangi dersin ogretmeni, danismanin gozlemi) ayirt et. Oznesi dusmus cumlenin ("...dile getirmistir") oznesi, aksi soylenmedikce bir onceki cumlede konusan kisidir. Ozette bulgulari kaynagiyla yaz ("Anneye gore...", "Matematik ogretmenine gore...").
 
-ONEMLI GENEL KURAL: Asagida 5 ayri tespit bolumu var (Hatirlatma, BDT, Bireyi Tanima, Uyum Izleme, Gecmis Yil Ortalamasi). Not uzun olabilir ve ana konu (ornegin kaygi/bir olay) notun cogunu kaplayabilir - bu durumda arka planda gecen, tek cumlede bahsedilmis bilgiler (aile yapisi, gecmis saglik/psikolojik oykusu, uyum belirtileri gibi) kolayca atlanir. HER bolum icin notun TAMAMINI, sadece ana konuyu degil, bastan sona BAGIMSIZ olarak yeniden tara - bir bilgi ana hikayenin icine gomulu, yan cumlede geciyor diye atlama.
+ONEMLI GENEL KURAL: Asagida 6 ayri tespit bolumu var (Hatirlatma, BDT, Bireyi Tanima, Uyum Izleme, Gecmis Yil Ortalamasi, Eksik Kalanlar). Not uzun olabilir ve ana konu (ornegin kaygi/bir olay) notun cogunu kaplayabilir - bu durumda arka planda gecen, tek cumlede bahsedilmis bilgiler (aile yapisi, gecmis saglik/psikolojik oykusu, uyum belirtileri gibi) kolayca atlanir. HER bolum icin notun TAMAMINI, sadece ana konuyu degil, bastan sona BAGIMSIZ olarak yeniden tara - bir bilgi ana hikayenin icine gomulu, yan cumlede geciyor diye atlama.
 
 Ozetin en sonuna, AYRI bir satirda, su formatta bir hatirlatma tespiti ekle (bu, ozetin bir parcasi degil, ayri islenecek):
 ---HATIRLATMA---
@@ -20061,7 +20160,11 @@ Son olarak, YENI bir satirda, su formatta bir "Gecmis Yil Ortalamasi" tespiti ek
 (Notta ogrencinin ONCEKI bir egitim-ogretim yilina ait YIL SONU not ortalamasindan ACIKCA soz ediliyorsa
 (ornegin "5. sinifta ortalamasi 82 idi" ya da "6. sinif yil sonu ortalamasi 78.50"), HER BIRINI ayri
 satirda 'sinifDuzeyi | ortalama' formatinda yaz. Ornek: 6 | 78.50
-Boyle bir bilgi YOKSA sadece "Yok" yaz. Tahmin yurutme, sadece notta ACIKCA belirtilen bir sayi varsa yaz.)`,
+Boyle bir bilgi YOKSA sadece "Yok" yaz. Tahmin yurutme, sadece notta ACIKCA belirtilen bir sayi varsa yaz.)
+
+Bundan sonra, YENI bir satirda, su formatta "Eksik Kalanlar" tespiti ekle:
+---EKSIK_KALANLAR---
+(Gorusmenin konusu icin bir okul psikolojik danismaninin genelde ele aldigi temel basliklarla GUNCEL notu karsilastir. Notta HIC gecmeyen ya da yarim kalan ve bir SONRAKI gorusmede sorulmasi yararli olacak EN FAZLA 5 madde yaz. Her madde ayri satirda "- " ile baslasin, kisa olsun (en fazla 15 kelime) ve danismana hitap eden bir hatirlatma gibi yazilsin (ornek: "- Uyku duzeni ve aksam ekran suresi sorulmadi", "- Matematikte hangi konularda zorlandigi netlestirilmeli"). Notta zaten yanitlanmis bir seyi yazma. Danismanin isaretledigi basliklar verildiyse: "Konusuldu" olanlari eksik sayma; "Takip gerekli / yarim kaldi" olanlari, notta ayrintisi yoksa listeye al. Kendine zarar, istismar, siddet gibi bir risk notta geciyor ama guvenlik/koruyucu etkenler/veli bilgilendirme ele alinmamissa bunu ILK madde yap. Ogrenci adi yazma. Onemli bir eksik yoksa sadece "Yok" yaz.)`,
       messages: [{ role: "user", content: rawText }],
     }),
   });
@@ -56280,6 +56383,7 @@ export default function App() {
   // Öğrenci değişince formun seans numarası o öğrencinin önceki formlarına göre yenilenir
   useEffect(() => {
     setGorusmeFormu(g => g ? { ...g, seans: pdrFormSeansNo(records, g.sablon, form.studentName, form.className, form.numara) } : g);
+    setRehberDurum({}); setOnerilenEksik(null);
   }, [form.studentName, form.className, form.numara]);
   const [notOgrenciArama, setNotOgrenciArama] = useState("");
   // Grup görüşmesi: aynı anda birden fazla öğrenciyle (örn. aralarındaki
@@ -56298,6 +56402,8 @@ export default function App() {
   const [onerilenBireyiTanima, setOnerilenBireyiTanima] = useState(null); // [{kategori,metin,secili}] | null
   const [onerilenUyum, setOnerilenUyum] = useState(null); // [{kod,dayanak}] | null — Uyum İzleme önerisi
   const [onerilenGecmisYil, setOnerilenGecmisYil] = useState(null); // [{sinif,ortalama}] | null — Profil 2 geçmiş yıl önerisi
+  const [onerilenEksik, setOnerilenEksik] = useState(null); // [{metin,secili}] | null — "sonraki görüşmede sor" (kayıtla birlikte saklanır)
+  const [rehberDurum, setRehberDurum] = useState({}); // görüşme rehberi: { basliklar: {ad:"ok"|"?"}, sorulan: [acikSoruId] }
   const [onerilenBdt, setOnerilenBdt] = useState(null); // [{kategori,ifade,secili}] | null
   const [profAiLoading, setProfAiLoading] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -56648,8 +56754,8 @@ export default function App() {
     setAiLoading(true);
     let tamCevap;
     try {
-      tamCevap = await getAISummary(pdrOzetMetniKur(form.raw,
-        pdrGorusmeGecmisiMetni(records, form.studentName, form.className, form.numara, null)));
+      const gecmisVeRehber = [pdrGorusmeGecmisiMetni(records, form.studentName, form.className, form.numara, null), gorusmeRehberBaglam(rehberDurum)].filter(Boolean).join("\n\n");
+      tamCevap = await getAISummary(pdrOzetMetniKur(form.raw, gecmisVeRehber || null));
     } catch (e) {
       setAiLoading(false);
       try { pdrUyariBandi("⚠️ AI Özetle yapılamadı: " + ((e && e.message) || "bilinmeyen hata")); } catch (_) {}
@@ -56671,7 +56777,9 @@ export default function App() {
     const bireyiTanimaBlok = (uyParcalari[0] || "").trim();
     const gyParcalari = (uyParcalari[1] || "").split(/---GECMIS_YIL_ORT---/i);
     const uyumBlok = (gyParcalari[0] || "").trim();
-    const gecmisYilBlok = (gyParcalari[1] || "").trim();
+    const ekParcalari = (gyParcalari[1] || "").split(/---EKSIK_KALANLAR---/i);
+    const gecmisYilBlok = (ekParcalari[0] || "").trim();
+    setOnerilenEksik(gorusmeRehberEksikParcala(ekParcalari[1] || ""));
     setForm(f => ({ ...f, summary }));
     setOnerilenHatirlatma(pdrHatirlatmaBlokParcala(hatirlatmaBlok));
     // Bilişsel çarpıtma önerisi — güvenlik uyarısı varsa ayrı ve belirgin şekilde göster.
@@ -56894,8 +57002,14 @@ export default function App() {
       ...formEk,
       grupKatilimcilari: tumKatilimcilar.length > 1 ? tumKatilimcilar.filter(x => x !== k).map(x => x.name) : undefined,
       ...(tumKatilimcilar.length === 1 && form.meetingType === "Öğrenci" && pdrOlcumVar(olcum) ? { olcum: { ...olcum } } : {}),
+      ...(onerilenEksik && onerilenEksik.some(o => o.secili) ? { acikSorular: onerilenEksik.filter(o => o.secili).map(o => ({ id: uid(), metin: o.metin, tamam: false })) } : {}),
+      ...(rehberDurum.basliklar && Object.keys(rehberDurum.basliklar).length ? { rehberBasliklar: { ...rehberDurum.basliklar } } : {}),
     }));
-    const updated = [...yeniKayitlar, ...records];
+    // Görüşme rehberinde "soruldu" işaretlenen eski maddeler kapatılır
+    const sorulanlar = rehberDurum.sorulan || [];
+    const eskiler = sorulanlar.length ? records.map(r => Array.isArray(r.acikSorular) && r.acikSorular.some(a => sorulanlar.includes(a.id))
+      ? { ...r, acikSorular: r.acikSorular.map(a => sorulanlar.includes(a.id) ? { ...a, tamam: true, kapanisTarih: formTarihi || today() } : a) } : r) : records;
+    const updated = [...yeniKayitlar, ...eskiler];
     setRecords(updated); await saveRecords(updated);
     // 🎯 Notta hedef okul ya da deneme neti geçiyorsa öğrencinin kaydına eklemeyi öner (grup notunda her öğrenciye kendi kısmından)
     try {
@@ -56926,7 +57040,7 @@ export default function App() {
     // Not: aktifOgrenci değişmediği için yukarıdaki useEffect burada tekrar
     // tetiklenmez, bu yüzden öğrenci bilgisini elle korumak gerekiyor.
     setForm(f => ({ ...f, topic: "", altKonu: "", raw: "", summary: "" })); setOlcum({});
-    setDigerKatilimcilar([]);
+    setDigerKatilimcilar([]); setRehberDurum({}); setOnerilenEksik(null);
     setSaved(true); setTimeout(() => setSaved(false), 2000); setTab("ogrenciler");
   }
 
@@ -58438,6 +58552,7 @@ function pdrBaslangicSekmesi() {
                 </>
               )}
               </div><div className="pi-sag">
+              <GorusmeRehberiKarti form={form} records={records} bireyiTanima={bireyiTanima} hatirlatmalar={hatirlatmalar} durum={rehberDurum} setDurum={setRehberDurum} />
               {/* Ham not */}
               <label style={{ fontSize:11, fontWeight:600, color:MUTED, display:"block", marginBottom:4 }}>{gorusmeFormu ? "EK NOT (İSTEĞE BAĞLI)" : "GÖRÜŞME NOTU"}</label>
               <textarea data-asistan="gorusme-not" placeholder="Görüşme notlarını buraya yazın..." value={form.raw} onChange={e=>setForm(f=>({...f,raw:e.target.value}))} rows={5} style={{ width:"100%", padding:"9px 11px", border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius:9, fontSize:13, resize:"vertical", boxSizing:"border-box", marginBottom:10 }} />
@@ -58463,6 +58578,21 @@ function pdrBaslangicSekmesi() {
                   <textarea value={form.summary} onChange={e=>setForm(f=>({...f,summary:e.target.value}))} rows={4} style={{ width:"100%", padding:"9px 11px", border:`1px solid ${ACCENT_LIGHT}`, borderRadius:9, fontSize:13, resize:"vertical", boxSizing:"border-box", background:"#F0FAF4" }} />
                 </div>
               ) : null}
+              {/* AI'ın bulduğu eksik kalan başlıklar — seçilenler kayıtla saklanır, sonraki görüşmede rehber kartına gelir */}
+              {onerilenEksik && (
+                <div data-testid="eksik-kalanlar" style={{ background:"#F0FDF4", border:"1px solid #86EFAC", borderRadius:10, padding:"10px 12px", marginBottom:10 }}>
+                  <div style={{ fontSize:11, fontWeight:700, color:"#166534", marginBottom:8 }}>🧭 Bu görüşmede eksik kalanlar — sonraki görüşmede sor:</div>
+                  <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:6 }}>
+                    {onerilenEksik.map((o,i) => (
+                      <label key={i} style={{ display:"flex", alignItems:"flex-start", gap:8, fontSize:12, cursor:"pointer", lineHeight:1.4 }}>
+                        <input type="checkbox" checked={o.secili} onChange={() => setOnerilenEksik(l => l.map((x,j) => j===i ? { ...x, secili: !x.secili } : x))} style={{ marginTop:2 }} />
+                        <span>{o.metin}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <div style={{ fontSize:10, color:"#166534", lineHeight:1.5 }}>Seçili olanlar kaydedince bu notla saklanır ve öğrencinin bir sonraki görüşmesinde "Görüşme rehberi"nde karşına çıkar. Gereksiz olanın işaretini kaldır.</div>
+                </div>
+              )}
               {/* AI'ın fark ettiği hatırlatma önerisi — onaylarsan Hatırlatıcı'ya eklenir */}
               {onerilenHatirlatma && (
                 <div style={{ background:"#FFF8E7", border:"1px solid #F0D68A", borderRadius:10, padding:"10px 12px", marginBottom:10 }}>

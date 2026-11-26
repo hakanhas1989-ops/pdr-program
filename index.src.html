@@ -13567,23 +13567,24 @@ function pdrKapaliP2Analizi({ sinavlar = {}, d2 = {}, gecmisYillar = {}, ilgiler
   // AKADEMİK DURUM
   const dersOrt = [];
   for (const k of Object.keys(etiket)) {
-    const v1 = sayi(sinavlar[k + "1"]), v2 = sayi(sinavlar[k + "2"]), vo = sayi(sinavlar[k]);
-    const degerler = [v1, v2].filter(v => v !== null);
-    const ort = degerler.length ? degerler.reduce((a, b) => a + b, 0) / degerler.length : vo;
+    const oz = pdrYaziliOzet(sinavlar, k), ort = oz.son;
     if (ort === null || ort === undefined) continue;
-    dersOrt.push({ k, ad: etiket[k], ort, degisim: v1 !== null && v2 !== null ? v2 - v1 : null });
+    // değişim: iki dönem varsa dönemden döneme, yoksa o dönemin 1. → 2. yazılısı
+    const degisim = oz.d1 != null && oz.d2 != null ? oz.d2 - oz.d1 : oz.d2 != null ? (oz.y3 != null && oz.y4 != null ? oz.y4 - oz.y3 : null) : (oz.y1 != null && oz.y2 != null ? oz.y2 - oz.y1 : null);
+    dersOrt.push({ k, ad: etiket[k], ort, degisim, donemli: oz.d1 != null && oz.d2 != null });
   }
   let akd;
   if (dersOrt.length) {
     const genel = dersOrt.reduce((s, d) => s + d.ort, 0) / dersOrt.length;
     const sirali = dersOrt.slice().sort((a, b) => b.ort - a.ort);
     const gucluD = sirali.filter(d => d.ort >= 70).slice(0, 3), zayifD = sirali.filter(d => d.ort < 60).reverse().slice(0, 3);
-    akd = `Yazılı ortalaması ${genel.toFixed(1)} (${KS_MEB_NOT(genel)}). `;
+    akd = `${dersOrt.some(d => d.donemli) ? "Yıl sonu yazılı ortalaması" : "Yazılı ortalaması"} ${genel.toFixed(1)} (${KS_MEB_NOT(genel)}). `;
     akd += gucluD.length ? `Güçlü dersler: ${gucluD.map(d => `${d.ad} (${d.ort.toFixed(0)})`).join(", ")}. ` : "Belirgin biçimde güçlü bir ders yok. ";
     akd += zayifD.length ? `Desteklenmesi gereken dersler: ${zayifD.map(d => `${d.ad} (${d.ort.toFixed(0)}, ${KS_MEB_NOT(d.ort)})`).join(", ")}. ` : "60'ın altında dersi yok. ";
     const artan = dersOrt.filter(d => d.degisim !== null && d.degisim >= 10).map(d => d.ad), dusen = dersOrt.filter(d => d.degisim !== null && d.degisim <= -10).map(d => d.ad);
-    if (artan.length) akd += `1. yazılıdan 2. yazılıya belirgin artış: ${artan.join(", ")}. `;
-    if (dusen.length) akd += `1. yazılıdan 2. yazılıya belirgin düşüş: ${dusen.join(", ")} — nedeni öğrenciyle konuşulmalı. `;
+    const ne = dersOrt.some(d => d.donemli) ? "1. dönemden 2. döneme" : "1. yazılıdan 2. yazılıya";
+    if (artan.length) akd += `${ne} belirgin artış: ${artan.join(", ")}. `;
+    if (dusen.length) akd += `${ne} belirgin düşüş: ${dusen.join(", ")} — nedeni öğrenciyle konuşulmalı. `;
     const fark = sirali[0].ort - sirali[sirali.length - 1].ort;
     if (dersOrt.length >= 3 && fark >= 30) akd += `Dersler arasında büyük fark var (${fark.toFixed(0)} puan); bu durum ilgi farkı ya da belirli bir alanda öğrenme güçlüğü olasılığı açısından değerlendirilmeli. `;
     // Geçmiş yıllar seyri
@@ -16314,8 +16315,8 @@ const KS_ASISTAN_ARACLAR = {
     },
   },
   not_kaydet: {
-    aciklama: "Öğrencinin ders notlarını kaydeder (ONAY GEREKİR): yazılı sınav puanları (Profil 2 → Yazılı Sınav Puanları; her derste 1. ve 2. yazılı) ve yıl sonu not ortalamaları (Profil 2 → Geçmiş Yıl Sonu Not Ortalamaları; sınıf düzeyine göre). yazililar: [{ders, yazili: 1|2, puan: 0-100}] — yazili verilmezse o dersin boş olan ilk yazılısına yazılır. Dersler: Türkçe, Matematik, İnkılap Tarihi, Fen Bilimleri, İngilizce, Din Kültürü. yil_sonu: [{sinif: sınıf düzeyi (örn. 7), ortalama: 0-100}]. Danışmanın söylediği sayıları aynen yaz, tahmin etme.",
-    girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "yazililar": [{"ders": "Matematik", "yazili": 1, "puan": 85}], "yil_sonu": [{"sinif": 7, "ortalama": 82.5}]}', ogrenciIster: true, yazma: true, yontem: "hepsi",
+    aciklama: "Öğrencinin ders notlarını kaydeder (ONAY GEREKİR): yazılı sınav puanları (Profil 2 → Yazılı Sınav Puanları; her derste 1. ve 2. dönem, her dönemde 1. ve 2. yazılı) ve yıl sonu not ortalamaları (Profil 2 → Geçmiş Yıl Sonu Not Ortalamaları; sınıf düzeyine göre). yazililar: [{ders, donem: 1|2, yazili: 1|2, puan: 0-100}] — donem verilmezse bugünün tarihine göre (Şubat–Ağustos 2. dönem, diğer aylar 1. dönem) seçilir; yazili verilmezse o dönemde boş olan ilk yazılıya yazılır. Bu yılın ders yıl sonu notları iki dönem yazılı ortalamasından program tarafından hesaplanır, kaydedilmez. Dersler: Türkçe, Matematik, İnkılap Tarihi, Fen Bilimleri, İngilizce, Din Kültürü. yil_sonu: [{sinif: sınıf düzeyi (örn. 7), ortalama: 0-100}]. Danışmanın söylediği sayıları aynen yaz, tahmin etme.",
+    girdi: '{"ogrenci": "ad", "sinif": "isteğe bağlı", "yazililar": [{"ders": "Matematik", "donem": 1, "yazili": 1, "puan": 85}], "yil_sonu": [{"sinif": 7, "ortalama": 82.5}]}', ogrenciIster: true, yazma: true, yontem: "hepsi",
     onayOzeti: (g, ctx, o) => { const p = ksNotPlani(g, ctx, o); return `📚 Not kaydı\nÖğrenci: ${ksAsistanEtiket(o)}\n${p.satirlar.length ? p.satirlar.join("\n") : "• (kaydedilecek geçerli not yok)"}${p.sorunlar.length ? "\n⚠ Kaydedilmeyecek: " + p.sorunlar.join("; ") : ""}`; },
     calistir: async (g, ctx, o) => {
       const p = ksNotPlani(g, ctx, o);
@@ -17119,9 +17120,9 @@ function ksAsistanOgrenciDosyasi(ctx, o) {
   }
   const p2 = (ctx.profiles2 || []).find(ayni);
   // Bu yılın yazılı sınav puanları (Profil 2 → Yazılı Sınav Puanları; her derste 1. ve 2. yazılı)
-  try { const sv = (p2 && p2.sinavlar) || {}, sy = (x) => { const n = parseFloat(String(x == null ? "" : x).replace(",", ".")); return isNaN(n) ? null : n; };
-    const yz = DERSLER.map(d => { const a = [sy(sv[d.key + "1"]), sy(sv[d.key + "2"])], v = a.filter(x => x != null); return v.length ? `${d.label || d.ad || d.key} ${a.map(x => x == null ? "-" : x).join("/")} (ort ${(v.reduce((t, x) => t + x, 0) / v.length).toFixed(0)})` : null; }).filter(Boolean);
-    if (yz.length) ak.push(`Bu yılın yazılı puanları (1./2. yazılı): ${yz.join(", ")}`); else ak.push("Bu yılın yazılı puanları: girilmemiş");
+  try { const sv = (p2 && p2.sinavlar) || {};
+    const yz = DERSLER.map(d => { const oz = pdrYaziliOzet(sv, d.key); return oz.son == null ? null : `${d.label || d.ad || d.key}: ${pdrYaziliMetin(oz)}`; }).filter(Boolean);
+    if (yz.length) ak.push(`Bu yılın yazılı puanları (dönem: 1./2. yazılı): ${yz.join("; ")}`); else ak.push("Bu yılın yazılı puanları: girilmemiş");
   } catch (e) {}
   if (p2 && p2.gecmisYillar && Object.keys(p2.gecmisYillar).length) ak.push(`Yıl sonu not ortalamaları: ${Object.entries(p2.gecmisYillar).sort((a, c) => a[0] - c[0]).map(([k, v]) => k + ". sınıf " + v).join(", ")}`);
   b.push("\nAKADEMİK: " + (ak.length ? ak.join(" | ") : "deneme ya da not ortalaması kaydı yok."));
@@ -19937,15 +19938,9 @@ async function getP2Analiz({ studentName, className, sinavlar, d2, gecmisYillar,
   const dersListesi = aktifDersler(sinavTuru);
   const toplamSoru = dersListesi.reduce((s,d)=>s+d.maks, 0);
   const dersMetni = DERSLER.map(d => {
-    const v1 = parseFloat(sinavlar?.[d.key+"1"]);
-    const v2 = parseFloat(sinavlar?.[d.key+"2"]);
-    const vo = parseFloat(sinavlar?.[d.key]);
-    if (!isNaN(v1) && !isNaN(v2)) return `${d.label}: 1.Yazili ${v1}, 2.Yazili ${v2}, Ort ${((v1+v2)/2).toFixed(1)}/100`;
-    if (!isNaN(v1)) return `${d.label}: 1.Yazili ${v1}/100`;
-    if (!isNaN(v2)) return `${d.label}: 2.Yazili ${v2}/100`;
-    if (!isNaN(vo)) return `${d.label}: ${vo}/100`;
-    return null;
-  }).filter(Boolean).join(", ");
+    const oz = pdrYaziliOzet(sinavlar, d.key);
+    return oz.son == null ? null : `${d.label}: ${pdrYaziliMetin(oz)} (100 uzerinden)`;
+  }).filter(Boolean).join("; ");
 
   const d2Metni = d2 && (d2.TN || d2.TN_E) ? `D2 Dikkat Testi: TN=${d2.TN||"—"}, E1=${d2.E1||"—"}, E2=${d2.E2||"—"}, E=${d2.E||(d2Sayi(d2.E1)!==null||d2Sayi(d2.E2)!==null?(d2Sayi(d2.E1)||0)+(d2Sayi(d2.E2)||0):"—")}, TN-E=${d2.TN_E||"—"}, E%=${d2.E_yuzde||"—"}, CP=${d2.CP||"—"}, FR=${d2.FR||"—"}, PR=${d2.PR||"—"}` : "";
 
@@ -24453,7 +24448,28 @@ const ILGI_ETIKETLERI = [
   "Matematik / Mantık","Yabancı Dil","İçerik Üretimi","El Sanatları",
   "Fotoğrafçılık","Liderlik","Diğer"
 ];
-const EMPTY_SINAV = { turkce1:"", turkce2:"", mat1:"", mat2:"", inkilap1:"", inkilap2:"", fen1:"", fen2:"", ingilizce1:"", ingilizce2:"", din1:"", din2:"" };
+const EMPTY_SINAV = { turkce1:"", turkce2:"", mat1:"", mat2:"", inkilap1:"", inkilap2:"", fen1:"", fen2:"", ingilizce1:"", ingilizce2:"", din1:"", din2:"",
+  turkce3:"", turkce4:"", mat3:"", mat4:"", inkilap3:"", inkilap4:"", fen3:"", fen4:"", ingilizce3:"", ingilizce4:"", din3:"", din4:"" };
+// Yazılı notları: ders anahtarı + 1/2 = 1. dönem 1./2. yazılı, + 3/4 = 2. dönem 1./2. yazılı.
+// Dönem ortalaması o dönemin yazılılarının ortalaması; yıl sonu = iki dönem ortalamasının ortalaması
+// (yalnız yazılılara göre — karnedeki dönem puanı performans notlarını da içerir).
+// "son": eldeki en güncel ortalama (yıl sonu > 2. dönem > 1. dönem); eski kayıtlarda tek değer (ders anahtarı) 1. dönem sayılır.
+function pdrYaziliOzet(sv, k) {
+  const n = x => { const v = parseFloat(String(x == null ? "" : x).replace(",", ".")); return isNaN(v) ? null : v; };
+  const ort = a => { const b = a.filter(x => x != null); return b.length ? b.reduce((t, v) => t + v, 0) / b.length : null; };
+  const s = sv || {}, y = [1, 2, 3, 4].map(i => n(s[k + i]));
+  const d1 = ort([y[0], y[1]]) ?? n(s[k]), d2 = ort([y[2], y[3]]);
+  const yil = d1 != null && d2 != null ? (d1 + d2) / 2 : null;
+  return { y1: y[0], y2: y[1], y3: y[2], y4: y[3], d1, d2, yil, son: yil ?? d2 ?? d1 };
+}
+function pdrNotYaz(v) { return v == null ? "—" : Number.isInteger(v) ? String(v) : v.toFixed(1).replace(".", ","); }
+function pdrYaziliMetin(o) {
+  const p = [];
+  if (o.y1 != null || o.y2 != null || o.d1 != null) p.push(`1. dönem ${o.y1 != null || o.y2 != null ? `${o.y1 ?? "-"}/${o.y2 ?? "-"} ` : ""}(ort ${pdrNotYaz(o.d1)})`);
+  if (o.d2 != null) p.push(`2. dönem ${o.y3 ?? "-"}/${o.y4 ?? "-"} (ort ${pdrNotYaz(o.d2)})`);
+  if (o.yil != null) p.push(`yıl sonu ${pdrNotYaz(o.yil)}`);
+  return p.join(", ");
+}
 // Bir sınıf isminden ("8-A" gibi) önceki en fazla 3 sınıf düzeyini çıkarır:
 // 8. sınıf öğrencisi için [5,6,7]. Kademe bilgisine ihtiyaç duymaz.
 function pdrOncekiSinifDuzeyleri(className) {
@@ -25189,7 +25205,7 @@ function ozetRaporVeri(rapor) {
   // Yıl sonu ve yazılı notları
   const p2 = rapor.profil2 || (rapor.ogrenciProfilleri2 || []).find(ayni) || {};
   V.yilSonu = Object.entries(p2.gecmisYillar || {}).map(([k, v]) => [k, ozSayi(v), String(v).trim()]).filter(x => x[1] != null).sort((a, b) => parseInt(a[0]) - parseInt(b[0]));
-  V.yazili = DERSLER.map(d => { const s = p2.sinavlar || {}; const a = [ozSayi(s[d.key + "1"]), ozSayi(s[d.key + "2"])].filter(x => x != null); const o = a.length ? a.reduce((x, y) => x + y, 0) / a.length : ozSayi(s[d.key]); return o == null ? null : { ad: d.label, renk: d.color, ort: ozYuvarla(o) }; }).filter(Boolean);
+  V.yazili = DERSLER.map(d => { const o = pdrYaziliOzet(p2.sinavlar, d.key).son; return o == null ? null : { ad: d.label, renk: d.color, ort: ozYuvarla(o) }; }).filter(Boolean);
   // Konu Haritası (bitirme durumu) — elle işaretlenen konu tamamlama yüzdeleri
   const kademe = K.kademe || rapor.kademe || (typeof sinifKademesi === "function" ? sinifKademesi(sinif) : null);
   const khTum = K.konuHaritasiVerisi || {};
@@ -25543,16 +25559,7 @@ function RaporModalIc({ rapor, onKapat }) {
 
   const dersOrtalama = () => {
     if (!profil2?.sinavlar) return null;
-    const vals = DERSLER.map(d => {
-      const v1 = parseFloat(profil2.sinavlar[d.key+"1"]);
-      const v2 = parseFloat(profil2.sinavlar[d.key+"2"]);
-      if (!isNaN(v1) && !isNaN(v2)) return (v1+v2)/2;
-      if (!isNaN(v1)) return v1;
-      if (!isNaN(v2)) return v2;
-      // Eski format desteği
-      const vo = parseFloat(profil2.sinavlar[d.key]);
-      return !isNaN(vo) ? vo : null;
-    }).filter(v => v !== null);
+    const vals = DERSLER.map(d => pdrYaziliOzet(profil2.sinavlar, d.key).son).filter(v => v !== null);
     return vals.length ? (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1) : null;
   };
 
@@ -26402,11 +26409,9 @@ function RaporModalIc({ rapor, onKapat }) {
                     <div style={{ marginBottom: 12 }}>
                       <div style={{ fontSize: 10, fontWeight: 700, color: "#9E78ED", textTransform: "uppercase", marginBottom: 6 }}>Yazılı Sınav Puanları</div>
                       {DERSLER.map(d => {
-                        const v1 = parseFloat(profil2.sinavlar?.[d.key+"1"]);
-                        const v2 = parseFloat(profil2.sinavlar?.[d.key+"2"]);
-                        const vo = parseFloat(profil2.sinavlar?.[d.key]);
-                        const ort = !isNaN(v1)&&!isNaN(v2) ? ((v1+v2)/2).toFixed(1) : !isNaN(v1)?v1:!isNaN(v2)?v2:!isNaN(vo)?vo:null;
-                        if (!ort) return null;
+                        const oz = pdrYaziliOzet(profil2.sinavlar, d.key);
+                        if (oz.son == null) return null;
+                        const v1 = oz.y1 ?? NaN, v2 = oz.y2 ?? NaN, ort = pdrNotYaz(oz.son);
                         return (
                           <div key={d.key} style={{ padding: "3px 0", borderBottom: "1px solid #f5f5f5" }}>
                             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:2 }}>
@@ -26414,11 +26419,12 @@ function RaporModalIc({ rapor, onKapat }) {
                               <div style={{ display:"flex", gap:6, alignItems:"center" }}>
                                 {!isNaN(v1)&&<span style={{fontSize:9,color:"#888"}}>1.Y:<b style={{color:d.color}}>{v1}</b></span>}
                                 {!isNaN(v2)&&<span style={{fontSize:9,color:"#888"}}>2.Y:<b style={{color:d.color}}>{v2}</b></span>}
-                                <span style={{fontSize:11,fontWeight:900,color:d.color}}>Ort:{ort}</span>
+                                {oz.d2 != null && <span style={{fontSize:9,color:"#888"}}>2.D:<b style={{color:d.color}}>{oz.y3 ?? "-"}/{oz.y4 ?? "-"}</b></span>}
+                                <span style={{fontSize:11,fontWeight:900,color:d.color}}>{oz.yil != null ? "Yıl sonu:" : oz.d2 != null ? "2.D ort:" : "Ort:"}{ort}</span>
                               </div>
                             </div>
                             <div style={{height:4,background:"#eee",borderRadius:2}}>
-                              <div style={{width:`${parseFloat(ort)}%`,height:"100%",background:d.color,borderRadius:2}}/>
+                              <div style={{width:`${oz.son}%`,height:"100%",background:d.color,borderRadius:2}}/>
                             </div>
                           </div>
                         );
@@ -43747,12 +43753,15 @@ function ksNotPlani(g, ctx, o) {
     const puan = sayi(y && y.puan);
     if (!d) { sorunlar.push(`"${(y && y.ders) || "?"}" dersi tanınmadı (programdaki dersler: ${DERSLER.map(x => x.label).join(", ")})`); return; }
     if (puan === null || puan < 0 || puan > 100) { sorunlar.push(`${d.label}: puan 0-100 arasında olmalı (${y && y.puan})`); return; }
+    let dn = parseInt(y.donem, 10);
+    if (dn !== 1 && dn !== 2) { const ay = new Date().getMonth(); dn = ay >= 1 && ay <= 7 ? 2 : 1; }
+    const ofs = dn === 2 ? 2 : 0, hep = { ...mevcut, ...sinavlar };
     let no = parseInt(y.yazili, 10);
-    if (no !== 1 && no !== 2) no = !String({ ...mevcut, ...sinavlar }[d.key + "1"] || "").trim() ? 1 : !String({ ...mevcut, ...sinavlar }[d.key + "2"] || "").trim() ? 2 : 0;
-    if (!no) { sorunlar.push(`${d.label}: iki yazılı da dolu; hangisi olduğunu (1 ya da 2) belirt`); return; }
-    const k = d.key + no, eski = String(mevcut[k] || "").trim();
+    if (no !== 1 && no !== 2) no = !String(hep[d.key + (1 + ofs)] || "").trim() ? 1 : !String(hep[d.key + (2 + ofs)] || "").trim() ? 2 : 0;
+    if (!no) { sorunlar.push(`${d.label}: ${dn}. dönemin iki yazılısı da dolu; hangisi olduğunu (1 ya da 2) belirt`); return; }
+    const k = d.key + (no + ofs), eski = String(mevcut[k] || "").trim();
     sinavlar[k] = String(puan);
-    satirlar.push(`• ${d.label} ${no}. yazılı: ${eski && eski !== String(puan) ? eski + " → " : ""}${puan}`);
+    satirlar.push(`• ${d.label} ${dn}. dönem ${no}. yazılı: ${eski && eski !== String(puan) ? eski + " → " : ""}${puan}`);
   });
   const duzey = parseInt((String(o.className || "").match(/\d+/) || [""])[0], 10);
   (Array.isArray(g.yil_sonu) ? g.yil_sonu : []).forEach(y => {
@@ -44891,7 +44900,7 @@ ${ogrP1?.scores ? DIMENSIONS.map(d=>`${d.label}: ${ogrP1.scores[d.key]||0}/5`).j
 ${ogrP1?.analiz ? `PDR Analizi: ${ogrP1.analiz}` : ""}
 
 PROFİL 2 — AKADEMİK:
-${ogrP2?.sinavlar ? DERSLER.map(d=>`${d.label}: 1.Yazılı ${ogrP2.sinavlar[d.key+"1"]||"-"}, 2.Yazılı ${ogrP2.sinavlar[d.key+"2"]||"-"}`).join(", ") : "Girilmemiş"}
+${ogrP2?.sinavlar ? (DERSLER.map(d=>{ const oz = pdrYaziliOzet(ogrP2.sinavlar, d.key); return oz.son == null ? null : `${d.label}: ${pdrYaziliMetin(oz)}`; }).filter(Boolean).join("; ") || "Girilmemiş") : "Girilmemiş"}
 ${ogrP2?.d2 && (ogrP2.d2.TN || ogrP2.d2.PR) ? `D2 Dikkat: ${d2KisaOzet(ogrP2.d2)}` : ""}
 ${ogrP2?.kariyer_hedef ? `Kariyer Hedefi: ${ogrP2.kariyer_hedef}` : ""}
 
@@ -46826,27 +46835,27 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
                     // Yazılı sınav puanları: yalnızca puanı girilmiş dersler
                     const sv = ogrP2.sinavlar || {};
                     const sayi = (v) => { const n = parseFloat(String(v ?? "").replace(",", ".")); return isNaN(n) ? null : n; };
-                    const satirlar = DERSLER.map(d => ({ d, y1: sayi(sv[d.key + "1"]), y2: sayi(sv[d.key + "2"]) })).filter(x => x.y1 !== null || x.y2 !== null);
+                    const satirlar = DERSLER.map(d => ({ d, oz: pdrYaziliOzet(sv, d.key) })).filter(x => x.oz.son !== null);
+                    const ikiDonem = satirlar.some(x => x.oz.d2 !== null);
                     const yillar = Object.entries(ogrP2.gecmisYillar || {}).map(([k, v]) => [parseInt(k, 10), sayi(v)]).filter(([k, v]) => k && v !== null).sort((a, c) => a[0] - c[0]);
                     const d2 = ogrP2.d2 || {};
                     const d2Var = ["TN", "E_yuzde", "TN_E", "CP", "PR"].some(k => String(d2[k] || "").trim());
-                    const tumOrt = satirlar.length ? (satirlar.reduce((t, x) => t + (x.y1 !== null && x.y2 !== null ? (x.y1 + x.y2) / 2 : (x.y1 ?? x.y2)), 0) / satirlar.length) : null;
+                    const tumOrt = satirlar.length ? (satirlar.reduce((t, x) => t + x.oz.son, 0) / satirlar.length) : null;
                     const renk = (v) => v === null ? MUTED : v >= 85 ? "#15803D" : v >= 70 ? "#0E7490" : v >= 50 ? "#B45309" : "#B91C1C";
                     return (
                       <>
                         {satirlar.length > 0 ? (
                           <div data-testid="p2-yazililar" style={{ marginBottom:10 }}>
-                            <div style={{ fontSize:11.5, fontWeight:700, color:BLUE, marginBottom:6 }}>📝 Yazılı Sınav Puanları{tumOrt !== null ? <span style={{ color:MUTED, fontWeight:600 }}> · genel ortalama {tumOrt.toFixed(1)}</span> : null}</div>
+                            <div style={{ fontSize:11.5, fontWeight:700, color:BLUE, marginBottom:6 }}>📝 Yazılı Sınav Puanları{tumOrt !== null ? <span style={{ color:MUTED, fontWeight:600 }}> · {satirlar.some(x => x.oz.yil !== null) ? "yıl sonu" : "genel"} ortalama {tumOrt.toFixed(1)}</span> : null}</div>
                             <div style={{ display:"grid", gridTemplateColumns:"1fr auto auto auto", gap:"4px 12px", fontSize:12, alignItems:"center" }}>
-                              <span style={{ fontSize:10, color:MUTED }}>Ders</span><span style={{ fontSize:10, color:MUTED, textAlign:"center" }}>1. Yazılı</span><span style={{ fontSize:10, color:MUTED, textAlign:"center" }}>2. Yazılı</span><span style={{ fontSize:10, color:MUTED, textAlign:"center" }}>Ort.</span>
-                              {satirlar.map(({ d, y1, y2 }) => {
-                                const ort = y1 !== null && y2 !== null ? (y1 + y2) / 2 : (y1 ?? y2);
+                              {ikiDonem ? <><span style={{ fontSize:10, color:MUTED }}>Ders</span><span style={{ fontSize:10, color:MUTED, textAlign:"center" }}>1. Dönem</span><span style={{ fontSize:10, color:MUTED, textAlign:"center" }}>2. Dönem</span><span style={{ fontSize:10, color:MUTED, textAlign:"center" }}>Yıl sonu</span></> : <><span style={{ fontSize:10, color:MUTED }}>Ders</span><span style={{ fontSize:10, color:MUTED, textAlign:"center" }}>1. Yazılı</span><span style={{ fontSize:10, color:MUTED, textAlign:"center" }}>2. Yazılı</span><span style={{ fontSize:10, color:MUTED, textAlign:"center" }}>Ort.</span></>}
+                              {satirlar.map(({ d, oz }) => {
+                                const hucre = (o, a, b) => <span style={{ textAlign:"center", lineHeight:1.15 }}><b style={{ color:renk(o) }}>{pdrNotYaz(o == null ? null : Math.round(o * 10) / 10)}</b>{a != null || b != null ? <span style={{ display:"block", fontSize:9, color:MUTED }}>{a ?? "-"} · {b ?? "-"}</span> : null}</span>;
                                 return (
                                   <React.Fragment key={d.key}>
                                     <span style={{ color:d.color, fontWeight:700 }}>{d.label}</span>
-                                    <span style={{ textAlign:"center", fontWeight:700, color:renk(y1) }}>{y1 ?? "—"}</span>
-                                    <span style={{ textAlign:"center", fontWeight:700, color:renk(y2) }}>{y2 ?? "—"}</span>
-                                    <span style={{ textAlign:"center", fontWeight:900, color:renk(ort) }}>{Number.isInteger(ort) ? ort : ort.toFixed(1)}</span>
+                                    {ikiDonem ? <>{hucre(oz.d1, oz.y1, oz.y2)}{hucre(oz.d2, oz.y3, oz.y4)}<span style={{ textAlign:"center", fontWeight:900, color:renk(oz.yil) }}>{pdrNotYaz(oz.yil == null ? null : Math.round(oz.yil * 10) / 10)}</span></>
+                                      : <><span style={{ textAlign:"center", fontWeight:700, color:renk(oz.y1) }}>{oz.y1 ?? "—"}</span><span style={{ textAlign:"center", fontWeight:700, color:renk(oz.y2) }}>{oz.y2 ?? "—"}</span><span style={{ textAlign:"center", fontWeight:900, color:renk(oz.son) }}>{pdrNotYaz(Math.round(oz.son * 10) / 10)}</span></>}
                                   </React.Fragment>
                                 );
                               })}
@@ -51737,6 +51746,7 @@ function ProfilMerkez({
   // Form state
   const [profForm, setProfForm] = useState({ notes:"", scores:{...EMPTY_SCORES}, analysis:"" });
   const [prof2Form, setProf2Form] = useState({...EMPTY_PROF2});
+  const [yaziliDonem, setYaziliDonem] = useState(() => { const ay = new Date().getMonth(); return ay >= 1 && ay <= 7 ? 2 : 1; });
   const [prof2Analiz, setProf2Analiz] = useState("");
   const [scoresLoading, setScoresLoading] = useState(false);
   const [profAiLoading, setProfAiLoading] = useState(false);
@@ -52103,45 +52113,56 @@ function ProfilMerkez({
                 <div>
                   {/* Sınav puanları — 2 yazılı */}
                   <div style={{background:CARD,border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)",borderRadius:12,padding:14,marginBottom:12}}>
-                    <div style={{fontSize:12,fontWeight:700,color:BLUE,textTransform:"uppercase",letterSpacing:0.5,marginBottom:10}}>Yazılı Sınav Puanları</div>
+                    <div style={{fontSize:12,fontWeight:700,color:BLUE,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Yazılı Sınav Puanları</div>
+                    <div style={{display:"flex",gap:6,marginBottom:10}}>
+                      {[1,2].map(n => <button key={n} type="button" data-testid={"yazili-donem-"+n} onClick={()=>setYaziliDonem(n)} style={{flex:1,padding:"7px 6px",borderRadius:8,border:`1.5px solid ${yaziliDonem===n?BLUE:BORDER}`,background:yaziliDonem===n?"#EEF2FF":"#fff",color:yaziliDonem===n?BLUE:TEXT,fontSize:12,fontWeight:800,cursor:"pointer"}}>{n}. Dönem</button>)}
+                    </div>
+                    {(() => { const oz = DERSLER.map(d => pdrYaziliOzet(prof2Form.sinavlar, d.key)), ys = oz.map(o => o.yil).filter(v => v != null), dd = oz.map(o => yaziliDonem === 1 ? o.d1 : o.d2).filter(v => v != null), ort = a => a.reduce((t, v) => t + v, 0) / a.length;
+                      return (dd.length || ys.length) ? <div data-testid="yazili-genel" style={{fontSize:11,color:MUTED,marginBottom:8,lineHeight:1.5}}>{dd.length ? <>{yaziliDonem}. dönem genel ortalaması <b style={{color:TEXT}}>{pdrNotYaz(ort(dd))}</b></> : null}{dd.length && ys.length ? " · " : ""}{ys.length ? <>yıl sonu genel ortalaması <b style={{color:TEXT}}>{pdrNotYaz(ort(ys))}</b>{ys.length < DERSLER.length ? ` (${ys.length} ders)` : ""}</> : null}</div> : null; })()}
                     {DERSLER.map(d => {
-                      const v1 = prof2Form.sinavlar?.[d.key+"1"]||"";
-                      const v2 = prof2Form.sinavlar?.[d.key+"2"]||"";
-                      const ort = (parseFloat(v1)||0)&&(parseFloat(v2)||0) ? ((parseFloat(v1)+parseFloat(v2))/2).toFixed(1) : parseFloat(v1)||parseFloat(v2)||null;
+                      const a = yaziliDonem === 1 ? 1 : 3, b = a + 1;
+                      const v1 = prof2Form.sinavlar?.[d.key+a]||"";
+                      const v2 = prof2Form.sinavlar?.[d.key+b]||"";
+                      const oz = pdrYaziliOzet(prof2Form.sinavlar, d.key), dOrt = yaziliDonem === 1 ? oz.d1 : oz.d2;
+                      const ort = dOrt == null ? null : pdrNotYaz(Math.round(dOrt * 10) / 10);
                       return (
-                        <div key={d.key} style={{marginBottom:10}}>
+                        <div key={d.key} data-yazili-ders={d.key} style={{marginBottom:10}}>
                           <div style={{fontSize:11,fontWeight:700,color:d.color,marginBottom:4}}>{d.label}</div>
-                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:6,alignItems:"center"}}>
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr auto auto",gap:6,alignItems:"center"}}>
                             <div>
-                              <label style={{fontSize:9,color:MUTED,display:"block",marginBottom:2}}>1. YAZILI</label>
+                              <label style={{fontSize:9,color:MUTED,display:"block",marginBottom:2}}>{yaziliDonem}. D. 1. YAZILI</label>
                               <input type="number" min="0" max="100" placeholder="—"
                                 data-pdr-grup="yazili-puan" enterKeyHint="next"
                                 onKeyDown={pdrEnterIleGec("yazili-puan")}
                                 value={v1}
                                 onChange={e=>{
                                   const v=e.target.value;
-                                  setProf2Form(f=>({...f,sinavlar:{...f.sinavlar,[d.key+"1"]:v}}));
+                                  setProf2Form(f=>({...f,sinavlar:{...f.sinavlar,[d.key+a]:v}}));
                                   // 3 hane (100) ya da 100'ü aşamayacak 2 hane girildiyse sıradaki kutuya geç
                                   if (v.length===3 || (v.length===2 && parseInt(v,10)>10)) setTimeout(()=>pdrSonrakiAlanaGec(e,"yazili-puan"),0);
                                 }}
                                 style={{...inp,borderColor:v1?d.color:BORDER,textAlign:"center",fontWeight:700}} />
                             </div>
                             <div>
-                              <label style={{fontSize:9,color:MUTED,display:"block",marginBottom:2}}>2. YAZILI</label>
+                              <label style={{fontSize:9,color:MUTED,display:"block",marginBottom:2}}>{yaziliDonem}. D. 2. YAZILI</label>
                               <input type="number" min="0" max="100" placeholder="—"
                                 data-pdr-grup="yazili-puan" enterKeyHint="next"
                                 onKeyDown={pdrEnterIleGec("yazili-puan")}
                                 value={v2}
                                 onChange={e=>{
                                   const v=e.target.value;
-                                  setProf2Form(f=>({...f,sinavlar:{...f.sinavlar,[d.key+"2"]:v}}));
+                                  setProf2Form(f=>({...f,sinavlar:{...f.sinavlar,[d.key+b]:v}}));
                                   if (v.length===3 || (v.length===2 && parseInt(v,10)>10)) setTimeout(()=>pdrSonrakiAlanaGec(e,"yazili-puan"),0);
                                 }}
                                 style={{...inp,borderColor:v2?d.color:BORDER,textAlign:"center",fontWeight:700}} />
                             </div>
                             <div style={{textAlign:"center",minWidth:40}}>
-                              <div style={{fontSize:9,color:MUTED,marginBottom:2}}>ORT</div>
+                              <div style={{fontSize:9,color:MUTED,marginBottom:2}}>{yaziliDonem}. D. ORT</div>
                               <div style={{fontSize:14,fontWeight:900,color:ort?d.color:MUTED}}>{ort||"—"}</div>
+                            </div>
+                            <div title="Yıl sonu: iki dönem yazılı ortalamalarının ortalaması" style={{textAlign:"center",minWidth:44}}>
+                              <div style={{fontSize:9,color:MUTED,marginBottom:2}}>YIL SONU</div>
+                              <div data-testid={"yil-sonu-"+d.key} style={{fontSize:14,fontWeight:900,color:oz.yil!=null?d.color:MUTED}}>{oz.yil!=null?pdrNotYaz(Math.round(oz.yil*10)/10):"—"}</div>
                             </div>
                           </div>
                         </div>
@@ -52363,10 +52384,10 @@ function ProfilMerkez({
                 <div style={{background:CARD,border:`1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)",borderRadius:12,padding:14,marginBottom:12}}>
                   <div style={{fontSize:12,fontWeight:700,color:BLUE,textTransform:"uppercase",letterSpacing:0.5,marginBottom:10}}>Yazılı Sınav Puanları</div>
                   {DERSLER.map(d=>{
-                    const v1=parseFloat(mevcutP2.sinavlar?.[d.key+"1"]);
-                    const v2=parseFloat(mevcutP2.sinavlar?.[d.key+"2"]);
-                    const ort=!isNaN(v1)&&!isNaN(v2)?((v1+v2)/2).toFixed(1):!isNaN(v1)?v1:!isNaN(v2)?v2:null;
-                    if(!ort) return null;
+                    const oz=pdrYaziliOzet(mevcutP2.sinavlar,d.key);
+                    const v1=oz.y1??NaN, v2=oz.y2??NaN, v3=oz.y3??NaN, v4=oz.y4??NaN;
+                    if(oz.son==null) return null;
+                    const ort=pdrNotYaz(Math.round(oz.son*10)/10);
                     return (
                       <div key={d.key} style={{marginBottom:10}}>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
@@ -52374,14 +52395,17 @@ function ProfilMerkez({
                           <div style={{display:"flex",gap:8,alignItems:"center"}}>
                             {!isNaN(v1)&&<span style={{fontSize:11,color:MUTED}}>1.Yazılı: <b style={{color:d.color}}>{v1}</b></span>}
                             {!isNaN(v2)&&<span style={{fontSize:11,color:MUTED}}>2.Yazılı: <b style={{color:d.color}}>{v2}</b></span>}
-                            <span style={{fontSize:13,fontWeight:900,color:d.color,background:d.color+"11",borderRadius:6,padding:"2px 8px"}}>Ort: {ort}</span>
+                            {oz.d2!=null&&<span style={{fontSize:11,color:MUTED}}>2.Dönem: <b style={{color:d.color}}>{isNaN(v3)?"-":v3}/{isNaN(v4)?"-":v4}</b></span>}
+                            <span style={{fontSize:13,fontWeight:900,color:d.color,background:d.color+"11",borderRadius:6,padding:"2px 8px"}}>{oz.yil!=null?"Yıl sonu":oz.d2!=null?"2.D ort":"Ort"}: {ort}</span>
                           </div>
                         </div>
                         <div style={{height:8,background:BG,borderRadius:4,display:"flex",gap:2}}>
-                          {!isNaN(v1)&&<div style={{width:`${v1/2}%`,height:"100%",background:d.color,borderRadius:4,opacity:0.6}}/>}
-                          {!isNaN(v2)&&<div style={{width:`${v2/2}%`,height:"100%",background:d.color,borderRadius:4}}/>}
+                          {!isNaN(v1)&&<div style={{width:`${v1/(oz.d2!=null?4:2)}%`,height:"100%",background:d.color,borderRadius:4,opacity:0.6}}/>}
+                          {!isNaN(v2)&&<div style={{width:`${v2/(oz.d2!=null?4:2)}%`,height:"100%",background:d.color,borderRadius:4}}/>}
+                          {!isNaN(v3)&&<div style={{width:`${v3/4}%`,height:"100%",background:d.color,borderRadius:4,opacity:0.6}}/>}
+                          {!isNaN(v4)&&<div style={{width:`${v4/4}%`,height:"100%",background:d.color,borderRadius:4}}/>}
                         </div>
-                        <div style={{fontSize:9,color:MUTED,marginTop:2}}>Maks: 100 · Bar = yazılı puanları</div>
+                        <div style={{fontSize:9,color:MUTED,marginTop:2}}>Maks: 100 · Bar = yazılı puanları{oz.d2!=null?" (iki dönem)":""}</div>
                       </div>
                     );
                   })}

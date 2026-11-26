@@ -24793,7 +24793,16 @@ function pdrAraNorm(s) {
 }
 function pdrAdAra(ad, q) {
   const a = pdrAraNorm(ad), k = pdrAraNorm(q).split(" ").filter(Boolean);
-  return k.every(w => a.includes(w));
+  if (k.every(w => a.includes(w))) return true;
+  // Soyad / ikinci ad gizlilik için maskeli saklanır ("MAZEN GH*****"): tam yazılan soyad ("ghanem"),
+  // maskeli parçanın görünen harfleriyle ("gh") başlıyorsa eşleşir. Tek harfi görünen parça ("A*****")
+  // çok geniş olduğundan yalnız sorgunun başka bir kelimesi adın maskesiz kısmıyla eşleştiyse sayılır.
+  const parcalar = a.split(" ").filter(Boolean);
+  const acik = parcalar.filter(p => !p.includes("*")), maskeli = parcalar.filter(p => p.includes("*")).map(p => p.replace(/\*/g, "")).filter(Boolean);
+  if (!maskeli.length) return false;
+  const acikEsle = (w) => acik.some(p => p.includes(w));
+  const digerAcik = (w) => k.some(x => x !== w && acikEsle(x));
+  return k.every(w => a.includes(w) || (w.length >= 2 && maskeli.some(v => w.startsWith(v) && (v.length >= 2 || digerAcik(w)))));
 }
 function pdrSozlukOku(sozluk, name, className, numara) {
   if (!sozluk) return undefined;

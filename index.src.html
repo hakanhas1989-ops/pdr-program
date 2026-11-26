@@ -20062,6 +20062,36 @@ function gorusmeRehberEksikParcala(blok) {
 
 // AI Özetle için hedef okul farkı: bu yılın en son denemesi (yoksa notta geçen net, o da yoksa 7. sınıf geçmiş deneme ortalaması)
 // ile öğrencinin hedef okulları (+ bu notta geçen okullar) arasındaki net ve puan farkı. Hesap programda yapılır, AI'ya bırakılmaz.
+// Grup görüşmesinde AI'nın bulduğu bir maddenin (Bireyi Tanıma / Uyum İzleme) KİME ait olduğu:
+// metinde ("(HACER RÜ***** Fİ*****)" etiketi ya da adı) hangi katılımcı geçiyorsa ona; birden çok geçiyorsa hepsine;
+// hiçbiri geçmiyorsa "ikisi de / öğrenciler" gibi ortak ifade varsa hepsine, yoksa yalnız varsayılan öğrenciye.
+// Sahibi bulunan maddeden "(Ad Soyad)" etiketi çıkarılır.
+function pdrGrupMaddeSahipleri(metin, katilimcilar, varsayilan) {
+  const kl = (katilimcilar || []).filter(k => k && k.name);
+  if (kl.length < 2) return { sahipler: kl.length ? kl : [varsayilan], metin };
+  const t = pdrAraNorm(metin);
+  const ilk = (k) => pdrAraNorm(String(k.name).split(/\s+/)[0]).replace(/[^a-z0-9]/g, "");
+  const sahip = kl.filter(k => t.includes(pdrAraNorm(k.name)) || (ilk(k).length >= 3 && new RegExp("(^|[^a-z0-9])" + ilk(k) + "([^a-z0-9]|$)").test(t)));
+  if (sahip.length) {
+    let temiz = String(metin);
+    kl.forEach(k => { temiz = temiz.split("(" + k.name + ")").join(""); });
+    temiz = temiz.replace(/\s{2,}/g, " ").replace(/\s+([.,;:])/g, "$1").replace(/[,;]\s*$/, "").trim();
+    return { sahipler: sahip, metin: temiz || metin };
+  }
+  if (/her ikisi|ikisi de|ikisinin|ikisine|öğrenciler|hepsi|üçü de|grup olarak/i.test(metin)) return { sahipler: kl, metin };
+  return { sahipler: [varsayilan], metin };
+}
+// Bir öğrencinin Bireyi Tanıma'sında, açıkça BAŞKA bir kayıtlı öğrencinin adıyla etiketlenmiş ("(AD SOYAD)") ve kendi adı geçmeyen maddeler
+function pdrYanlisSahipliBT(bt, ogr, ogrenciler) {
+  const ayni = (x) => pdrAyniOgrenci(x.studentName, x.className, ogr.name, ogr.className, x.numara, ogr.numara);
+  const benim = pdrAraNorm(ogr.name);
+  return (bt || []).filter(ayni).map(m => {
+    const metinN = pdrAraNorm(m.metin);
+    if (metinN.includes(benim)) return null;
+    const diger = (ogrenciler || []).find(o => o.studentName && pdrAraNorm(o.studentName) !== benim && String(m.metin || "").includes("(" + o.studentName + ")"));
+    return diger ? { madde: m, hedef: diger } : null;
+  }).filter(Boolean);
+}
 function pdrOzetHedefFarki(ogr, ogrDen, dersler, notMetni) {
   try {
     const okullar = [...new Set([...((ogr && ogr.hedefOkullar) || []).map(h => h.okul), ...pdrNottakiOkullar(notMetni || "")])];
@@ -46868,6 +46898,24 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
               <div style={{ fontSize:11, color:MUTED, marginBottom:14, lineHeight:1.5 }}>
                 Görüşmeler sırasında öğrendiğin sosyo-demografik/psikososyal bilgileri kategori kategori madde madde ekleyebilirsin. Tamamen elle giriliyor, hiçbir AI çağrısı yapılmıyor.
               </div>
+              {(() => { const yanlis = pdrYanlisSahipliBT(bireyiTanima, { name: seciliOgrenci, className: seciliOgrenciSinif, numara: seciliOgrenciNumara }, tumOgrenciler);
+                if (!yanlis.length) return null;
+                const tasi = async () => {
+                  const harita = new Map(yanlis.map(y => [y.madde.id, y.hedef]));
+                  const guncel = (bireyiTanima || []).map(b => { const h = harita.get(b.id); if (!h) return b;
+                    const metin = String(b.metin).split("(" + h.studentName + ")").join("").replace(/\s{2,}/g, " ").replace(/\s+([.,;:])/g, "$1").trim();
+                    return { ...b, studentName: h.studentName, className: h.className, numara: h.numara || "", metin }; });
+                  setBireyiTanima(guncel); await saveBireyiTanima(guncel);
+                };
+                const adlar = [...new Set(yanlis.map(y => y.hedef.studentName))].join(", ");
+                return (
+                  <div data-testid="bt-yanlis-sahip" style={{ background:"#FFF7ED", border:"1.5px solid #FDBA74", borderRadius:10, padding:"9px 11px", marginBottom:14, fontSize:12, color:"#7C2D12", lineHeight:1.5 }}>
+                    ⚠️ Burada <b>{yanlis.length}</b> madde başka öğrenciye ait görünüyor ({adlar}) — grup görüşmesinden yanlışlıkla bu öğrenciye eklenmiş.
+                    <div style={{ display:"flex", gap:8, marginTop:7 }}>
+                      <button data-testid="bt-tasi" onClick={tasi} style={{ padding:"6px 12px", background:"#EA580C", color:"#fff", border:"none", borderRadius:8, fontSize:12, fontWeight:800, cursor:"pointer" }}>↪ Ait olduğu öğrenciye taşı</button>
+                    </div>
+                  </div>);
+              })()}
               {BIREYI_TANIMA_KATEGORILER.map(kat => {
                 const maddeler = (bireyiTanima||[]).filter(b => pdrAyniOgrenci(b.studentName, b.className, seciliOgrenci, seciliOgrenciSinif, b.numara, seciliOgrenciNumara) && b.kategori === kat.key);
                 const formAcik = bireyiTanimaAcikKategori === kat.key;
@@ -54752,6 +54800,10 @@ function RecordCard({ rec, records, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz,
   const guncelOgr = kayitliListesi?.find(o => o.name === rec.studentName);
   const guncelSinif = guncelOgr?.className || rec.className;
   const guncelNumara = guncelOgr?.numara || rec.numara;
+  // Düzenlenen kayıt + (grup görüşmesiyse) diğer katılımcılar, güncel sınıf/numaralarıyla
+  const pdrDuzenleKatilimcilar = () => [{ name: rec.studentName, className: guncelSinif, numara: guncelNumara },
+    ...(rec.grupKatilimcilari || []).map(ad => { const o = kayitliListesi?.find(x => x.name === ad); const r2 = (records || []).find(r => r.studentName === ad && r.date === rec.date);
+      return { name: ad, className: o?.className || r2?.className || "", numara: o?.numara || r2?.numara || "" }; })];
 
   // AI ile Özeti Güncelle — daha önce (ilk görüşme notu eklenirken) AI
   // Özetle hiç kullanılmamış olsa bile, burada BDT çarpıtma, Bireyi Tanıma
@@ -54852,10 +54904,9 @@ function RecordCard({ rec, records, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz,
     if (!onerilenBireyiTanima) return;
     const secilenler = onerilenBireyiTanima.filter(o => o.secili);
     if (secilenler.length === 0) { setOnerilenBireyiTanima(null); return; }
-    const yeniMaddeler = secilenler.map(o => ({
-      id: uid(), studentName: rec.studentName, className: guncelSinif, numara: guncelNumara,
-      kategori: o.kategori, metin: o.metin, tarih: rec.date || today()
-    }));
+    const katil = pdrDuzenleKatilimcilar();
+    const yeniMaddeler = secilenler.flatMap(o => { const sh = pdrGrupMaddeSahipleri(o.metin, katil, katil[0]);
+      return sh.sahipler.map(k => ({ id: uid(), studentName: k.name, className: k.className, numara: k.numara, kategori: o.kategori, metin: sh.metin, tarih: rec.date || today() })); });
     const guncel = [...yeniMaddeler, ...(bireyiTanima||[])];
     setBireyiTanima(guncel);
     await saveBireyiTanima(guncel);
@@ -54867,14 +54918,16 @@ function RecordCard({ rec, records, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz,
   // düşürür — kesin kayıt değildir, danışman o sekmede onaylar.
   async function handleUyumDuzenleOnayaGonder() {
     if (!onerilenUyumDuzenle) return;
-    const kayit = {
+    const katil = pdrDuzenleKatilimcilar();
+    const uyumSahip = onerilenUyumDuzenle.map(o => { const sh = pdrGrupMaddeSahipleri(o.dayanak, katil, katil[0]); return { ...o, dayanak: sh.metin, sahipler: sh.sahipler.map(x => x.name) }; });
+    const kayitlar = katil.filter(k => uyumSahip.some(o => o.sahipler.includes(k.name))).map(k => { const benim = uyumSahip.filter(o => o.sahipler.includes(k.name)); return {
       id: uid(), yil: aktifYil, tarih: rec.date || today(),
-      studentName: rec.studentName, className: guncelSinif, numara: guncelNumara || "",
-      isaretli: onerilenUyumDuzenle.map(o => o.kod),
-      dayanaklar: Object.fromEntries(onerilenUyumDuzenle.map(o => [o.kod, o.dayanak])),
+      studentName: k.name, className: k.className, numara: k.numara || "",
+      isaretli: benim.map(o => o.kod),
+      dayanaklar: Object.fromEntries(benim.map(o => [o.kod, o.dayanak])),
       sonuc: "İzlemeye devam", not: "", beklemede: true,
-    };
-    const guncel = [...(uyumIzleme||[]), kayit];
+    }; });
+    const guncel = [...(uyumIzleme||[]), ...kayitlar];
     setUyumIzleme(guncel);
     await saveUyumIzleme(guncel);
     setOnerilenUyumDuzenle(null);
@@ -56979,10 +57032,9 @@ export default function App() {
     const secilenler = onerilenBireyiTanima.filter(o => o.secili);
     if (secilenler.length === 0) { setOnerilenBireyiTanima(null); return; }
     const tumKatilimcilar = [{ name: form.studentName, className: form.className, numara: form.numara }, ...digerKatilimcilar];
-    const yeniMaddeler = tumKatilimcilar.flatMap(k => secilenler.map(o => ({
-      id: uid(), studentName: k.name, className: k.className, numara: k.numara,
-      kategori: o.kategori, metin: o.metin, tarih: form.tarih || today()
-    })));
+    // Grup görüşmesinde her madde yalnız ait olduğu öğrenciye eklenir (Hacer'in bilgisi Havin'e yazılmaz)
+    const yeniMaddeler = secilenler.flatMap(o => { const sh = pdrGrupMaddeSahipleri(o.metin, tumKatilimcilar, tumKatilimcilar[0]);
+      return sh.sahipler.map(k => ({ id: uid(), studentName: k.name, className: k.className, numara: k.numara, kategori: o.kategori, metin: sh.metin, tarih: form.tarih || today() })); });
     const guncel = [...yeniMaddeler, ...(bireyiTanima||[])];
     setBireyiTanima(guncel);
     await saveBireyiTanima(guncel);
@@ -56995,15 +57047,18 @@ export default function App() {
   async function handleUyumOnayaGonder() {
     if (!onerilenUyum || !form.studentName.trim()) return;
     const tumKatilimcilar = [{ name: form.studentName, className: form.className, numara: form.numara }, ...digerKatilimcilar];
-    const yeniKayitlar = tumKatilimcilar.map(k => {
+    // Grup görüşmesinde her gösterge yalnız dayanağında adı geçen öğrenciye gider
+    const uyumSahip = onerilenUyum.map(o => { const sh = pdrGrupMaddeSahipleri(o.dayanak, tumKatilimcilar, tumKatilimcilar[0]); return { ...o, dayanak: sh.metin, sahipler: sh.sahipler.map(x => x.name) }; });
+    const yeniKayitlar = tumKatilimcilar.filter(k => uyumSahip.some(o => o.sahipler.includes(k.name))).map(k => {
       const guncelOgr = kayitliListesi?.find(o => o.name === k.name);
       const guncelSinif = guncelOgr?.className || k.className;
       const guncelNumara = guncelOgr?.numara || k.numara;
+      const benim = uyumSahip.filter(o => o.sahipler.includes(k.name));
       return {
         id: uid(), yil: aktifYil, tarih: form.tarih || today(),
         studentName: k.name, className: guncelSinif, numara: guncelNumara || "",
-        isaretli: onerilenUyum.map(o => o.kod),
-        dayanaklar: Object.fromEntries(onerilenUyum.map(o => [o.kod, o.dayanak])),
+        isaretli: benim.map(o => o.kod),
+        dayanaklar: Object.fromEntries(benim.map(o => [o.kod, o.dayanak])),
         sonuc: "İzlemeye devam", not: "", beklemede: true,
       };
     });

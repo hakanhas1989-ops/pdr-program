@@ -52474,9 +52474,15 @@ function GorusmeTakvimiEkrani({ records, aktifYil }) {
   const [acikAy, setAcikAy] = useState(null);
   const [acikHafta, setAcikHafta] = useState(null);
 
+  // Takvim TÜM görüşmeleri sayar (öğrenci + veli + öğretmen); "öğrenci" sayısı
+  // yalnız öğrenci görüşmelerindeki farklı öğrencilerdir, veli ayrıca gösterilir.
   const ogrenciGorusmeleri = useMemo(() =>
-    (records || []).filter(r => (r.meetingType || "Öğrenci") === "Öğrenci" && r.date),
+    (records || []).filter(r => r.date),
   [records]);
+  const tur = r => r.meetingType || "Öğrenci";
+  const ozet = l => { const og = l.filter(r => tur(r) === "Öğrenci"), ve = l.filter(r => tur(r) === "Veli").length, ot = l.filter(r => tur(r) === "Öğretmen").length;
+    return { farkliOgrenci: pdrOgrenciGrupla(og, []).length, veli: ve, ogretmen: ot }; };
+  const ozetMetin = (n, o) => `${n} görüşme${o.farkliOgrenci ? ` · ${o.farkliOgrenci} öğrenci` : ""}${o.veli ? ` · ${o.veli} veli` : ""}${o.ogretmen ? ` · ${o.ogretmen} öğretmen` : ""}`;
 
   const aylikVeri = useMemo(() => okulYiliAylari(aktifYil).map(ayBilgi => {
     const ayKayitlari = ogrenciGorusmeleri
@@ -52484,11 +52490,9 @@ function GorusmeTakvimiEkrani({ records, aktifYil }) {
       .sort((a, b) => pdrTarihMs(a.date) - pdrTarihMs(b.date));
     const haftalar = ayHaftalariniHesapla(ayBilgi.ayIndex, ayBilgi.yil).map(h => {
       const kayitlar = ayKayitlari.filter(r => { const t = pdrTarihParcala(r.date); return t.gun >= h.ilkGun && t.gun <= h.sonGun; });
-      const farkliOgrenci = pdrOgrenciGrupla(kayitlar, []).length;
-      return { ...h, kayitlar, farkliOgrenci };
+      return { ...h, kayitlar, ...ozet(kayitlar) };
     }).filter(h => h.kayitlar.length > 0);
-    const farkliOgrenciAy = pdrOgrenciGrupla(ayKayitlari, []).length;
-    return { ...ayBilgi, toplamGorusme: ayKayitlari.length, farkliOgrenci: farkliOgrenciAy, haftalar };
+    return { ...ayBilgi, toplamGorusme: ayKayitlari.length, ...ozet(ayKayitlari), haftalar };
   }), [ogrenciGorusmeleri, aktifYil]);
 
   const yilToplam = aylikVeri.reduce((s, a) => s + a.toplamGorusme, 0);
@@ -52497,11 +52501,11 @@ function GorusmeTakvimiEkrani({ records, aktifYil }) {
     <div style={{ padding: 16, maxWidth: 1280, margin: "0 auto" }}>
       <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 4, color:BLUE }}>📅 Görüşme Takvimi</div>
       <div style={{ fontSize: 12, color: MUTED, marginBottom: 16, lineHeight: 1.5 }}>
-        {aktifYil} eğitim-öğretim yılında yapılan öğrenci görüşmeleri, ay ve hafta bazında listelenir. Veri, Görüşme Notu sekmesinde kaydettiğin her görüşmeden otomatik oluşur — burada ayrıca bir şey girmen gerekmez.
+        {aktifYil} eğitim-öğretim yılında yapılan öğrenci, veli ve öğretmen görüşmeleri, ay ve hafta bazında listelenir. Veri, Görüşme Notu sekmesinde kaydettiğin her görüşmeden otomatik oluşur — burada ayrıca bir şey girmen gerekmez.
       </div>
 
       <div style={{ background:"#EEF2FF", borderRadius:10, padding:"10px 14px", marginBottom:16, fontSize:13, color:BLUE, fontWeight:600 }}>
-        {aktifYil} toplam: {yilToplam} görüşme
+        {aktifYil} toplam: {ozetMetin(yilToplam, ozet(aylikVeri.flatMap(a => a.haftalar.flatMap(h => h.kayitlar))))}
       </div>
 
       <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
@@ -52517,7 +52521,7 @@ function GorusmeTakvimiEkrani({ records, aktifYil }) {
                 <span style={{ fontSize:14, fontWeight:800 }}>{ayVeri.ay} {ayVeri.yil}</span>
                 <span style={{ display:"flex", alignItems:"center", gap:8 }}>
                   <span style={{ fontSize:11, fontWeight:700, color: ayVeri.toplamGorusme>0?BLUE:MUTED, background: ayVeri.toplamGorusme>0?"#EEF2FF":BG, borderRadius:8, padding:"2px 8px" }}>
-                    {ayVeri.toplamGorusme > 0 ? `${ayVeri.toplamGorusme} görüşme · ${ayVeri.farkliOgrenci} öğrenci` : "Görüşme yok"}
+                    {ayVeri.toplamGorusme > 0 ? ozetMetin(ayVeri.toplamGorusme, ayVeri) : "Görüşme yok"}
                   </span>
                   <span style={{ fontSize:11, color:MUTED }}>{acik?"▲":"▼"}</span>
                 </span>
@@ -52538,7 +52542,7 @@ function GorusmeTakvimiEkrani({ records, aktifYil }) {
                         }}>
                           <span style={{ fontSize:12, fontWeight:700 }}>{hafta.haftaNo}. Hafta <span style={{ fontWeight:400, color:MUTED }}>({aralik})</span></span>
                           <span style={{ display:"flex", alignItems:"center", gap:6 }}>
-                            <span style={{ fontSize:10, color:BLUE, fontWeight:700 }}>{hafta.kayitlar.length} görüşme · {hafta.farkliOgrenci} öğrenci</span>
+                            <span style={{ fontSize:10, color:BLUE, fontWeight:700 }}>{ozetMetin(hafta.kayitlar.length, hafta)}</span>
                             <span style={{ fontSize:10, color:MUTED }}>{haftaAcik?"▲":"▼"}</span>
                           </span>
                         </button>
@@ -52546,7 +52550,7 @@ function GorusmeTakvimiEkrani({ records, aktifYil }) {
                           <div style={{ padding:"4px 4px 4px 10px" }}>
                             {hafta.kayitlar.map(r => (
                               <div key={r.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 0", borderBottom:`1px solid ${BORDER}` }}>
-                                <span style={{ flex:1, minWidth:0, fontSize:11, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{r.studentName}{r.className?` — ${r.className}`:""}</span>
+                                <span style={{ flex:1, minWidth:0, fontSize:11, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{tur(r) !== "Öğrenci" && <span style={{ fontSize:9.5, fontWeight:800, color:"#7C3AED", background:"#F3E8FF", borderRadius:6, padding:"1px 5px", marginRight:5 }}>{tur(r) === "Veli" ? "👪 Veli" : tur(r)}</span>}{r.studentName}{r.className?` — ${r.className}`:""}</span>
                                 <span style={{ flexShrink:0, lineHeight:1.2, textAlign:"right" }}>
                                   <span style={{ display:"block", color:MUTED, fontSize:10.5 }}>{r.date}{r.saat ? ` · ${r.saat}` : ""}</span>
                                   <span style={{ display:"block", color:MUTED, fontSize:8.5, opacity:0.75 }}>{pdrGunAdi(r.date)}</span>

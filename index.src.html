@@ -45749,9 +45749,11 @@ function OgrenciYonetim({
     setRecords(guncel);
     await saveRecords(guncel);
   }
-  async function handleGorusmeGuncelle(id, patch) {
+  async function handleGorusmeGuncelle(id, patch, ekGuncellemeler) {
     const eski = records.find(r => r.id === id);
-    const guncel = records.map(r => r.id === id ? { ...r, ...patch } : r);
+    // ekGuncellemeler: aynı kayıtla birlikte değişen diğer kayıtlar (ör. grup görüşmesinde diğer öğrencilerin özel notu)
+    const ek = new Map((ekGuncellemeler || []).map(x => [x.id, x.patch]));
+    const guncel = records.map(r => r.id === id ? { ...r, ...patch } : ek.has(r.id) ? { ...r, ...ek.get(r.id) } : r);
     setRecords(guncel);
     await saveRecords(guncel);
     // 🎯 Düzeltilen notta yeni bir hedef okul geçiyorsa (yeni kayıttaki gibi) eklemeyi öner
@@ -54732,6 +54734,7 @@ function RecordCard({ rec, records, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz,
   const [duzenle, setDuzenle] = useState(false);
   const [editForm, setEditForm] = useState({ summary: rec.summary, topic: rec.topic || "", altKonu: rec.altKonu || "", raw: rec.raw || "", date: rec.date || "", ozelNot: rec.ozelNot || "" });
   const [ozelNotUyari, setOzelNotUyari] = useState("");
+  const [digerOzelNotlar, setDigerOzelNotlar] = useState(null); // [{id, ad, metin, secili}] — grubun diğer öğrencilerine eklenecek cümleler
   const [aiLoading, setAiLoading] = useState(false);
   const [kaydedildi, setKaydedildi] = useState(false);
   const [onerilenBdt, setOnerilenBdt] = useState(null);
@@ -54888,7 +54891,10 @@ function RecordCard({ rec, records, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz,
     const eskiOzet = String(rec.summary || "").trim(), yeniHam = String(editForm.raw || "").trim();
     const ozetKopya = eskiOzet && rec.raw !== undefined && String(rec.raw || "").trim().startsWith(eskiOzet) && !rec.form;
     const ozet = ozetKopya && editForm.summary === rec.summary && yeniHam && yeniHam !== eskiOzet ? yeniHam : editForm.summary;
-    onUpdate(rec.id, { summary: ozet, topic: editForm.topic, altKonu: editForm.topic ? editForm.altKonu : "", raw: editForm.raw, date: yeniTarih, ozelNot: String(editForm.ozelNot || "").trim() });
+    const ekler = (digerOzelNotlar || []).filter(d => d.secili && String(d.metin || "").trim())
+      .map(d => ({ id: d.id, patch: { ozelNot: (String(d.eski || "").trim() ? String(d.eski).trim() + "\n" : "") + String(d.metin).trim() } }));
+    onUpdate(rec.id, { summary: ozet, topic: editForm.topic, altKonu: editForm.topic ? editForm.altKonu : "", raw: editForm.raw, date: yeniTarih, ozelNot: String(editForm.ozelNot || "").trim() }, ekler);
+    setDigerOzelNotlar(null);
     setDuzenle(false);
     setKaydedildi(true);
     setTimeout(() => setKaydedildi(false), 2000);
@@ -55086,6 +55092,18 @@ function RecordCard({ rec, records, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz,
                 const metin = editForm.raw || editForm.summary, bol = pdrGrupNotBol(metin, rec.studentName, rec.grupKatilimcilari || []);
                 // Adı geçen cümle ve onu izleyen (başka öğrencinin adı geçene kadar) cümleler bu öğrencinindir
                 const c = bol.kendi ? pdrCumleler(bol.kendi) : pdrNottaAdiGecenCumleler(metin, rec.studentName);
+                // Grubun diğer öğrencileri: onların adı geçen cümleleri de bulunur, kaydedince kendi kayıtlarının özel notuna eklenir
+                const digerleri = (rec.grupKatilimcilari || []).map(ad => {
+                  const kayit = (records || []).find(r => r.id !== rec.id && r.studentName === ad && r.date === rec.date && (r.grupKatilimcilari || []).includes(rec.studentName));
+                  if (!kayit) return null;
+                  const b2 = pdrGrupNotBol(metin, ad, [rec.studentName, ...(rec.grupKatilimcilari || []).filter(x => x !== ad)]);
+                  const c2 = b2.kendi ? pdrCumleler(b2.kendi) : pdrNottaAdiGecenCumleler(metin, ad);
+                  if (!c2.length) return null;
+                  const yazi = "Ortak notta bu öğrenciyle ilgili: " + c2.join(" ");
+                  if (String(kayit.ozelNot || "").includes(yazi)) return null;
+                  return { id: kayit.id, ad, metin: yazi, eski: kayit.ozelNot || "", secili: true };
+                }).filter(Boolean);
+                setDigerOzelNotlar(digerleri.length ? digerleri : null);
                 if (!c.length) { setOzelNotUyari("Notta bu öğrencinin adının geçtiği bir cümle yok. Özel notu kendin yazabilirsin."); return; }
                 setOzelNotUyari("Taslak yalnızca notta adının geçtiği cümlelerden alındı; yeni bilgi eklenmedi. Kontrol edip düzenle.");
                 setEditForm(f => ({ ...f, ozelNot: (f.ozelNot ? f.ozelNot + "\n" : "") + "Ortak notta bu öğrenciyle ilgili: " + c.join(" ") }));
@@ -55093,11 +55111,26 @@ function RecordCard({ rec, records, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz,
               {ozelNotUyari && <div data-testid="ozel-not-uyari" style={{ fontSize: 11, color: "#8a5a00", background: "#FFF6E5", borderRadius: 6, padding: "4px 8px", marginBottom: 6 }}>{ozelNotUyari}</div>}
               <textarea data-testid="ozel-not" value={editForm.ozelNot || ""} onChange={e => setEditForm(f => ({ ...f, ozelNot: e.target.value }))} rows={3} placeholder="ör. Kendi anlatımına göre…"
                 style={{ width: "100%", padding: "8px 10px", border: `1px solid ${PURPLE}`, borderRadius: 8, fontSize: 13, resize: "vertical", boxSizing: "border-box", fontFamily: "inherit", lineHeight: 1.6 }} />
+              {digerOzelNotlar && (
+                <div data-testid="diger-ozel-not" style={{ marginTop: 8, background: "#F3F0FF", border: `1px solid ${PURPLE}`, borderRadius: 8, padding: "8px 10px" }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: PURPLE, marginBottom: 6 }}>👥 Gruptaki diğer öğrenciler — kaydedince kendi kayıtlarının özel notuna eklenir:</div>
+                  {digerOzelNotlar.map((d, i) => (
+                    <div key={d.id} style={{ marginBottom: 6 }}>
+                      <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 12, fontWeight: 700, color: TEXT, cursor: "pointer" }}>
+                        <input type="checkbox" checked={d.secili} onChange={() => setDigerOzelNotlar(l => l.map((x, j) => j === i ? { ...x, secili: !x.secili } : x))} />{d.ad}
+                      </label>
+                      <textarea value={d.metin} onChange={e => { const v = e.target.value; setDigerOzelNotlar(l => l.map((x, j) => j === i ? { ...x, metin: v } : x)); }} rows={3}
+                        style={{ width: "100%", marginTop: 4, padding: "6px 8px", border: `1px solid ${BORDER}`, borderRadius: 6, fontSize: 12, resize: "vertical", boxSizing: "border-box", fontFamily: "inherit", lineHeight: 1.5, opacity: d.secili ? 1 : 0.5 }} />
+                    </div>
+                  ))}
+                  <div style={{ fontSize: 10, color: MUTED }}>Taslaklar yalnızca notta adlarının geçtiği cümlelerden alındı. İstemediğinin işaretini kaldır.</div>
+                </div>
+              )}
             </div>
           )}
 
           <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={() => { setDuzenle(false); setOzelNotUyari(""); setEditForm({ summary: rec.summary, topic: rec.topic || "", altKonu: rec.altKonu || "", raw: rec.raw || "", date: rec.date || "", ozelNot: rec.ozelNot || "" }); }} style={{
+            <button onClick={() => { setDuzenle(false); setOzelNotUyari(""); setDigerOzelNotlar(null); setEditForm({ summary: rec.summary, topic: rec.topic || "", altKonu: rec.altKonu || "", raw: rec.raw || "", date: rec.date || "", ozelNot: rec.ozelNot || "" }); }} style={{
               flex: 1, padding: "9px", background: CARD, color: MUTED, border: `1px solid ${BORDER}`,boxShadow:"0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer"
             }}>İptal</button>
             <button onClick={handleSave} style={{

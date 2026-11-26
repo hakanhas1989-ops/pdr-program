@@ -54946,6 +54946,15 @@ function RecordCard({ rec, records, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz,
     const ozet = ozetKopya && editForm.summary === rec.summary && yeniHam && yeniHam !== eskiOzet ? yeniHam : editForm.summary;
     const ekler = (digerOzelNotlar || []).filter(d => d.secili && String(d.metin || "").trim())
       .map(d => ({ id: d.id, patch: { ozelNot: (String(d.eski || "").trim() ? String(d.eski).trim() + "\n" : "") + String(d.metin).trim() } }));
+    // Grup görüşmesi: ortak not her öğrencinin kaydında ayrı kopyadır. Bu kayıtta ortak not değiştiyse
+    // diğer katılımcıların kopyaları da (onayla) güncellenir; her öğrencinin özel notu kendisinde kalır.
+    if (rec.grupKatilimcilari?.length && (String(editForm.raw || "") !== String(rec.raw || "") || ozet !== rec.summary)) {
+      const digerKayitlar = (records || []).filter(r => r.id !== rec.id && r.date === rec.date && rec.grupKatilimcilari.includes(r.studentName) && (r.grupKatilimcilari || []).includes(rec.studentName));
+      if (digerKayitlar.length && window.confirm(`Bu bir grup görüşmesi. Gruptaki diğer öğrencilerin (${digerKayitlar.map(r => r.studentName).join(", ")}) kaydındaki ortak not da bu hâliyle güncellensin mi?\n\n(Her öğrencinin özel notu kendisinde kalır.)`)) {
+        digerKayitlar.forEach(r => { const var_ = ekler.find(e => e.id === r.id), yama = { raw: editForm.raw, summary: ozet };
+          if (var_) Object.assign(var_.patch, yama); else ekler.push({ id: r.id, patch: yama }); });
+      }
+    }
     onUpdate(rec.id, { summary: ozet, topic: editForm.topic, altKonu: editForm.topic ? editForm.altKonu : "", raw: editForm.raw, date: yeniTarih, ozelNot: String(editForm.ozelNot || "").trim() }, ekler);
     setDigerOzelNotlar(null);
     setDuzenle(false);

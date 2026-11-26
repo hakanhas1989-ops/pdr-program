@@ -47328,6 +47328,113 @@ function denemeBazliRiskDagilimiHesapla(denemeler, kayitliListesi, dersler) {
 // Bu yılın deneme bazlı risk dağılımını gösterir — her deneme (Deneme 1, 2,
 // 3...) kendi kalıcı bölümünde, en yenisi en üstte. "Geçmiş Dönem" risk
 // dağılımının YANINA eklenir, onun yerine geçmez.
+// Bu yılın denemelerinde (1) önceki denemeye göre en çok yükselen / düşen öğrenciler ve
+// okul sıralaması değişimi, (2) şubelerin yan yana karşılaştırması. Yalnızca cihazdaki
+// deneme verisiyle hesaplanır; hiçbir yere gönderilmez.
+function denemeKarsilastirmaVerisi(denemeler, kayitliListesi, dersler) {
+  const D = {};
+  (kayitliListesi || []).forEach(o => {
+    const od = pdrSozlukOku(denemeler, o.name, o.className, o.numara) || {};
+    for (let no = 1; no <= DENEME_SAYISI; no++) {
+      const nets = od[no]; if (!nets) continue;
+      const dersli = nets._topluNet === undefined || nets._topluNet === null || nets._topluNet === "";
+      (D[no] ||= []).push({ id: o.name + "|" + (o.className || "") + "|" + (o.numara || ""), ad: o.name, sinif: o.className || "Sınıf Belirtilmemiş", net: pdrToplamNetHesapla(nets, dersler), nets: dersli ? nets : null });
+    }
+  });
+  Object.values(D).forEach(l => { const s = l.map(x => x.net).sort((a, b) => b - a); l.forEach(x => { x.sira = s.findIndex(v => v === x.net) + 1; }); });
+  return D;
+}
+function denemeDegisimHesapla(D, no) {
+  const simdi = D[no] || [], onceki = {};
+  for (let n = 1; n < no; n++) (D[n] || []).forEach(x => { onceki[x.id] = { ...x, no: n }; });
+  return simdi.filter(x => onceki[x.id]).map(x => { const o = onceki[x.id]; return { ...x, oncekiNo: o.no, oncekiNet: o.net, oncekiSira: o.sira, fark: Math.round((x.net - o.net) * 10) / 10, siraFark: o.sira - x.sira }; });
+}
+function subeKarsilastirmaHesapla(D, no, dersler) {
+  const l = D[no] || [], ort = a => a.length ? a.reduce((t, v) => t + v, 0) / a.length : null;
+  const G = {}; l.forEach(x => { (G[x.sinif] ||= []).push(x); });
+  const okulDers = Object.fromEntries(dersler.map(d => [d.key, ort(l.filter(x => x.nets).map(x => parseFloat(x.nets[d.key]) || 0))]));
+  const oncekiNo = [...Array(no - 1).keys()].map(i => no - 1 - i).find(n => (D[n] || []).length);
+  const subeler = Object.entries(G).sort((a, b) => a[0].localeCompare(b[0], "tr")).map(([sinif, a]) => {
+    const v = a.map(x => x.net), o = ort(v), ss = Math.sqrt(v.reduce((t, x) => t + (x - o) ** 2, 0) / v.length);
+    const onc = oncekiNo ? (D[oncekiNo] || []).filter(x => x.sinif === sinif).map(x => x.net) : [];
+    const dersOrt = Object.fromEntries(dersler.map(d => [d.key, ort(a.filter(x => x.nets).map(x => parseFloat(x.nets[d.key]) || 0))]));
+    return { sinif, n: a.length, ort: o, enYuksek: Math.max(...v), enDusuk: Math.min(...v), ss, oncekiOrt: onc.length ? ort(onc) : null, dersOrt };
+  });
+  return { subeler, okulOrt: ort(l.map(x => x.net)), okulDers, oncekiNo, n: l.length };
+}
+function DenemeKarsilastirmaPaneli({ denemeler, kayitliListesi, dersler }) {
+  const D = denemeKarsilastirmaVerisi(denemeler, kayitliListesi, dersler);
+  const nolar = Object.keys(D).map(Number).sort((a, b) => a - b);
+  const [secNo, setSecNo] = useState(null), [sekme, setSekme] = useState("degisim"), [sinif, setSinif] = useState(""), [hepsi, setHepsi] = useState(false);
+  if (!nolar.length) return null;
+  const no = nolar.includes(secNo) ? secNo : nolar[nolar.length - 1];
+  const f1 = x => x == null ? "—" : (Math.round(x * 10) / 10).toFixed(1).replace(".", ",");
+  const isaret = x => (x > 0 ? "+" : "") + f1(x);
+  const kart = { background: CARD, border: `1px solid ${BORDER}`, boxShadow: "0 4px 12px rgba(20,40,32,0.14), 0 1px 3px rgba(20,40,32,0.10)", borderRadius: 10, padding: "10px 12px" };
+  const cip = (aktif) => ({ padding: "5px 10px", borderRadius: 8, border: `1px solid ${aktif ? BLUE : BORDER}`, background: aktif ? "#EEF2FF" : "#fff", color: aktif ? BLUE : TEXT, fontSize: 11.5, fontWeight: 800, cursor: "pointer" });
+  const degisim = denemeDegisimHesapla(D, no).filter(x => !sinif || x.sinif === sinif);
+  const yukselen = degisim.filter(x => x.fark > 0).sort((a, b) => b.fark - a.fark), dusen = degisim.filter(x => x.fark < 0).sort((a, b) => a.fark - b.fark);
+  const sert = dusen.filter(x => x.fark <= -5).length, siniflar = [...new Set((D[no] || []).map(x => x.sinif))].sort((a, b) => a.localeCompare(b, "tr"));
+  const satir = (x, renk) => (
+    <div key={x.id} data-dk-degisim={x.ad} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "5px 8px", background: BG, borderRadius: 6, fontSize: 11.5 }}>
+      <span style={{ color: TEXT, fontWeight: 700, minWidth: 0 }}>{x.ad} <span style={{ color: MUTED, fontWeight: 400 }}>{x.sinif}</span></span>
+      <span style={{ whiteSpace: "nowrap", color: MUTED }}>{f1(x.oncekiNet)} → <b style={{ color: TEXT }}>{f1(x.net)}</b> <b style={{ color: renk }}>{isaret(x.fark)}</b> · sıra {x.oncekiSira}→{x.sira}</span>
+    </div>);
+  const liste = (baslik, l, renk, bos) => (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ fontSize: 11, fontWeight: 800, color: renk, marginBottom: 4 }}>{baslik} ({l.length})</div>
+      {l.length ? <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>{(hepsi ? l : l.slice(0, 10)).map(x => satir(x, renk))}</div> : <div style={{ fontSize: 11, color: MUTED }}>{bos}</div>}
+    </div>);
+  const S = subeKarsilastirmaHesapla(D, no, dersler);
+  const dersVar = dersler.filter(d => S.okulDers[d.key] != null);
+  const uc = k => { const v = S.subeler.map(s => s.dersOrt[k]).filter(x => x != null); return v.length > 1 ? [Math.min(...v), Math.max(...v)] : [null, null]; };
+  const th = { padding: "4px 6px", fontSize: 10, color: MUTED, fontWeight: 800, textAlign: "center", whiteSpace: "nowrap", borderBottom: `1px solid ${BORDER}` };
+  const td = { padding: "4px 6px", fontSize: 11, textAlign: "center", whiteSpace: "nowrap", borderBottom: `1px solid ${BORDER}` };
+  return (
+    <div data-testid="deneme-karsilastirma" style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: 13, fontWeight: 800, color: TEXT, marginBottom: 8 }}>🔀 Deneme Karşılaştırma</div>
+      <div style={kart}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 8 }}>{nolar.map(n => <button key={n} data-dk-deneme={n} onClick={() => setSecNo(n)} style={cip(n === no)}>Deneme {n}</button>)}</div>
+        <div style={{ display: "flex", gap: 5, marginBottom: 6 }}>
+          <button data-testid="dk-sekme-degisim" onClick={() => setSekme("degisim")} style={{ ...cip(sekme === "degisim"), flex: 1 }}>📈 Yükselen / Düşen</button>
+          <button data-testid="dk-sekme-sube" onClick={() => setSekme("sube")} style={{ ...cip(sekme === "sube"), flex: 1 }}>🏫 Şube Karşılaştırma</button>
+        </div>
+        {sekme === "degisim" ? (no === nolar[0] ? <div style={{ fontSize: 11.5, color: MUTED }}>Deneme {no} bu yılın ilk denemesi; karşılaştırma için bir sonraki deneme girilmeli.</div> : <>
+          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+            <select data-testid="dk-sinif" value={sinif} onChange={e => setSinif(e.target.value)} style={{ padding: "4px 8px", borderRadius: 8, border: `1px solid ${BORDER}`, fontSize: 11.5, color: TEXT, background: "#fff" }}>
+              <option value="">Tüm okul</option>{siniflar.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <label style={{ fontSize: 11, color: MUTED, display: "flex", alignItems: "center", gap: 3 }}><input type="checkbox" checked={hepsi} onChange={e => setHepsi(e.target.checked)} /> Hepsini göster</label>
+          </div>
+          <div style={{ fontSize: 11, color: MUTED, marginTop: 6 }}>Her öğrenci, girdiği bir önceki denemeyle karşılaştırılır. {degisim.length} öğrencinin iki denemesi var: {yukselen.length} yükseldi, {dusen.length} düştü{sert ? `, ${sert} öğrenci 5 net ve üzeri düştü` : ""}. Sıra okul içindeki sıralamadır.</div>
+          {sert > 0 && <div data-testid="dk-sert-dusus" style={{ marginTop: 6, background: "#FDECEA", color: "#C0392B", borderRadius: 8, padding: "6px 8px", fontSize: 11, fontWeight: 700 }}>⚠ 5 net ve üzeri düşüş yaşayan {sert} öğrenciyle görüşme planlanabilir.</div>}
+          {liste("⬇ En çok düşenler", dusen, "#C0392B", "Düşen öğrenci yok.")}
+          {liste("⬆ En çok yükselenler", yukselen, "#1A8C5B", "Yükselen öğrenci yok.")}
+        </>) : <>
+          <div style={{ fontSize: 11, color: MUTED, marginBottom: 6 }}>Deneme {no}: {S.n} öğrenci, okul ortalaması {f1(S.okulOrt)} net.{S.oncekiNo ? ` Değişim Deneme ${S.oncekiNo}'e göredir.` : ""} Ders sütunlarında her dersin en düşük şubesi kırmızı, en yüksek şubesi yeşil.</div>
+          <div style={{ overflowX: "auto" }}>
+            <table data-testid="dk-sube-tablo" style={{ borderCollapse: "collapse", width: "100%" }}>
+              <thead><tr><th style={{ ...th, textAlign: "left" }}>Şube</th><th style={th}>Öğr.</th><th style={th}>Ort.</th><th style={th}>Okula göre</th>{S.oncekiNo ? <th style={th}>Değişim</th> : null}<th style={th}>En yüksek</th><th style={th}>En düşük</th><th style={th}>Yayılım (±)</th>{dersVar.map(d => <th key={d.key} style={th}>{d.label.slice(0, 3)}</th>)}</tr></thead>
+              <tbody>
+                {S.subeler.map(s => (
+                  <tr key={s.sinif} data-dk-sube={s.sinif}>
+                    <td style={{ ...td, textAlign: "left", fontWeight: 800 }}>{s.sinif}</td><td style={td}>{s.n}</td><td style={{ ...td, fontWeight: 800 }}>{f1(s.ort)}</td>
+                    <td style={{ ...td, color: s.ort - S.okulOrt >= 0 ? "#1A8C5B" : "#C0392B", fontWeight: 700 }}>{isaret(s.ort - S.okulOrt)}</td>
+                    {S.oncekiNo ? <td style={{ ...td, color: s.oncekiOrt == null ? MUTED : s.ort - s.oncekiOrt >= 0 ? "#1A8C5B" : "#C0392B", fontWeight: 700 }}>{s.oncekiOrt == null ? "—" : isaret(s.ort - s.oncekiOrt)}</td> : null}
+                    <td style={td}>{f1(s.enYuksek)}</td><td style={td}>{f1(s.enDusuk)}</td><td style={td}>{f1(s.ss)}</td>
+                    {dersVar.map(d => { const v = s.dersOrt[d.key], [mn, mx] = uc(d.key); return <td key={d.key} title={v == null ? "" : `${d.label}: ${f1(v)}/${d.maks}`} style={{ ...td, background: v == null ? "transparent" : v === mn ? "#FDECEA" : v === mx ? "#E6F5EE" : "transparent", color: v === mn ? "#C0392B" : v === mx ? "#1A8C5B" : TEXT, fontWeight: v === mn || v === mx ? 800 : 400 }}>{f1(v)}</td>; })}
+                  </tr>))}
+                <tr><td style={{ ...td, textAlign: "left", fontWeight: 800, color: MUTED }}>Okul</td><td style={td}>{S.n}</td><td style={{ ...td, fontWeight: 800 }}>{f1(S.okulOrt)}</td><td style={td}></td>{S.oncekiNo ? <td style={td}></td> : null}<td style={td}></td><td style={td}></td><td style={td}></td>{dersVar.map(d => <td key={d.key} style={{ ...td, color: MUTED }}>{f1(S.okulDers[d.key])}</td>)}</tr>
+              </tbody>
+            </table>
+          </div>
+          <div style={{ fontSize: 10.5, color: MUTED, marginTop: 6 }}>Yayılım: şubedeki netlerin ortalamadan ortalama uzaklığı; büyükse şubede başarı farkı fazladır. {dersVar.length < dersler.length ? "Yalnız toplam net girilen öğrenciler ders sütunlarına katılmaz." : ""}</div>
+        </>}
+      </div>
+    </div>
+  );
+}
+
 function DenemeBazliRiskGosterimi({ denemeler, kayitliListesi, dersler }) {
   const [acikDeneme, setAcikDeneme] = useState(null);
   const veriler = denemeBazliRiskDagilimiHesapla(denemeler, kayitliListesi, dersler);
@@ -49536,6 +49643,8 @@ function DenemeTabip({ denemeler, setDenemeler, kayitliListesi, aktifOgrenci, se
       <RiskOzetKartlari ogrenciler={(ogrenciler||[]).filter(o => !o.yil || o.yil === aktifYil)} baslik="📊 Tüm Okul — Geçmiş Dönem Deneme Risk Dağılımı" />
 
       <DenemeBazliRiskGosterimi denemeler={denemeler} kayitliListesi={kayitliListesi} dersler={dersler} />
+
+      <DenemeKarsilastirmaPaneli denemeler={denemeler} kayitliListesi={kayitliListesi} dersler={dersler} />
 
       {!guncelYilExcelAcik && (
         <button data-asistan="deneme-guncel-ac" onClick={() => setGuncelYilExcelAcik(true)} style={{

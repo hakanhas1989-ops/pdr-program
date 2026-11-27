@@ -46981,20 +46981,34 @@ SADECE şu JSON formatında cevap ver, başka hiçbir şey yazma:
               <div style={{ fontSize:11, color:MUTED, marginBottom:14, lineHeight:1.5 }}>
                 Öğrencinin görüşme sırasında dile getirdiği olumsuz ifadeleri, hangi bilişsel çarpıtma kategorisine girdiğini belirterek kaydet. AI, "Görüşme Notu → AI Özetle" akışında bir öneri çıkarabilir (danışman onaylamadan kaydolmaz); burada elle de ekleyebilirsin.
               </div>
+              {(() => {
+                // Dolu kategoriler üstte özetlenir; dokununca o kategoriye kaydırır
+                const dolu = BDT_CARPITMA_KATEGORILERI.map(kat => ({ kat, n: (bdtAnaliz||[]).filter(b => pdrAyniOgrenci(b.studentName, b.className, seciliOgrenci, seciliOgrenciSinif, b.numara, seciliOgrenciNumara) && b.kategori === kat.key).length })).filter(x => x.n > 0);
+                return (
+                  <div data-testid="bdt-dolu-ozet" style={{ background: dolu.length ? "#FFF4EC" : BG, border: `1px solid ${dolu.length ? "#F5C6A5" : BORDER}`, borderRadius: 10, padding: "8px 10px", marginBottom: 14 }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: dolu.length ? "#C2410C" : MUTED, marginBottom: dolu.length ? 6 : 0 }}>{dolu.length ? `İfade kaydedilen kategoriler (${dolu.length})` : "Henüz hiçbir kategoride ifade yok."}</div>
+                    {dolu.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>{dolu.map(({ kat, n }) => (
+                      <button key={kat.key} type="button" data-bdt-ozet={kat.key} onClick={() => { const e = document.getElementById("bdt-kat-" + kat.key); if (e) e.scrollIntoView({ behavior: "smooth", block: "center" }); }}
+                        style={{ background: "#C2410C", color: "#fff", border: "none", borderRadius: 12, padding: "3px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>{kat.ad} · {n}</button>
+                    ))}</div>}
+                  </div>
+                );
+              })()}
               {BDT_CARPITMA_KATEGORILERI.map(kat => {
                 const ifadeler = (bdtAnaliz||[]).filter(b => pdrAyniOgrenci(b.studentName, b.className, seciliOgrenci, seciliOgrenciSinif, b.numara, seciliOgrenciNumara) && b.kategori === kat.key);
                 const formAcik = bdtAcikKategori === kat.key;
+                const doluMu = ifadeler.length > 0;
                 return (
-                  <div key={kat.key} style={{ marginBottom:16 }}>
-                    <div style={{ fontSize:12, fontWeight:700, color:TEXT, marginBottom:2 }}>{kat.ad} {ifadeler.length>0 && <span style={{color:MUTED,fontWeight:500}}>({ifadeler.length})</span>}</div>
+                  <div key={kat.key} id={"bdt-kat-" + kat.key} data-bdt-kat={kat.key} data-dolu={doluMu ? "1" : "0"} style={{ marginBottom:16, ...(doluMu ? { background:"#FFF4EC", border:"1px solid #F5C6A5", borderLeft:"5px solid #C2410C", borderRadius:10, padding:"10px 12px" } : { opacity: formAcik ? 1 : 0.8 }) }}>
+                    <div style={{ fontSize:12, fontWeight:800, color: doluMu ? "#C2410C" : TEXT, marginBottom:2 }}>{kat.ad} {doluMu && <span style={{ background:"#C2410C", color:"#fff", borderRadius:10, padding:"1px 7px", fontSize:10.5, fontWeight:800, marginLeft:4 }}>{ifadeler.length}</span>}</div>
                     <div style={{ fontSize:10, color:MUTED, marginBottom:8, lineHeight:1.4 }}>{kat.aciklama}</div>
                     {ifadeler.length === 0 && !formAcik && (
                       <div style={{ fontSize:11, color:MUTED, marginBottom:6 }}>Henüz ifade eklenmedi.</div>
                     )}
                     {ifadeler.map(m => (
-                      <div key={m.id} style={{ display:"flex", alignItems:"flex-start", gap:6, marginBottom:5, fontSize:12, color:TEXT }}>
-                        <span style={{ color:"#8E5B3C", fontWeight:800, marginTop:1 }}>•</span>
-                        <span style={{ flex:1 }}>"{m.ifade}" <span style={{ fontSize:10, color:MUTED }}>({m.tarih})</span></span>
+                      <div key={m.id} data-bdt-ifade={m.id} style={{ display:"flex", alignItems:"flex-start", gap:6, marginBottom:5, fontSize:12.5, color:"#7C2D12", background:"#fff", border:"1px solid #F5C6A5", borderRadius:8, padding:"6px 8px" }}>
+                        <span style={{ color:"#C2410C", fontWeight:800, marginTop:1 }}>❝</span>
+                        <span style={{ flex:1, fontWeight:600, fontStyle:"italic" }}>{m.ifade} <span style={{ fontSize:10, color:MUTED, fontStyle:"normal", fontWeight:400 }}>({m.tarih})</span></span>
                         <button onClick={()=>handleBdtSil(m.id)} style={{ background:"none", border:"none", color:"#C0392B", fontSize:12, cursor:"pointer", flexShrink:0 }}>🗑</button>
                       </div>
                     ))}

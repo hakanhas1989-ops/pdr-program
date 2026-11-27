@@ -1336,7 +1336,9 @@ function pdrKalkanMetin(s, o) {
       if (d.tur === "tam") return on + pdrKalkanKodVer(o, "T:" + d.anahtar, ad) + kes;
       const sahipler = [...(PDR_KALKAN.parcaSahibi.get(d.anahtar) || [])];
       const buradakiler = sahipler.filter(a => o.buIstekteTam.has(a));
-      const sahip = buradakiler.length === 1 ? buradakiler[0] : sahipler.length === 1 ? sahipler[0] : null;
+      // Odak öğrenci (ör. özetlenen görüşmenin öğrencisi) bu parçanın sahiplerindense ad ona aittir;
+      // yoksa önceki görüşme bağlamında geçen başka bir öğrencinin tam adı ("Yiğit" → başka bir Yiğit) seçilebiliyordu.
+      const sahip = o.odak && sahipler.includes(o.odak) ? o.odak : buradakiler.length === 1 ? buradakiler[0] : sahipler.length === 1 ? sahipler[0] : null;
       if (sahip) {
         return on + pdrKalkanKodVer(o, "T:" + sahip, PDR_KALKAN.orijinal.get(sahip) || ad) + kes;
       }
@@ -1712,6 +1714,11 @@ function pdrKalkanDene(metin) {
     o.genis = true;
     if (govde && govde.__kalkanGenis) delete govde.__kalkanGenis;
     if (govde && govde.__asistan) delete govde.__asistan;
+    if (govde && "__kalkanOdak" in govde) {   // bu istekte konuşulan öğrenci: tek başına geçen adı ona bağlar
+      const od = String(govde.__kalkanOdak || "").trim().replace(/\s+/g, " ");
+      if (od) o.odak = pdrKalkanKucukHarf(od);
+      delete govde.__kalkanOdak;
+    }
     const dosyaOnayli = !!(govde && govde.__kalkanDosyaOnayli);   // ör. kütüphane kaynağı: öğrenci belgesi değil
     if (govde && "__kalkanDosyaOnayli" in govde) delete govde.__kalkanDosyaOnayli;
     const hedefAdi = pdrKalkanHedefAdi(url, asistanIstegi);
@@ -1840,7 +1847,7 @@ function pdrAiJsonVarMi(t) {
     if (!sadeceMetin) return claudeIle("Bu analiz görsel/dosya içerdiği için");
     if (!ucUrl) return claudeIle("Ücretsiz model adresi ayarlanmamış (Asistan ayarları);");
     pdrAsistanKalkanaEkle(ucUrl);
-    const g2 = { model: sec.model, max_tokens: Math.min(parseInt(g.max_tokens) || 1500, 2500), system: pdrAiDuzMetin(g.system), messages: g.messages.map(m => ({ role: m.role, content: pdrAiDuzMetin(m.content) })) };
+    const g2 = { model: sec.model, max_tokens: Math.min(parseInt(g.max_tokens) || 1500, 2500), system: pdrAiDuzMetin(g.system), messages: g.messages.map(m => ({ role: m.role, content: pdrAiDuzMetin(m.content) })), ...(g.__kalkanOdak ? { __kalkanOdak: g.__kalkanOdak } : {}) };
     const jsonIstendi = /\bJSON\b/i.test(g2.system + " " + (g2.messages[g2.messages.length - 1] || {}).content);
     let hata = "";
     try {
@@ -20163,11 +20170,12 @@ function GorusmeRehberiKarti({ form, records, bireyiTanima, hatirlatmalar, durum
 }
 // ===== GÖRÜŞME REHBERİ BİTİŞ =====
 
-async function getAISummary(rawText) {
+async function getAISummary(rawText, odakOgrenci) {
   const istek = () => fetch("https://pdr-api.hakanhas1989.workers.dev", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
+      ...(odakOgrenci ? { __kalkanOdak: odakOgrenci } : {}),
       model: "claude-sonnet-4-6", max_tokens: 3500, temperature: 0,
       system: `Sen Dr. Ayse Kara'sin - 20 yillik klinik deneyime sahip, okul psikolojik danismanligi alaninda uzmanlasmis bir psikolog ve PDR uzmanisin. Bilissel Davranisci Terapi (BDT) temel yonelimindir: otomatik dusunceler, bilissel carpitmalar, sema teorisi, davranissal aktivasyon ve maruz birakma tekniklerini klinik pratikte ustaca kullanirsin. Baglanma teorisi (Bowlby, Ainsworth), aile sistemleri terapisi (Minuchin, Bowen) ve gelisim psikolojisi (Piaget, Vygotsky, Erikson) perspektifinden bireyi cevresiyle birlikte degerlendirirsin. Sosyolojide Bourdieu'nun habitus ve kulturel sermaye kavramlari, Giddens'in yapilasmasi ve sosyal tabakalasmanin psikolojik etkilerini Turkiye baglaminda okursun: aile baskisi, toplumsal cinsiyet rolleri, sinav odakli egitimin cocuk uzerindeki yukunu sosyolojik zemine oturtursun. Felsefi temetin: Frankl anlam terapisi, Sartre sorumluluk etigi, Stoa kontrol alani, fenomenolojinin oznel deneyim odagi. Uslubun: yargilamayan, merak eden, guclu yonlere odaklanan, somut ve uygulanabilir oneriler sunan, Turkce yazan, PDR diline hakim bir klinisyen.
 
@@ -54955,7 +54963,7 @@ function RecordCard({ rec, records, onDelete, onUpdate, bdtAnaliz, setBdtAnaliz,
     if (!editForm.raw.trim()) return;
     setAiLoading(true);
     const tamCevap = await getAISummary(pdrOzetMetniKur(editForm.raw,
-      pdrGorusmeGecmisiMetni(records, rec.studentName, rec.className, rec.numara, rec.id)));
+      pdrGorusmeGecmisiMetni(records, rec.studentName, rec.className, rec.numara, rec.id)), rec.studentName);
     const parcalar = tamCevap.split(/---HATIRLATMA---/i);
     const summary = parcalar[0].trim();
     const kalan = parcalar[1] || "";
@@ -57058,7 +57066,7 @@ export default function App() {
       hedefFark = kademe === "ortaokul" && form.studentName && !digerKatilimcilar.length ? pdrOzetHedefFarki((ogrenciler || []).find(x => pdrAyniOgrenci(x.studentName, x.className, form.studentName, form.className, x.numara, form.numara)), pdrSozlukOku(denemeler, form.studentName, form.className, form.numara), aktifDenemeDersleri, form.raw) : "";
       const hedefBaglam = hedefFark ? `=== HEDEF OKUL HESABI (program hesapladı; özete yazma — program özetin sonuna kendisi ekleyecek. Değerlendirme'de bu farka sayı yazmadan kısaca değinebilirsin: ulaşılabilir / zorlayıcı / çok zorlayıcı) ===\n${hedefFark}` : "";
       const gecmisVeRehber = [pdrGorusmeGecmisiMetni(records, form.studentName, form.className, form.numara, null), gorusmeRehberBaglam(rehberDurum), hedefBaglam].filter(Boolean).join("\n\n");
-      tamCevap = await getAISummary(pdrOzetMetniKur(form.raw, gecmisVeRehber || null));
+      tamCevap = await getAISummary(pdrOzetMetniKur(form.raw, gecmisVeRehber || null), form.studentName);
     } catch (e) {
       setAiLoading(false);
       try { pdrUyariBandi("⚠️ AI Özetle yapılamadı: " + ((e && e.message) || "bilinmeyen hata")); } catch (_) {}

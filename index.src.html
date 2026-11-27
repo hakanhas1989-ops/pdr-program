@@ -51760,6 +51760,7 @@ function ProfilMerkez({
   const [profAiLoading, setProfAiLoading] = useState(false);
   const [prof2AiLoading, setProf2AiLoading] = useState(false);
   const [scoresSet, setScoresSet] = useState(false);
+  const [p1KaynakAcik, setP1KaynakAcik] = useState(false);
   const [kaydedildi, setKaydedildi] = useState(false);
   // Görünüm modu: form | onizleme
   const [mod, setMod] = useState("form");
@@ -52066,6 +52067,34 @@ function ProfilMerkez({
                       background:scoresLoading?BORDER:PURPLE, color:"#fff", border:"none",
                       borderRadius:8, padding:"8px 14px", fontSize:12, fontWeight:700, cursor:"pointer"
                     }}>{scoresLoading?"Notlar okunuyor…":"✦ Görüşme Notlarından Puanla"}</button>
+                    {(() => {
+                      // Puanlamaya giren kayıtlar: handleScoresKapali / handleScoresFromNotes ile AYNI süzgeç
+                      const kayn = records.filter(r => pdrAyniOgrenci(r.studentName, r.className, seciliAd, seciliSinif, r.numara, seciliNumara) && r.summary);
+                      const gun = d => { const [g, a, y] = String(d || "").split("."); return `${y}${(a || "").padStart(2, "0")}${(g || "").padStart(2, "0")}`; };
+                      const sirali = kayn.slice().sort((x, y) => gun(y.date).localeCompare(gun(x.date)));
+                      const sade = v => String(v || "").toLocaleLowerCase("tr").trim().replace(/\s+/g, " ");
+                      const farkli = sirali.filter(r => sade(r.studentName) !== sade(seciliAd));
+                      const turSay = {}; sirali.forEach(r => { const t = r.meetingType || "Öğrenci"; turSay[t] = (turSay[t] || 0) + 1; });
+                      return (
+                        <div data-testid="p1-kaynaklar" style={{ marginTop: 6, borderTop: `1px dashed ${BORDER}`, paddingTop: 8 }}>
+                          <button type="button" data-testid="p1-kaynak-ac" onClick={() => setP1KaynakAcik(a => !a)} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 12, fontWeight: 700, color: TEXT }}>
+                            {p1KaynakAcik ? "▾" : "▸"} 📋 Puanlamada kullanılan görüşmeler ({sirali.length}){sirali.length ? " · " + Object.entries(turSay).map(([t, n]) => `${n} ${t.toLocaleLowerCase("tr")}`).join(", ") : ""}
+                          </button>
+                          {farkli.length > 0 && <div data-testid="p1-kaynak-uyari" style={{ marginTop: 6, background: "#FDECEA", color: "#C0392B", borderRadius: 8, padding: "6px 8px", fontSize: 11, fontWeight: 700 }}>
+                            ⚠ {farkli.length} görüşme farklı bir adla kayıtlı ({[...new Set(farkli.map(r => r.studentName))].join(", ")}) ama aynı sınıf ve numara nedeniyle bu öğrenciye sayılıyor. Başka bir öğrenciye aitse o görüşmenin adını ya da numarasını düzelt.
+                          </div>}
+                          {p1KaynakAcik && <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 4 }}>
+                            {sirali.length === 0 ? <div style={{ fontSize: 11, color: MUTED }}>Özeti olan görüşme yok.</div> : sirali.map(r => {
+                              const fk = sade(r.studentName) !== sade(seciliAd);
+                              return <div key={r.id} data-p1-kaynak={r.id} style={{ fontSize: 11, padding: "4px 8px", background: fk ? "#FDECEA" : "#fff", border: `1px solid ${fk ? "#F5B7B1" : BORDER}`, borderRadius: 6, color: TEXT }}>
+                                <b>{r.date || "tarihsiz"}</b> · {r.meetingType || "Öğrenci"}{r.topic ? " · " + konuGoster(r) : ""}{fk ? <span style={{ color: "#C0392B", fontWeight: 700 }}> · kayıtlı ad: {r.studentName}</span> : null}
+                              </div>;
+                            })}
+                            <div style={{ fontSize: 10.5, color: MUTED, marginTop: 2 }}>Ayrıca: danışman notu {profForm.notes && profForm.notes.trim() ? "var" : "yok"}; gözlem soruları yapıldıysa %40 ağırlıkla; kapalı sistemde deneme sonuçları. Puanlar yalnız butona basınca güncellenir.</div>
+                          </div>}
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Radar + sliderlar */}
